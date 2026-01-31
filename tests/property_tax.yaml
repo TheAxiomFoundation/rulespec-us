@@ -1,0 +1,252 @@
+# Tests for Texas Property Tax (Chapter 11)
+#
+# Reference: Texas Tax Code Chapter 11
+# https://statutes.capitol.texas.gov/Docs/TX/htm/TX.11.htm
+#
+# Note: Texas has no state property tax. All tests are for
+# local taxing entity calculations using state-defined exemptions.
+
+metadata:
+  module: tx.11
+  description: Texas Property Tax exemption and calculation test cases
+  tags: [property-tax, homestead, exemptions]
+
+tests:
+  # Basic homestead with exemptions
+  - name: "Residence homestead with school exemption only"
+    description: "Standard homestead with $100,000 school district exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 350000
+        school_district_tax_rate: 1.05  # Per $100 valuation
+    expected:
+      school_homestead_exemption: 100000
+      taxable_value_school: 250000
+      school_district_tax: 2625  # $250,000 * 1.05%
+    citations:
+      - "Tex. Tax Code § 11.13(b): $100,000 school homestead exemption (2023+)"
+
+  # Over-65 additional exemption
+  - name: "Homestead with over-65 exemption"
+    description: "Senior homeowner with additional $10,000 exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 300000
+        owner_is_over_65: true
+        school_district_tax_rate: 1.10
+    expected:
+      school_homestead_exemption: 100000
+      over_65_disabled_exemption: 10000
+      total_school_exemptions: 110000
+      taxable_value_school: 190000
+      school_district_tax: 2090
+    citations:
+      - "Tex. Tax Code § 11.13(c): Additional $10,000 for 65+"
+
+  # Disabled homeowner exemption
+  - name: "Homestead with disability exemption"
+    description: "Disabled homeowner with additional exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 250000
+        owner_is_disabled: true
+        school_district_tax_rate: 1.00
+    expected:
+      over_65_disabled_exemption: 10000
+      total_school_exemptions: 110000
+      taxable_value_school: 140000
+    citations:
+      - "Tex. Tax Code § 11.13(c): Additional $10,000 for disabled"
+
+  # 100% disabled veteran exemption
+  - name: "100% disabled veteran - full exemption"
+    description: "100% disabled veteran receives full property tax exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 500000
+        owner_is_disabled_veteran: true
+        veteran_disability_rating: 100
+        school_district_tax_rate: 1.20
+    expected:
+      disabled_veteran_exemption: 500000  # Full value
+      taxable_value_school: 0
+      school_district_tax: 0
+    citations:
+      - "Tex. Tax Code § 11.131: 100% exemption for 100% disabled veterans"
+
+  # Partial disabled veteran exemption
+  - name: "70% disabled veteran partial exemption"
+    description: "Veteran with 70% rating receives $12,000 exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 400000
+        owner_is_disabled_veteran: true
+        veteran_disability_rating: 75
+        school_district_tax_rate: 1.00
+    expected:
+      disabled_veteran_exemption: 12000
+      total_school_exemptions: 112000  # $100K school + $12K veteran
+      taxable_value_school: 288000
+    citations:
+      - "Tex. Tax Code § 11.22: 70-99% rating = $12,000 exemption"
+
+  # Appraisal cap test
+  - name: "Homestead appraisal cap limits increase"
+    description: "Market value increased 15%, but capped at 10%"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 460000  # 15% increase
+        prior_year_appraised_value: 400000
+        school_district_tax_rate: 1.00
+    expected:
+      capped_appraised_value: 440000  # 400K + 10% = 440K
+      taxable_value_school: 340000  # $440K - $100K exemption
+    citations:
+      - "Tex. Tax Code § 23.23(a): 10% annual cap on homestead appraisal"
+
+  # No cap for non-homestead
+  - name: "Non-homestead has no appraisal cap"
+    description: "Commercial property not subject to 10% cap"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: false
+        appraised_value: 460000
+        prior_year_appraised_value: 400000
+    expected:
+      capped_appraised_value: 460000  # No cap applied
+    citations:
+      - "Tex. Tax Code § 23.23: Cap only for residence homesteads"
+
+  # Multiple taxing entities
+  - name: "Full property tax calculation - all entities"
+    description: "Homestead taxed by school, city, county, and MUD"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 400000
+        school_district_tax_rate: 1.10
+        city_tax_rate: 0.45
+        county_tax_rate: 0.35
+        special_district_tax_rate: 0.50  # MUD
+        non_school_exemptions: 50000  # Optional local exemption
+    expected:
+      taxable_value_school: 300000  # $400K - $100K school exemption
+      taxable_value_other: 350000  # $400K - $50K local exemption
+      school_district_tax: 3300
+      city_property_tax: 1575
+      county_property_tax: 1225
+      special_district_tax: 1750
+      total_property_tax: 7850
+      combined_tax_rate: 2.40  # Sum of all rates
+    citations:
+      - "Tex. Tax Code § 26.04: Local taxing entities set rates"
+
+  # Low value property
+  - name: "Low value property below exemption"
+    description: "Property value less than exemption amount"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 80000
+        school_district_tax_rate: 1.00
+    expected:
+      school_homestead_exemption: 100000
+      taxable_value_school: 0  # Can't go negative
+      school_district_tax: 0
+    citations:
+      - "Tex. Tax Code § 11.13: Taxable value cannot be negative"
+
+  # Non-homestead property
+  - name: "Commercial property - no homestead exemption"
+    description: "Commercial property has no homestead exemptions"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: false
+        appraised_value: 500000
+        school_district_tax_rate: 1.10
+        city_tax_rate: 0.50
+        county_tax_rate: 0.40
+    expected:
+      school_homestead_exemption: 0
+      taxable_value_school: 500000  # Full value taxable
+      school_district_tax: 5500
+      combined_tax_rate: 2.00
+    citations:
+      - "Tex. Tax Code § 11.13(a): Exemptions only for residence homesteads"
+
+  # Veteran disability rating brackets
+  - name: "50% disabled veteran exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 300000
+        owner_is_disabled_veteran: true
+        veteran_disability_rating: 55
+    expected:
+      disabled_veteran_exemption: 10000
+    citations:
+      - "Tex. Tax Code § 11.22: 50-69% rating = $10,000"
+
+  - name: "30% disabled veteran exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 300000
+        owner_is_disabled_veteran: true
+        veteran_disability_rating: 35
+    expected:
+      disabled_veteran_exemption: 7500
+    citations:
+      - "Tex. Tax Code § 11.22: 30-49% rating = $7,500"
+
+  - name: "10% disabled veteran exemption"
+    period: 2024
+    input:
+      property:
+        is_residence_homestead: true
+        appraised_value: 300000
+        owner_is_disabled_veteran: true
+        veteran_disability_rating: 15
+    expected:
+      disabled_veteran_exemption: 5000
+    citations:
+      - "Tex. Tax Code § 11.22: 10-29% rating = $5,000"
+
+properties:
+  - name: Property tax is non-negative
+    for_all:
+      variables: [total_property_tax]
+      constraint: total_property_tax >= 0
+
+  - name: Taxable value bounded by appraised value
+    for_all:
+      variables: [taxable_value_school, capped_appraised_value]
+      constraint: taxable_value_school <= capped_appraised_value
+
+  - name: Capped value bounded by appraised value
+    for_all:
+      variables: [capped_appraised_value, appraised_value]
+      constraint: capped_appraised_value <= appraised_value
+
+  - name: Exemptions non-negative
+    for_all:
+      variables: [school_homestead_exemption, over_65_disabled_exemption, disabled_veteran_exemption]
+      constraint: school_homestead_exemption >= 0 and over_65_disabled_exemption >= 0 and disabled_veteran_exemption >= 0

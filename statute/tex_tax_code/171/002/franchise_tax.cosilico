@@ -1,0 +1,140 @@
+# Texas Tax Code § 171.002 - Imposition of Franchise Tax
+#
+# Imposes franchise tax on entities doing business in Texas
+# Rate depends on business type (retail/wholesale vs. other)
+#
+# Reference: https://statutes.capitol.texas.gov/Docs/TX/htm/TX.171.htm#171.002
+
+module tx.171.002
+version "2024.1"
+jurisdiction tx
+
+imports:
+  is_subject_to_franchise_tax: statute/tex_tax_code/171/001/definitions#is_subject_to_franchise_tax
+  is_doing_business_in_texas: statute/tex_tax_code/171/001/definitions#is_doing_business_in_texas
+  primary_business_activity: statute/tex_tax_code/171/001/definitions#primary_business_activity
+  business_activity_type: statute/tex_tax_code/171/001/definitions#business_activity_type
+  total_revenue: statute/tex_tax_code/171/1011/total_revenue#total_revenue
+  is_below_no_tax_threshold: statute/tex_tax_code/171/1011/total_revenue#is_below_no_tax_threshold
+  apportioned_taxable_margin: statute/tex_tax_code/171/101/taxable_margin#apportioned_taxable_margin
+  uses_ez_computation: statute/tex_tax_code/171/1013/ez_computation#uses_ez_computation
+  ez_computation_tax: statute/tex_tax_code/171/1013/ez_computation#ez_computation_tax
+
+# Determine if entity is retail or wholesale trade
+variable is_retail_or_wholesale {
+  entity Business
+  period Year
+  dtype Bool
+  reference "Tex. Tax Code § 171.002(b)"
+  label "Retail or Wholesale Trade"
+  description "Whether entity qualifies for reduced retail/wholesale rate"
+
+  formula {
+    let activity = primary_business_activity
+
+    match activity {
+      case business_activity_type.retail_trade => true
+      case business_activity_type.wholesale_trade => true
+      else => false
+    }
+  }
+}
+
+# Determine applicable tax rate
+variable applicable_tax_rate {
+  entity Business
+  period Year
+  dtype Rate
+  reference "Tex. Tax Code § 171.002(a)"
+  label "Applicable Tax Rate"
+  description "Franchise tax rate based on business activity type"
+
+  formula {
+    let is_retail_wholesale = variable(is_retail_or_wholesale)
+
+    if is_retail_wholesale then
+      parameter(tx.171.tax_rate_retail_wholesale)
+    else
+      parameter(tx.171.tax_rate_other)
+  }
+}
+
+# Calculate standard margin-based tax
+variable margin_based_tax {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.002"
+  label "Margin-Based Tax"
+  description "Franchise tax calculated on taxable margin"
+
+  formula {
+    let margin = apportioned_taxable_margin
+    let rate = variable(applicable_tax_rate)
+
+    return margin * rate / 100  # Rate is percentage
+  }
+}
+
+# Calculate final franchise tax amount
+variable franchise_tax {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.002"
+  label "Texas Franchise Tax"
+  description "Final franchise tax due to Texas"
+
+  formula {
+    # Check if entity owes any tax
+    let is_subject = is_subject_to_franchise_tax
+    let doing_business = is_doing_business_in_texas
+    let below_threshold = is_below_no_tax_threshold
+
+    # No tax if not subject, not doing business in TX, or below threshold
+    if not is_subject or not doing_business or below_threshold then
+      0
+    else
+      # Choose between E-Z computation and margin-based tax
+      let use_ez = uses_ez_computation
+      let ez_tax = ez_computation_tax
+      let margin_tax = variable(margin_based_tax)
+
+      # If using E-Z, return E-Z tax; otherwise return margin-based
+      if use_ez then ez_tax else margin_tax
+  }
+}
+
+# Determine if entity owes franchise tax
+variable owes_franchise_tax {
+  entity Business
+  period Year
+  dtype Bool
+  reference "Tex. Tax Code § 171.002"
+  label "Owes Franchise Tax"
+  description "Whether entity has franchise tax liability"
+
+  formula {
+    variable(franchise_tax) > 0
+  }
+}
+
+# Calculate effective franchise tax rate
+variable effective_franchise_tax_rate {
+  entity Business
+  period Year
+  dtype Rate
+  reference "Tex. Tax Code § 171.002"
+  label "Effective Franchise Tax Rate"
+  description "Effective tax rate as percentage of total revenue"
+
+  formula {
+    let tax = variable(franchise_tax)
+    let revenue = total_revenue
+
+    if revenue <= 0 then 0
+    else (tax / revenue) * 100
+  }
+}

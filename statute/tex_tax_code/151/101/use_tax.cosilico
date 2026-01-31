@@ -1,0 +1,141 @@
+# Texas Tax Code § 151.101 - Use Tax Imposed
+#
+# Imposes use tax on taxable items stored, used, or consumed in Texas
+# when sales tax was not paid at time of purchase
+#
+# Reference: https://statutes.capitol.texas.gov/Docs/TX/htm/TX.151.htm#151.101
+
+module tx.151.101
+version "2024.1"
+jurisdiction tx
+
+imports:
+  sales_tax_category: statute/tex_tax_code/151/051/sales_tax#sales_tax_category
+  is_exempt_from_sales_tax: statute/tex_tax_code/151/051/sales_tax#is_exempt_from_sales_tax
+
+# Input: Purchase price of item
+variable purchase_price {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.101"
+  label "Purchase Price"
+  description "Price paid for item subject to use tax"
+
+  default 0
+}
+
+# Input: Sales tax already paid on item
+variable sales_tax_already_paid {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.101(b)"
+  label "Sales Tax Already Paid"
+  description "Amount of sales tax already paid to another jurisdiction"
+
+  default 0
+}
+
+# Input: Item category for use tax
+variable use_tax_item_category {
+  entity Transaction
+  period Instant
+  dtype Enum(sales_tax_category)
+  reference "Tex. Tax Code § 151.101"
+  label "Item Category"
+  description "Category of item for use tax determination"
+
+  default sales_tax_category.tangible_personal_property
+}
+
+# Input: Local jurisdiction rate where item is used
+variable local_use_tax_rate {
+  entity Transaction
+  period Instant
+  dtype Rate
+  reference "Tex. Tax Code § 321.104"
+  label "Local Use Tax Rate"
+  description "Local use tax rate where item is stored/used"
+
+  default 0
+}
+
+# Determine if item is exempt from use tax
+variable is_exempt_from_use_tax {
+  entity Transaction
+  period Instant
+  dtype Bool
+  reference "Tex. Tax Code § 151.313-151.317"
+  label "Exempt from Use Tax"
+  description "Whether item is exempt from Texas use tax"
+
+  formula {
+    # Use tax exemptions mirror sales tax exemptions
+    is_exempt_from_sales_tax
+  }
+}
+
+# Calculate gross use tax before credit
+variable gross_use_tax {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.101"
+  label "Gross Use Tax"
+  description "Use tax before credit for taxes paid elsewhere"
+
+  formula {
+    let price = variable(purchase_price)
+    let exempt = variable(is_exempt_from_use_tax)
+    let state_rate = parameter(tx.151.state_sales_tax_rate)
+    let local_rate = variable(local_use_tax_rate)
+    let max_local = parameter(tx.151.max_local_sales_tax_rate)
+
+    if exempt then 0
+    else
+      let effective_local = min(local_rate, max_local)
+      let combined_rate = state_rate + effective_local
+      price * combined_rate / 100
+  }
+}
+
+# Calculate use tax credit for taxes paid to other states
+variable use_tax_credit {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.101(b)"
+  label "Use Tax Credit"
+  description "Credit for sales tax paid to another state"
+
+  formula {
+    let gross = variable(gross_use_tax)
+    let paid = variable(sales_tax_already_paid)
+
+    # Credit limited to Texas tax that would be due
+    return min(paid, gross)
+  }
+}
+
+# Calculate net use tax due
+variable use_tax_due {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.101"
+  label "Use Tax Due"
+  description "Net use tax due after credit for taxes paid elsewhere"
+
+  formula {
+    let gross = variable(gross_use_tax)
+    let credit = variable(use_tax_credit)
+
+    return max(0, gross - credit)
+  }
+}

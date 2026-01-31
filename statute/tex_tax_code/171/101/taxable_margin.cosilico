@@ -1,0 +1,157 @@
+# Texas Tax Code § 171.101 - Determination of Taxable Margin
+#
+# The taxable margin is the lesser of:
+# (1) 70% of total revenue, or
+# (2) Total revenue after deducting COGS or compensation (whichever is greater)
+# (3) Total revenue minus $1 million
+#
+# Reference: https://statutes.capitol.texas.gov/Docs/TX/htm/TX.171.htm#171.101
+
+module tx.171.101
+version "2024.1"
+jurisdiction tx
+
+imports:
+  total_revenue: statute/tex_tax_code/171/1011/total_revenue#total_revenue
+  margin_using_cogs: statute/tex_tax_code/171/1011/cost_of_goods_sold#margin_using_cogs
+  margin_using_compensation: statute/tex_tax_code/171/1012/compensation#margin_using_compensation
+
+# Calculate 70% of total revenue
+variable margin_70_percent_revenue {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.101(a)(1)(B)"
+  label "70% of Total Revenue"
+  description "Taxable margin option: 70% of total revenue"
+
+  formula {
+    let revenue = total_revenue
+    let multiplier = parameter(tx.171.margin_revenue_multiplier)
+
+    return revenue * multiplier
+  }
+}
+
+# Calculate total revenue minus $1 million
+variable margin_minus_million {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.101(a)(1)(D)"
+  label "Total Revenue Minus $1 Million"
+  description "Taxable margin option: total revenue minus $1 million threshold"
+
+  formula {
+    let revenue = total_revenue
+    let threshold = parameter(tx.171.minimum_margin_threshold)
+
+    return max(0, revenue - threshold)
+  }
+}
+
+# Choose best margin calculation (lowest of the four options)
+variable taxable_margin {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.101"
+  label "Taxable Margin"
+  description "Taxable margin for franchise tax - lowest of four calculation methods"
+
+  formula {
+    let margin_70 = variable(margin_70_percent_revenue)
+    let margin_cogs = margin_using_cogs
+    let margin_comp = margin_using_compensation
+    let margin_million = variable(margin_minus_million)
+
+    # Taxable margin is the lesser of these amounts
+    # First, find best deduction method (lower of COGS or compensation)
+    let best_deduction_margin = min(margin_cogs, margin_comp)
+
+    # Then compare with 70% method
+    let margin_before_million = min(margin_70, best_deduction_margin)
+
+    # Finally, compare with $1 million threshold option
+    return min(margin_before_million, margin_million)
+  }
+}
+
+# Apportioned margin for entities doing business in multiple states
+variable apportionment_factor {
+  entity Business
+  period Year
+  dtype Rate
+  reference "Tex. Tax Code § 171.106"
+  label "Texas Apportionment Factor"
+  description "Percentage of margin apportioned to Texas based on gross receipts"
+
+  # Texas uses single-factor (gross receipts) apportionment
+  default 1.0  # 100% if only doing business in Texas
+}
+
+# Input: Gross receipts sourced to Texas
+variable texas_gross_receipts {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.106"
+  label "Texas Gross Receipts"
+  description "Gross receipts sourced to Texas for apportionment"
+
+  default 0
+}
+
+# Input: Total gross receipts everywhere
+variable total_gross_receipts_everywhere {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.106"
+  label "Total Gross Receipts Everywhere"
+  description "Total gross receipts from all locations"
+
+  default 0
+}
+
+# Calculate apportionment factor
+variable calculated_apportionment_factor {
+  entity Business
+  period Year
+  dtype Rate
+  reference "Tex. Tax Code § 171.106"
+  label "Calculated Apportionment Factor"
+  description "Texas apportionment factor based on gross receipts ratio"
+
+  formula {
+    let tx_receipts = variable(texas_gross_receipts)
+    let total_receipts = variable(total_gross_receipts_everywhere)
+
+    # Avoid division by zero
+    if total_receipts <= 0 then 1.0
+    else tx_receipts / total_receipts
+  }
+}
+
+# Apportioned taxable margin
+variable apportioned_taxable_margin {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.106"
+  label "Apportioned Taxable Margin"
+  description "Taxable margin after Texas apportionment"
+
+  formula {
+    let margin = variable(taxable_margin)
+    let factor = variable(calculated_apportionment_factor)
+
+    return margin * factor
+  }
+}

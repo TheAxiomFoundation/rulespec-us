@@ -1,0 +1,80 @@
+# Texas Tax Code § 171.1013 - E-Z Computation
+#
+# Alternative simplified tax calculation based on total revenue
+# Available to entities with total revenue <= $20 million
+#
+# Reference: https://statutes.capitol.texas.gov/Docs/TX/htm/TX.171.htm#171.1013
+
+module tx.171.1013
+version "2024.1"
+jurisdiction tx
+
+imports:
+  total_revenue: statute/tex_tax_code/171/1011/total_revenue#total_revenue
+  apportionment_factor: statute/tex_tax_code/171/101/taxable_margin#calculated_apportionment_factor
+
+# Determine if entity qualifies for E-Z computation
+variable qualifies_for_ez_computation {
+  entity Business
+  period Year
+  dtype Bool
+  reference "Tex. Tax Code § 171.1013"
+  label "Qualifies for E-Z Computation"
+  description "Whether entity is eligible for E-Z computation method"
+
+  formula {
+    let revenue = total_revenue
+    let threshold = parameter(tx.171.discounted_rate_threshold)
+
+    return revenue <= threshold
+  }
+}
+
+# Calculate E-Z computation tax
+variable ez_computation_tax {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1013"
+  label "E-Z Computation Tax"
+  description "Franchise tax calculated using E-Z computation method"
+
+  formula {
+    let revenue = total_revenue
+    let rate = parameter(tx.171.tax_rate_ez)
+    let factor = apportionment_factor
+
+    # E-Z computation: total revenue * rate * apportionment factor
+    return revenue * rate * factor / 100  # Rate is expressed as percentage
+  }
+}
+
+# Input: Entity elects E-Z computation
+variable elects_ez_computation {
+  entity Business
+  period Year
+  dtype Bool
+  reference "Tex. Tax Code § 171.1013"
+  label "Elects E-Z Computation"
+  description "Whether entity elects to use E-Z computation method"
+
+  default false
+}
+
+# Determine if E-Z computation applies
+variable uses_ez_computation {
+  entity Business
+  period Year
+  dtype Bool
+  reference "Tex. Tax Code § 171.1013"
+  label "Uses E-Z Computation"
+  description "Whether entity uses E-Z computation (qualified and elected)"
+
+  formula {
+    let qualifies = variable(qualifies_for_ez_computation)
+    let elects = variable(elects_ez_computation)
+
+    return qualifies and elects
+  }
+}

@@ -1,0 +1,188 @@
+# Texas Tax Code § 151.051 - Sales Tax Imposed
+#
+# Imposes sales tax on sale of tangible personal property
+# and certain services in Texas
+#
+# Reference: https://statutes.capitol.texas.gov/Docs/TX/htm/TX.151.htm#151.051
+
+module tx.151.051
+version "2024.1"
+jurisdiction tx
+
+# Categories of goods/services for tax treatment
+enum sales_tax_category {
+  tangible_personal_property
+  taxable_services
+  grocery_food
+  prescription_medicine
+  otc_medicine
+  medical_equipment
+  manufacturing_equipment
+  agricultural_equipment
+  exempt_other
+}
+
+# Input: Category of item sold
+variable item_category {
+  entity Transaction
+  period Instant
+  dtype Enum(sales_tax_category)
+  reference "Tex. Tax Code § 151.051"
+  label "Item Category"
+  description "Category of item for sales tax determination"
+
+  default sales_tax_category.tangible_personal_property
+}
+
+# Input: Sale price before tax
+variable sale_price {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.007"
+  label "Sale Price"
+  description "Total sale price of taxable item or service"
+
+  default 0
+}
+
+# Input: Local sales tax rate (varies by jurisdiction)
+variable local_sales_tax_rate {
+  entity Transaction
+  period Instant
+  dtype Rate
+  reference "Tex. Tax Code § 321.101"
+  label "Local Sales Tax Rate"
+  description "Combined local sales tax rate (city, county, transit, etc.)"
+
+  default 0  # No local tax by default
+}
+
+# Determine if item is exempt from sales tax
+variable is_exempt_from_sales_tax {
+  entity Transaction
+  period Instant
+  dtype Bool
+  reference "Tex. Tax Code § 151.313-151.317"
+  label "Exempt from Sales Tax"
+  description "Whether item is exempt from Texas sales tax"
+
+  formula {
+    let category = variable(item_category)
+
+    match category {
+      case sales_tax_category.grocery_food => parameter(tx.151.grocery_food_exempted)
+      case sales_tax_category.prescription_medicine => parameter(tx.151.prescription_medicine_exempted)
+      case sales_tax_category.otc_medicine => parameter(tx.151.otc_medicine_exempted)
+      case sales_tax_category.medical_equipment => parameter(tx.151.medical_equipment_exempted)
+      case sales_tax_category.manufacturing_equipment => true
+      case sales_tax_category.agricultural_equipment => true
+      case sales_tax_category.exempt_other => true
+      else => false
+    }
+  }
+}
+
+# Calculate state sales tax
+variable state_sales_tax {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.051"
+  label "State Sales Tax"
+  description "Texas state sales tax on transaction"
+
+  formula {
+    let price = variable(sale_price)
+    let exempt = variable(is_exempt_from_sales_tax)
+    let rate = parameter(tx.151.state_sales_tax_rate)
+
+    if exempt then 0
+    else price * rate / 100  # Rate is percentage
+  }
+}
+
+# Calculate local sales tax
+variable local_sales_tax {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 321.101"
+  label "Local Sales Tax"
+  description "Combined local sales tax on transaction"
+
+  formula {
+    let price = variable(sale_price)
+    let exempt = variable(is_exempt_from_sales_tax)
+    let rate = variable(local_sales_tax_rate)
+    let max_local = parameter(tx.151.max_local_sales_tax_rate)
+
+    # Ensure local rate doesn't exceed maximum
+    let effective_rate = min(rate, max_local)
+
+    if exempt then 0
+    else price * effective_rate / 100
+  }
+}
+
+# Calculate total sales tax
+variable total_sales_tax {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.051"
+  label "Total Sales Tax"
+  description "Combined state and local sales tax on transaction"
+
+  formula {
+    let state_tax = variable(state_sales_tax)
+    let local_tax = variable(local_sales_tax)
+
+    return state_tax + local_tax
+  }
+}
+
+# Calculate combined sales tax rate
+variable combined_sales_tax_rate {
+  entity Transaction
+  period Instant
+  dtype Rate
+  reference "Tex. Tax Code § 151.051"
+  label "Combined Sales Tax Rate"
+  description "Combined state and local sales tax rate"
+
+  formula {
+    let exempt = variable(is_exempt_from_sales_tax)
+
+    if exempt then 0
+    else
+      let state_rate = parameter(tx.151.state_sales_tax_rate)
+      let local_rate = variable(local_sales_tax_rate)
+      let max_local = parameter(tx.151.max_local_sales_tax_rate)
+      let effective_local = min(local_rate, max_local)
+
+      state_rate + effective_local
+  }
+}
+
+# Calculate total amount due including tax
+variable total_amount_due {
+  entity Transaction
+  period Instant
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 151.051"
+  label "Total Amount Due"
+  description "Sale price plus applicable sales tax"
+
+  formula {
+    let price = variable(sale_price)
+    let tax = variable(total_sales_tax)
+
+    return price + tax
+  }
+}

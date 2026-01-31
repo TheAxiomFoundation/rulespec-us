@@ -1,0 +1,228 @@
+# Tests for Texas Sales and Use Tax (Chapter 151)
+#
+# Reference: Texas Tax Code Chapter 151
+# https://statutes.capitol.texas.gov/Docs/TX/htm/TX.151.htm
+
+metadata:
+  module: tx.151
+  description: Texas Sales and Use Tax test cases
+  tags: [sales-tax, use-tax, consumption-tax]
+
+tests:
+  # Basic taxable transaction
+  - name: "Standard taxable purchase - state only"
+    description: "Purchase of taxable goods with state tax only"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 100.00
+        item_category: tangible_personal_property
+        local_sales_tax_rate: 0
+    expected:
+      is_exempt_from_sales_tax: false
+      state_sales_tax: 6.25
+      local_sales_tax: 0
+      total_sales_tax: 6.25
+      combined_sales_tax_rate: 6.25
+      total_amount_due: 106.25
+    citations:
+      - "Tex. Tax Code § 151.051: 6.25% state sales tax rate"
+
+  # Maximum combined rate
+  - name: "Purchase with maximum local tax"
+    description: "Purchase in jurisdiction with maximum 2% local tax"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 100.00
+        item_category: tangible_personal_property
+        local_sales_tax_rate: 2.0
+    expected:
+      state_sales_tax: 6.25
+      local_sales_tax: 2.00
+      total_sales_tax: 8.25
+      combined_sales_tax_rate: 8.25
+      total_amount_due: 108.25
+    citations:
+      - "Tex. Tax Code § 151.051: 6.25% state rate"
+      - "Tex. Tax Code § 321.101: Maximum 2% local rate"
+
+  # Grocery food exemption
+  - name: "Grocery food purchase - exempt"
+    description: "Purchase of exempt grocery food items"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 150.00
+        item_category: grocery_food
+        local_sales_tax_rate: 2.0
+    expected:
+      is_exempt_from_sales_tax: true
+      state_sales_tax: 0
+      local_sales_tax: 0
+      total_sales_tax: 0
+      total_amount_due: 150.00
+    citations:
+      - "Tex. Tax Code § 151.314: Grocery food exempt since 1984"
+
+  # Prescription medicine exemption
+  - name: "Prescription medicine - exempt"
+    description: "Purchase of prescription medication"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 75.00
+        item_category: prescription_medicine
+        local_sales_tax_rate: 2.0
+    expected:
+      is_exempt_from_sales_tax: true
+      total_sales_tax: 0
+      total_amount_due: 75.00
+    citations:
+      - "Tex. Tax Code § 151.313: Prescription drugs exempt"
+
+  # Over-the-counter medicine exemption
+  - name: "OTC medicine - exempt"
+    description: "Purchase of over-the-counter medicine"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 25.00
+        item_category: otc_medicine
+        local_sales_tax_rate: 2.0
+    expected:
+      is_exempt_from_sales_tax: true
+      total_sales_tax: 0
+      total_amount_due: 25.00
+    citations:
+      - "Tex. Tax Code § 151.314: OTC medicines exempt since 2012"
+
+  # Large purchase
+  - name: "Large vehicle purchase"
+    description: "High-value taxable purchase"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 45000.00
+        item_category: tangible_personal_property
+        local_sales_tax_rate: 2.0
+    expected:
+      state_sales_tax: 2812.50
+      local_sales_tax: 900.00
+      total_sales_tax: 3712.50
+      total_amount_due: 48712.50
+    citations:
+      - "Tex. Tax Code § 151.051"
+
+  # Taxable services
+  - name: "Taxable service"
+    description: "Purchase of taxable service"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 200.00
+        item_category: taxable_services
+        local_sales_tax_rate: 1.5
+    expected:
+      is_exempt_from_sales_tax: false
+      state_sales_tax: 12.50
+      local_sales_tax: 3.00
+      total_sales_tax: 15.50
+    citations:
+      - "Tex. Tax Code § 151.0101: Taxable services defined"
+
+  # Local rate at maximum cap
+  - name: "Local rate capped at 2%"
+    description: "Local rate exceeding 2% is capped"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 100.00
+        item_category: tangible_personal_property
+        local_sales_tax_rate: 3.0  # Exceeds maximum
+    expected:
+      local_sales_tax: 2.00  # Capped at 2%
+      combined_sales_tax_rate: 8.25  # 6.25 + 2.0 (capped)
+    citations:
+      - "Tex. Tax Code § 321.101: Local tax capped at 2%"
+
+  # Use tax scenarios
+  - name: "Use tax - no prior tax paid"
+    description: "Item purchased out of state with no tax paid"
+    period: 2024
+    input:
+      transaction:
+        purchase_price: 500.00
+        use_tax_item_category: tangible_personal_property
+        sales_tax_already_paid: 0
+        local_use_tax_rate: 2.0
+    expected:
+      is_exempt_from_use_tax: false
+      gross_use_tax: 41.25  # 8.25% of $500
+      use_tax_credit: 0
+      use_tax_due: 41.25
+    citations:
+      - "Tex. Tax Code § 151.101: Use tax imposed"
+
+  - name: "Use tax - partial credit for tax paid elsewhere"
+    description: "Item purchased in state with lower tax rate"
+    period: 2024
+    input:
+      transaction:
+        purchase_price: 1000.00
+        use_tax_item_category: tangible_personal_property
+        sales_tax_already_paid: 60.00  # 6% paid elsewhere
+        local_use_tax_rate: 2.0
+    expected:
+      gross_use_tax: 82.50  # 8.25% of $1000
+      use_tax_credit: 60.00
+      use_tax_due: 22.50  # $82.50 - $60.00
+    citations:
+      - "Tex. Tax Code § 151.101(b): Credit for tax paid to other state"
+
+  - name: "Use tax - full credit when other state tax is higher"
+    description: "Item purchased in state with higher tax rate"
+    period: 2024
+    input:
+      transaction:
+        purchase_price: 1000.00
+        use_tax_item_category: tangible_personal_property
+        sales_tax_already_paid: 100.00  # 10% paid elsewhere
+        local_use_tax_rate: 2.0
+    expected:
+      gross_use_tax: 82.50
+      use_tax_credit: 82.50  # Credit capped at Texas tax
+      use_tax_due: 0
+    citations:
+      - "Tex. Tax Code § 151.101(b): Credit limited to Texas tax"
+
+  # Zero dollar transaction
+  - name: "Zero value transaction"
+    description: "Edge case with zero sale price"
+    period: 2024
+    input:
+      transaction:
+        sale_price: 0
+        item_category: tangible_personal_property
+        local_sales_tax_rate: 2.0
+    expected:
+      total_sales_tax: 0
+      total_amount_due: 0
+
+properties:
+  - name: Sales tax is non-negative
+    for_all:
+      variables: [total_sales_tax]
+      constraint: total_sales_tax >= 0
+
+  - name: Combined rate bounded by maximum
+    for_all:
+      variables: [combined_sales_tax_rate]
+      where:
+        is_exempt_from_sales_tax: false
+      constraint: combined_sales_tax_rate <= 8.25
+
+  - name: Use tax credit bounded by gross tax
+    for_all:
+      variables: [use_tax_credit, gross_use_tax]
+      constraint: use_tax_credit <= gross_use_tax

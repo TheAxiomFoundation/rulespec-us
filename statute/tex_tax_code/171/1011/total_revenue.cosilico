@@ -1,0 +1,160 @@
+# Texas Tax Code § 171.1011 - Total Revenue
+#
+# Defines total revenue for purposes of calculating taxable margin
+# Reference: https://statutes.capitol.texas.gov/Docs/TX/htm/TX.171.htm#171.1011
+
+module tx.171.1011
+version "2024.1"
+jurisdiction tx
+
+# Input: Gross revenue from Texas business operations
+variable gross_revenue {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(a)"
+  label "Gross Revenue"
+  description "Total gross revenue from all sources"
+
+  default 0
+}
+
+# Input: Revenue from sales of tangible personal property
+variable revenue_from_sales_tpp {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(c)(1)"
+  label "Revenue from Sales of TPP"
+  description "Revenue from sales of tangible personal property"
+
+  default 0
+}
+
+# Input: Revenue from services
+variable revenue_from_services {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(c)(2)"
+  label "Revenue from Services"
+  description "Revenue from performance of services"
+
+  default 0
+}
+
+# Input: Rental income
+variable rental_income {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(c)(3)"
+  label "Rental Income"
+  description "Rental income from real and tangible personal property"
+
+  default 0
+}
+
+# Input: Other revenue
+variable other_revenue {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(c)(4)"
+  label "Other Revenue"
+  description "Other revenue items includible in total revenue"
+
+  default 0
+}
+
+# Exclusions from total revenue per § 171.1011(e)
+
+# Input: Dividends and interest from federal obligations
+variable excluded_dividends_interest {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(e)(1)"
+  label "Excluded Dividends and Interest"
+  description "Dividends and interest from federal obligations excluded from total revenue"
+
+  default 0
+}
+
+# Input: Amounts received from settlement of federal securities
+variable excluded_federal_securities {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(e)(2)"
+  label "Excluded Federal Securities"
+  description "Amounts received from sales/settlements of federal securities"
+
+  default 0
+}
+
+# Input: Bad debt recovered
+variable bad_debt_recovered {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011(e)(3)"
+  label "Bad Debt Recovered"
+  description "Previously written-off bad debt that was recovered"
+
+  default 0
+}
+
+# Calculate total revenue
+variable total_revenue {
+  entity Business
+  period Year
+  dtype Money
+  unit "USD"
+  reference "Tex. Tax Code § 171.1011"
+  label "Total Revenue"
+  description "Total revenue for franchise tax margin calculation"
+
+  formula {
+    let gross = variable(gross_revenue)
+    let sales_tpp = variable(revenue_from_sales_tpp)
+    let services = variable(revenue_from_services)
+    let rentals = variable(rental_income)
+    let other = variable(other_revenue)
+
+    # Add all revenue sources
+    let total_gross = gross + sales_tpp + services + rentals + other
+
+    # Subtract exclusions
+    let excl_dividends = variable(excluded_dividends_interest)
+    let excl_securities = variable(excluded_federal_securities)
+    let excl_bad_debt = variable(bad_debt_recovered)
+
+    return max(0, total_gross - excl_dividends - excl_securities - excl_bad_debt)
+  }
+}
+
+# Determine if entity is below no-tax-due threshold
+variable is_below_no_tax_threshold {
+  entity Business
+  period Year
+  dtype Bool
+  reference "Tex. Tax Code § 171.002(d)(2)"
+  label "Below No-Tax-Due Threshold"
+  description "Whether entity's total revenue is below the no-tax-due threshold"
+
+  formula {
+    let revenue = variable(total_revenue)
+    let threshold = parameter(tx.171.no_tax_due_threshold)
+
+    return revenue <= threshold
+  }
+}

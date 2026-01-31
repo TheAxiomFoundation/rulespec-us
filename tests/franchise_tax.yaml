@@ -1,0 +1,212 @@
+# Tests for Texas Franchise Tax (Chapter 171)
+#
+# Reference: Texas Tax Code Chapter 171
+# https://statutes.capitol.texas.gov/Docs/TX/htm/TX.171.htm
+
+metadata:
+  module: tx.171
+  description: Texas Franchise Tax (Margin Tax) test cases
+  tags: [franchise-tax, margin-tax, business-tax]
+
+tests:
+  # Below no-tax-due threshold
+  - name: "Small business below $2.47M threshold"
+    description: "No franchise tax due for businesses with revenue below threshold"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: limited_liability_company
+        total_revenue: 2000000
+        cost_of_goods_sold: 800000
+        allowable_compensation: 600000
+    expected:
+      is_below_no_tax_threshold: true
+      franchise_tax: 0
+    citations:
+      - "Tex. Tax Code § 171.002(d)(2): No tax if revenue <= $2,470,000"
+
+  # Standard margin calculation - retail/wholesale rate
+  - name: "Retail business using COGS method"
+    description: "Retail business with $5M revenue using COGS deduction"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: corporation
+        primary_business_activity: retail_trade
+        total_revenue: 5000000
+        cost_of_goods_sold: 3500000
+        allowable_compensation: 400000
+    expected:
+      taxable_margin: 1000000  # min($1M threshold, $1.5M COGS margin)
+      applicable_tax_rate: 0.375
+      franchise_tax: 3750  # $1M * 0.375%
+    citations:
+      - "Tex. Tax Code § 171.002(a)(1): 0.375% for retail/wholesale"
+      - "Tex. Tax Code § 171.101(a)(1)(D): $1M floor"
+
+  # Standard margin calculation - other business rate
+  - name: "Service business using compensation method"
+    description: "Professional services firm using compensation deduction"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: professional_limited_liability_company
+        primary_business_activity: other
+        total_revenue: 8000000
+        allowable_compensation: 4000000
+        cost_of_goods_sold: 500000
+    expected:
+      margin_using_cogs: 7500000
+      margin_using_compensation: 4000000
+      margin_70_percent_revenue: 5600000
+      taxable_margin: 4000000  # Best option is compensation method
+      applicable_tax_rate: 0.75
+      franchise_tax: 30000  # $4M * 0.75%
+    citations:
+      - "Tex. Tax Code § 171.002(a)(2): 0.75% for non-retail"
+      - "Tex. Tax Code § 171.101: Lowest of four methods"
+
+  # 70% of revenue method is best
+  - name: "High-margin business where 70% method wins"
+    description: "Business with low COGS and compensation where 70% is best"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: corporation
+        primary_business_activity: other
+        total_revenue: 10000000
+        cost_of_goods_sold: 1000000
+        allowable_compensation: 2000000
+    expected:
+      margin_using_cogs: 9000000
+      margin_using_compensation: 8000000
+      margin_70_percent_revenue: 7000000
+      taxable_margin: 7000000  # 70% method wins
+      franchise_tax: 52500  # $7M * 0.75%
+    citations:
+      - "Tex. Tax Code § 171.101(a)(1)(B): 70% of total revenue option"
+
+  # E-Z Computation election
+  - name: "Small business elects E-Z computation"
+    description: "Business under $20M uses simplified E-Z computation"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: limited_liability_company
+        primary_business_activity: other
+        total_revenue: 5000000
+        elects_ez_computation: true
+    expected:
+      qualifies_for_ez_computation: true
+      uses_ez_computation: true
+      ez_computation_tax: 16550  # $5M * 0.331%
+      franchise_tax: 16550
+    citations:
+      - "Tex. Tax Code § 171.1013: E-Z computation at 0.331%"
+
+  # Compensation limit per employee
+  - name: "High compensation limited by per-employee cap"
+    description: "Total compensation exceeds per-employee limit"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: corporation
+        primary_business_activity: other
+        total_revenue: 20000000
+        total_wages_paid: 6000000
+        employer_benefit_contributions: 500000
+        number_of_employees: 10
+    expected:
+      total_compensation_before_limit: 6500000
+      compensation_limit: 4000000  # 10 employees * $400,000 cap
+      allowable_compensation: 4000000  # Capped
+    citations:
+      - "Tex. Tax Code § 171.1012(b): $400,000 per employee cap (2024)"
+
+  # Apportionment for multi-state business
+  - name: "Multi-state business apportionment"
+    description: "Business with Texas and out-of-state operations"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: corporation
+        primary_business_activity: other
+        total_revenue: 10000000
+        texas_gross_receipts: 6000000
+        total_gross_receipts_everywhere: 10000000
+        cost_of_goods_sold: 4000000
+    expected:
+      calculated_apportionment_factor: 0.60
+      taxable_margin: 6000000  # Before apportionment
+      apportioned_taxable_margin: 3600000
+      franchise_tax: 27000  # $3.6M * 0.75%
+    citations:
+      - "Tex. Tax Code § 171.106: Single-factor gross receipts apportionment"
+
+  # Sole proprietorship exemption
+  - name: "Sole proprietorship not subject to franchise tax"
+    description: "Sole proprietorships are exempt from franchise tax"
+    period: 2024
+    input:
+      business:
+        entity_type: sole_proprietorship
+        total_revenue: 5000000
+    expected:
+      is_subject_to_franchise_tax: false
+      franchise_tax: 0
+    citations:
+      - "Tex. Tax Code § 171.001: Sole proprietorships excluded"
+
+  # Just at threshold
+  - name: "Business exactly at no-tax threshold"
+    description: "Edge case at $2,470,000 threshold"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: limited_liability_company
+        total_revenue: 2470000
+    expected:
+      is_below_no_tax_threshold: true
+      franchise_tax: 0
+    citations:
+      - "Tex. Tax Code § 171.002(d)(2)"
+
+  - name: "Business just above no-tax threshold"
+    description: "Edge case at $2,470,001 - owes tax"
+    period: 2024
+    input:
+      business:
+        is_doing_business_in_texas: true
+        entity_type: limited_liability_company
+        primary_business_activity: other
+        total_revenue: 2470001
+        cost_of_goods_sold: 500000
+    expected:
+      is_below_no_tax_threshold: false
+      owes_franchise_tax: true
+    citations:
+      - "Tex. Tax Code § 171.002(d)(2)"
+
+properties:
+  - name: Franchise tax is non-negative
+    for_all:
+      variables: [franchise_tax]
+      constraint: franchise_tax >= 0
+
+  - name: Tax rate bounded
+    for_all:
+      variables: [applicable_tax_rate]
+      constraint: applicable_tax_rate <= 1.0
+
+  - name: Taxable margin bounded by revenue
+    for_all:
+      variables: [taxable_margin, total_revenue]
+      constraint: taxable_margin <= total_revenue
