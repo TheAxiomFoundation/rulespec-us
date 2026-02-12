@@ -1,6 +1,6 @@
-# cosilico-us-tx
+# rac-us-tx
 
-Texas state tax statute encodings for the [Cosilico](https://cosilico.ai) policy rules engine.
+Texas state tax statute encodings for the [Rules Foundation](https://rules.foundation) policy rules engine.
 
 ## Overview
 
@@ -13,7 +13,7 @@ Texas has a unique tax structure with **no personal income tax** (prohibited by 
 ## Structure
 
 ```
-cosilico-us-tx/
+rac-us-tx/
 ├── statute/
 │   └── tex_tax_code/
 │       ├── 171/          # Chapter 171 - Franchise Tax
@@ -80,13 +80,13 @@ Texas has no state property tax. Local taxing entities set their own rates.
 
 ```bash
 # Validate rules
-cosilico check statute/
+rac check statute/
 
 # Run tests
-cosilico test tests/
+rac test tests/
 
 # Calculate franchise tax
-cosilico calc franchise_tax --input business.yaml
+rac calc franchise_tax --input business.yaml
 ```
 
 ## References

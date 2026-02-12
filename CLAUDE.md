@@ -1,6 +1,6 @@
-# cosilico-us-tx
+# rac-us-tx
 
-**Texas state tax statute encodings for Cosilico.**
+**Texas state tax statute encodings for Rules Foundation.**
 
 Texas has no personal income tax, but has significant business and consumption taxes:
 - **Franchise Tax** (Margin Tax) - Texas Tax Code Chapter 171
@@ -12,7 +12,7 @@ Texas has no personal income tax, but has significant business and consumption t
 Files organized under `statute/` by Texas Tax Code chapter and section:
 
 ```
-cosilico-us-tx/
+rac-us-tx/
 ├── statute/
 │   ├── tex_tax_code/
 │   │   ├── 171/               # Chapter 171 - Franchise Tax
@@ -79,6 +79,6 @@ references {
 
 ## Related Repos
 
-- **cosilico-us** - US federal statutes
-- **cosilico-lawarchive** - Source document archive
-- **cosilico-engine** - DSL compiler and runtime
+- **rac-us** - US federal statutes
+- **atlas** - Source document archive
+- **rac-compile** - DSL compiler and runtime
