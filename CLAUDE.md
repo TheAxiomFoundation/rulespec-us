@@ -1,11 +1,13 @@
 # rac-us-tx
 
-**Texas state tax statute encodings for Rules Foundation.**
+**Texas jurisdiction repo for Rules Foundation.**
 
 Texas has no personal income tax, but has significant business and consumption taxes:
 - **Franchise Tax** (Margin Tax) - Texas Tax Code Chapter 171
 - **Sales and Use Tax** - Texas Tax Code Chapter 151
 - **Property Tax Framework** - Texas Tax Code Chapter 11
+
+This repo can also carry Texas-administered overlays for federal programs when Texas, rather than the federal government, sets the operative value or rule for Texas.
 
 ## Structure
 
@@ -43,6 +45,12 @@ rac-us-tx/
     ├── sales_tax.yaml
     └── property_tax.yaml
 ```
+
+## Repo Boundary
+
+- Keep federal SNAP core in `rac-us`.
+- Put Texas-administered SNAP overlays, handbook/bulletin source slices, and Texas-specific current-effective values in `rac-us-tx`.
+- When a Texas source is exercising delegated authority rather than amending a federal numeric baseline, use `relation: sets` metadata in the `*.meta.yaml` sidecar and point the `target` at the canonical upstream slot when one exists.
 
 ## Key Texas Tax Features
 

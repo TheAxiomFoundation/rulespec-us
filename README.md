@@ -1,6 +1,6 @@
 # rac-us-tx
 
-Texas state tax statute encodings for the [Rules Foundation](https://rules.foundation) policy rules engine.
+Texas jurisdiction repo for the [Rules Foundation](https://rules.foundation) policy rules engine.
 
 ## Overview
 
@@ -9,6 +9,7 @@ Texas has a unique tax structure with **no personal income tax** (prohibited by 
 - **Franchise Tax (Margin Tax)** - Business tax based on taxable margin
 - **Sales and Use Tax** - 6.25% state rate + up to 2% local
 - **Property Tax** - Local taxes with state-defined exemptions
+- **Texas-administered overlays for federal programs** - for example Texas SNAP current-effective handbook and bulletin parameters
 
 ## Structure
 
@@ -37,6 +38,10 @@ rac-us-tx/
     ├── sales_tax.yaml
     └── property_tax.yaml
 ```
+
+Texas-administered current-effective overlays and guidance-derived source slices live under `sources/slices/`.
+
+When a Texas authority sets a jurisdiction-specific value under delegated federal authority, record the authoritative excerpt in `sources/slices/...` and attach a `*.meta.yaml` sidecar with `relation: sets` pointing at the canonical upstream slot.
 
 ## Texas Franchise Tax
 
