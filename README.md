@@ -40,8 +40,9 @@ rac-us-tx/
 ```
 
 Texas-administered current-effective overlays and guidance-derived source slices live under `sources/slices/`.
+For manuals, handbooks, bulletins, and other policy documents, the authoritative document layer should live under `sources/official/.../source.akn.xml`; `sources/slices/...` should be treated as derived atomic extracts that point back to those AKN sections.
 
-When a Texas authority sets a jurisdiction-specific value under delegated federal authority, record the authoritative excerpt in `sources/slices/...` and attach a `*.meta.yaml` sidecar with `relation: sets` pointing at the canonical upstream slot.
+When a Texas authority sets a jurisdiction-specific value under delegated federal authority, record the authoritative excerpt in `sources/slices/...`, attach a `*.meta.yaml` sidecar with `relation: sets` pointing at the canonical upstream slot, and include `source_backing` metadata that identifies the authoritative AKN file and section eId or eIds that the slice was derived from.
 
 ## Texas Franchise Tax
 
