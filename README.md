@@ -41,12 +41,13 @@ rac-us-tx/
 
 Texas-administered current-effective overlays and other non-tax source material should be rooted under:
 
-- `sources/raw/...` for exact fetched government artifacts such as handbook HTML, PDFs, or XML.
-- `sources/akn/...` for the normalized Akoma Ntoso working source plus any per-target `*.meta.yaml` files that map AKN sections onto canonical RAC targets.
+- Atlas / Cloudflare R2, mirrored locally under `~/.arch/.../raw/...` for exact fetched government artifacts such as handbook HTML, PDFs, or XML.
+- Atlas / Cloudflare R2, mirrored locally under `~/.arch/.../akn/...` for the normalized Akoma Ntoso working document.
+- `sources/targets/...` in this repo for lightweight `*.meta.yaml` files that map archived AKN sections onto canonical RAC targets.
 
-Checked-in manual `.txt` extracts are not a durable source layer here. If AutoRAC needs a `source.txt`, it should be materialized from the AKN document at eval time.
+Checked-in manual `.txt` extracts are not a durable source layer here. If AutoRAC needs a `source.txt`, it should be materialized from the archived AKN document at eval time. Raw fetch artifacts and full AKN documents should not be checked into this repo.
 
-When a Texas authority sets a jurisdiction-specific value under delegated federal authority, keep the canonical document in `sources/akn/.../source.akn.xml`, place the corresponding `*.meta.yaml` alongside it, and use `relation: sets` to point at the canonical upstream slot.
+When a Texas authority sets a jurisdiction-specific value under delegated federal authority, keep the authoritative raw and AKN documents in the Atlas archive, keep the target mapping sidecar in `sources/targets/...`, and use `relation: sets` to point at the canonical upstream slot.
 
 ## Texas Franchise Tax
 
