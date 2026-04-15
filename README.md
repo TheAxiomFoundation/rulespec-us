@@ -39,10 +39,14 @@ rac-us-tx/
     └── property_tax.yaml
 ```
 
-Texas-administered current-effective overlays and guidance-derived source slices live under `sources/slices/`.
-For manuals, handbooks, bulletins, and other policy documents, the authoritative document layer should live under `sources/official/.../source.akn.xml`; `sources/slices/...` should be treated as derived atomic extracts that point back to those AKN sections.
+Texas-administered current-effective overlays and other non-tax source material should be rooted under:
 
-When a Texas authority sets a jurisdiction-specific value under delegated federal authority, record the authoritative excerpt in `sources/slices/...`, attach a `*.meta.yaml` sidecar with `relation: sets` pointing at the canonical upstream slot, and include `source_backing` metadata that identifies the authoritative AKN file and section eId or eIds that the slice was derived from.
+- `sources/raw/...` for exact fetched government artifacts such as handbook HTML, PDFs, or XML.
+- `sources/akn/...` for the normalized Akoma Ntoso working source plus any per-target `*.meta.yaml` files that map AKN sections onto canonical RAC targets.
+
+Checked-in manual `.txt` extracts are not a durable source layer here. If AutoRAC needs a `source.txt`, it should be materialized from the AKN document at eval time.
+
+When a Texas authority sets a jurisdiction-specific value under delegated federal authority, keep the canonical document in `sources/akn/.../source.akn.xml`, place the corresponding `*.meta.yaml` alongside it, and use `relation: sets` to point at the canonical upstream slot.
 
 ## Texas Franchise Tax
 

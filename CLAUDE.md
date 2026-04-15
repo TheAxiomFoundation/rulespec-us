@@ -49,10 +49,10 @@ rac-us-tx/
 ## Repo Boundary
 
 - Keep federal SNAP core in `rac-us`.
-- Put Texas-administered SNAP overlays, handbook/bulletin source slices, and Texas-specific current-effective values in `rac-us-tx`.
-- For policy manuals and bulletins, keep the canonical document under `sources/official/.../source.akn.xml` and treat `sources/slices/...` as derived atoms backed by AKN section eIds.
+- Put Texas-administered SNAP overlays and Texas-specific current-effective values in `rac-us-tx`.
+- For policy manuals and bulletins, keep fetched artifacts under `sources/raw/...` and the normalized working document under `sources/akn/.../source.akn.xml`.
 - When a Texas source is exercising delegated authority rather than amending a federal numeric baseline, use `relation: sets` metadata in the `*.meta.yaml` sidecar and point the `target` at the canonical upstream slot when one exists.
-- Manual-derived `*.meta.yaml` sidecars should also include `source_backing` with the authoritative AKN file and section eId or eIds.
+- Manual-derived `*.meta.yaml` files should live alongside the AKN document and include `source_backing` with the authoritative AKN file and section eId or eIds.
 
 ## Key Texas Tax Features
 
