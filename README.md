@@ -1,15 +1,18 @@
 # rules-us-tx
 
-Texas RuleSpec source registry and policy metadata.
+Texas RuleSpec encodings and source registry metadata.
 
 ## Contents
 
-- `sources/`: source slices, target manifests, and sidecar metadata when available.
-- `statute/`, `regulation/`, or `legislation/`: retained structured source metadata and parameter tables when available.
-- `.github/workflows/`: repository guards that keep legacy executable formula payloads out of Git.
+- `statutes/`: Texas statute RuleSpec YAML, with tests beside each encoding as `.test.yaml`.
+- `regulations/`: Texas regulation RuleSpec YAML, with tests beside each encoding as `.test.yaml`.
+- `policies/`: Texas policy RuleSpec YAML, with tests beside each encoding as `.test.yaml`.
+- `sources/`: source registry or manifest metadata when needed.
+- `.github/workflows/repository-checks.yml`: wrapper around the shared RuleSpec validation workflow.
 
 ## Conventions
 
-Use RuleSpec YAML for new encoded rules. Keep source text with matching `.meta.yaml` files that record provenance and relations. Large XML or source payloads belong in object storage, with only registry or manifest metadata in Git.
+Use RuleSpec YAML for encoded rules. Do not add legacy `statute/`,
+`parameters.yaml`, `tests.yaml`, `tests/*.yaml`, or `.rac` artifacts.
 
 Jurisdiction-specific materials belong in this repo. Shared federal materials belong in `rules-us`.

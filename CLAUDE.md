@@ -1,16 +1,15 @@
 # rules-us-tx Agent Notes
 
-This repo stores Texas RuleSpec source registry materials and related policy metadata.
+This repo stores Texas RuleSpec encodings and source registry metadata.
 
 ## Do
 
-- Keep jurisdiction-administered source slices under `sources/` when source slices are present.
-- Add or update sidecar `.meta.yaml` files with source provenance, relations, and jurisdiction metadata.
-- Keep parameter tables as structured YAML when they are useful reference data.
-- Keep large source payloads outside Git and point to them through metadata or manifests.
+- Put RuleSpec encodings under `statutes/`, `regulations/`, or `policies/`.
+- Put tests beside each encoding as `.test.yaml`.
+- Keep only source registry or manifest metadata under `sources/` when needed.
 
 ## Do Not
 
-- Reintroduce legacy executable formula payloads.
+- Reintroduce `statute/`, `parameters.yaml`, `tests.yaml`, `tests/*.yaml`, or `.rac` artifacts.
 - Put unrelated jurisdiction materials here.
 - Add generated source payloads to Git.
