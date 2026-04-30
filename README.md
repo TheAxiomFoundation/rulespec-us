@@ -12,7 +12,7 @@ Texas RuleSpec encodings and source registry metadata.
 
 ## Conventions
 
-Use RuleSpec YAML for encoded rules. Do not add legacy `statute/`,
-`parameters.yaml`, `tests.yaml`, `tests/*.yaml`, or `.rac` artifacts.
+Use RuleSpec YAML for encoded rules. Do not add singular rule roots, separate
+parameter/test fixture files, or generated formula artifacts.
 
 Jurisdiction-specific materials belong in this repo. Shared federal materials belong in `rules-us`.

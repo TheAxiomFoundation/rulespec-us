@@ -10,6 +10,6 @@ This repo stores Texas RuleSpec encodings and source registry metadata.
 
 ## Do Not
 
-- Reintroduce `statute/`, `parameters.yaml`, `tests.yaml`, `tests/*.yaml`, or `.rac` artifacts.
+- Add singular rule roots, separate parameter/test fixture files, or generated formula artifacts.
 - Put unrelated jurisdiction materials here.
 - Add generated source payloads to Git.
