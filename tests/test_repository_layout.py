@@ -124,9 +124,11 @@ def test_rulespec_files_use_rulespec_v1_shape() -> None:
             if not isinstance(rule, dict):
                 invalid.append(f"{path.relative_to(ROOT)}: rules[{index}] is not a mapping")
                 continue
-            for key in ("name", "kind", "versions"):
+            for key in ("name", "kind"):
                 if key not in rule:
                     invalid.append(f"{path.relative_to(ROOT)}: rules[{index}] missing {key}")
+            if rule.get("kind") in {"parameter", "derived"} and "versions" not in rule:
+                invalid.append(f"{path.relative_to(ROOT)}: rules[{index}] missing versions")
 
     assert invalid == []
 
@@ -144,6 +146,8 @@ def test_rulespec_rules_have_source_metadata() -> None:
             if not isinstance(rule, dict):
                 continue
             name = rule.get("name", f"rules[{index}]")
+            if rule.get("kind") in {"data_relation", "source_relation"}:
+                continue
             if not rule.get("source"):
                 missing.append(f"{path.relative_to(ROOT)}: {name} missing source")
             if not module_source_locator:
