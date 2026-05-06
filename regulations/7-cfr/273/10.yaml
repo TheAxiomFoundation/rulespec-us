@@ -1,0 +1,98 @@
+format: rulespec/v1
+module:
+  summary: |-
+    7 CFR 273.10(e) provides federal SNAP net-income and benefit-level
+    calculation mechanics. Countable earned and unearned income are added to
+    determine monthly household income. Excess shelter costs are the allowable
+    shelter expenses above 50 percent of income after the earlier deductions;
+    households not entitled to the full excess shelter deduction are capped at
+    the federally adjusted excess shelter maximum. Initial-month allotments of
+    less than 10 dollars are not issued.
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/10
+imports:
+  - us:regulations/7-cfr/273/9
+  - us:policies/usda/snap/fy-2026-cola/deductions
+  - us:statutes/7/2014/e/6/A
+rules:
+  - name: snap_gross_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_countable_earned_income + snap_countable_unearned_income
+  - name: snap_monthly_household_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_gross_monthly_income
+  - name: snap_excess_shelter_income_offset_rate
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.10(e)(1)(i)(H)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '0.50'
+  - name: snap_half_adjusted_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(H)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_net_income_pre_shelter * snap_excess_shelter_income_offset_rate
+  - name: snap_uncapped_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(H)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, snap_allowable_shelter_costs - snap_half_adjusted_income)
+  - name: snap_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(I)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_full_excess_shelter_deduction_applies:
+              snap_uncapped_excess_shelter_deduction
+          else: min(snap_uncapped_excess_shelter_deduction, snap_maximum_excess_shelter_deduction_48_states_dc)
+  - name: snap_initial_month_minimum_issuance_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii)(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '10'
+  - name: snap_initial_month_allotment_after_minimum_issuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii)(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_initial_month_prorated_allotment < snap_initial_month_minimum_issuance_threshold:
+              0
+          else: snap_initial_month_prorated_allotment
