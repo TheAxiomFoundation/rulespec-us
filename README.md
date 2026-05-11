@@ -1,4 +1,4 @@
-# rules-us
+# rulespec-us
 
 United States federal RuleSpec encodings and source registry metadata.
 

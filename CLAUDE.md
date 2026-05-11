@@ -1,4 +1,4 @@
-# rules-us Agent Notes
+# rulespec-us Agent Notes
 
 This repo stores US federal RuleSpec encodings and source registry metadata.
 
