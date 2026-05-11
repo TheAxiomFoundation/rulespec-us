@@ -1,4 +1,4 @@
-# rules-us-tx Agent Notes
+# rulespec-us-tx Agent Notes
 
 This repo stores Texas RuleSpec encodings and source registry metadata.
 

@@ -1,4 +1,4 @@
-# rules-us-tx
+# rulespec-us-tx
 
 Texas RuleSpec encodings and source registry metadata.
 
@@ -15,4 +15,4 @@ Texas RuleSpec encodings and source registry metadata.
 Use RuleSpec YAML for encoded rules. Do not add singular rule roots, separate
 parameter/test fixture files, or generated formula artifacts.
 
-Jurisdiction-specific materials belong in this repo. Shared federal materials belong in `rules-us`.
+Jurisdiction-specific materials belong in this repo. Shared federal materials belong in `rulespec-us`.
