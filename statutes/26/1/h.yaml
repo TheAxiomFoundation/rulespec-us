@@ -1,0 +1,273 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 1(h) applies preferential income tax rates to
+    net capital gain and qualified dividend income. It separates ordinary-rate
+    taxable income from adjusted net capital gain, applies the zero, 15-percent,
+    and 20-percent capital-gain brackets, and applies special 25-percent and
+    28-percent rates to specified gains.
+  source_verification:
+    corpus_citation_path: us/statute/26/1
+    values:
+      capital_gains_zero_rate: 0
+      capital_gains_fifteen_percent_rate: 0.15
+      capital_gains_twenty_percent_rate: 0.20
+      unrecaptured_section_1250_gain_rate: 0.25
+      capital_gains_28_percent_rate: 0.28
+imports:
+  - us:policies/irs/rev-proc-2025-32/capital-gains
+rules:
+  - name: capital_gains_zero_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1(h)(1)(B), 1(j)(5)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0'
+  - name: capital_gains_fifteen_percent_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1(h)(1)(C), 1(j)(5)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.15'
+  - name: capital_gains_twenty_percent_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1(h)(1)(D), 1(j)(5)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.20'
+  - name: unrecaptured_section_1250_gain_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1(h)(1)(E)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.25'
+  - name: capital_gains_28_percent_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1(h)(1)(F), 1(h)(4)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.28'
+  - name: net_capital_gain
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(11), 26 USC 1222(11)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              max(0, long_term_capital_gains)
+              - max(0, -short_term_capital_gains)
+          )
+          + qualified_dividend_income
+  - name: adjusted_net_capital_gain
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(3), 1(h)(11)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              max(0, net_capital_gain - qualified_dividend_income)
+              - (
+                  unrecaptured_section_1250_gain
+                  + capital_gains_28_percent_rate_gain
+              )
+          )
+          + qualified_dividend_income
+  - name: capital_gains_excluded_from_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          taxable_income
+          - max(
+              taxable_income - net_capital_gain,
+              min(
+                  min(max(taxable_income, 0), capital_gains_zero_rate_threshold),
+                  taxable_income - adjusted_net_capital_gain
+              )
+          )
+  - name: adjusted_net_capital_gain_limited
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(adjusted_net_capital_gain, taxable_income)
+  - name: non_capital_gain_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, taxable_income - capital_gains_excluded_from_taxable_income)
+  - name: income_less_adjusted_net_capital_gain
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, taxable_income - adjusted_net_capital_gain_limited)
+  - name: capital_gains_in_zero_rate_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(B), 1(j)(5)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              min(max(taxable_income, 0), capital_gains_zero_rate_threshold)
+              - income_less_adjusted_net_capital_gain
+          )
+  - name: capital_gains_in_fifteen_percent_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(C), 1(j)(5)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          min(
+              max(
+                  0,
+                  adjusted_net_capital_gain_limited
+                  - capital_gains_in_zero_rate_bracket
+              ),
+              max(
+                  0,
+                  min(
+                      max(taxable_income, 0),
+                      capital_gains_fifteen_percent_threshold
+                  )
+                  - (
+                      non_capital_gain_taxable_income
+                      + capital_gains_in_zero_rate_bracket
+                  )
+              )
+          )
+  - name: capital_gains_in_twenty_percent_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(D), 1(j)(5)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              adjusted_net_capital_gain_limited
+              - capital_gains_in_zero_rate_bracket
+              - capital_gains_in_fifteen_percent_bracket
+          )
+  - name: main_capital_gains_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(B)-(D), 1(j)(5)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          capital_gains_zero_rate * capital_gains_in_zero_rate_bracket
+          + (
+              capital_gains_fifteen_percent_rate
+              * capital_gains_in_fifteen_percent_bracket
+          )
+          + (
+              capital_gains_twenty_percent_rate
+              * capital_gains_in_twenty_percent_bracket
+          )
+  - name: taxable_unrecaptured_section_1250_gain
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(E), 1(h)(6)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              min(
+                  unrecaptured_section_1250_gain,
+                  max(0, net_capital_gain - qualified_dividend_income)
+              )
+              - max(
+                  0,
+                  non_capital_gain_taxable_income
+                  + net_capital_gain
+                  - taxable_income
+              )
+          )
+  - name: unrecaptured_section_1250_gain_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(E)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          unrecaptured_section_1250_gain_rate
+          * taxable_unrecaptured_section_1250_gain
+  - name: capital_gains_28_percent_rate_gain_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)(1)(F), 1(h)(4)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: capital_gains_28_percent_rate * capital_gains_28_percent_rate_gain
+  - name: capital_gains_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1(h)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          main_capital_gains_tax
+          + unrecaptured_section_1250_gain_tax
+          + capital_gains_28_percent_rate_gain_tax
