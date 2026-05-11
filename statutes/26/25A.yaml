@@ -1,0 +1,441 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 25A defines the American Opportunity and
+    Lifetime Learning credits. The section sets the per-student American
+    Opportunity schedule, the Lifetime Learning rate and expense cap, the
+    shared modified-adjusted-gross-income phaseout, the refundable portion of
+    the American Opportunity credit, and filing, alien-status, identification,
+    scholarship, double-benefit, and student-history limitations.
+  source_verification:
+    corpus_citation_path: us/statute/26/25A
+    values:
+      aotc_first_expense_rate: 1.0
+      aotc_first_expense_threshold: 2000
+      aotc_second_expense_rate: 0.25
+      aotc_second_expense_threshold: 4000
+      aotc_prior_year_limit: 4
+      llc_rate: 0.20
+      llc_expense_limit: 10000
+      education_credit_phaseout_start_single: 80000
+      education_credit_phaseout_start_joint: 160000
+      education_credit_phaseout_length_single: 10000
+      education_credit_phaseout_length_joint: 20000
+      aotc_refundable_rate: 0.40
+rules:
+  - name: education_credit_member_of_tax_unit
+    kind: data_relation
+    data_relation:
+      arity: 2
+  - name: aotc_first_expense_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 25A(b)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '1.0'
+  - name: aotc_first_expense_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(b)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '2000'
+  - name: aotc_second_expense_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 25A(b)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.25'
+  - name: aotc_second_expense_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(b)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '4000'
+  - name: aotc_prior_year_limit
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 25A(b)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '4'
+  - name: llc_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 25A(c)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.20'
+  - name: llc_expense_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(c)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '10000'
+  - name: education_credit_phaseout_start_single
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(d)(1)(A)(ii)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '80000'
+  - name: education_credit_phaseout_start_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(d)(1)(A)(ii)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '160000'
+  - name: education_credit_phaseout_length_single
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(d)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '10000'
+  - name: education_credit_phaseout_length_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 25A(d)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '20000'
+  - name: aotc_refundable_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 25A(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.40'
+  - name: education_credit_adjusted_expenses
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(g)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, qualified_tuition_and_related_expenses - excludable_educational_assistance)
+  - name: education_credit_person_eligible_relationship
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25A(f)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          is_taxpayer
+          or is_spouse
+          or is_tax_unit_dependent
+  - name: aotc_eligible_student
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25A(b)(2)(B), 25A(b)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          meets_higher_education_act_student_requirements
+          and at_least_half_time_student
+  - name: aotc_student_year_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25A(b)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          aotc_eligible_student
+          and aotc_prior_year_election_count < aotc_prior_year_limit
+          and not completed_first_four_years_postsecondary_before_year
+          and not has_felony_drug_conviction
+  - name: aotc_claim_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25A(b), 25A(g)(1), 25A(g)(8)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          aotc_election_in_effect
+          and education_credit_person_eligible_relationship
+          and aotc_student_year_eligible
+          and education_credit_identification_requirements_met
+          and institution_employer_identification_number_included
+          and payee_statement_received
+          and not aotc_disallowance_period_applies
+  - name: aotc_student_first_band_expenses
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(b)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(education_credit_adjusted_expenses, aotc_first_expense_threshold)
+  - name: aotc_student_second_band_expenses
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(b)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, min(education_credit_adjusted_expenses, aotc_second_expense_threshold) - aotc_first_expense_threshold)
+  - name: aotc_student_potential
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          (aotc_student_first_band_expenses * aotc_first_expense_rate)
+          + (aotc_student_second_band_expenses * aotc_second_expense_rate)
+  - name: american_opportunity_credit_before_phaseout
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(b)(1), aggregated over eligible students
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          sum_where(
+              education_credit_member_of_tax_unit,
+              aotc_student_potential,
+              aotc_claim_allowed
+          )
+  - name: education_credit_phaseout_start
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(d)(1)(A)(ii)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if filing_status == 1:
+              education_credit_phaseout_start_joint
+          else:
+              education_credit_phaseout_start_single
+  - name: education_credit_phaseout_length
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(d)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if filing_status == 1:
+              education_credit_phaseout_length_joint
+          else:
+              education_credit_phaseout_length_single
+  - name: education_credit_phaseout_excess
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(d)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, modified_adjusted_gross_income - education_credit_phaseout_start)
+  - name: education_credit_phaseout_rate
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 25A(d)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(1, education_credit_phaseout_excess / education_credit_phaseout_length)
+  - name: education_credit_claim_requirements_satisfied
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25A(g)(6), 25A(g)(7)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          filing_status != 2
+          and (
+              not is_nonresident_alien
+              or section_6013_resident_alien_election
+          )
+  - name: american_opportunity_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(b), 25A(d), 25A(g)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if education_credit_claim_requirements_satisfied:
+              max(0, american_opportunity_credit_before_phaseout * (1 - education_credit_phaseout_rate))
+          else:
+              0
+  - name: refundable_american_opportunity_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if taxpayer_is_section_1_g_child:
+              0
+          else:
+              american_opportunity_credit * aotc_refundable_rate
+  - name: non_refundable_american_opportunity_credit_potential
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: american_opportunity_credit - refundable_american_opportunity_credit
+  - name: non_refundable_american_opportunity_credit_credit_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(a), section 26(a), IRS Schedule 3 ordering
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, income_tax_before_credits - foreign_tax_credit - cdcc)
+  - name: non_refundable_american_opportunity_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(i), section 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(non_refundable_american_opportunity_credit_credit_limit, non_refundable_american_opportunity_credit_potential)
+  - name: llc_eligible_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25A(c)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          education_credit_election_in_effect
+          and education_credit_person_eligible_relationship
+          and education_credit_identification_requirements_met
+          and payee_statement_received
+          and not aotc_claim_allowed
+  - name: llc_expenses_before_cap
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(c)(1), 25A(c)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          sum_where(
+              education_credit_member_of_tax_unit,
+              education_credit_adjusted_expenses,
+              llc_eligible_person
+          )
+  - name: llc_capped_expenses
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(c)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(llc_expenses_before_cap, llc_expense_limit)
+  - name: lifetime_learning_credit_potential
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(c), 25A(d), 25A(g)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if education_credit_claim_requirements_satisfied:
+              max(0, llc_capped_expenses * llc_rate * (1 - education_credit_phaseout_rate))
+          else:
+              0
+  - name: lifetime_learning_credit_credit_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(a), section 26(a), IRS Schedule 3 ordering
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, income_tax_before_credits - foreign_tax_credit - cdcc - non_refundable_american_opportunity_credit)
+  - name: lifetime_learning_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(c), section 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(lifetime_learning_credit_credit_limit, lifetime_learning_credit_potential)
+  - name: education_credit_before_refund_split
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(a), 25A(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: american_opportunity_credit + lifetime_learning_credit
+  - name: education_tax_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(a), 25A(i), section 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: non_refundable_american_opportunity_credit + lifetime_learning_credit
