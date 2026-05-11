@@ -1,0 +1,173 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 24(h) applies the current child tax credit
+    rules for taxable years beginning after 2017, including the post-2025
+    permanent credit amount, other-dependent credit, filing-status phaseout
+    thresholds, and social-security-number rule. Annual adjusted dollar
+    amounts are imported from the IRS tax-year authority.
+  source_verification:
+    corpus_citation_path: us/statute/26/24
+    values:
+      ctc_other_dependent_amount: 500
+      ctc_joint_phase_out_threshold: 400000
+      ctc_other_phase_out_threshold: 200000
+      ctc_phase_out_amount: 50
+      ctc_phase_out_increment: 1000
+      ctc_qualifying_child_age_limit: 17
+imports:
+  - us:policies/irs/rev-proc-2025-32/child-tax-credit
+rules:
+  - name: member_of_tax_unit
+    kind: data_relation
+    data_relation:
+      arity: 2
+  - name: ctc_qualifying_child_age_limit
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 24(c)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '17'
+  - name: ctc_qualifying_child
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 24(c)(1), 24(h)(7)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          is_tax_unit_dependent
+          and age < ctc_qualifying_child_age_limit
+          and meets_ctc_child_identification_requirements
+  - name: ctc_qualifying_children
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 24(c)(1), aggregated over the tax unit
+    versions:
+      - effective_from: '2026-01-01'
+        formula: count_where(member_of_tax_unit, ctc_qualifying_child)
+  - name: ctc_other_dependent
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 24(h)(4)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: is_tax_unit_dependent and not ctc_qualifying_child
+  - name: ctc_other_dependents
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 24(h)(4), aggregated over the tax unit
+    versions:
+      - effective_from: '2026-01-01'
+        formula: count_where(member_of_tax_unit, ctc_other_dependent)
+  - name: ctc_other_dependent_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 24(h)(4)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '500'
+  - name: ctc_maximum
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(h)(2), 24(h)(4)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          (ctc_qualifying_children * ctc_child_maximum_amount)
+          + (ctc_other_dependents * ctc_other_dependent_amount)
+  - name: ctc_joint_phase_out_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 24(h)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '400000'
+  - name: ctc_other_phase_out_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 24(h)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '200000'
+  - name: ctc_phase_out_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(h)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match filing_status:
+              1 => ctc_joint_phase_out_threshold
+              4 => ctc_joint_phase_out_threshold
+              2 => ctc_other_phase_out_threshold
+              3 => ctc_other_phase_out_threshold
+              0 => ctc_other_phase_out_threshold
+  - name: ctc_phase_out_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 24(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '50'
+  - name: ctc_phase_out_increment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 24(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '1000'
+  - name: ctc_phase_out
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(b)(1), 24(h)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ceil(
+              max(0, modified_adjusted_gross_income - ctc_phase_out_threshold)
+              / ctc_phase_out_increment
+          )
+          * ctc_phase_out_amount
+  - name: ctc
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(a), 24(h)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ctc_maximum - ctc_phase_out)
+  - name: ctc_refundable_maximum
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(h)(5)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: ctc_qualifying_children * ctc_refundable_child_amount
