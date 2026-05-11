@@ -42,7 +42,7 @@ def iter_rulespec_files() -> list[Path]:
 
 
 def canonical_rule_id(path: Path, rule_name: str) -> str:
-    repo_prefix = ROOT.name.removeprefix("rules-")
+    repo_prefix = ROOT.name.removeprefix("rulespec-")
     target = path.relative_to(ROOT).with_suffix("").as_posix()
     return f"{repo_prefix}:{target}#{rule_name}"
 
