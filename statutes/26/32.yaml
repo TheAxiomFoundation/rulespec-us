@@ -1,0 +1,276 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 32 defines the earned income credit formula,
+    statutory phase-in and phase-out rates, child-count rules, and eligibility
+    gates. Inflation-adjusted annual dollar amounts are imported from the IRS
+    tax-year authority.
+  source_verification:
+    corpus_citation_path: us/statute/26/32
+    values:
+      eitc_phase_in_rates:
+        0: 0.0765
+        1: 0.34
+        2: 0.40
+        3: 0.45
+      eitc_phase_out_rates:
+        0: 0.0765
+        1: 0.1598
+        2: 0.2106
+        3: 0.2106
+      eitc_childless_minimum_age: 25
+      eitc_childless_age_ceiling_exclusive: 65
+imports:
+  - us:policies/irs/rev-proc-2025-32/earned-income-credit
+rules:
+  - name: member_of_tax_unit
+    kind: data_relation
+    data_relation:
+      arity: 2
+  - name: eitc_phase_in_rates
+    kind: parameter
+    dtype: Rate
+    indexed_by: qualifying_child_count
+    source: 26 USC 32(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        values:
+          0: 0.0765
+          1: 0.34
+          2: 0.40
+          3: 0.45
+  - name: eitc_phase_out_rates
+    kind: parameter
+    dtype: Rate
+    indexed_by: qualifying_child_count
+    source: 26 USC 32(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        values:
+          0: 0.0765
+          1: 0.1598
+          2: 0.2106
+          3: 0.2106
+  - name: eitc_childless_minimum_age
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 32(c)(1)(A)(ii)(II)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '25'
+  - name: eitc_childless_age_ceiling_exclusive
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 32(c)(1)(A)(ii)(II)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '65'
+  - name: eitc_qualifying_child
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 32(c)(3)(A), 32(c)(3)(D)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          is_qualifying_child_dependent
+          and meets_eitc_identification_requirements
+  - name: eitc_child_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 32(c)(3), aggregated over the tax unit
+    versions:
+      - effective_from: '2026-01-01'
+        formula: count_where(member_of_tax_unit, eitc_qualifying_child)
+  - name: eitc_capped_child_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 32(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(eitc_child_count, 3)
+  - name: eitc_phase_in_rate
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 32(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match eitc_capped_child_count:
+              0 => eitc_phase_in_rates[0]
+              1 => eitc_phase_in_rates[1]
+              2 => eitc_phase_in_rates[2]
+              3 => eitc_phase_in_rates[3]
+  - name: eitc_phase_out_rate
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 32(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match eitc_capped_child_count:
+              0 => eitc_phase_out_rates[0]
+              1 => eitc_phase_out_rates[1]
+              2 => eitc_phase_out_rates[2]
+              3 => eitc_phase_out_rates[3]
+  - name: eitc_earned_income_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(b)(2), adjusted by Rev. Proc. 2025-32
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match eitc_capped_child_count:
+              0 => eitc_earned_income_amounts[0]
+              1 => eitc_earned_income_amounts[1]
+              2 => eitc_earned_income_amounts[2]
+              3 => eitc_earned_income_amounts[3]
+  - name: eitc_maximum
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(b), adjusted by Rev. Proc. 2025-32
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match eitc_capped_child_count:
+              0 => eitc_maximum_credit_amounts[0]
+              1 => eitc_maximum_credit_amounts[1]
+              2 => eitc_maximum_credit_amounts[2]
+              3 => eitc_maximum_credit_amounts[3]
+  - name: eitc_phase_out_start
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(b)(2), adjusted by Rev. Proc. 2025-32
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if filing_status == 1:
+              match eitc_capped_child_count:
+                  0 => eitc_threshold_phaseout_amounts_joint[0]
+                  1 => eitc_threshold_phaseout_amounts_joint[1]
+                  2 => eitc_threshold_phaseout_amounts_joint[2]
+                  3 => eitc_threshold_phaseout_amounts_joint[3]
+          else:
+              match eitc_capped_child_count:
+                  0 => eitc_threshold_phaseout_amounts_other[0]
+                  1 => eitc_threshold_phaseout_amounts_other[1]
+                  2 => eitc_threshold_phaseout_amounts_other[2]
+                  3 => eitc_threshold_phaseout_amounts_other[3]
+  - name: eitc_phase_out_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(adjusted_gross_income, earned_income)
+  - name: eitc_phased_in
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(a)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(eitc_maximum, earned_income * eitc_phase_in_rate)
+  - name: eitc_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          eitc_phase_out_rate
+          * max(0, eitc_phase_out_income - eitc_phase_out_start)
+  - name: eitc_before_eligibility
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(eitc_phased_in, max(0, eitc_maximum - eitc_reduction))
+  - name: eitc_investment_income_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 32(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: eitc_relevant_investment_income <= eitc_maximum_investment_income
+  - name: eitc_childless_age_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 32(c)(1)(A)(ii)(II)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          age >= eitc_childless_minimum_age
+          and age < eitc_childless_age_ceiling_exclusive
+  - name: eitc_demographic_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 32(c)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          eitc_child_count > 0
+          or count_where(member_of_tax_unit, eitc_childless_age_eligible) > 0
+  - name: eitc_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 32(c), 32(d), 32(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          eitc_demographic_eligible
+          and eitc_investment_income_eligible
+          and filer_meets_eitc_identification_requirements
+          and (filing_status != 2 or satisfies_eitc_separated_spouse_rules)
+  - name: eitc
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 32(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if eitc_eligible:
+              eitc_before_eligibility
+          else:
+              0
