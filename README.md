@@ -1,4 +1,4 @@
-# rules-us-ca
+# rulespec-us-ca
 
 California RuleSpec encodings and source registry metadata.
 
@@ -15,4 +15,4 @@ California RuleSpec encodings and source registry metadata.
 Use RuleSpec YAML for encoded rules. Do not add singular rule roots, separate
 parameter/test fixture files, or generated formula artifacts.
 
-Federal materials belong in `rules-us`. California-administered materials belong here.
+Federal materials belong in `rulespec-us`. California-administered materials belong here.
