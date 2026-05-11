@@ -1,0 +1,160 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 1411 imposes the 3.8 percent Net Investment
+    Income Tax on individuals. The section defines the tax as the rate applied
+    to the lesser of net investment income or modified-adjusted-gross-income
+    above the statutory filing-status threshold, excludes nonresident aliens,
+    and defines modified adjusted gross income for this purpose.
+  source_verification:
+    corpus_citation_path: us/statute/26/1411
+    values:
+      niit_rate: 0.038
+      niit_threshold_joint: 250000
+      niit_threshold_other: 200000
+rules:
+  - name: niit_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1411(a)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.038'
+  - name: niit_threshold_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1411(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '250000'
+  - name: niit_threshold_separate
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(b)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: niit_threshold_joint / 2
+  - name: niit_threshold_other
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1411(b)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '200000'
+  - name: niit_threshold_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(b)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match filing_status:
+              1 => niit_threshold_joint
+              4 => niit_threshold_joint
+              2 => niit_threshold_separate
+              3 => niit_threshold_other
+              0 => niit_threshold_other
+  - name: niit_modified_adjusted_gross_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          adjusted_gross_income
+          + max(
+              0,
+              section_911_excluded_gross_income
+              - section_911_disallowed_deductions_and_exclusions
+          )
+  - name: net_investment_income_gross_items
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(c)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          taxable_interest_income
+          + dividend_income
+          + annuity_income
+          + royalty_income
+          + rental_income
+          + passive_activity_business_income
+          + financial_trading_business_income
+          + taxable_net_gain_from_dispositions
+  - name: net_investment_income_excluded_items
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(c)(5), 1411(c)(6)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          qualified_plan_distributions
+          + self_employment_income_subject_to_1401_b
+  - name: net_investment_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(c)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              net_investment_income_gross_items
+              - allocable_investment_deductions
+              - net_investment_income_excluded_items
+          )
+  - name: niit_excess_modified_adjusted_gross_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(a)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, niit_modified_adjusted_gross_income - niit_threshold_amount)
+  - name: niit_tax_base
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(a)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(net_investment_income, niit_excess_modified_adjusted_gross_income)
+  - name: net_investment_income_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(a)(1), 1411(e)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if is_nonresident_alien:
+              0
+          else:
+              niit_rate * niit_tax_base
