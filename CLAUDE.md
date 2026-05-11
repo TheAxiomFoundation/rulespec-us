@@ -1,4 +1,4 @@
-# rules-us-md Agent Notes
+# rulespec-us-md Agent Notes
 
 This repo stores Maryland RuleSpec source registry materials and related policy metadata.
 
