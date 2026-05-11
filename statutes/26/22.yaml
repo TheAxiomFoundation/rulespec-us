@@ -1,0 +1,392 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 22 defines the credit for elderly individuals
+    and individuals retired on permanent and total disability. The section
+    sets the qualified-individual tests, initial section 22 amounts, disability
+    income cap for under-65 qualified individuals, reductions for nontaxable
+    pensions and benefits, adjusted-gross-income phaseout, married-filing and
+    nonresident-alien gates, and the 15 percent credit rate.
+  source_verification:
+    corpus_citation_path: us/statute/26/22
+    values:
+      section_22_credit_rate: 0.15
+      section_22_age_threshold: 65
+      permanent_total_disability_minimum_duration_months: 12
+      section_22_initial_amount_one_qualified: 5000
+      section_22_initial_amount_two_qualified: 7500
+      section_22_initial_amount_separate: 3750
+      section_22_phaseout_threshold_single: 7500
+      section_22_phaseout_threshold_joint: 10000
+      section_22_phaseout_threshold_separate: 5000
+      section_22_phaseout_rate: 0.5
+rules:
+  - name: elderly_disabled_member_of_tax_unit
+    kind: data_relation
+    data_relation:
+      arity: 2
+  - name: section_22_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 22(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.15'
+  - name: section_22_age_threshold
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 22(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '65'
+  - name: permanent_total_disability_minimum_duration_months
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 22(e)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '12'
+  - name: section_22_initial_amount_one_qualified
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 22(c)(2)(A)(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '5000'
+  - name: section_22_initial_amount_two_qualified
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 22(c)(2)(A)(ii)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '7500'
+  - name: section_22_initial_amount_separate
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 22(c)(2)(A)(iii)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '3750'
+  - name: section_22_phaseout_threshold_single
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 22(d)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '7500'
+  - name: section_22_phaseout_threshold_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 22(d)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '10000'
+  - name: section_22_phaseout_threshold_separate
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 22(d)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '5000'
+  - name: section_22_phaseout_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 22(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.5'
+  - name: is_aged_65_or_over
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: age >= section_22_age_threshold
+  - name: permanently_totally_disabled
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(e)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          unable_to_engage_substantial_gainful_activity
+          and medically_determinable_impairment
+          and (
+              impairment_expected_to_result_in_death
+              or impairment_duration_months >= permanent_total_disability_minimum_duration_months
+          )
+          and disability_proof_furnished
+  - name: retired_on_total_disability
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(b)(2), 22(e)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          retired_on_disability_before_year_end
+          and permanently_totally_disabled
+  - name: elderly_disabled_qualified_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(b)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          is_aged_65_or_over
+          or retired_on_total_disability
+  - name: under_65_elderly_disabled_qualified_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(c)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          elderly_disabled_qualified_individual
+          and not is_aged_65_or_over
+  - name: section_22_qualified_individual_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 22(b), aggregated over taxpayer and spouse
+    versions:
+      - effective_from: '2026-01-01'
+        formula: count_where(elderly_disabled_member_of_tax_unit, elderly_disabled_qualified_individual)
+  - name: section_22_aged_qualified_individual_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 22(c)(2)(B)(ii)(II), aggregated over taxpayer and spouse
+    versions:
+      - effective_from: '2026-01-01'
+        formula: count_where(elderly_disabled_member_of_tax_unit, is_aged_65_or_over)
+  - name: section_22_under_65_disability_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          sum_where(
+              elderly_disabled_member_of_tax_unit,
+              section_22_disability_income,
+              under_65_elderly_disabled_qualified_individual
+          )
+  - name: section_22_initial_amount_before_disability_cap
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if section_22_qualified_individual_count == 0:
+              0
+          else:
+              if filing_status == 2:
+                  section_22_initial_amount_separate
+              else:
+                  if filing_status == 1 and section_22_qualified_individual_count >= 2:
+                      section_22_initial_amount_two_qualified
+                  else:
+                      section_22_initial_amount_one_qualified
+  - name: section_22_initial_amount_cap
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          (
+              section_22_aged_qualified_individual_count
+              * section_22_initial_amount_one_qualified
+          )
+          + section_22_under_65_disability_income
+  - name: section_22_initial_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(section_22_initial_amount_before_disability_cap, section_22_initial_amount_cap)
+  - name: section_22_nontaxable_pension_benefit_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              pension_annuity_disability_benefits_received
+              - taxable_pension_annuity_disability_benefits_included
+          )
+          + max(
+              0,
+              social_security_benefits_received
+              - taxable_social_security_benefits_included
+          )
+          + max(
+              0,
+              other_nontaxable_pension_annuity_disability_benefits_subject_to_reduction
+              - section_104_a_4_va_benefits
+          )
+  - name: section_22_amount_after_benefit_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c)(1), 22(c)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, section_22_initial_amount - section_22_nontaxable_pension_benefit_reduction)
+  - name: section_22_phaseout_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match filing_status:
+              1 => section_22_phaseout_threshold_joint
+              2 => section_22_phaseout_threshold_separate
+              0 => section_22_phaseout_threshold_single
+              3 => section_22_phaseout_threshold_single
+              4 => section_22_phaseout_threshold_single
+  - name: section_22_agi_phaseout_excess
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, adjusted_gross_income - section_22_phaseout_threshold)
+  - name: section_22_agi_phaseout_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: section_22_agi_phaseout_excess * section_22_phaseout_rate
+  - name: section_22_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(c), 22(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, section_22_amount_after_benefit_reduction - section_22_agi_phaseout_reduction)
+  - name: elderly_disabled_credit_potential
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: section_22_amount * section_22_credit_rate
+  - name: elderly_disabled_preceding_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IRS Schedule 3 ordering for nonrefundable credits
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          foreign_tax_credit
+          + cdcc
+          + non_refundable_american_opportunity_credit
+          + lifetime_learning_credit
+          + savers_credit
+          + residential_clean_energy_credit
+          + energy_efficient_home_improvement_credit
+  - name: elderly_disabled_credit_credit_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Credit against tax imposed by this chapter; IRS Schedule 3 ordering
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, income_tax_before_credits - elderly_disabled_preceding_credits)
+  - name: elderly_disabled_filing_status_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(e)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: filing_status != 2 or spouses_lived_apart_all_year
+  - name: elderly_disabled_credit_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 22(b), 22(e)(1), 22(f)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          section_22_qualified_individual_count > 0
+          and elderly_disabled_filing_status_eligible
+          and not is_nonresident_alien
+  - name: elderly_disabled_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 22(a), 22(e)(1), 22(f)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if elderly_disabled_credit_eligible:
+              min(elderly_disabled_credit_credit_limit, elderly_disabled_credit_potential)
+          else:
+              0
