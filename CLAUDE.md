@@ -1,4 +1,4 @@
-# rules-us-sc Agent Notes
+# rulespec-us-sc Agent Notes
 
 This repo stores South Carolina RuleSpec source registry materials and related policy metadata.
 
