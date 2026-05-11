@@ -1,4 +1,4 @@
-# rules-us-ar Agent Notes
+# rulespec-us-ar Agent Notes
 
 This repo stores Arkansas RuleSpec source registry materials and related policy metadata.
 
