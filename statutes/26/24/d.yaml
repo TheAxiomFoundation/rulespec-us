@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 24(d) defines the refundable portion of the
+    child tax credit. Current-law taxable years after 2017 use the section
+    24(h) earned-income threshold and maximum refundable amount.
+  source_verification:
+    corpus_citation_path: us/statute/26/24
+    values:
+      ctc_refundable_phase_in_rate: 0.15
+      ctc_refundable_phase_in_threshold: 2500
+      ctc_refundable_min_children_for_ss_excess: 3
+imports:
+  - us:statutes/26/24/h
+rules:
+  - name: ctc_refundable_phase_in_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 24(d)(1)(B)(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.15'
+  - name: ctc_refundable_phase_in_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 24(d)(1)(B)(i), as modified by 26 USC 24(h)(6)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '2500'
+  - name: ctc_refundable_min_children_for_ss_excess
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 24(d)(1)(B)(ii)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '3'
+  - name: ctc_phase_in_relevant_earnings
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(B)(i)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, filer_adjusted_earnings - ctc_refundable_phase_in_threshold)
+          * ctc_refundable_phase_in_rate
+  - name: ctc_social_security_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              employee_social_security_tax
+              + employee_medicare_tax
+              + unreported_payroll_tax
+              + self_employment_tax_ald
+              + additional_medicare_tax
+              - excess_payroll_tax_withheld
+          )
+  - name: ctc_social_security_excess
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(B)(ii), referencing credit allowed under 26 USC 32
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ctc_social_security_tax - eitc)
+  - name: ctc_phase_in
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if ctc_qualifying_children < ctc_refundable_min_children_for_ss_excess:
+              ctc_phase_in_relevant_earnings
+          else:
+              max(ctc_phase_in_relevant_earnings, ctc_social_security_excess)
+  - name: ctc_refundable_cap
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(A), 24(h)(5)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(ctc_refundable_maximum, ctc)
+  - name: ctc_tax_limited
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(B), 26 USC 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(ctc, ctc_limiting_tax_liability)
+  - name: ctc_tax_limited_with_phase_in
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(B), 26 USC 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(ctc, ctc_limiting_tax_liability + ctc_phase_in)
+  - name: ctc_refundable_tax_increase
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)(1)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: ctc_tax_limited_with_phase_in - ctc_tax_limited
+  - name: ctc_refundable_foreign_income_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 24(d)(3)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: not excludes_foreign_earned_income
+  - name: refundable_ctc
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if ctc_refundable_foreign_income_eligible:
+              min(ctc_refundable_cap, ctc_refundable_tax_increase)
+          else:
+              0
+  - name: non_refundable_ctc
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 24(d)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: ctc - refundable_ctc
