@@ -1,0 +1,365 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Internal Revenue Code section 21 defines the child and dependent care
+    credit, including qualifying individuals, expense limits, earned-income
+    limits, and the two-step applicable-percentage phaseout. Section 26(a)
+    supplies the general nonrefundable credit limitation for the final allowed
+    credit.
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/21
+      - us/statute/26/26
+    values:
+      cdcc_child_age_limit: 13
+      cdcc_max_qualifying_individuals: 2
+      cdcc_max_expenses_per_individual: 3000
+      cdcc_max_rate: 0.50
+      cdcc_first_phaseout_floor: 0.35
+      cdcc_second_phaseout_floor: 0.20
+      cdcc_phaseout_rate_reduction: 0.01
+      cdcc_first_phaseout_start: 15000
+      cdcc_phaseout_increment: 2000
+      cdcc_second_phaseout_start_joint: 150000
+      cdcc_second_phaseout_start_other: 75000
+      cdcc_second_phaseout_increment_joint: 4000
+      cdcc_second_phaseout_increment_other: 2000
+rules:
+  - name: cdcc_member_of_tax_unit
+    kind: data_relation
+    data_relation:
+      arity: 2
+  - name: cdcc_child_age_limit
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 21(b)(1)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '13'
+  - name: cdcc_max_qualifying_individuals
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 21(c)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '2'
+  - name: cdcc_max_expenses_per_individual
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(c)(1)-(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '3000'
+  - name: cdcc_max_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 21(a)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.50'
+  - name: cdcc_first_phaseout_floor
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.35'
+  - name: cdcc_second_phaseout_floor
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.20'
+  - name: cdcc_phaseout_rate_reduction
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 21(a)(2)(A)-(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '0.01'
+  - name: cdcc_first_phaseout_start
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '15000'
+  - name: cdcc_phaseout_increment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '2000'
+  - name: cdcc_second_phaseout_start_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '150000'
+  - name: cdcc_second_phaseout_start_other
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '75000'
+  - name: cdcc_second_phaseout_increment_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '4000'
+  - name: cdcc_second_phaseout_increment_other
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: '2000'
+  - name: cdcc_qualifying_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 21(b)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          (
+              is_section_152_a_1_dependent
+              and age < cdcc_child_age_limit
+          )
+          or (
+              is_tax_unit_dependent
+              and is_incapable_of_self_care
+              and has_same_principal_place_of_abode_more_than_half_year
+          )
+          or (
+              is_spouse
+              and is_incapable_of_self_care
+              and has_same_principal_place_of_abode_more_than_half_year
+          )
+  - name: count_cdcc_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 21(b)(1), aggregated over the tax unit
+    versions:
+      - effective_from: '2026-01-01'
+        formula: count_where(cdcc_member_of_tax_unit, cdcc_qualifying_individual)
+  - name: capped_count_cdcc_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 21(c)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: min(count_cdcc_eligible, cdcc_max_qualifying_individuals)
+  - name: cdcc_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(c)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              (cdcc_max_expenses_per_individual * capped_count_cdcc_eligible)
+              - dependent_care_assistance_exclusion
+          )
+  - name: cdcc_relevant_expenses
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(b)(2), 21(c), 21(d)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          min(
+              min(tax_unit_childcare_expenses, cdcc_limit),
+              min_head_spouse_earned
+          )
+  - name: cdcc_first_phaseout_excess
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, adjusted_gross_income - cdcc_first_phaseout_start)
+  - name: cdcc_first_phaseout_increments
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: ceil(cdcc_first_phaseout_excess / cdcc_phaseout_increment)
+  - name: cdcc_first_phaseout_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: cdcc_first_phaseout_increments * cdcc_phaseout_rate_reduction
+  - name: cdcc_first_phaseout_rate
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 21(a)(2)(A)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(cdcc_first_phaseout_floor, cdcc_max_rate - cdcc_first_phaseout_reduction)
+  - name: cdcc_second_phaseout_start
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match filing_status:
+              1 => cdcc_second_phaseout_start_joint
+              4 => cdcc_second_phaseout_start_other
+              2 => cdcc_second_phaseout_start_other
+              3 => cdcc_second_phaseout_start_other
+              0 => cdcc_second_phaseout_start_other
+  - name: cdcc_second_phaseout_increment
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match filing_status:
+              1 => cdcc_second_phaseout_increment_joint
+              4 => cdcc_second_phaseout_increment_other
+              2 => cdcc_second_phaseout_increment_other
+              3 => cdcc_second_phaseout_increment_other
+              0 => cdcc_second_phaseout_increment_other
+  - name: cdcc_second_phaseout_excess
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, adjusted_gross_income - cdcc_second_phaseout_start)
+  - name: cdcc_second_phaseout_increments
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: ceil(cdcc_second_phaseout_excess / cdcc_second_phaseout_increment)
+  - name: cdcc_second_phaseout_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 21(a)(2)(B)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: cdcc_second_phaseout_increments * cdcc_phaseout_rate_reduction
+  - name: cdcc_rate
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 21(a)(2)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              cdcc_second_phaseout_floor,
+              cdcc_first_phaseout_rate - cdcc_second_phaseout_reduction
+          )
+  - name: cdcc_potential
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(a)(1)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: cdcc_relevant_expenses * cdcc_rate
+  - name: cdcc_credit_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, income_tax_before_credits - foreign_tax_credit + alternative_minimum_tax)
+  - name: cdcc_married_filing_status_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 21(e)(2), 21(e)(4)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: filing_status != 2 or satisfies_cdcc_married_living_apart_rules
+  - name: cdcc_claim_requirements_satisfied
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 21(e)(6), 21(e)(9), 21(e)(10)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          cdcc_married_filing_status_eligible
+          and provider_identification_requirements_met
+          and qualifying_individual_identification_requirements_met
+          and expenses_paid_to_allowed_provider
+  - name: cdcc
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 21(a), limited by 26 USC 26(a)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if cdcc_claim_requirements_satisfied:
+              min(cdcc_credit_limit, cdcc_potential)
+          else:
+              0
