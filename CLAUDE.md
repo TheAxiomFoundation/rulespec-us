@@ -1,4 +1,4 @@
-# rules-us-al Agent Notes
+# rulespec-us-al Agent Notes
 
 This repo stores Alabama RuleSpec source registry materials and related policy metadata.
 
