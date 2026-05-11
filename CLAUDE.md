@@ -1,4 +1,4 @@
-# rules-us-fl Agent Notes
+# rulespec-us-fl Agent Notes
 
 This repo stores Florida RuleSpec source registry materials and related policy metadata.
 
