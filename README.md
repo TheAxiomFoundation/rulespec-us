@@ -1,4 +1,4 @@
-# rules-us-tn
+# rulespec-us-tn
 
 Tennessee RuleSpec source registry and policy metadata.
 
@@ -12,4 +12,4 @@ Tennessee RuleSpec source registry and policy metadata.
 
 Use RuleSpec YAML under `statutes/`, `regulations/`, or `policies/` for encoded rules. Keep source text with matching `.meta.yaml` files that record provenance and relations. Large XML or source payloads belong in object storage, with only registry or manifest metadata in Git.
 
-Jurisdiction-specific materials belong in this repo. Shared federal materials belong in `rules-us`.
+Jurisdiction-specific materials belong in this repo. Shared federal materials belong in `rulespec-us`.

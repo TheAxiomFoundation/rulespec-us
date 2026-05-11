@@ -1,4 +1,4 @@
-# rules-us-tn Agent Notes
+# rulespec-us-tn Agent Notes
 
 This repo stores Tennessee RuleSpec source registry materials and related policy metadata.
 
