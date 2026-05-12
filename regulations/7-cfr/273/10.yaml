@@ -1,98 +1,403 @@
 format: rulespec/v1
 module:
-  summary: |-
-    7 CFR 273.10(e) provides federal SNAP net-income and benefit-level
-    calculation mechanics. Countable earned and unearned income are added to
-    determine monthly household income. Excess shelter costs are the allowable
-    shelter expenses above 50 percent of income after the earlier deductions;
-    households not entitled to the full excess shelter deduction are capped at
-    the federally adjusted excess shelter maximum. Initial-month allotments of
-    less than 10 dollars are not issued.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us/regulation/7/273/10
+  summary: |-
+    7 CFR 273.10(e)(1) provides that, to determine a household's net monthly income, the State agency shall add gross earned income and unearned income minus exclusions; subtract 20 percent of earned income; subtract the standard deduction; subtract excess medical expenses over $35; subtract allowable dependent care and, if applicable, child support; subtract the homeless shelter deduction up to $143; compute excess shelter costs as shelter costs exceeding 50 percent of income after the above deductions; and subtract excess shelter costs up to the applicable maximum unless the household is entitled to the full amount. 7 CFR 273.10(e)(2)(ii) provides that, except as otherwise specified, the monthly allotment equals the maximum SNAP allotment for household size reduced by 30 percent of net monthly income, with specified rounding options; initial-month benefits under $10 are not issued; and, except during an initial month, eligible one- and two-person households receive at least the minimum benefit, equal to 8 percent of the maximum allotment for a household of one, rounded to the nearest whole dollar.
 imports:
-  - us:regulations/7-cfr/273/9
   - us:policies/usda/snap/fy-2026-cola/deductions
-  - us:statutes/7/2014/e/6/A
+  - us:regulations/7-cfr/273/9
 rules:
-  - name: snap_gross_monthly_income
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 7 CFR 273.10(e)(1)(i)(A)
+  - name: snap_earned_income_deduction_rate_for_net_income
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.10(e)(1)(i)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Multiply the total gross monthly earned income by 20 percent and subtract that amount from the total gross income.
     versions:
       - effective_from: '2025-10-01'
-        formula: snap_countable_earned_income + snap_countable_unearned_income
-  - name: snap_monthly_household_income
-    kind: derived
-    entity: Household
+        formula: |-
+          0.20
+
+  - name: snap_medical_expense_threshold
+    kind: parameter
     dtype: Money
-    period: Month
     unit: USD
-    source: 7 CFR 273.10(e)(1)(i)(A)
+    source: 7 CFR 273.10(e)(1)(i)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If the household is entitled to an excess medical deduction as provided in § 273.9(d)(3), determine if total medical expenses exceed $35.
     versions:
       - effective_from: '2025-10-01'
-        formula: snap_gross_monthly_income
-  - name: snap_excess_shelter_income_offset_rate
+        formula: |-
+          35
+
+  - name: snap_homeless_shelter_deduction_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Subtract the homeless shelter deduction, if any, up to the maximum of $143.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          143
+
+  - name: snap_excess_shelter_income_share
     kind: parameter
     dtype: Rate
     source: 7 CFR 273.10(e)(1)(i)(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Subtract from total shelter costs 50 percent of the household's monthly income after all the above deductions have been subtracted.
     versions:
       - effective_from: '2025-10-01'
-        formula: '0.50'
-  - name: snap_half_adjusted_income
+        formula: |-
+          0.50
+
+  - name: snap_allotment_net_income_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.10(e)(2)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: the household's monthly allotment shall be equal to the maximum SNAP allotment for the household's size reduced by 30 percent of the household's net monthly income
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.30
+
+  - name: snap_initial_month_minimum_issuance
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If the calculation of benefits ... for an initial month would yield an allotment of less than $10 for the household, no benefits shall be issued to the household for the initial month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: snap_minimum_benefit_rate
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.10(e)(2)(ii)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The minimum benefit is 8 percent of the maximum allotment for a household of one, rounded to the nearest whole dollar.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.08
+
+  - name: snap_minimum_benefit_household_size_limit
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.10(e)(2)(ii)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Except during an initial month, all eligible one-person and two-person households shall receive minimum monthly allotments equal to the minimum benefit.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2
+
+  - name: snap_total_gross_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Add the gross monthly income earned by all household members and the total monthly unearned income of all household members, minus income exclusions, to determine the household's total gross income.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_gross_monthly_earned_income + snap_total_monthly_unearned_income - snap_income_exclusions
+
+  - name: snap_earned_income_deduction_for_net_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Multiply the total gross monthly earned income by 20 percent and subtract that amount from the total gross income.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_earned_income_deduction_rate_for_net_income
+              output: snap_earned_income_deduction_rate_for_net_income
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_gross_monthly_earned_income * snap_earned_income_deduction_rate_for_net_income
+
+  - name: snap_excess_medical_deduction_for_net_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If so, subtract that portion which exceeds $35.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_entitled_to_excess_medical_deduction: max(0, snap_total_medical_expenses - snap_medical_expense_threshold) else: 0
+
+  - name: snap_homeless_shelter_deduction_for_net_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Subtract the homeless shelter deduction, if any, up to the maximum of $143.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          min(snap_claimed_homeless_shelter_deduction, snap_homeless_shelter_deduction_cap)
+
+  - name: snap_net_income_before_shelter
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(A)-(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Subtract the standard deduction ... medical ... dependent care ... child support ... homeless shelter deduction.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/deductions#snap_standard_deduction
+              output: snap_standard_deduction
+              hash: sha256:bb28d73d2566eebcd2a6d0b16098d108b35c10a20c892aab5dbc510c462b9264
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              snap_total_gross_income
+              - snap_earned_income_deduction_for_net_income
+              - snap_standard_deduction
+              - snap_excess_medical_deduction_for_net_income
+              - snap_allowable_monthly_dependent_care_expenses
+              - snap_allowable_monthly_child_support_payments
+              - snap_homeless_shelter_deduction_for_net_income
+          )
+
+  - name: snap_excess_shelter_cost
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
     source: 7 CFR 273.10(e)(1)(i)(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Subtract from total shelter costs 50 percent of the household's monthly income after all the above deductions have been subtracted. The remaining amount, if any, is the excess shelter cost.
     versions:
       - effective_from: '2025-10-01'
-        formula: snap_net_income_pre_shelter * snap_excess_shelter_income_offset_rate
-  - name: snap_uncapped_excess_shelter_deduction
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 7 CFR 273.10(e)(1)(i)(H)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: max(0, snap_allowable_shelter_costs - snap_half_adjusted_income)
-  - name: snap_excess_shelter_deduction
+        formula: |-
+          if snap_homeless_shelter_deduction_for_net_income > 0: 0 else: max(0, snap_total_allowable_shelter_expenses - (snap_net_income_before_shelter * snap_excess_shelter_income_share))
+
+  - name: snap_excess_shelter_deduction_for_net_income
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
     source: 7 CFR 273.10(e)(1)(i)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Subtract the excess shelter cost up to the maximum amount allowed for the area (unless the household is entitled to the full amount of its excess shelter expenses).
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9#snap_full_excess_shelter_deduction_applies
+              output: snap_full_excess_shelter_deduction_applies
+              hash: sha256:0e17fc2b7553f3d47b6f70ba088d317f5ec3655a031e0b12d88509556c4f1406
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/deductions#snap_maximum_excess_shelter_deduction_48_states_dc
+              output: snap_maximum_excess_shelter_deduction_48_states_dc
+              hash: sha256:bb28d73d2566eebcd2a6d0b16098d108b35c10a20c892aab5dbc510c462b9264
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if snap_full_excess_shelter_deduction_applies:
-              snap_uncapped_excess_shelter_deduction
-          else: min(snap_uncapped_excess_shelter_deduction, snap_maximum_excess_shelter_deduction_48_states_dc)
-  - name: snap_initial_month_minimum_issuance_threshold
-    kind: parameter
-    dtype: Money
-    unit: USD
-    source: 7 CFR 273.10(e)(2)(ii)(B)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: '10'
-  - name: snap_initial_month_allotment_after_minimum_issuance
+          if snap_full_excess_shelter_deduction_applies: snap_excess_shelter_cost else: min(snap_excess_shelter_cost, snap_maximum_excess_shelter_deduction_48_states_dc)
+
+  - name: snap_net_monthly_income
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: 7 CFR 273.10(e)(2)(ii)(B)
+    source: 7 CFR 273.10(e)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The household's net monthly income has been determined.
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if snap_initial_month_prorated_allotment < snap_initial_month_minimum_issuance_threshold:
-              0
-          else: snap_initial_month_prorated_allotment
+          max(0, snap_net_income_before_shelter - snap_excess_shelter_deduction_for_net_income)
+
+  - name: snap_minimum_benefit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The minimum benefit is 8 percent of the maximum allotment for a household of one, rounded to the nearest whole dollar.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          floor((snap_maximum_allotment_for_one_person_household * snap_minimum_benefit_rate) + 0.5)
+
+  - name: snap_calculated_monthly_allotment_before_minimums
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If 30 percent of the household's net income ends in cents, the State agency shall round ... up ... or ... round the allotment down to the nearest lower dollar.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if state_agency_rounds_thirty_percent_net_income_up: max(0, snap_maximum_allotment_for_household_size - ceil(snap_net_monthly_income * snap_allotment_net_income_reduction_rate)) else: max(0, floor(snap_maximum_allotment_for_household_size - (snap_net_monthly_income * snap_allotment_net_income_reduction_rate)))
+
+  - name: snap_monthly_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: initial month ... less than $10 ... no benefits; except during an initial month, all eligible one-person and two-person households shall receive minimum monthly allotments equal to the minimum benefit.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_initial_month and snap_calculated_monthly_allotment_before_minimums < snap_initial_month_minimum_issuance: 0 else: if (not household_initial_month) and household_size <= snap_minimum_benefit_household_size_limit and snap_calculated_monthly_allotment_before_minimums < snap_minimum_benefit: snap_minimum_benefit else: snap_calculated_monthly_allotment_before_minimums
