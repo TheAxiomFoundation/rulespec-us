@@ -1,36 +1,170 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Internal Revenue Code section 6401 treats refundable credits that exceed
-    tax liability as overpayments. For current-law 2026 individual cases, the
-    refundable-credit aggregate includes the refundable credits modeled in
-    Subpart C and payroll-tax refundable credits, and final federal income tax
-    is income tax before refundable credits reduced by that aggregate.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us/statute/26/6401
+  summary: |-
+    (a) Assessment and collection after limitation period. The term “overpayment” includes that part of the amount of the payment of any internal revenue tax which is assessed or collected after the expiration of the period of limitation properly applicable thereto.
+
+    (b) Excessive credits (1) In general If the amount allowable as credits under subpart C of part IV of subchapter A of chapter 1 (relating to refundable credits) exceeds the tax imposed by subtitle A (reduced by the credits allowable under subparts A, B, D, and G of such part IV), the amount of such excess shall be considered an overpayment. (2) Special rule for credit under section 33 For purposes of paragraph (1), any credit allowed under section 33 (relating to withholding of tax on nonresident aliens and on foreign corporations) for any taxable year shall be treated as a credit allowable under subpart C of part IV of subchapter A of chapter 1 only if an election under subsection (g) or (h) of section 6013 is in effect for such taxable year. The preceding sentence shall not apply to any credit so allowed by reason of section 1446.
+
+    (c) Rule where no tax liability An amount paid as tax shall not be considered not to constitute an overpayment solely by reason of the fact that there was no tax liability in respect of which such amount was paid.
 rules:
+  - name: limitation_period_overpayment_part
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 6401(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/6401
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if internal_revenue_tax_payment_assessed_or_collected_after_applicable_limitation_period_expired:
+              amount_of_internal_revenue_tax_payment_assessed_or_collected_after_limitation_period
+          else:
+              0
+
+  - name: section_33_credit_treated_as_refundable_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 6401(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/6401
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if section_6013_g_or_h_election_in_effect_for_taxable_year or credit_allowed_under_section_33_by_reason_of_section_1446:
+              credit_allowed_under_section_33
+          else:
+              0
+
   - name: income_tax_refundable_credits
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 6401(b), Subpart C of Part IV of Subchapter A of Chapter 1
+    source: 26 USC 6401(b)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/6401
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          eitc
-          + refundable_american_opportunity_credit
-          + refundable_ctc
-          + recovery_rebate_credit
-          + refundable_payroll_tax_credit
+          credits_allowable_under_subpart_c_excluding_section_33_for_overpayment
+          + section_33_credit_treated_as_refundable_credit
+
+  - name: refundable_credit_excess_overpayment
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 6401(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/6401
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(
+              0,
+              income_tax_refundable_credits
+              - tax_imposed_by_subtitle_a_reduced_by_subparts_a_b_d_and_g_credits
+          )
+
   - name: income_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 6401(b)
+    source: 26 USC 6401(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/6401
     versions:
       - effective_from: '2026-01-01'
-        formula: income_tax_before_refundable_credits - income_tax_refundable_credits
+        formula: |-
+          tax_imposed_by_subtitle_a_reduced_by_subparts_a_b_d_and_g_credits
+          - income_tax_refundable_credits
+
+  - name: tax_payment_can_be_overpayment_despite_no_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 6401(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/6401
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6401
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          amount_paid_as_tax > 0
+          and no_tax_liability_in_respect_of_amount_paid
