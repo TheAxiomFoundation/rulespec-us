@@ -1,30 +1,93 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Internal Revenue Code section 63(c)(5) caps a dependent individual's
-    standard deduction at the greater of a minimum amount or earned income plus
-    an addition, subject to the single-filer basic standard deduction. Annual
-    inflation-adjusted dollar amounts are imported from the IRS tax-year
-    authority, not encoded in the statute file.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us/statute/26/63
-imports:
-  - us:policies/irs/rev-proc-2025-32/standard-deduction
+  summary: |-
+    (5) Limitation on basic standard deduction in the case of certain dependents In the case of an individual with respect to whom a deduction under section 151 is allowable to another taxpayer for a taxable year beginning in the calendar year in which the individual’s taxable year begins, the basic standard deduction applicable to such individual for such individual’s taxable year shall not exceed the greater of— (A) $500, or (B) the sum of $250 and such individual’s earned income.
 rules:
-  - name: dependent_standard_deduction
+  - name: dependent_basic_standard_deduction_statutory_floor_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: IRC section 63(c)(5)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the greater of— (A) $500"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          500
+
+  - name: dependent_basic_standard_deduction_statutory_earned_income_addition_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: IRC section 63(c)(5)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "(B) the sum of $250 and such individual’s earned income."
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          250
+
+  - name: dependent_basic_standard_deduction_limitation_applies
     kind: derived
-    entity: Person
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: IRC section 63(c)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "In the case of an individual with respect to whom a deduction under section 151 is allowable to another taxpayer for a taxable year beginning in the calendar year in which the individual’s taxable year begins"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          deduction_under_section_151_allowable_to_another_taxpayer
+
+  - name: dependent_basic_standard_deduction_statutory_limit
+    kind: derived
+    entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
     source: IRC section 63(c)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the basic standard deduction applicable to such individual for such individual’s taxable year shall not exceed the greater of— (A) $500, or (B) the sum of $250 and such individual’s earned income."
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the greater of— (A) $500"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "(B) the sum of $250 and such individual’s earned income."
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          min(
-              single_basic_standard_deduction,
-              max(
-                  dependent_minimum,
-                  earned_income + dependent_earned_income_addition
-              )
-          )
+          max(dependent_basic_standard_deduction_statutory_floor_amount, dependent_basic_standard_deduction_statutory_earned_income_addition_amount + earned_income)
