@@ -1,0 +1,245 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-301.545
+  summary: |-
+    (a) No further benefits will be issued until the postponed verification, except as specified in Section 63-301.545(a)(2), is completed and the household's participation shall be terminated if the verification for income, resources, residency (except for homeless households), or any deduction, except for unverified child support, is not completed within 30 days following the date the application was filed. Page 137.1 This page is intentionally left blank. FOOD STAMP REGULATIONS Regulations APPLICATION PROCESS 63-301 (Cont.) (1) Migrant households shall receive the second months benefits if the only missing verification is from an out-of-state source. However, the out-of-state verification shall be completed within 60 days following the date the application was filed or if not the household's participation shall be terminated. (2) A household with an unverified child support obligation and/or amount of child support paid shall not be terminated, but instead have its eligibility and benefit level determined without a child support deduction as specified in Section 63-300.51(j). (b) The individual household member's participation shall be terminated if proof of alien or student status has not been provided or if a SSN or proof that one has been applied for has not been provided within 30 days following the date the application was filed. Benefits to the remaining household members shall be recalculated and issued as otherwise eligible. (1) Migrant household members shall be treated as specified in Section 63-301.545(a)(1), if the missing verification is from an out-of-state source. (c) If verification results in changes in the household's eligibility or level of benefits, the CWD shall act on those changes without advance notice. FOOD STAMP REGULATIONS
+rules:
+  - name: household_postponed_verification_deadline_days
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: 63-301.545(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "is not completed within 30 days following the date the application was filed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: migrant_out_of_state_verification_deadline_days
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: 63-301.545(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "the out-of-state verification shall be completed within 60 days following the date the application was filed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          60
+
+  - name: individual_status_and_ssn_proof_deadline_days
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: 63-301.545(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "has not been provided within 30 days following the date the application was filed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: migrant_household_out_of_state_verification_extension_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "Migrant households shall receive the second months benefits if the only missing verification is from an out-of-state source."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_is_migrant and only_missing_household_verification_is_from_out_of_state_source
+
+  - name: household_participation_terminated_for_incomplete_postponed_verification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "the household's participation shall be terminated if the verification for income, resources, residency (except for homeless households), or any deduction, except for unverified child support, is not completed within 30 days following the date the application was filed"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "Migrant households shall receive the second months benefits if the only missing verification is from an out-of-state source."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_postponed_verification_not_completed
+          and days_following_household_application_filed > household_postponed_verification_deadline_days
+          and (
+            missing_household_income_verification
+            or missing_household_resources_verification
+            or (missing_household_residency_verification and not household_is_homeless)
+            or missing_household_deduction_verification_other_than_unverified_child_support
+          )
+          and
+          not migrant_household_out_of_state_verification_extension_applies
+
+  - name: migrant_household_participation_terminated_for_out_of_state_verification_after_deadline
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "the out-of-state verification shall be completed within 60 days following the date the application was filed or if not the household's participation shall be terminated"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          migrant_household_out_of_state_verification_extension_applies
+          and household_out_of_state_verification_not_completed
+          and days_following_household_application_filed > migrant_out_of_state_verification_deadline_days
+
+  - name: child_support_deduction_excluded_for_unverified_child_support
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "A household with an unverified child support obligation and/or amount of child support paid shall not be terminated, but instead have its eligibility and benefit level determined without a child support deduction"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_has_unverified_child_support_obligation_or_amount
+
+  - name: cwd_may_act_without_advance_notice_on_verification_change
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "If verification results in changes in the household's eligibility or level of benefits, the CWD shall act on those changes without advance notice."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          verification_results_in_changes_in_household_eligibility_or_benefit_level
+
+  - name: migrant_household_member_out_of_state_verification_extension_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "Migrant household members shall be treated as specified in Section 63-301.545(a)(1), if the missing verification is from an out-of-state source."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          member_is_in_migrant_household and member_missing_verification_is_from_out_of_state_source
+
+  - name: household_member_participation_terminated_for_missing_status_or_ssn_proof
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "The individual household member's participation shall be terminated if proof of alien or student status has not been provided or if a SSN or proof that one has been applied for has not been provided within 30 days following the date the application was filed."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "Migrant household members shall be treated as specified in Section 63-301.545(a)(1), if the missing verification is from an out-of-state source."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          days_following_member_household_application_filed > individual_status_and_ssn_proof_deadline_days
+          and (alien_or_student_status_proof_not_provided or ssn_or_proof_of_application_not_provided)
+          and
+          not migrant_household_member_out_of_state_verification_extension_applies
+
+  - name: migrant_household_member_participation_terminated_for_out_of_state_verification_after_deadline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 63-301.545(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "Migrant household members shall be treated as specified in Section 63-301.545(a)(1), if the missing verification is from an out-of-state source."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-301.545
+              excerpt: "the out-of-state verification shall be completed within 60 days following the date the application was filed or if not the household's participation shall be terminated"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          migrant_household_member_out_of_state_verification_extension_applies
+          and member_out_of_state_verification_not_completed
+          and days_following_member_household_application_filed > migrant_out_of_state_verification_deadline_days

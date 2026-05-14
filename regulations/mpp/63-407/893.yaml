@@ -1,0 +1,178 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-407.893
+  summary: |-
+    (a) Determine whether the number of hours worked in workfare are more than the number which could have been assigned had the proper benefit level been used in calculating the number of hours to be worked. (b) If the extra hours that were worked because of the improper benefit level equal the amount of hours calculated by dividing the overissuance by the higher of the State or federal minimum wage, no claim shall be established. No credit for future work requirements shall be given. (c) If the extra hours worked times the higher of the State of federal minimum wage do not equal the amount of the overissuance, the amount of the claim established under Section 63-801.312 shall be adjusted to equal the amount of the overissuance not “worked off”.
+rules:
+  - name: workfare_hours_exceed_proper_benefit_assignable_hours
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-407.893(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "Determine whether the number of hours worked in workfare are more than the number which could have been assigned had the proper benefit level been used"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          workfare_hours_worked > workfare_hours_assignable_had_proper_benefit_level_been_used
+
+  - name: extra_workfare_hours_due_to_improper_benefit_level
+    kind: derived
+    entity: SnapUnit
+    dtype: Float
+    period: Month
+    source: 63-407.893(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the number of hours worked in workfare are more than the number which could have been assigned had the proper benefit level been used"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the extra hours that were worked because of the improper benefit level"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, workfare_hours_worked - workfare_hours_assignable_had_proper_benefit_level_been_used)
+
+  - name: higher_state_or_federal_minimum_wage_for_workfare_claim
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-407.893(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the higher of the State or federal minimum wage"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(state_minimum_wage, federal_minimum_wage)
+
+  - name: workfare_overissuance_hours_equivalent
+    kind: derived
+    entity: SnapUnit
+    dtype: Float
+    period: Month
+    source: 63-407.893(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the amount of hours calculated by dividing the overissuance by the higher of the State or federal minimum wage"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          overissuance_amount / higher_state_or_federal_minimum_wage_for_workfare_claim
+
+  - name: workfare_overissuance_amount_worked_off
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-407.893(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the extra hours worked times the higher of the State of federal minimum wage"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the amount of the overissuance not “worked off”"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(overissuance_amount, max(0, extra_workfare_hours_due_to_improper_benefit_level * higher_state_or_federal_minimum_wage_for_workfare_claim))
+
+  - name: workfare_overissuance_claim_barred_by_work_off
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-407.893(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "If the extra hours that were worked because of the improper benefit level equal the amount of hours calculated by dividing the overissuance by the higher of the State or federal minimum wage, no claim shall be established."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          workfare_overissuance_amount_worked_off == overissuance_amount
+
+  - name: future_work_requirement_credit_for_extra_workfare_hours_barred
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-407.893(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "No credit for future work requirements shall be given."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "If the extra hours that were worked because of the improper benefit level equal the amount of hours calculated by dividing the overissuance by the higher of the State or federal minimum wage"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          workfare_overissuance_amount_worked_off == overissuance_amount
+
+  - name: workfare_overissuance_claim_amount_after_work_off
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-407.893(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.893
+              excerpt: "the amount of the claim established under Section 63-801.312 shall be adjusted to equal the amount of the overissuance not “worked off”"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, overissuance_amount - workfare_overissuance_amount_worked_off)
