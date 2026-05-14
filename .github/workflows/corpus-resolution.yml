@@ -1,0 +1,48 @@
+name: Corpus resolution check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rulespec-us
+        uses: actions/checkout@v6.0.2
+
+      - name: Checkout axiom-rules-engine
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          path: _axiom/axiom-rules-engine
+
+      - name: Set up Rust
+        run: |
+          if ! command -v rustup &> /dev/null; then
+            curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused \
+              --location --silent --show-error --fail https://sh.rustup.rs \
+              | sh -s -- --default-toolchain stable -y
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Build axiom-rules-engine
+        run: |
+          cd _axiom/axiom-rules-engine
+          cargo build --release --quiet
+
+      - name: Run SNAP composition resolution check
+        env:
+          AXIOM_RULES_ENGINE_BINARY: ${{ github.workspace }}/_axiom/axiom-rules-engine/target/release/axiom-rules-engine
+          AXIOM_RULESPEC_REPO_ROOTS: ${{ github.workspace }}/..
+        run: |
+          # The engine expects to find the corpus under a directory named
+          # `rulespec-us` for `us:` imports. Set up a sibling symlink so the
+          # resolver can find this repo.
+          ln -sfn "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/../rulespec-us"
+          python3 scripts/check_corpus_resolution.py snap
