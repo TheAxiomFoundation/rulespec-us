@@ -1,0 +1,230 @@
+format: rulespec/v1
+imports:
+  - us:statutes/26/63/c#standard_deduction
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/6012
+  summary: |-
+    (a) General rule Returns with respect to income taxes under subtitle A shall be made by the following: ... (3) Every estate the gross income of which for the taxable year is $600 or more; (4) Every trust having for the taxable year any taxable income, or having gross income of $600 or over, regardless of the amount of taxable income; ...
+    (c) Certain income earned abroad or from sale of residence For purposes of this section, gross income shall be computed without regard to the exclusion provided for in section 121 (relating to gain from sale of principal residence) and without regard to the exclusion provided for in section 911 (relating to citizens or residents of the United States living abroad).
+    (d) Tax-exempt interest required to be shown on return Every person required to file a return under this section for the taxable year shall include on such return the amount of interest received or accrued during the taxable year which is exempt from the tax imposed by chapter 1.
+    (f) Special rule for taxable years 2018 through 2025 In the case of a taxable year beginning after December 31, 2017, and before January 1, 2026, subsection (a)(1) shall not apply, and every individual who has gross income for the taxable year shall be required to make returns with respect to income taxes under subtitle A, except that a return shall not be required of— (1) an individual who is not married (determined by applying section 7703) and who has gross income for the taxable year which does not exceed the standard deduction applicable to such individual for such taxable year under section 63, or (2) an individual entitled to make a joint return if— (A) the gross income of such individual, when combined with the gross income of such individual’s spouse, for the taxable year does not exceed the standard deduction which would be applicable to the taxpayer for such taxable year under section 63 if such individual and such individual’s spouse made a joint return, (B) such individual and such individual’s spouse have the same household as their home at the close of the taxable year, (C) such individual’s spouse does not make a separate return, and (D) neither such individual nor such individual’s spouse is an individual described in section 63(c)(5) who has income (other than earned income) in excess of the amount in effect under section 63(c)(5)(A).
+rules:
+  - name: estate_gross_income_return_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 6012(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: Every estate the gross income of which for the taxable year is $600 or more
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          600
+
+  - name: trust_gross_income_return_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 6012(a)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: Every trust having for the taxable year any taxable income, or having gross income of $600 or over
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          600
+
+  - name: gross_income_for_section_6012
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 6012(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: gross income shall be computed without regard to the exclusion provided for in section 121 ... and without regard to the exclusion provided for in section 911
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          gross_income
+          + gain_excluded_from_gross_income_under_section_121
+          + income_excluded_from_gross_income_under_section_911
+
+  - name: unmarried_individual_exception_to_return_requirement_under_2018_2025_rule
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 6012(f)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: except that a return shall not be required of— (1) an individual who is not married (determined by applying section 7703) and who has gross income for the taxable year which does not exceed the standard deduction applicable to such individual for such taxable year under section 63
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/63/c#standard_deduction
+              output: standard_deduction
+              hash: sha256:f0837d58e11fb24050ea1937569bc990f5c8bc5df3eb21a04047cde587b9d905
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          individual_not_married_under_section_7703
+          and gross_income_for_section_6012 <= standard_deduction
+
+  - name: joint_return_exception_to_return_requirement_under_2018_2025_rule
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 6012(f)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: an individual entitled to make a joint return if— (A) the gross income of such individual, when combined with the gross income of such individual’s spouse ... does not exceed the standard deduction ... if such individual and such individual’s spouse made a joint return, (B) ... same household ... (C) ... spouse does not make a separate return, and (D) neither ... is an individual described in section 63(c)(5) who has income (other than earned income) in excess of the amount in effect under section 63(c)(5)(A).
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/63/c#standard_deduction
+              output: standard_deduction
+              hash: sha256:f0837d58e11fb24050ea1937569bc990f5c8bc5df3eb21a04047cde587b9d905
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          individual_entitled_to_make_joint_return
+          and combined_gross_income_of_individual_and_spouse_for_section_6012 <= standard_deduction
+          and individual_and_spouse_have_same_household_as_home_at_close_of_taxable_year
+          and not spouse_makes_separate_return
+          and not individual_is_section_63_c_5_dependent_with_nonearned_income_above_63_c_5_A_amount
+          and not spouse_is_section_63_c_5_dependent_with_nonearned_income_above_63_c_5_A_amount
+
+  - name: individual_income_tax_return_required_under_2018_2025_rule
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 6012(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: In the case of a taxable year beginning after December 31, 2017, and before January 1, 2026
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: every individual who has gross income for the taxable year shall be required to make returns with respect to income taxes under subtitle A
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: except that a return shall not be required of— (1) ... or (2) ...
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          taxable_year_begins_after_2017_and_before_2026
+          and taxpayer_is_individual
+          and gross_income_for_section_6012 > 0
+          and not unmarried_individual_exception_to_return_requirement_under_2018_2025_rule
+          and not joint_return_exception_to_return_requirement_under_2018_2025_rule
+
+  - name: estate_income_tax_return_required
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 6012(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: Every estate the gross income of which for the taxable year is $600 or more
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: $600 or more
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          taxpayer_is_estate
+          and gross_income_for_section_6012 >= estate_gross_income_return_threshold
+
+  - name: trust_income_tax_return_required
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 6012(a)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: Every trust having for the taxable year any taxable income, or having gross income of $600 or over, regardless of the amount of taxable income
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: gross income of $600 or over
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          taxpayer_is_trust
+          and (taxable_income > 0 or gross_income_for_section_6012 >= trust_gross_income_return_threshold)
+
+  - name: tax_exempt_interest_required_to_be_shown_on_return
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 6012(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/6012
+              text: Every person required to file a return under this section for the taxable year shall include on such return the amount of interest received or accrued during the taxable year which is exempt from the tax imposed by chapter 1.
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          if individual_income_tax_return_required_under_2018_2025_rule or estate_income_tax_return_required or trust_income_tax_return_required: tax_exempt_interest_received_or_accrued else: 0
