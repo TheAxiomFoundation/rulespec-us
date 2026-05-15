@@ -1,0 +1,174 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/170
+  summary: |-
+    (p) Special rule for taxpayers who do not elect to itemize deductions In the case of any taxable year, if the individual does not elect to itemize deductions for such taxable year, the deduction under this section shall be equal to the deduction, not in excess of 1,000 ($2,000 in the case of a joint return), which would be determined under this section if the only charitable contributions taken into account in determining such deduction were contributions made in cash during such taxable year (determined without regard to subsections (b)(1)(G)(ii), (b)(1)(I), and (d)(1)) to an organization described in section 170(b)(1)(A) and not— (1) to an organization described in section 509(a)(3), or (2) for the establishment of a new, or maintenance of an existing, donor advised fund (as defined in section 4966(d)(2)).
+rules:
+  - name: charitable_contribution_of_tax_unit
+    kind: data_relation
+    data_relation:
+      predicate: charitable_contribution_of_tax_unit
+      arity: 2
+      arguments:
+        - TaxUnit
+        - Payment
+
+  - name: nonitemizer_charitable_deduction_individual_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 170(p)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: not in excess of 1,000 ($2,000 in the case of a joint return)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          1000
+
+  - name: nonitemizer_charitable_deduction_joint_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 170(p)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: not in excess of 1,000 ($2,000 in the case of a joint return)
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          2000
+
+  - name: nonitemizer_cash_contribution_taken_into_account
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 170(p)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: contributions made in cash during such taxable year ... to an organization described in section 170(b)(1)(A)
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: and not— (1) to an organization described in section 509(a)(3), or (2) for the establishment of a new, or maintenance of an existing, donor advised fund
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          contribution_made_in_cash_during_taxable_year
+          and contribution_to_organization_described_in_section_170_b_1_A
+          and
+          not contribution_to_organization_described_in_section_509_a_3
+          and
+          not contribution_for_establishment_or_maintenance_of_donor_advised_fund_defined_in_section_4966_d_2
+
+  - name: nonitemizer_cash_contribution_amount_taken_into_account
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 170(p)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: if the only charitable contributions taken into account in determining such deduction were contributions made in cash during such taxable year
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/170
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if nonitemizer_cash_contribution_taken_into_account: payment_amount else: 0
+
+  - name: nonitemizer_charitable_deduction_cap
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 170(p)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: not in excess of 1,000 ($2,000 in the case of a joint return)
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/170
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          match filing_status:
+              1 => nonitemizer_charitable_deduction_joint_cap
+              0 => nonitemizer_charitable_deduction_individual_cap
+              2 => nonitemizer_charitable_deduction_individual_cap
+              3 => nonitemizer_charitable_deduction_individual_cap
+              4 => nonitemizer_charitable_deduction_individual_cap
+
+  - name: nonitemizer_charitable_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 170(p)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: if the individual does not elect to itemize deductions for such taxable year, the deduction under this section shall be equal to the deduction, not in excess of 1,000 ($2,000 in the case of a joint return)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/170
+              text: if the only charitable contributions taken into account in determining such deduction were contributions made in cash during such taxable year ... to an organization described in section 170(b)(1)(A) and not—
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/170
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if individual_does_not_elect_to_itemize_deductions_for_taxable_year:
+              min(
+                  nonitemizer_charitable_deduction_cap,
+                  sum_where(
+                      charitable_contribution_of_tax_unit,
+                      nonitemizer_cash_contribution_amount_taken_into_account,
+                      nonitemizer_cash_contribution_taken_into_account
+                  )
+              )
+          else:
+              0
