@@ -1,0 +1,139 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/45A
+  summary: |-
+    (c) Qualified employee For purposes of this section— (1) In general Except as otherwise provided in this subsection, the term “qualified employee” means, with respect to any period, any employee of an employer if— (A) the employee is an enrolled member of an Indian tribe or the spouse of an enrolled member of an Indian tribe, (B) substantially all of the services performed during such period by such employee for such employer are performed within an Indian reservation, and (C) the principal place of abode of such employee while performing such services is on or near the reservation in which the services are performed. (2) Individuals receiving wages in excess of $30,000 not eligible An employee shall not be treated as a qualified employee for any taxable year of the employer if the total amount of the wages paid or incurred by such employer to such employee during such taxable year (whether or not for services within an Indian reservation) exceeds the amount determined at an annual rate of $30,000. (3) Inflation adjustment The Secretary shall adjust the $30,000 amount under paragraph (2) for years beginning after 1994 at the same time and in the same manner as under section 415(d), except that the base period taken into account for purposes of such adjustment shall be the calendar quarter beginning October 1, 1993 . (4) Employment must be trade or business employment An employee shall be treated as a qualified employee for any taxable year of the employer only if more than 50 percent of the wages paid or incurred by the employer to such employee during such taxable year are for services performed in a trade or business of the employer. Any determination as to whether the preceding sentence applies with respect to any employee for any taxable year shall be made without regard to subsection (e)(2). (5) Certain employees not eligible The term “qualified employee” shall not include— (A) any individual described in subparagraph (A), (B), or (C) of section 51(i)(1), (B) any 5-percent owner (as defined in section 416(i)(1)(B)), and (C) any individual if the services performed by such individual for the employer involve the conduct of class I, II, or III gaming as defined in section 4 of the Indian Gaming Regulatory Act ( 25 U.S.C. 2703 ), or are performed in a building housing such gaming activity. (6) Indian tribe defined The term “Indian tribe” means any Indian tribe, band, nation, pueblo, or other organized group or community, including any Alaska Native village, or regional or village corporation, as defined in, or established pursuant to, the Alaska Native Claims Settlement Act ( 43 U.S.C. 1601 et seq.) which is recognized as eligible for the special programs and services provided by the United States to Indians because of their status as Indians. (7) Indian reservation defined The term “Indian reservation” has the meaning given such term by section 168(j)(6).
+rules:
+  - name: qualified_employee_statutory_wage_limit_base
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 45A(c)(2), "$30,000"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "exceeds the amount determined at an annual rate of $30,000"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          30000
+
+  - name: trade_or_business_wages_required_percentage
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 45A(c)(4), "more than 50 percent"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "only if more than 50 percent of the wages paid or incurred by the employer to such employee during such taxable year are for services performed in a trade or business of the employer"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          0.50
+
+  - name: qualified_employee_wage_limit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 45A(c)(2)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "the amount determined at an annual rate of $30,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "The Secretary shall adjust the $30,000 amount under paragraph (2) for years beginning after 1994 at the same time and in the same manner as under section 415(d), except that the base period taken into account for purposes of such adjustment shall be the calendar quarter beginning October 1, 1993"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          if taxable_year_begins_after_1994:
+              wage_limit_adjusted_under_section_415_d_with_base_period_calendar_quarter_beginning_1993_10_01
+          else:
+              qualified_employee_statutory_wage_limit_base
+
+  - name: employment_trade_or_business_requirement_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 45A(c)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "only if more than 50 percent of the wages paid or incurred by the employer to such employee during such taxable year are for services performed in a trade or business of the employer"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "more than 50 percent"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          trade_or_business_wage_percentage > trade_or_business_wages_required_percentage
+
+  - name: qualified_employee
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 45A(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "the term “qualified employee” means, with respect to any period, any employee of an employer if— (A) the employee is an enrolled member of an Indian tribe or the spouse of an enrolled member of an Indian tribe, (B) substantially all of the services performed during such period by such employee for such employer are performed within an Indian reservation, and (C) the principal place of abode of such employee while performing such services is on or near the reservation in which the services are performed"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "An employee shall not be treated as a qualified employee for any taxable year of the employer if the total amount of the wages paid or incurred by such employer to such employee during such taxable year (whether or not for services within an Indian reservation) exceeds the amount determined at an annual rate of $30,000."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "An employee shall be treated as a qualified employee for any taxable year of the employer only if more than 50 percent of the wages paid or incurred by the employer to such employee during such taxable year are for services performed in a trade or business of the employer."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "The term “qualified employee” shall not include— (A) any individual described in subparagraph (A), (B), or (C) of section 51(i)(1), (B) any 5-percent owner (as defined in section 416(i)(1)(B)), and (C) any individual if the services performed by such individual for the employer involve the conduct of class I, II, or III gaming as defined in section 4 of the Indian Gaming Regulatory Act (25 U.S.C. 2703), or are performed in a building housing such gaming activity."
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          employee_is_enrolled_member_of_indian_tribe_or_spouse
+          and substantially_all_services_performed_within_indian_reservation
+          and principal_place_of_abode_on_or_near_reservation
+          and total_wages_paid_or_incurred_by_employer_to_employee <= qualified_employee_wage_limit
+          and employment_trade_or_business_requirement_satisfied
+          and not individual_described_in_section_51_i_1_A
+          and not individual_described_in_section_51_i_1_B
+          and not individual_described_in_section_51_i_1_C
+          and not individual_is_5_percent_owner_as_defined_in_section_416_i_1_B
+          and not services_involve_class_I_II_or_III_gaming
+          and not services_performed_in_building_housing_class_I_II_or_III_gaming_activity
