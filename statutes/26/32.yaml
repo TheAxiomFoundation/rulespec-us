@@ -1,5 +1,6 @@
 format: rulespec/v1
 imports:
+  - us:statutes/26/152/c
   - us:policies/irs/rev-proc-2025-32/earned-income-credit
 module:
   proof_validation:
@@ -103,6 +104,53 @@ rules:
         formula: |-
           65
 
+  - name: eitc_qualifying_child_base
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 32(c)(3), 26 USC 152(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/152/c#qualifying_child_relationship
+              output: qualifying_child_relationship
+              hash: sha256:c8bb8fccea504aa5015d8bf30d52579e2ed63c75ed26079fc0a74abe9e589a5c
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/152/c#abode_fraction_threshold
+              output: abode_fraction_threshold
+              hash: sha256:c8bb8fccea504aa5015d8bf30d52579e2ed63c75ed26079fc0a74abe9e589a5c
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/152/c#age_requirements_met
+              output: age_requirements_met
+              hash: sha256:c8bb8fccea504aa5015d8bf30d52579e2ed63c75ed26079fc0a74abe9e589a5c
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/152/c#tiebreaker_treats_individual_as_qualifying_child_of_taxpayer
+              output: tiebreaker_treats_individual_as_qualifying_child_of_taxpayer
+              hash: sha256:c8bb8fccea504aa5015d8bf30d52579e2ed63c75ed26079fc0a74abe9e589a5c
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/32
+              text: "qualifying child ... as defined in section 152(c), determined without regard to paragraph (1)(D) thereof and section 152(e)"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          qualifying_child_relationship
+          and individual_principal_place_of_abode_with_taxpayer_fraction > abode_fraction_threshold
+          and age_requirements_met
+          and not individual_filed_joint_return_with_spouse_other_than_only_for_claim_of_refund
+          and tiebreaker_treats_individual_as_qualifying_child_of_taxpayer
+
   - name: eitc_qualifying_child
     kind: derived
     entity: Person
@@ -130,7 +178,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          qualifying_child_under_section_152_c_as_modified_for_eitc
+          eitc_qualifying_child_base
           and qualifying_child_principal_place_of_abode_is_in_united_states
           and qualifying_child_name_age_and_tin_included_on_return
           and (
@@ -272,6 +320,12 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/earned-income-credit#eitc_maximum_credit_amounts
+              output: eitc_maximum_credit_amounts
+              hash: sha256:299a7bc8a73cfb7dfad5d49fb82fca8fa29bf1b18c09e91180ebc5b3975fad7b
+          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/statute/26/32
@@ -279,7 +333,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          eitc_phase_in_rate * eitc_earned_income_amount
+          match eitc_capped_child_count:
+              0 => eitc_maximum_credit_amounts[0]
+              1 => eitc_maximum_credit_amounts[1]
+              2 => eitc_maximum_credit_amounts[2]
+              3 => eitc_maximum_credit_amounts[3]
 
   - name: eitc_phase_out_start
     kind: derived
@@ -362,7 +420,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          eitc_phase_in_rate * min(earned_income, eitc_earned_income_amount)
+          if earned_income >= eitc_earned_income_amount: eitc_maximum else: eitc_phase_in_rate * min(max(0, earned_income), eitc_earned_income_amount)
 
   - name: eitc_reduction
     kind: derived
