@@ -1,0 +1,141 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/1211
+  summary: |-
+    (a) Corporations In the case of a corporation, losses from sales or exchanges of capital assets shall be allowed only to the extent of gains from such sales or exchanges.
+
+    (b) Other taxpayers In the case of a taxpayer other than a corporation, losses from sales or exchanges of capital assets shall be allowed only to the extent of the gains from such sales or exchanges, plus (if such losses exceed such gains) the lower of— (1) $3,000 ($1,500 in the case of a married individual filing a separate return), or (2) the excess of such losses over such gains.
+rules:
+  - name: other_taxpayer_capital_loss_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1211(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/1211
+              excerpt: "$3,000"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          3000
+
+  - name: married_separate_capital_loss_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1211(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/1211
+              excerpt: "$1,500 in the case of a married individual filing a separate return"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          1500
+
+  - name: other_taxpayer_capital_loss_limit_by_filing_status
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1211(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/1211
+              excerpt: "$3,000 ($1,500 in the case of a married individual filing a separate return)"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          match filing_status:
+              2 => married_separate_capital_loss_limit
+              0 => other_taxpayer_capital_loss_limit
+              1 => other_taxpayer_capital_loss_limit
+              3 => other_taxpayer_capital_loss_limit
+              4 => other_taxpayer_capital_loss_limit
+
+  - name: capital_losses_excess_over_gains
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1211(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/1211
+              excerpt: "the excess of such losses over such gains"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(0, losses_from_sales_or_exchanges_of_capital_assets - gains_from_sales_or_exchanges_of_capital_assets)
+
+  - name: corporation_capital_losses_allowed
+    kind: derived
+    entity: Corporation
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1211(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1211
+              excerpt: "losses from sales or exchanges of capital assets shall be allowed only to the extent of gains from such sales or exchanges"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          min(
+              max(0, losses_from_sales_or_exchanges_of_capital_assets),
+              max(0, gains_from_sales_or_exchanges_of_capital_assets)
+          )
+
+  - name: other_taxpayer_capital_losses_allowed
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1211(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1211
+              excerpt: "losses from sales or exchanges of capital assets shall be allowed only to the extent of the gains from such sales or exchanges, plus (if such losses exceed such gains) the lower of"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          min(
+              max(0, losses_from_sales_or_exchanges_of_capital_assets),
+              max(0, gains_from_sales_or_exchanges_of_capital_assets)
+              + min(
+                  other_taxpayer_capital_loss_limit_by_filing_status,
+                  capital_losses_excess_over_gains
+              )
+          )
