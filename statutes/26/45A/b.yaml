@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/45A
+  summary: |-
+    (b) Qualified wages; qualified employee health insurance costs For purposes of this section— (1) Qualified wages (A) In general The term “qualified wages” means any wages paid or incurred by an employer for services performed by an employee while such employee is a qualified employee. (B) Coordination with work opportunity credit The term “qualified wages” shall not include wages attributable to service rendered during the 1-year period beginning with the day the individual begins work for the employer if any portion of such wages is taken into account in determining the credit under section 51. If any portion of wages are taken into account under subsection (e)(1)(A) of section 51, the preceding sentence shall be applied by substituting “2-year period” for “1-year period”. (2) Qualified employee health insurance costs (A) In general The term “qualified employee health insurance costs” means any amount paid or incurred by an employer for health insurance to the extent such amount is attributable to coverage provided to any employee while such employee is a qualified employee. (B) Exception for amounts paid under salary reduction arrangements No amount paid or incurred for health insurance pursuant to a salary reduction arrangement shall be taken into account under subparagraph (A). (3) Limitation The aggregate amount of qualified wages and qualified employee health insurance costs taken into account with respect to any employee for any taxable year (and for the base period under subsection (a)(2)) shall not exceed $20,000.
+rules:
+  - name: work_opportunity_credit_coordination_period_years
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 45A(b)(1)(B), "1-year period"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "shall not include wages attributable to service rendered during the 1-year period beginning with the day the individual begins work for the employer"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          1
+
+  - name: section_51_e_1_A_coordination_period_years
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 45A(b)(1)(B), "2-year period"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "If any portion of wages are taken into account under subsection (e)(1)(A) of section 51, the preceding sentence shall be applied by substituting “2-year period” for “1-year period”"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          2
+
+  - name: employee_qualified_costs_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 45A(b)(3), "$20,000"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "shall not exceed $20,000"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          20000
+
+  - name: qualified_wages_before_employee_cap
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 45A(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "The term “qualified wages” means any wages paid or incurred by an employer for services performed by an employee while such employee is a qualified employee."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "The term “qualified wages” shall not include wages attributable to service rendered during the 1-year period beginning with the day the individual begins work for the employer if any portion of such wages is taken into account in determining the credit under section 51."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "If any portion of wages are taken into account under subsection (e)(1)(A) of section 51, the preceding sentence shall be applied by substituting “2-year period” for “1-year period”."
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          max(
+              0,
+              wages_paid_or_incurred_for_services_while_qualified_employee
+              - wages_excluded_by_work_opportunity_credit_coordination
+          )
+
+  - name: qualified_employee_health_insurance_costs_before_employee_cap
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 45A(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "The term “qualified employee health insurance costs” means any amount paid or incurred by an employer for health insurance to the extent such amount is attributable to coverage provided to any employee while such employee is a qualified employee."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "No amount paid or incurred for health insurance pursuant to a salary reduction arrangement shall be taken into account under subparagraph (A)."
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          max(
+              0,
+              health_insurance_amount_attributable_to_coverage_while_qualified_employee
+              - health_insurance_amount_paid_under_salary_reduction_arrangement
+          )
+
+  - name: qualified_wages_and_health_costs_taken_into_account
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 45A(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/45A
+              excerpt: "The aggregate amount of qualified wages and qualified employee health insurance costs taken into account with respect to any employee for any taxable year (and for the base period under subsection (a)(2)) shall not exceed $20,000."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/45A/b#qualified_wages_before_employee_cap
+              output: qualified_wages_before_employee_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/45A/b#qualified_employee_health_insurance_costs_before_employee_cap
+              output: qualified_employee_health_insurance_costs_before_employee_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/45A/b#employee_qualified_costs_cap
+              output: employee_qualified_costs_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          min(
+              employee_qualified_costs_cap,
+              qualified_wages_before_employee_cap
+              + qualified_employee_health_insurance_costs_before_employee_cap
+          )
