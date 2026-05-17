@@ -1,17 +1,37 @@
 format: rulespec/v1
+imports:
+  - us:statutes/26/151#exemption_individual_eligible
 module:
   proof_validation:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/63
+  deferred_outputs:
+    - output: us:statutes/26/63/f#additional_amount_for_each_aged_or_blind_entitlement
+      blocked_by:
+        - us:statutes/26/7703#taxpayer_considered_married_after_living_apart_rule
+        - us:statutes/26/2/a#surviving_spouse
+      reason: Paragraph (3) substitutes $750 for $600 for an individual who is not married and is not a surviving spouse. The copied surviving-spouse source is deferred and no shared filing-status output is available without prohibited local filing-status inputs.
+      source_values:
+        - us:statutes/26/63/f#aged_or_blind_additional_amount
+        - us:statutes/26/63/f#unmarried_not_surviving_spouse_additional_amount
   summary: |-
     (f) Aged or blind additional amounts (1) Additional amounts for the aged The taxpayer shall be entitled to an additional amount of $600— (A) for himself if he has attained age 65 before the close of his taxable year, and (B) for the spouse of the taxpayer if the spouse has attained age 65 before the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b). (2) Additional amount for blind The taxpayer shall be entitled to an additional amount of $600— (A) for himself if he is blind at the close of the taxable year, and (B) for the spouse of the taxpayer if the spouse is blind as of the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b). For purposes of subparagraph (B), if the spouse dies during the taxable year the determination of whether such spouse is blind shall be made as of the time of such death. (3) Higher amount for certain unmarried individuals In the case of an individual who is not married and is not a surviving spouse, paragraphs (1) and (2) shall be applied by substituting “$750” for “$600”. (4) Blindness defined For purposes of this subsection, an individual is blind only if his central visual acuity does not exceed 20/200 in the better eye with correcting lenses, or if his visual acuity is greater than 20/200 but is accompanied by a limitation in the fields of vision such that the widest diameter of the visual field subtends an angle no greater than 20 degrees.
 rules:
+  - name: spouse_of_taxpayer_for_subsection_f
+    kind: data_relation
+    data_relation:
+      predicate: spouse_of_taxpayer_for_subsection_f
+      arity: 2
+      arguments:
+        - TaxUnit
+        - Person
+
   - name: aged_or_blind_additional_amount
     kind: parameter
     dtype: Money
     unit: USD
-    source: IRC section 63(f)(1), (2)
+    source: 26 USC 63(f)(1), (2)
     metadata:
       proof:
         atoms:
@@ -29,7 +49,7 @@ rules:
     kind: parameter
     dtype: Money
     unit: USD
-    source: IRC section 63(f)(3)
+    source: 26 USC 63(f)(3)
     metadata:
       proof:
         atoms:
@@ -43,10 +63,27 @@ rules:
         formula: |-
           750
 
+  - name: aged_additional_amount_age_threshold
+    kind: parameter
+    dtype: Count
+    source: 26 USC 63(f)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "if he has attained age 65 before the close of his taxable year"
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          65
+
   - name: blindness_visual_acuity_numerator
     kind: parameter
     dtype: Decimal
-    source: IRC section 63(f)(4)
+    source: 26 USC 63(f)(4)
     metadata:
       proof:
         atoms:
@@ -63,7 +100,7 @@ rules:
   - name: blindness_visual_acuity_denominator
     kind: parameter
     dtype: Decimal
-    source: IRC section 63(f)(4)
+    source: 26 USC 63(f)(4)
     metadata:
       proof:
         atoms:
@@ -80,7 +117,7 @@ rules:
   - name: blindness_visual_field_angle_limit
     kind: parameter
     dtype: Decimal
-    source: IRC section 63(f)(4)
+    source: 26 USC 63(f)(4)
     metadata:
       proof:
         atoms:
@@ -88,7 +125,7 @@ rules:
             kind: parameter
             source:
               corpus_citation_path: us/statute/26/63
-              excerpt: "the widest diameter of the visual field subtends an angle no greater than 20 degrees"
+              excerpt: "widest diameter of the visual field subtends an angle no greater than 20 degrees"
     versions:
       - effective_from: '2018-01-01'
         formula: |-
@@ -99,7 +136,7 @@ rules:
     entity: Person
     dtype: Judgment
     period: Year
-    source: IRC section 63(f)(4)
+    source: 26 USC 63(f)(4)
     metadata:
       proof:
         atoms:
@@ -107,25 +144,14 @@ rules:
             kind: definition
             source:
               corpus_citation_path: us/statute/26/63
-              excerpt: "an individual is blind only if his central visual acuity does not exceed 20/200 in the better eye with correcting lenses, or if his visual acuity is greater than 20/200 but is accompanied by a limitation in the fields of vision such that the widest diameter of the visual field subtends an angle no greater than 20 degrees."
-          - path: versions[0].formula
-            kind: parameter
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "20/200"
-          - path: versions[0].formula
-            kind: parameter
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "20 degrees"
+              excerpt: "an individual is blind only if his central visual acuity does not exceed 20/200 in the better eye with correcting lenses, or if his visual acuity is greater than 20/200 but is accompanied by a limitation in the fields of vision such that the widest diameter of the visual field subtends an angle no greater than 20 degrees"
     versions:
       - effective_from: '2018-01-01'
         formula: |-
           central_visual_acuity_in_better_eye_with_correcting_lenses <= blindness_visual_acuity_numerator / blindness_visual_acuity_denominator
-          or
-          (
-            central_visual_acuity_in_better_eye_with_correcting_lenses > blindness_visual_acuity_numerator / blindness_visual_acuity_denominator
-            and widest_diameter_of_visual_field_angle <= blindness_visual_field_angle_limit
+          or (
+              central_visual_acuity_in_better_eye_with_correcting_lenses > blindness_visual_acuity_numerator / blindness_visual_acuity_denominator
+              and widest_diameter_of_visual_field_angle <= blindness_visual_field_angle_limit
           )
 
   - name: taxpayer_aged_additional_amount_entitlement
@@ -133,7 +159,7 @@ rules:
     entity: TaxUnit
     dtype: Judgment
     period: Year
-    source: IRC section 63(f)(1)(A)
+    source: 26 USC 63(f)(1)(A)
     metadata:
       proof:
         atoms:
@@ -147,12 +173,12 @@ rules:
         formula: |-
           taxpayer_has_attained_age_65_before_close_of_taxable_year
 
-  - name: spouse_aged_additional_amount_entitlement
+  - name: spouse_aged_additional_amount_person_entitlement
     kind: derived
-    entity: TaxUnit
+    entity: Person
     dtype: Judgment
     period: Year
-    source: IRC section 63(f)(1)(B)
+    source: 26 USC 63(f)(1)(B)
     metadata:
       proof:
         atoms:
@@ -161,18 +187,43 @@ rules:
             source:
               corpus_citation_path: us/statute/26/63
               excerpt: "for the spouse of the taxpayer if the spouse has attained age 65 before the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/151#exemption_individual_eligible
+              output: exemption_individual_eligible
+              hash: sha256:8e1d281bdce0d040e84c29e303805c7861bfb4f63dc3e278c2c8e7d548ac2f3d
     versions:
       - effective_from: '2018-01-01'
         formula: |-
           spouse_has_attained_age_65_before_close_of_taxable_year
-          and additional_exemption_allowable_for_spouse_under_section_151_b
+          and exemption_individual_eligible
+
+  - name: spouse_aged_additional_amount_entitlement
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 63(f)(1)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "for the spouse of the taxpayer if the spouse has attained age 65 before the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b)"
+    versions:
+      - effective_from: '2018-01-01'
+        formula: |-
+          count_where(spouse_of_taxpayer_for_subsection_f, spouse_aged_additional_amount_person_entitlement) > 0
 
   - name: taxpayer_blind_additional_amount_entitlement
     kind: derived
     entity: TaxUnit
     dtype: Judgment
     period: Year
-    source: IRC section 63(f)(2)(A)
+    source: 26 USC 63(f)(2)(A)
     metadata:
       proof:
         atoms:
@@ -186,12 +237,12 @@ rules:
         formula: |-
           taxpayer_is_blind_at_close_of_taxable_year
 
-  - name: spouse_blind_additional_amount_entitlement
+  - name: spouse_blind_additional_amount_person_entitlement
     kind: derived
-    entity: TaxUnit
+    entity: Person
     dtype: Judgment
     period: Year
-    source: IRC section 63(f)(2)(B)
+    source: 26 USC 63(f)(2)(B)
     metadata:
       proof:
         atoms:
@@ -200,19 +251,24 @@ rules:
             source:
               corpus_citation_path: us/statute/26/63
               excerpt: "for the spouse of the taxpayer if the spouse is blind as of the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b). For purposes of subparagraph (B), if the spouse dies during the taxable year the determination of whether such spouse is blind shall be made as of the time of such death."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/151#exemption_individual_eligible
+              output: exemption_individual_eligible
+              hash: sha256:8e1d281bdce0d040e84c29e303805c7861bfb4f63dc3e278c2c8e7d548ac2f3d
     versions:
       - effective_from: '2018-01-01'
         formula: |-
           spouse_is_blind_as_of_close_of_taxable_year_or_time_of_death
-          and additional_exemption_allowable_for_spouse_under_section_151_b
+          and exemption_individual_eligible
 
-  - name: applicable_aged_or_blind_additional_amount
+  - name: spouse_blind_additional_amount_entitlement
     kind: derived
     entity: TaxUnit
-    dtype: Money
+    dtype: Judgment
     period: Year
-    unit: USD
-    source: IRC section 63(f)(3)
+    source: 26 USC 63(f)(2)(B)
     metadata:
       proof:
         atoms:
@@ -220,55 +276,8 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/63
-              excerpt: "In the case of an individual who is not married and is not a surviving spouse, paragraphs (1) and (2) shall be applied by substituting “$750” for “$600”."
-          - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "additional amount of $600"
-          - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "substituting “$750” for “$600”"
+              excerpt: "for the spouse of the taxpayer if the spouse is blind as of the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b)"
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          if filing_status == 0 or filing_status == 3: unmarried_not_surviving_spouse_additional_amount else: aged_or_blind_additional_amount
-
-  - name: additional_standard_deduction_amount_under_subsection_f
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: IRC section 63(f)(1)-(3)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "The taxpayer shall be entitled to an additional amount of $600— (A) for himself if he has attained age 65 before the close of his taxable year, and (B) for the spouse of the taxpayer if the spouse has attained age 65 before the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b)."
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "The taxpayer shall be entitled to an additional amount of $600— (A) for himself if he is blind at the close of the taxable year, and (B) for the spouse of the taxpayer if the spouse is blind as of the close of the taxable year and an additional exemption is allowable to the taxpayer for such spouse under section 151(b)."
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/63
-              excerpt: "In the case of an individual who is not married and is not a surviving spouse, paragraphs (1) and (2) shall be applied by substituting “$750” for “$600”."
-    versions:
-      - effective_from: '2018-01-01'
-        formula: |-
-          applicable_aged_or_blind_additional_amount
-          *
-          (
-            (if taxpayer_aged_additional_amount_entitlement: 1 else: 0)
-            + (if spouse_aged_additional_amount_entitlement: 1 else: 0)
-            + (if taxpayer_blind_additional_amount_entitlement: 1 else: 0)
-            + (if spouse_blind_additional_amount_entitlement: 1 else: 0)
-          )
+          count_where(spouse_of_taxpayer_for_subsection_f, spouse_blind_additional_amount_person_entitlement) > 0
