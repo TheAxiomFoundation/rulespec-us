@@ -1,9 +1,29 @@
 format: rulespec/v1
+imports:
+  - us:statutes/26/152#dependent_of_taxpayer
+  - us:statutes/26/933#amount_excluded_from_gross_income_under_section_933
+  - us:statutes/26/931#amount_excluded_from_gross_income_under_section_931
+  - us:statutes/26/911#income_excluded_from_gross_income_under_section_911
 module:
   proof_validation:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/151
+  deferred_outputs:
+  - output: us:statutes/26/151#exemption_phaseout_applicable_percentage
+    blocked_by:
+    - us:statutes/26/68/b#applicable_amount
+    reason: >-
+      Current section 151(d)(3) continues to refer to the applicable amount in
+      effect under section 68(b), but section 68(b), as amended for taxable years
+      beginning after December 31, 2025, no longer defines that applicable amount.
+      The 2026 RuleSpec therefore leaves this phaseout percentage non-executable
+      rather than preserving a local cross-reference placeholder.
+    source_values:
+    - us:statutes/26/151#exemption_phaseout_rate_per_increment
+    - us:statutes/26/151#exemption_phaseout_increment
+    - us:statutes/26/151#exemption_phaseout_increment_separate
+    - us:statutes/26/151#exemption_phaseout_maximum_percentage
   summary: |-
     (a) In the case of an individual, the exemptions provided by this section shall be allowed as deductions in computing taxable income.
     (b) An exemption of the exemption amount for the taxpayer; and an additional exemption of the exemption amount for the spouse of the taxpayer if a joint return is not made by the taxpayer and his spouse, and if the spouse, for the calendar year in which the taxable year of the taxpayer begins, has no gross income and is not the dependent of another taxpayer.
@@ -244,33 +264,8 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          if taxable_year_begins_after_2017: post_2017_exemption_amount else: statutory_exemption_amount_base
+          if taxable_year_begins_after_tcja_exemption_amount_zero_effective_date: post_2017_exemption_amount else: statutory_exemption_amount_base
 
-  - name: exemption_phaseout_applicable_percentage
-    kind: derived
-    entity: TaxUnit
-    dtype: Rate
-    period: Year
-    source: 26 USC 151(d)(3)(A)-(B)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/151
-              text: applicable percentage means 2 percentage points for each $2,500 (or fraction thereof) by which adjusted gross income exceeds the applicable amount ... married individual filing a separate return ... "$1,250" ... shall not exceed 100 percent
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          min(
-              exemption_phaseout_maximum_percentage,
-              exemption_phaseout_rate_per_increment
-              * ceil(
-                  max(0, adjusted_gross_income - applicable_amount_in_effect_under_section_68_b)
-                  / (if filing_status == 2: exemption_phaseout_increment_separate else: exemption_phaseout_increment)
-              )
-          )
 
   - name: exemption_individual_eligible
     kind: derived
@@ -286,16 +281,22 @@ rules:
             source:
               corpus_citation_path: us/statute/26/151
               text: An exemption ... for the taxpayer; and an additional exemption ... for the spouse ... if a joint return is not made ... spouse ... has no gross income and is not the dependent of another taxpayer. An exemption ... for each individual who is a dependent ... No exemption shall be allowed ... unless the TIN of such individual is included on the return claiming the exemption.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/152#dependent_of_taxpayer
+              output: dependent_of_taxpayer
+              hash: sha256:b7c1a674c42d211f8f6b96b5d96577d3003ec16df3ccea309830502f6a87efde
     versions:
       - effective_from: '2026-01-01'
         formula: |-
           tin_included_on_return_claiming_exemption
           and (
               is_taxpayer
-              or is_dependent_under_section_152_of_taxpayer
+              or dependent_of_taxpayer
               or (
                   is_spouse_of_taxpayer
-                  and not joint_return_made_by_taxpayer_and_spouse
+                  and not (filing_status == 1)
                   and spouse_has_no_gross_income_for_calendar_year
                   and not spouse_is_dependent_of_another_taxpayer
               )
@@ -366,11 +367,29 @@ rules:
             source:
               corpus_citation_path: us/statute/26/151
               text: modified adjusted gross income means the adjusted gross income of the taxpayer for the taxable year increased by any amount excluded from gross income under section 911, 931, or 933
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/911#income_excluded_from_gross_income_under_section_911
+              output: income_excluded_from_gross_income_under_section_911
+              hash: sha256:874317f0b28a1ef7c703a2f7798cbc9a28ad9ed1eb844dd36e23450938a4f435
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/931#amount_excluded_from_gross_income_under_section_931
+              output: amount_excluded_from_gross_income_under_section_931
+              hash: sha256:24610c9933652322956d54e1132a4c0446fe056619676ba9692297f96a0be700
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/933#amount_excluded_from_gross_income_under_section_933
+              output: amount_excluded_from_gross_income_under_section_933
+              hash: sha256:15d3d7ed4242abafaa6e5a090d8ca81e46e5974103f8378be4228445da4dc04e
     versions:
       - effective_from: '2026-01-01'
         formula: |-
           adjusted_gross_income
-          + amount_excluded_from_gross_income_under_section_911
+          + income_excluded_from_gross_income_under_section_911
           + amount_excluded_from_gross_income_under_section_931
           + amount_excluded_from_gross_income_under_section_933
 
@@ -438,9 +457,9 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          taxable_year_begins_before_2029
+          taxable_year_begins_before_senior_deduction_expiration_date
           and (
-              not taxpayer_is_married_individual_within_section_7703
+              not (filing_status == 1 or filing_status == 2)
               or filing_status == 1
           )
 
