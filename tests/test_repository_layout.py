@@ -18,6 +18,7 @@ DISALLOWED_GENERIC_RULE_NAMES = {
     "threshold",
     "value",
 }
+ALLOWED_EMPTY_RULE_STATUSES = {"deferred", "entity_not_supported"}
 
 
 def iter_repo_files() -> list[Path]:
@@ -117,8 +118,17 @@ def test_rulespec_files_use_rulespec_v1_shape() -> None:
         if payload.get("format") != "rulespec/v1":
             invalid.append(f"{path.relative_to(ROOT)}: missing format: rulespec/v1")
         rules = payload.get("rules")
-        if not isinstance(rules, list) or not rules:
-            invalid.append(f"{path.relative_to(ROOT)}: missing non-empty rules list")
+        if not isinstance(rules, list):
+            invalid.append(f"{path.relative_to(ROOT)}: missing rules list")
+            continue
+        if not rules:
+            module = payload.get("module")
+            status = module.get("status") if isinstance(module, dict) else None
+            if status not in ALLOWED_EMPTY_RULE_STATUSES:
+                invalid.append(
+                    f"{path.relative_to(ROOT)}: empty rules list without "
+                    "explicit non-executable module status"
+                )
             continue
         for index, rule in enumerate(rules):
             if not isinstance(rule, dict):
