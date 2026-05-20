@@ -1,0 +1,207 @@
+format: rulespec/v1
+imports:
+  - us:statutes/26/163/h/4/C#interest_taken_into_account_after_dollar_limit
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/163
+  summary: |-
+    (4) Special rules for taxable years 2025 through 2028 relating to qualified passenger vehicle loan interest ... (C) Limitations ... (i) Dollar limit The amount of interest taken into account by a taxpayer under subparagraph (B) for any taxable year shall not exceed $10,000. (ii) Limitation based on modified adjusted gross income (I) In general The amount which is otherwise allowable as a deduction under subsection (a) as qualified passenger vehicle loan interest (determined without regard to this clause and after the application of clause (i)) shall be reduced (but not below zero) by $200 for each $1,000 (or portion thereof) by which the modified adjusted gross income of the taxpayer for the taxable year exceeds $100,000 ($200,000 in the case of a joint return).
+rules:
+  - name: modified_adjusted_gross_income_phaseout_reduction_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "shall be reduced (but not below zero) by $200 for each $1,000 (or portion thereof)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          200
+
+  - name: modified_adjusted_gross_income_phaseout_increment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "shall be reduced (but not below zero) by $200 for each $1,000 (or portion thereof)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          1000
+
+  - name: modified_adjusted_gross_income_phaseout_threshold_other
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "the modified adjusted gross income of the taxpayer for the taxable year exceeds $100,000 ($200,000 in the case of a joint return)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          100000
+
+  - name: modified_adjusted_gross_income_phaseout_threshold_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "the modified adjusted gross income of the taxpayer for the taxable year exceeds $100,000 ($200,000 in the case of a joint return)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          200000
+
+  - name: modified_adjusted_gross_income_phaseout_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "$100,000 ($200,000 in the case of a joint return)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C/ii/I#modified_adjusted_gross_income_phaseout_threshold_other
+              output: modified_adjusted_gross_income_phaseout_threshold_other
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C/ii/I#modified_adjusted_gross_income_phaseout_threshold_joint
+              output: modified_adjusted_gross_income_phaseout_threshold_joint
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if taxpayer_makes_joint_return:
+              modified_adjusted_gross_income_phaseout_threshold_joint
+          else:
+              modified_adjusted_gross_income_phaseout_threshold_other
+
+  - name: qualified_passenger_vehicle_loan_interest_phaseout_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "shall be reduced (but not below zero) by $200 for each $1,000 (or portion thereof) by which the modified adjusted gross income of the taxpayer for the taxable year exceeds $100,000 ($200,000 in the case of a joint return)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C/ii/I#modified_adjusted_gross_income_phaseout_reduction_amount
+              output: modified_adjusted_gross_income_phaseout_reduction_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C/ii/I#modified_adjusted_gross_income_phaseout_increment
+              output: modified_adjusted_gross_income_phaseout_increment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C/ii/I#modified_adjusted_gross_income_phaseout_threshold
+              output: modified_adjusted_gross_income_phaseout_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          modified_adjusted_gross_income_phaseout_reduction_amount
+          * ceil(
+              max(
+                  0,
+                  modified_adjusted_gross_income_of_taxpayer_for_taxable_year
+                  - modified_adjusted_gross_income_phaseout_threshold
+              )
+              / modified_adjusted_gross_income_phaseout_increment
+          )
+
+  - name: qualified_passenger_vehicle_loan_interest_deduction_after_modified_adjusted_gross_income_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 163(h)(4)(C)(ii)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "The amount which is otherwise allowable as a deduction under subsection (a) as qualified passenger vehicle loan interest (determined without regard to this clause and after the application of clause (i)) shall be reduced (but not below zero)"
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "In the case of taxable years beginning after December 31, 2024, and before January 1, 2029"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C#interest_taken_into_account_after_dollar_limit
+              output: interest_taken_into_account_after_dollar_limit
+              hash: sha256:a59f06d1818a9fa56814166fdc039a4eb724d33b4b161715a7bf1d368c9bead8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/163/h/4/C/ii/I#qualified_passenger_vehicle_loan_interest_phaseout_reduction
+              output: qualified_passenger_vehicle_loan_interest_phaseout_reduction
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if taxable_year_is_in_temporary_effective_window:
+              max(
+                  0,
+                  interest_taken_into_account_after_dollar_limit
+                  - qualified_passenger_vehicle_loan_interest_phaseout_reduction
+              )
+          else:
+              0

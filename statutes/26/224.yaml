@@ -1,4 +1,8 @@
 format: rulespec/v1
+imports:
+  - us:statutes/26/911/a#section_911_amount_excluded_from_gross_income
+  - us:statutes/26/931#amount_excluded_from_gross_income_under_section_931
+  - us:statutes/26/933#income_excluded_from_gross_income_under_section_933
 module:
   proof_validation:
     required: true
@@ -16,6 +20,8 @@ module:
     (e) Social security number required (1) In general No deduction shall be allowed under this section unless the taxpayer includes on the return of tax for the taxable year such individual’s social security number. (2) Social security number defined For purposes of paragraph (1), the term “social security number” shall have the meaning given such term in section 24(h)(7).
 
     (f) Married individuals If the taxpayer is a married individual (within the meaning of section 7703), this section shall apply only if the taxpayer and the taxpayer’s spouse file a joint return for the taxable year.
+
+    (g) Regulations The Secretary shall prescribe such regulations or other guidance as may be necessary to prevent reclassification of income as qualified tips, including regulations or other guidance to prevent abuse of the deduction allowed by this section.
 
     (h) Termination No deduction shall be allowed under this section for any taxable year beginning after December 31, 2028.
 rules:
@@ -103,7 +109,7 @@ rules:
             kind: amount
             source:
               corpus_citation_path: us/statute/26/224
-              text: exceeds $150,000 ($300,000 in the case of a joint return)
+              text: $300,000 in the case of a joint return
     versions:
       - effective_from: '2025-01-01'
         formula: |-
@@ -120,17 +126,38 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: definition
+            kind: formula
             source:
               corpus_citation_path: us/statute/26/224
-              text: modified adjusted gross income means the adjusted gross income of the taxpayer for the taxable year increased by any amount excluded from gross income under section 911, 931, or 933.
+              text: modified adjusted gross income means the adjusted gross income of the taxpayer for the taxable year increased by any amount excluded from gross income under section 911, 931, or 933
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/911/a#section_911_amount_excluded_from_gross_income
+              output: section_911_amount_excluded_from_gross_income
+              hash: sha256:b128d251a0f74fc46a27e516e864e53c8d25442f5b419c7bb3bb4b607542d725
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/931#amount_excluded_from_gross_income_under_section_931
+              output: amount_excluded_from_gross_income_under_section_931
+              hash: sha256:1163e1502bf90ef95eb8738416435de4a4a90a1f9f756532fc30b0a7a727db98
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/933#income_excluded_from_gross_income_under_section_933
+              output: income_excluded_from_gross_income_under_section_933
+              hash: sha256:e9b939801362efae757d1886823555c38a5f4ea828538308fe531f3619adc72f
     versions:
       - effective_from: '2025-01-01'
         formula: |-
-          adjusted_gross_income
-          + amount_excluded_from_gross_income_under_section_911
-          + amount_excluded_from_gross_income_under_section_931
-          + amount_excluded_from_gross_income_under_section_933
+          max(
+              0,
+              adjusted_gross_income
+              + section_911_amount_excluded_from_gross_income
+              + amount_excluded_from_gross_income_under_section_931
+              + income_excluded_from_gross_income_under_section_933
+          )
 
   - name: qualified_tips_phaseout_threshold
     kind: derived
@@ -143,19 +170,29 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
+            kind: condition
             source:
               corpus_citation_path: us/statute/26/224
-              text: $150,000 ($300,000 in the case of a joint return)
+              text: exceeds $150,000 ($300,000 in the case of a joint return)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_phaseout_threshold_other
+              output: qualified_tips_phaseout_threshold_other
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_phaseout_threshold_joint
+              output: qualified_tips_phaseout_threshold_joint
+              hash: sha256:local
     versions:
       - effective_from: '2025-01-01'
         formula: |-
-          match filing_status:
-              1 => qualified_tips_phaseout_threshold_joint
-              4 => qualified_tips_phaseout_threshold_joint
-              0 => qualified_tips_phaseout_threshold_other
-              2 => qualified_tips_phaseout_threshold_other
-              3 => qualified_tips_phaseout_threshold_other
+          if joint_return_made:
+              qualified_tips_phaseout_threshold_joint
+          else:
+              qualified_tips_phaseout_threshold_other
 
   - name: nonemployee_trade_or_business_qualified_tips_taken_into_account
     kind: derived
@@ -176,7 +213,7 @@ rules:
       - effective_from: '2025-01-01'
         formula: |-
           min(
-              nonemployee_trade_or_business_qualified_tips_included_on_statements_or_form_4137,
+              max(0, nonemployee_trade_or_business_qualified_tips_included_on_statements_or_form_4137),
               max(
                   0,
                   gross_income_from_nonemployee_trade_or_business_including_qualified_tips
@@ -190,7 +227,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 224(a), (c)
+    source: 26 USC 224(a), 224(c)
     metadata:
       proof:
         atoms:
@@ -198,16 +235,17 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/224
-              text: an amount equal to the qualified tips received during the taxable year that are included on statements furnished to the individual pursuant to section 6041(d)(3), 6041A(e)(3), 6050W(f)(2), or 6051(a)(18), or reported by the taxpayer on Form 4137 (or successor).
+              text: an amount equal to the qualified tips received during the taxable year that are included on statements ... or reported by the taxpayer on Form 4137 (or successor)
           - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us/statute/26/224
-              text: In the case of qualified tips received by an individual during any taxable year in the course of a trade or business (other than the trade or business of performing services as an employee) ... only to the extent that the gross income ... exceeds the sum of the deductions
+            kind: import
+            import:
+              target: us:statutes/26/224#nonemployee_trade_or_business_qualified_tips_taken_into_account
+              output: nonemployee_trade_or_business_qualified_tips_taken_into_account
+              hash: sha256:local
     versions:
       - effective_from: '2025-01-01'
         formula: |-
-          employee_qualified_tips_included_on_statements_or_form_4137
+          max(0, employee_qualified_tips_included_on_statements_or_form_4137)
           + nonemployee_trade_or_business_qualified_tips_taken_into_account
 
   - name: qualified_tips_deduction_before_phaseout
@@ -225,12 +263,24 @@ rules:
             source:
               corpus_citation_path: us/statute/26/224
               text: The amount allowed as a deduction under this section for any taxable year shall not exceed $25,000.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_deduction_cap
+              output: qualified_tips_deduction_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_taken_into_account_before_cap
+              output: qualified_tips_taken_into_account_before_cap
+              hash: sha256:local
     versions:
       - effective_from: '2025-01-01'
         formula: |-
           min(
-              qualified_tips_taken_into_account_before_cap,
-              qualified_tips_deduction_cap
+              qualified_tips_deduction_cap,
+              qualified_tips_taken_into_account_before_cap
           )
 
   - name: qualified_tips_phaseout_amount
@@ -247,7 +297,31 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/224
-              text: shall be reduced (but not below zero) by $100 for each $1,000 by which the taxpayer’s modified adjusted gross income exceeds $150,000 ($300,000 in the case of a joint return).
+              text: shall be reduced (but not below zero) by $100 for each $1,000 by which the taxpayer’s modified adjusted gross income exceeds
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_phaseout_reduction
+              output: qualified_tips_phaseout_reduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_phaseout_increment
+              output: qualified_tips_phaseout_increment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_modified_adjusted_gross_income
+              output: qualified_tips_modified_adjusted_gross_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_phaseout_threshold
+              output: qualified_tips_phaseout_threshold
+              hash: sha256:local
     versions:
       - effective_from: '2025-01-01'
         formula: |-
@@ -266,7 +340,7 @@ rules:
     entity: TaxUnit
     dtype: Judgment
     period: Year
-    source: 26 USC 224(e), (f), (h)
+    source: 26 USC 224(e), 224(f), 224(h)
     metadata:
       proof:
         atoms:
@@ -291,9 +365,9 @@ rules:
           taxpayer_social_security_number_included_on_return
           and (
               not taxpayer_is_married_individual_within_section_7703
-              or filing_status == 1
+              or joint_return_made
           )
-          and not taxable_year_begins_after_december_31_2028
+          and not taxable_year_begins_after_termination_date
 
   - name: qualified_tips_deduction
     kind: derived
@@ -301,7 +375,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 224(a)-(c), (e), (f), (h)
+    source: 26 USC 224(a), 224(b), 224(e), 224(f), 224(h)
     metadata:
       proof:
         atoms:
@@ -314,22 +388,25 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/224
-              text: shall not exceed $25,000
+              text: The amount allowable as a deduction under subsection (a) (after application of paragraph (1)) shall be reduced (but not below zero)
           - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/224
-              text: shall be reduced (but not below zero) by $100 for each $1,000
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_deduction_before_phaseout
+              output: qualified_tips_deduction_before_phaseout
+              hash: sha256:local
           - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/26/224
-              text: No deduction shall be allowed under this section unless the taxpayer includes on the return of tax for the taxable year such individual’s social security number.
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_phaseout_amount
+              output: qualified_tips_phaseout_amount
+              hash: sha256:local
           - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/26/224
-              text: No deduction shall be allowed under this section for any taxable year beginning after December 31, 2028.
+            kind: import
+            import:
+              target: us:statutes/26/224#qualified_tips_deduction_eligibility
+              output: qualified_tips_deduction_eligibility
+              hash: sha256:local
     versions:
       - effective_from: '2025-01-01'
         formula: |-
