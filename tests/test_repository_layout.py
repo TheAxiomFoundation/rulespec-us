@@ -119,11 +119,8 @@ def test_rulespec_files_use_rulespec_v1_shape() -> None:
         rules = payload.get("rules")
         if not isinstance(rules, list) or not rules:
             module = payload.get("module")
-            if (
-                rules == []
-                and isinstance(module, dict)
-                and module.get("status") in {"deferred", "entity_not_supported"}
-            ):
+            status = module.get("status") if isinstance(module, dict) else None
+            if rules == [] and status in {"deferred", "entity_not_supported"}:
                 continue
             invalid.append(f"{path.relative_to(ROOT)}: missing non-empty rules list")
             continue
