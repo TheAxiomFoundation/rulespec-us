@@ -1,11 +1,21 @@
 format: rulespec/v1
 imports:
   - us:statutes/26/63/c#standard_deduction
+  - us:statutes/26/7703#taxpayer_considered_married_after_living_apart_rule
 module:
   proof_validation:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/6012
+  deferred_outputs:
+    - output: us:statutes/26/6012#gross_income_adjustment_for_section_121_exclusion
+      blocked_by:
+        - us:statutes/26/121#gain_excluded_from_gross_income
+      reason: >-
+        Section 6012(c) computes filing gross income without regard to the
+        section 121 principal-residence gain exclusion. Section 121 is not
+        encoded in this repository, so this module keeps the adjustment amount
+        as an external input until that exclusion is available upstream.
   summary: |-
     (a) General rule Returns with respect to income taxes under subtitle A shall be made by the following: ... (3) Every estate the gross income of which for the taxable year is $600 or more; (4) Every trust having for the taxable year any taxable income, or having gross income of $600 or over, regardless of the amount of taxable income; ...
     (c) Certain income earned abroad or from sale of residence For purposes of this section, gross income shall be computed without regard to the exclusion provided for in section 121 (relating to gain from sale of principal residence) and without regard to the exclusion provided for in section 911 (relating to citizens or residents of the United States living abroad).
@@ -67,8 +77,8 @@ rules:
       - effective_from: '2018-01-01'
         formula: |-
           gross_income
-          + gain_excluded_from_gross_income_under_section_121
-          + income_excluded_from_gross_income_under_section_911
+          + principal_residence_gain_exclusion_adjustment_for_return_filing_gross_income
+          + foreign_earned_income_exclusion_adjustment_for_return_filing_gross_income
 
   - name: unmarried_individual_exception_to_return_requirement_under_2018_2025_rule
     kind: derived
@@ -89,11 +99,17 @@ rules:
             import:
               target: us:statutes/26/63/c#standard_deduction
               output: standard_deduction
-              hash: sha256:f0837d58e11fb24050ea1937569bc990f5c8bc5df3eb21a04047cde587b9d905
+              hash: sha256:53a218483c6e8d771ed249db38049c358beeb3e1606d621652dddb9732a9ada2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/7703#taxpayer_considered_married_after_living_apart_rule
+              output: taxpayer_considered_married_after_living_apart_rule
+              hash: sha256:f5985ef078c17b2e45080a53e9f2689633ab3c8664c324f28735bfa0c118db68
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          individual_not_married_under_section_7703
+          not taxpayer_considered_married_after_living_apart_rule
           and gross_income_for_section_6012 <= standard_deduction
 
   - name: joint_return_exception_to_return_requirement_under_2018_2025_rule
@@ -115,11 +131,11 @@ rules:
             import:
               target: us:statutes/26/63/c#standard_deduction
               output: standard_deduction
-              hash: sha256:f0837d58e11fb24050ea1937569bc990f5c8bc5df3eb21a04047cde587b9d905
+              hash: sha256:53a218483c6e8d771ed249db38049c358beeb3e1606d621652dddb9732a9ada2
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          individual_entitled_to_make_joint_return
+          filing_status == 1
           and combined_gross_income_of_individual_and_spouse_for_section_6012 <= standard_deduction
           and individual_and_spouse_have_same_household_as_home_at_close_of_taxable_year
           and not spouse_makes_separate_return
@@ -153,7 +169,7 @@ rules:
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          taxable_year_begins_after_2017_and_before_2026
+          special_individual_return_requirement_period_applies
           and taxpayer_is_individual
           and gross_income_for_section_6012 > 0
           and not unmarried_individual_exception_to_return_requirement_under_2018_2025_rule

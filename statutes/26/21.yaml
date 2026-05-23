@@ -4,6 +4,16 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/21
+  deferred_outputs:
+    - output: us:statutes/26/21/h#dependent_care_credit_possession_payment_administration
+      blocked_by:
+        - us:statutes/26/21#possession_credit_payment_and_coordination_context
+      reason: >-
+        Subsection (h) governs payments to U.S. possessions, mirror-code and
+        non-mirror-code systems, and coordination with the United States credit.
+        This module computes the taxpayer credit and consumes a resolved
+        possession coordination predicate; possession payment administration is
+        deferred.
   summary: |-
     26 USC 21 allows an individual with one or more qualifying individuals a credit equal to the applicable percentage of employment-related expenses paid during the taxable year. The applicable percentage is 50 percent, reduced (but not below 35 percent) by 1 percentage point for each $2,000 or fraction thereof by which adjusted gross income exceeds $15,000, and further reduced (but not below 20 percent) by 1 percentage point for each $2,000 ($4,000 for a joint return) or fraction thereof by which adjusted gross income exceeds $75,000 ($150,000 for a joint return). A qualifying individual is a dependent described in section 152(a)(1) under age 13, an incapable-of-self-care dependent with the same principal abode for more than half the taxable year, or an incapable-of-self-care spouse with the same principal abode for more than half the taxable year. Creditable employment-related expenses are limited to $3,000 for one qualifying individual or $6,000 for two or more, reduced by the aggregate amount excludable under section 129, and are also limited by the taxpayer's earned income, or for a married individual by the lesser of the taxpayer's and spouse's earned income. Married taxpayers generally must file a joint return; certain married individuals living apart are not considered married. No credit is allowed for payments to specified related individuals, for failures to provide service-provider identifying information absent due diligence, or for failures to include the qualifying individual's TIN. For taxable years beginning in 2021, special rules made the credit refundable for certain U.S.-abode taxpayers, increased expense limits to $8,000 and $16,000, changed phaseout amounts to 50 percent and $125,000, and reduced the 20 percent phaseout percentage toward zero above $400,000.
 rules:
@@ -419,17 +429,17 @@ rules:
       - effective_from: '2026-01-01'
         formula: |-
           (
-              is_dependent_under_section_152_a_1
+              is_cdcc_child_dependent
               and age < cdcc_child_age_limit
               and not abode_relationship_violates_local_law
-              and not section_152_e_non_custodial_parent
+              and not noncustodial_parent_exception_applies
           )
           or (
-              is_dependent_under_section_152_disregarding_listed_subsections
+              is_cdcc_dependent_disregarding_listed_subsections
               and physically_or_mentally_incapable_of_self_care
               and same_principal_place_of_abode_more_than_half_year
               and not abode_relationship_violates_local_law
-              and not section_152_e_non_custodial_parent
+              and not noncustodial_parent_exception_applies
           )
           or (
               is_spouse_of_taxpayer
@@ -473,7 +483,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          if taxable_year_begins_in_2021:
+          if cdcc_temporary_expansion_applies:
               if cdcc_qualifying_individual_count == 1:
                   cdcc_2021_one_qualifying_individual_expense_limit
               else:
@@ -574,7 +584,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          if taxable_year_begins_in_2021:
+          if cdcc_temporary_expansion_applies:
               cdcc_2021_first_phaseout_start
           else:
               cdcc_first_phaseout_start
@@ -614,7 +624,7 @@ rules:
       - effective_from: '2026-01-01'
         formula: |-
           max(
-              if taxable_year_begins_in_2021: cdcc_max_rate else: cdcc_first_phaseout_floor,
+              if cdcc_temporary_expansion_applies: cdcc_max_rate else: cdcc_first_phaseout_floor,
               cdcc_max_rate - (cdcc_first_phaseout_increments * cdcc_phaseout_rate_reduction)
           )
 
@@ -714,7 +724,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          if taxable_year_begins_in_2021:
+          if cdcc_temporary_expansion_applies:
               if adjusted_gross_income > cdcc_2021_high_income_phaseout_start:
                   max(0, cdcc_second_phaseout_floor - (cdcc_2021_high_income_phaseout_increments * cdcc_phaseout_rate_reduction))
               else:
@@ -759,7 +769,7 @@ rules:
         formula: |-
           legally_separated_under_decree
           or (
-              married_filing_separate_return
+              filing_status == 2
               and maintains_household_principal_abode_of_qualifying_individual_more_than_half_year
               and furnishes_over_half_cost_of_household
               and spouse_not_member_of_household_during_last_six_months
@@ -786,7 +796,7 @@ rules:
       - effective_from: '2026-01-01'
         formula: |-
           not married_at_close_of_taxable_year
-          or married_joint_return_filed
+          or filing_status == 1
           or treated_as_not_married_under_section_21
 
   - name: cdcc_claim_requirements_satisfied
@@ -831,7 +841,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          taxable_year_begins_in_2021
+          cdcc_temporary_expansion_applies
           and taxpayer_or_spouse_has_us_principal_abode_more_than_half_year
 
   - name: cdcc

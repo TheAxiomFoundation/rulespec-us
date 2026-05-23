@@ -7,6 +7,31 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/24
+  deferred_outputs:
+    - output: us:statutes/26/24/d#refundable_child_tax_credit
+      blocked_by:
+        - us:statutes/26/24/d#refundable_child_tax_credit_child_fragment
+      reason: >-
+        Subsection (d) governs the refundable portion of the child tax credit
+        and is encoded in the dedicated `statutes/26/24/d.yaml` child fragment.
+        This parent module computes the nonrefundable child credit and advance
+        payment reduction, so the refundable subsection is intentionally split
+        out from the parent artifact.
+    - output: us:statutes/26/24/h#post_2017_child_tax_credit_special_rules
+      blocked_by:
+        - us:statutes/26/24/h#post_2017_child_tax_credit_child_fragment
+      reason: >-
+        Subsection (h) supplies special post-2017 credit amounts, thresholds,
+        dependent-credit rules, identification requirements, and inflation
+        adjustments. Those rules are encoded in the dedicated
+        `statutes/26/24/h.yaml` child fragment and imported by this parent.
+    - output: us:statutes/26/24/k#child_tax_credit_possession_payment_administration
+      blocked_by:
+        - us:statutes/26/24#possession_credit_payment_and_coordination_context
+      reason: >-
+        Subsection (k) governs payments to U.S. possessions and coordination
+        with possession tax systems. This parent module computes the taxpayer
+        child tax credit; possession payment administration is deferred.
   summary: |-
     26 USC 24 allows a credit against tax for each qualifying child of the taxpayer for which the taxpayer is allowed a deduction under section 151, in an amount equal to $1,000, reduced (but not below zero) by $50 for each $1,000 (or fraction thereof) by which modified adjusted gross income exceeds the threshold amount. Modified adjusted gross income means adjusted gross income increased by amounts excluded under sections 911, 931, or 933. The threshold amount is $110,000 for a joint return, $75,000 for an unmarried individual, and $55,000 for a married individual filing separately. A qualifying child is a qualifying child under section 152(c) who has not attained age 17, excluding certain noncitizens. No credit is allowed without required child and taxpayer identifying numbers, for short taxable years except death-year closings, during fraud/reckless disallowance periods, or after certain deficiency denials unless required eligibility information is provided. For taxable years beginning after December 31, 2017, subsection (h) substitutes special amounts and thresholds, including $2,200 per qualifying child, $500 for certain other dependents, $400,000 joint and $200,000 other phaseout thresholds, and SSN rules. The credit is reduced by advance payments under section 7527A, and excess advance payments increase tax subject to a safe harbor. Inflation adjustments apply to specified subsection (h) dollar amounts.
 rules:
@@ -214,9 +239,9 @@ rules:
       - effective_from: '2018-01-01'
         formula: |-
           adjusted_gross_income
-          + amount_excluded_from_gross_income_under_section_911
-          + amount_excluded_from_gross_income_under_section_931
-          + amount_excluded_from_gross_income_under_section_933
+          + ctc_foreign_earned_income_exclusion_adjustment
+          + ctc_possession_income_exclusion_adjustment
+          + ctc_puerto_rico_income_exclusion_adjustment
 
   - name: ctc_qualifying_child
     kind: derived
@@ -240,9 +265,9 @@ rules:
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          qualifying_child_under_section_152_c
+          ctc_child_satisfies_dependency_rules
           and age < ctc_child_age_ceiling_exclusive
-          and allowed_deduction_under_section_151_for_child
+          and ctc_child_deduction_allowed
           and not certain_noncitizen_exception_applies
 
   - name: ctc_child_identification_requirement_satisfied
@@ -374,12 +399,13 @@ rules:
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          match filing_status:
-              1 => ctc_joint_threshold_base
-              4 => ctc_joint_threshold_base
-              2 => ctc_separate_threshold_base
-              0 => ctc_unmarried_threshold_base
-              3 => ctc_unmarried_threshold_base
+          if ctc_phaseout_joint_threshold_applies:
+              ctc_joint_threshold_base
+          else:
+              if ctc_phaseout_separate_threshold_applies:
+                  ctc_separate_threshold_base
+              else:
+                  ctc_unmarried_threshold_base
 
   - name: ctc_phaseout_threshold
     kind: derived
@@ -401,11 +427,11 @@ rules:
             import:
               target: us:statutes/26/24/h#ctc_phase_out_threshold_under_subsection_h
               output: ctc_phase_out_threshold_under_subsection_h
-              hash: sha256:6589226170a8d201d0b5e035f00ac12530f7043ed31779cb3c1cbdb553a23fd9
+              hash: sha256:80d253ad020aaf460588e169963b2d126ea532359124436c2905c343b7dbc103
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          if taxable_year_begins_after_2017:
+          if ctc_subsection_h_special_rules_apply:
               ctc_phase_out_threshold_under_subsection_h
           else:
               ctc_phaseout_threshold_base
@@ -430,11 +456,11 @@ rules:
             import:
               target: us:statutes/26/24/h#ctc_maximum_before_phase_out_under_subsection_h
               output: ctc_maximum_before_phase_out_under_subsection_h
-              hash: sha256:6589226170a8d201d0b5e035f00ac12530f7043ed31779cb3c1cbdb553a23fd9
+              hash: sha256:80d253ad020aaf460588e169963b2d126ea532359124436c2905c343b7dbc103
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          if taxable_year_begins_after_2017:
+          if ctc_subsection_h_special_rules_apply:
               ctc_maximum_before_phase_out_under_subsection_h
           else:
               ctc_qualifying_children_count * ctc_child_amount_base
@@ -503,4 +529,4 @@ rules:
     versions:
       - effective_from: '2018-01-01'
         formula: |-
-          max(0, ctc_before_advance_payments - aggregate_advance_payments_under_section_7527A)
+          max(0, ctc_before_advance_payments - ctc_advance_payments_received)
