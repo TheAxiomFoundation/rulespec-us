@@ -1,0 +1,160 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3121
+  summary: |-
+    (12) (A) tips paid in any medium other than cash; (B) cash tips received by an employee in any calendar month in the course of his employment by an employer unless the amount of such cash tips is $20 or more;
+rules:
+  - name: monthly_cash_tip_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3121(a)(12)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "unless the amount of such cash tips is $20 or more"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          20
+
+  - name: noncash_tip_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3121(a)(12)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "tips paid in any medium other than cash"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          tips_paid_in_medium_other_than_cash
+
+  - name: noncash_tips_excluded_from_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 3121(a)(12)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "tips paid in any medium other than cash"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/12#noncash_tip_exclusion_applies
+              output: noncash_tip_exclusion_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if noncash_tip_exclusion_applies: tip_amount else: 0
+
+  - name: low_monthly_cash_tip_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3121(a)(12)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "cash tips received by an employee in any calendar month in the course of his employment by an employer"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "unless the amount of such cash tips is $20 or more"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/12#monthly_cash_tip_threshold
+              output: monthly_cash_tip_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          cash_tips_received_by_employee_in_calendar_month_in_course_of_employment_by_employer
+          and monthly_cash_tips_amount < monthly_cash_tip_threshold
+
+  - name: low_monthly_cash_tips_excluded_from_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 3121(a)(12)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "cash tips received by an employee in any calendar month in the course of his employment by an employer unless the amount of such cash tips is $20 or more"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/12#low_monthly_cash_tip_exclusion_applies
+              output: low_monthly_cash_tip_exclusion_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if low_monthly_cash_tip_exclusion_applies: cash_tip_amount_for_payment else: 0
+
+  - name: tips_excluded_from_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 3121(a)(12)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "(A) tips paid in any medium other than cash; (B) cash tips received by an employee in any calendar month in the course of his employment by an employer unless the amount of such cash tips is $20 or more"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/12#noncash_tips_excluded_from_wages
+              output: noncash_tips_excluded_from_wages
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/12#low_monthly_cash_tips_excluded_from_wages
+              output: low_monthly_cash_tips_excluded_from_wages
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          noncash_tips_excluded_from_wages + low_monthly_cash_tips_excluded_from_wages
