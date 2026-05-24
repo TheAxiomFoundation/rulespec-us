@@ -1,0 +1,174 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3121
+  summary: |-
+    (7) (A) remuneration paid in any medium other than cash to an employee for service not in the course of the employer’s trade or business or for domestic service in a private home of the employer; (B) cash remuneration paid by an employer in any calendar year to an employee for domestic service in a private home of the employer (including domestic service on a farm operated for profit), if the cash remuneration paid in such year by the employer to the employee for such service is less than the applicable dollar threshold (as defined in subsection (x)) for such year; (C) cash remuneration paid by an employer in any calendar year to an employee for service not in the course of the employer’s trade or business, if the cash remuneration paid in such year by the employer to the employee for such service is less than $100. As used in this subparagraph, the term “service not in the course of the employer’s trade or business” does not include domestic service in a private home of the employer and does not include service described in subsection (g)(5);
+rules:
+  - name: cash_nontrade_service_statutory_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3121(a)(7)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "is less than $100"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          100
+
+  - name: noncash_private_or_nonbusiness_service_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(a)(7)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "remuneration paid in any medium other than cash to an employee"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "for service not in the course of the employer’s trade or business or for domestic service in a private home of the employer"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          remuneration_paid_in_medium_other_than_cash_to_employee
+          and (service_not_in_course_of_employer_trade_or_business or domestic_service_in_private_home_of_employer)
+
+  - name: domestic_cash_below_applicable_threshold_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(a)(7)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "cash remuneration paid by an employer in any calendar year to an employee for domestic service in a private home of the employer (including domestic service on a farm operated for profit)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "if the cash remuneration paid in such year by the employer to the employee for such service is less than the applicable dollar threshold (as defined in subsection (x)) for such year"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          cash_remuneration_paid_by_employer_to_employee
+          and domestic_service_in_private_home_of_employer
+          and cash_remuneration_paid_in_year_by_employer_to_employee_for_domestic_service < applicable_dollar_threshold_as_defined_in_subsection_x_for_year
+
+  - name: cash_nontrade_service_for_subparagraph_c
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(a)(7)(C), flush language
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "As used in this subparagraph, the term “service not in the course of the employer’s trade or business” does not include domestic service in a private home of the employer and does not include service described in subsection (g)(5)"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_not_in_course_of_employer_trade_or_business
+          and not domestic_service_in_private_home_of_employer
+          and not service_described_in_subsection_g_5
+
+  - name: cash_nontrade_below_statutory_threshold_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(a)(7)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "cash remuneration paid by an employer in any calendar year to an employee for service not in the course of the employer’s trade or business"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "if the cash remuneration paid in such year by the employer to the employee for such service is less than $100"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/7#cash_nontrade_service_for_subparagraph_c
+              output: cash_nontrade_service_for_subparagraph_c
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/7#cash_nontrade_service_statutory_threshold
+              output: cash_nontrade_service_statutory_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          cash_remuneration_paid_by_employer_to_employee
+          and cash_nontrade_service_for_subparagraph_c
+          and cash_remuneration_paid_in_year_by_employer_to_employee_for_nontrade_service < cash_nontrade_service_statutory_threshold
+
+  - name: private_or_nonbusiness_service_remuneration_excluded_from_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3121(a)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: "remuneration paid in any medium other than cash ...; cash remuneration ... if ... less than the applicable dollar threshold ...; cash remuneration ... if ... less than $100"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/7#noncash_private_or_nonbusiness_service_exclusion_applies
+              output: noncash_private_or_nonbusiness_service_exclusion_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/7#domestic_cash_below_applicable_threshold_exclusion_applies
+              output: domestic_cash_below_applicable_threshold_exclusion_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/a/7#cash_nontrade_below_statutory_threshold_exclusion_applies
+              output: cash_nontrade_below_statutory_threshold_exclusion_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if noncash_private_or_nonbusiness_service_exclusion_applies or domestic_cash_below_applicable_threshold_exclusion_applies or cash_nontrade_below_statutory_threshold_exclusion_applies: payment_amount else: 0
