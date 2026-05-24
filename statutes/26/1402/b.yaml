@@ -1,0 +1,118 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/1402
+  summary: |-
+    (b) Self-employment income The term “self-employment income” means the net earnings from self-employment derived by an individual (other than a nonresident alien individual, except as provided by an agreement under section 233 of the Social Security Act) during any taxable year; except that such term shall not include— (1) in the case of the tax imposed by section 1401(a), that part of the net earnings from self-employment which is in excess of (i) an amount equal to the contribution and benefit base (as determined under section 230 of the Social Security Act) which is effective for the calendar year in which such taxable year begins, minus (ii) the amount of the wages paid to such individual during such taxable years; or (2) the net earnings from self-employment, if such net earnings for the taxable year are less than $400. For purposes of paragraph (1), the term “wages” (A) includes such remuneration paid to an employee for services included under an agreement entered into pursuant to the provisions of section 3121( l ) (relating to coverage of citizens of the United States who are employees of foreign affiliates of American employers), as would be wages under section 3121(a) if such services constituted employment under section 3121(b), and (B) includes compensation which is subject to the tax imposed by section 3201 or 3211. An individual who is not a citizen of the United States but who is a resident of the Commonwealth of Puerto Rico, the Virgin Islands, Guam, or American Samoa shall not, for purposes of this chapter be considered to be a nonresident alien individual. In the case of church employee income, the special rules of subsection (j)(2) shall apply for purposes of paragraph (2).
+imports:
+  - us:statutes/26/1402/a#net_earnings_from_self_employment
+rules:
+  - name: self_employment_income_inclusion_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1402(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/1402
+              span: 26 USC 1402(b)(2)
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          400
+
+  - name: self_employment_income_excluded_for_taxpayer
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 1402(b), first sentence and final sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/1402
+              span: 26 USC 1402(b)
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          individual_is_nonresident_alien
+          and not social_security_agreement_under_section_233_applies_to_nonresident_alien
+          and not individual_is_noncitizen_territory_resident
+
+  - name: self_employment_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1402
+              span: 26 USC 1402(b)(2)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#net_earnings_from_self_employment
+              output: net_earnings_from_self_employment
+              hash: sha256:ab9e44c995d39fa28ace7be3236ac8fb99310ee67b20adf112da049fbe7007b5
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if self_employment_income_excluded_for_taxpayer: 0
+          else:
+            if net_earnings_from_self_employment < self_employment_income_inclusion_threshold:
+              0
+            else:
+              net_earnings_from_self_employment
+
+  - name: self_employment_income_for_section_1401_a
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1402
+              span: 26 USC 1402(b)(1)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#net_earnings_from_self_employment
+              output: net_earnings_from_self_employment
+              hash: sha256:ab9e44c995d39fa28ace7be3236ac8fb99310ee67b20adf112da049fbe7007b5
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if self_employment_income_excluded_for_taxpayer: 0
+          else:
+            if net_earnings_from_self_employment < self_employment_income_inclusion_threshold:
+              0
+            else:
+              min(
+                net_earnings_from_self_employment,
+                max(
+                  0,
+                  contribution_and_benefit_base_under_section_230_of_social_security_act
+                  - wages_paid_to_individual_for_section_1401_a
+                )
+              )
