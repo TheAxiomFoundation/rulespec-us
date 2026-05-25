@@ -1,0 +1,124 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3302
+  deferred_outputs:
+  - output: us:statutes/26/3302/a#state_unemployment_contribution_credit_against_section_3301_tax
+    reason: The final credit against the tax imposed by section 3301 is limited by
+      subsection (c), requires determining whether the State unemployment compensation
+      law is certified as provided in section 3304, and requires determining the section
+      6071 return filing deadline. The copied context does not provide section 3304,
+      section 6071, or subsection (c), so the final credit surface is deferred. This
+      file retains the source-stated late-payment percentage limits that can be computed
+      independently.
+    source_values:
+    - us:statutes/26/3302/a#late_paid_contributions_credit_percentage
+    - us:statutes/26/3302/a#title11_trustee_no_fault_late_paid_contributions_credit_percentage
+    - us:statutes/26/3302/a#credit_for_late_paid_contributions_limit
+  summary: "The taxpayer may, to the extent provided in this subsection and subsection\
+    \ (c), credit against the tax imposed by section 3301 contributions paid into\
+    \ a certified State unemployment fund. Credit is allowed only for contributions\
+    \ paid with respect to the taxable year and generally paid by the section 6071\
+    \ return due date; for later payments, the credit shall not exceed 90 percent\
+    \ of the amount otherwise allowable if timely paid. For wages paid by a title\
+    \ 11 estate trustee, if the failure to pay on time was without fault by the trustee,\
+    \ paragraph (3) substitutes \u201C100 percent\u201D for \u201C90 percent\u201D\
+    ."
+rules:
+- name: late_paid_contributions_credit_percentage
+  kind: parameter
+  dtype: Rate
+  source: 26 USC 3302(a)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: credit shall not exceed 90 percent
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '0.90'
+- name: title11_trustee_no_fault_late_paid_contributions_credit_percentage
+  kind: parameter
+  dtype: Rate
+  source: 26 USC 3302(a)(5)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: "substituting \u201C100 percent\u201D for \u201C90 percent\u201D"
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '1.00'
+- name: applicable_late_paid_contributions_credit_percentage
+  kind: derived
+  entity: Employer
+  dtype: Rate
+  period: Year
+  source: 26 USC 3302(a)(3), 26 USC 3302(a)(5)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: In the case of wages paid by the trustee of an estate under title
+            11 of the United States Code, if the failure to pay contributions on time
+            was without fault by the trustee
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/a#late_paid_contributions_credit_percentage
+          output: late_paid_contributions_credit_percentage
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/a#title11_trustee_no_fault_late_paid_contributions_credit_percentage
+          output: title11_trustee_no_fault_late_paid_contributions_credit_percentage
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if wages_paid_by_trustee_of_estate_under_title_11 and failure_to_pay_contributions_on_time_was_without_fault_by_trustee:
+      title11_trustee_no_fault_late_paid_contributions_credit_percentage else: late_paid_contributions_credit_percentage'
+- name: credit_for_late_paid_contributions_limit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3302(a)(3), 26 USC 3302(a)(5)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: credit shall not exceed 90 percent of the amount which would have
+            been allowable as credit on account of such contributions had they been
+            paid on or before such last day
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: "substituting \u201C100 percent\u201D for \u201C90 percent\u201D"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/a#applicable_late_paid_contributions_credit_percentage
+          output: applicable_late_paid_contributions_credit_percentage
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "applicable_late_paid_contributions_credit_percentage\n* max(\n    0,\n\
+      \    amount_which_would_have_been_allowable_as_credit_on_account_of_late_contributions_if_timely_paid\n\
+      )"
