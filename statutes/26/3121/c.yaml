@@ -1,0 +1,156 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3121
+  summary: |-
+    (c) Included and excluded service For purposes of this chapter, if the services performed during one-half or more of any pay period by an employee for the person employing him constitute employment, all the services of such employee for such period shall be deemed to be employment; but if the services performed during more than one-half of any such pay period by an employee for the person employing him do not constitute employment, then none of the services of such employee for such period shall be deemed to be employment. As used in this subsection, the term “pay period” means a period (of not more than 31 consecutive days) for which a payment of remuneration is ordinarily made to the employee by the person employing him. This subsection shall not be applicable with respect to services performed in a pay period by an employee for the person employing him, where any of such service is excepted by subsection (b)(9).
+rules:
+  - name: pay_period_max_consecutive_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: 26 USC 3121(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: the term “pay period” means a period (of not more than 31 consecutive days)
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          31
+
+  - name: one_half_services_threshold
+    kind: parameter
+    dtype: Rate
+    period: Day
+    source: 26 USC 3121(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: if the services performed during one-half or more of any pay period
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          1 / 2
+
+  - name: pay_period_under_subsection_c
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3121(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: the term “pay period” means a period (of not more than 31 consecutive days) for which a payment of remuneration is ordinarily made to the employee by the person employing him
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/c#pay_period_max_consecutive_days
+              output: pay_period_max_consecutive_days
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          period_for_which_payment_of_remuneration_is_ordinarily_made_to_employee_by_employer
+          and pay_period_consecutive_days <= pay_period_max_consecutive_days
+
+  - name: all_services_for_pay_period_deemed_employment
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3121(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: if the services performed during one-half or more of any pay period by an employee for the person employing him constitute employment
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: all the services of such employee for such period shall be deemed to be employment
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: This subsection shall not be applicable with respect to services performed in a pay period by an employee for the person employing him, where any of such service is excepted by subsection (b)(9).
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/c#pay_period_under_subsection_c
+              output: pay_period_under_subsection_c
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/c#one_half_services_threshold
+              output: one_half_services_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          pay_period_under_subsection_c
+          and services_performed_for_employer_during_pay_period_that_constitute_employment_fraction >= one_half_services_threshold
+          and not any_service_in_pay_period_excepted_by_subsection_b_9
+
+  - name: no_services_for_pay_period_deemed_employment
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3121(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: if the services performed during more than one-half of any such pay period by an employee for the person employing him do not constitute employment
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: then none of the services of such employee for such period shall be deemed to be employment
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: This subsection shall not be applicable with respect to services performed in a pay period by an employee for the person employing him, where any of such service is excepted by subsection (b)(9).
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/c#pay_period_under_subsection_c
+              output: pay_period_under_subsection_c
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/c#one_half_services_threshold
+              output: one_half_services_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          pay_period_under_subsection_c
+          and services_performed_for_employer_during_pay_period_that_do_not_constitute_employment_fraction > one_half_services_threshold
+          and not any_service_in_pay_period_excepted_by_subsection_b_9
