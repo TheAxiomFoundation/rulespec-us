@@ -1,0 +1,242 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3121
+  summary: |-
+    26 USC 3121(v) provides special wage treatment for certain employer contributions, nonqualified deferred compensation plans, and exempt governmental deferred compensation plans. Certain employer contributions are not excluded from “wages”; nonqualified deferred compensation is taken into account at the later of service performance or absence of substantial forfeiture risk, with stated exceptions and no later wage treatment; and “exempt governmental deferred compensation plan” is defined with enumerated exclusions.
+rules:
+  - name: employer_contribution_included_in_wages_notwithstanding_subsection_a_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(v)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Nothing in any paragraph of subsection (a) (other than paragraph (1)) shall exclude from the term “wages”
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: any employer contribution under a qualified cash or deferred arrangement
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: any amount treated as an employer contribution under section 414(h)(2)
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          (
+            employer_contribution_under_qualified_cash_or_deferred_arrangement_as_defined_in_section_401_k
+            and (
+              contribution_not_included_in_gross_income_by_reason_of_section_402_e_3
+              or contribution_consists_of_designated_roth_contributions_as_defined_in_section_402A_c
+            )
+          )
+          or (
+            amount_treated_as_employer_contribution_under_section_414_h_2
+            and pickup_referred_to_in_section_414_h_2_is_pursuant_to_salary_reduction_agreement
+          )
+
+  - name: employer_contribution_amount_included_in_wages_notwithstanding_subsection_a_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3121(v)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: shall exclude from the term “wages”— (A) any employer contribution ... or (B) any amount treated as an employer contribution
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/v#employer_contribution_included_in_wages_notwithstanding_subsection_a_exclusions
+              output: employer_contribution_included_in_wages_notwithstanding_subsection_a_exclusions
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if employer_contribution_included_in_wages_notwithstanding_subsection_a_exclusions: employer_contribution_or_treated_employer_contribution_amount else: 0
+
+  - name: nonqualified_deferred_compensation_plan
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(v)(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: any plan or other arrangement for deferral of compensation other than a plan described in subsection (a)(5)
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          plan_or_other_arrangement_for_deferral_of_compensation
+          and not plan_described_in_subsection_a_5
+
+  - name: nonqualified_deferred_compensation_amount_taken_into_account_for_chapter
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(v)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Any amount deferred under a nonqualified deferred compensation plan
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: as of the later of— (i) when the services are performed, or (ii) when there is no substantial risk of forfeiture
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: shall not apply to any excess parachute payment ... or to any specified stock compensation
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/v#nonqualified_deferred_compensation_plan
+              output: nonqualified_deferred_compensation_plan
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          amount_deferred_under_plan
+          and nonqualified_deferred_compensation_plan
+          and services_have_been_performed
+          and no_substantial_risk_of_forfeiture_of_rights_to_amount
+          and not excess_parachute_payment_as_defined_in_section_280G_b
+          and not specified_stock_compensation_as_defined_in_section_4985_on_which_tax_is_imposed_by_section_4985
+
+  - name: nonqualified_deferred_compensation_amount_taken_into_account_as_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3121(v)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Any amount deferred under a nonqualified deferred compensation plan shall be taken into account for purposes of this chapter
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/v#nonqualified_deferred_compensation_amount_taken_into_account_for_chapter
+              output: nonqualified_deferred_compensation_amount_taken_into_account_for_chapter
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if nonqualified_deferred_compensation_amount_taken_into_account_for_chapter: deferred_compensation_amount else: 0
+
+  - name: previously_taken_into_account_deferred_compensation_not_thereafter_treated_as_wages
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(v)(2)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Any amount taken into account as wages by reason of subparagraph (A) (and the income attributable thereto) shall not thereafter be treated as wages
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          amount_taken_into_account_as_wages_by_reason_of_subparagraph_A
+          or income_attributable_to_amount_taken_into_account_as_wages_by_reason_of_subparagraph_A
+
+  - name: previously_taken_into_account_deferred_compensation_excluded_from_later_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3121(v)(2)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: shall not thereafter be treated as wages for purposes of this chapter
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/v#previously_taken_into_account_deferred_compensation_not_thereafter_treated_as_wages
+              output: previously_taken_into_account_deferred_compensation_not_thereafter_treated_as_wages
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if previously_taken_into_account_deferred_compensation_not_thereafter_treated_as_wages: previously_taken_into_account_amount_and_income_attributable_thereto else: 0
+
+  - name: exempt_governmental_deferred_compensation_plan
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(v)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: any plan providing for deferral of compensation established and maintained for its employees by the United States, by a State or political subdivision thereof, or by an agency or instrumentality
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Such term shall not include— (A) any plan to which section 83, 402(b), 403(c), 457(a), or 457(f)(1) applies
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: any annuity contract described in section 403(b), and (C) the Thrift Savings Fund
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          plan_provides_for_deferral_of_compensation
+          and plan_established_and_maintained_for_employees_by_united_states_state_political_subdivision_agency_or_instrumentality
+          and not plan_to_which_section_83_applies
+          and not plan_to_which_section_402_b_applies
+          and not plan_to_which_section_403_c_applies
+          and not plan_to_which_section_457_a_applies
+          and not plan_to_which_section_457_f_1_applies
+          and not annuity_contract_described_in_section_403_b
+          and not thrift_savings_fund_within_meaning_of_subchapter_III_of_chapter_84_of_title_5
