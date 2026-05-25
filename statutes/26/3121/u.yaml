@@ -1,0 +1,212 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3121
+  summary: |-
+    26 USC 3121(u) applies the hospital insurance taxes imposed by sections 3101(b) and 3111(b) to Federal, State, and local employment by applying subsection (b) without regard to paragraph (5) for Federal employment and, subject to stated exceptions, without regard to paragraph (7) for State and local employment. It also defines “medicare qualified government employment” as service that is employment with paragraphs (1) and (2) applied but would not be employment without those paragraphs.
+rules:
+  - name: election_worker_remuneration_threshold_for_specified_calendar_years
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 26 USC 3121(u)(2)(B)(ii)(V)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: remuneration paid in a calendar year for such service is less than $1,000 with respect to service performed during any calendar year commencing on or after January 1, 1995, ending on or before December 31, 1999
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          1000
+
+  - name: election_worker_remuneration_below_applicable_threshold
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(u)(2)(B)(ii)(V)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: remuneration paid in a calendar year for such service is less than $1,000
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: adjusted amount determined under section 218(c)(8)(B) of the Social Security Act for any calendar year commencing on or after January 1, 2000
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/u#election_worker_remuneration_threshold_for_specified_calendar_years
+              output: election_worker_remuneration_threshold_for_specified_calendar_years
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_performed_by_election_official_or_election_worker
+          and (
+            (
+              service_performed_in_calendar_year_within_specified_pre_adjustment_window
+              and calendar_year_remuneration_for_election_service < election_worker_remuneration_threshold_for_specified_calendar_years
+            )
+            or (
+              service_performed_in_calendar_year_subject_to_social_security_act_adjusted_amount
+              and calendar_year_remuneration_for_election_service < adjusted_amount_determined_under_section_218_c_8_B_of_social_security_act_for_calendar_year
+            )
+          )
+
+  - name: state_local_hospital_insurance_employment_certain_services_exception
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(u)(2)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/u#election_worker_remuneration_below_applicable_threshold
+              output: election_worker_remuneration_below_applicable_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_included_under_agreement_under_section_218_of_social_security_act
+          or service_performed_by_individual_employed_by_state_or_political_subdivision_to_relieve_unemployment
+          or service_performed_in_hospital_home_or_other_institution_by_patient_or_inmate_as_employee_of_state_political_subdivision_or_district_of_columbia
+          or service_performed_by_state_political_subdivision_or_district_of_columbia_employee_serving_temporarily_in_fire_storm_snow_earthquake_flood_or_similar_emergency
+          or service_performed_by_individual_included_under_section_5351_2_of_title_5_other_than_medical_or_dental_intern_or_resident
+          or election_worker_remuneration_below_applicable_threshold
+          or service_performed_by_individual_in_position_described_in_section_1402_c_2_E
+
+  - name: state_local_hospital_insurance_employment_continuing_current_employment_exception
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(u)(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Service performed for an employer shall not be treated as employment by reason of subparagraph (A) if
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_would_be_excluded_from_employment_for_chapter_if_subparagraph_A_did_not_apply
+          and individual_was_performing_substantial_and_regular_service_for_remuneration_for_that_employer_before_applicable_continuity_date
+          and individual_was_bona_fide_employee_of_that_employer_on_applicable_continuity_date
+          and not employment_relationship_entered_into_for_purposes_of_meeting_continuing_current_employment_exception
+          and not employment_relationship_with_that_employer_terminated_after_applicable_continuity_date
+
+  - name: state_local_service_employment_for_hospital_insurance_tax
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(u)(2)(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: subsection (b) shall be applied without regard to paragraph (7) thereof
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: Except as provided in subparagraphs (B) and (C)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/u#state_local_hospital_insurance_employment_certain_services_exception
+              output: state_local_hospital_insurance_employment_certain_services_exception
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/u#state_local_hospital_insurance_employment_continuing_current_employment_exception
+              output: state_local_hospital_insurance_employment_continuing_current_employment_exception
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_is_employment_as_defined_in_subsection_b_disregarding_paragraph_7
+          and not state_local_hospital_insurance_employment_certain_services_exception
+          and not state_local_hospital_insurance_employment_continuing_current_employment_exception
+
+  - name: federal_service_employment_for_hospital_insurance_tax
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(u)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: subsection (b) shall be applied without regard to paragraph (5) thereof
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_is_employment_as_defined_in_subsection_b_disregarding_paragraph_5
+
+  - name: medicare_qualified_government_employment
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3121(u)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              excerpt: is employment (as defined in subsection (b)) with the application of paragraphs (1) and (2), but would not be employment (as so defined) without the application of such paragraphs
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/u#federal_service_employment_for_hospital_insurance_tax
+              output: federal_service_employment_for_hospital_insurance_tax
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3121/u#state_local_service_employment_for_hospital_insurance_tax
+              output: state_local_service_employment_for_hospital_insurance_tax
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          (
+            federal_service_employment_for_hospital_insurance_tax
+            or state_local_service_employment_for_hospital_insurance_tax
+          )
+          and not service_would_be_employment_as_defined_in_subsection_b_without_application_of_paragraphs_1_and_2
