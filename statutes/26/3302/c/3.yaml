@@ -1,0 +1,89 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3302
+  summary: |-
+    "If the Secretary of Labor determines that a State, or State agency, has not" entered the Trade Act section 239 agreement before July 15, 1975, or fulfilled its commitments, "the total credits ... shall be reduced by 7½ percent" of the attributable tax.
+rules:
+  - name: trade_act_agreement_credit_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 3302(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "reduced by 7½ percent"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          0.075
+
+  - name: trade_act_agreement_credit_reduction_applies
+    kind: derived
+    entity: Employer
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3302(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "If the Secretary of Labor determines that a State, or State agency, has not"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          taxpayer_subject_to_unemployment_compensation_law_of_state
+          and taxable_year_is_during_state_or_agency_does_not_enter_or_fulfill_trade_act_section_239_agreement
+          and (
+            secretary_of_labor_determined_state_or_agency_did_not_enter_trade_act_section_239_agreement_before_deadline
+            or secretary_of_labor_determined_state_or_agency_did_not_fulfill_trade_act_section_239_agreement_commitments
+          )
+
+  - name: trade_act_agreement_credit_reduction
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3302(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "shall be reduced by 7½ percent of the tax imposed"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if trade_act_agreement_credit_reduction_applies: trade_act_agreement_credit_reduction_rate * tax_imposed_with_respect_to_state_attributable_wages else: 0
+
+  - name: total_credits_allowed_under_section_after_trade_act_agreement_reduction
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3302(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "the total credits ... otherwise allowable under this section ... shall be reduced"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(0, total_credits_otherwise_allowable_under_section_after_subsections_a_b_and_paragraphs_1_and_2 - trade_act_agreement_credit_reduction)
