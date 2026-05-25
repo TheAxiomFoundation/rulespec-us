@@ -1,0 +1,190 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3302
+  summary: |-
+    In a taxable year beginning with the fifth or succeeding consecutive January 1 with a balance of advances, the amount is wages attributable to the State multiplied by the percentage, if any, by which the 5-year benefit cost rate, or if higher 2.7 percent, exceeds the State average employer contribution rate. Subparagraph (C) shall not apply, and subparagraph (B) shall apply, if the Secretary of Labor timely determines that the State meets subsection (f)(2)(B).
+rules:
+  - name: fifth_or_succeeding_benefit_cost_floor_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 3302(c)(2)(C)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "or (if higher) 2.7 percent"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          0.027
+
+  - name: fifth_or_succeeding_advances_balance_reduction_applies
+    kind: derived
+    entity: Employer
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3302(c)(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "taxable year beginning with the fifth or any succeeding consecutive January 1 as of the beginning of which there is a balance of such advances"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "Subparagraph (C) shall not apply ... if the Secretary of Labor determines (on or before November 10 of such taxable year)"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          taxable_year_begins_with_fifth_or_succeeding_consecutive_january1_with_balance_of_advances
+          and not timely_secretary_of_labor_determination_state_meets_subsection_f_2_B_requirements_for_taxable_year
+
+  - name: fifth_or_succeeding_advances_balance_subparagraph_b_applies_instead
+    kind: derived
+    entity: Employer
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3302(c)(2)(C), second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "taxable year to which it would otherwise apply"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "but subparagraph (B) shall apply to such taxable year"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          taxable_year_begins_with_fifth_or_succeeding_consecutive_january1_with_balance_of_advances
+          and timely_secretary_of_labor_determination_state_meets_subsection_f_2_B_requirements_for_taxable_year
+
+  - name: fifth_or_succeeding_benefit_cost_rate_after_floor
+    kind: derived
+    entity: Employer
+    dtype: Rate
+    period: Year
+    source: 26 USC 3302(c)(2)(C)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "the 5-year benefit cost rate applicable to such State for such taxable year or (if higher) 2.7 percent"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/C#fifth_or_succeeding_benefit_cost_floor_rate
+              output: fifth_or_succeeding_benefit_cost_floor_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(
+              five_year_benefit_cost_rate_applicable_to_state_for_taxable_year,
+              fifth_or_succeeding_benefit_cost_floor_rate
+          )
+
+  - name: fifth_or_succeeding_advances_balance_excess_percentage
+    kind: derived
+    entity: Employer
+    dtype: Rate
+    period: Year
+    source: 26 USC 3302(c)(2)(C)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "percentage (if any) by which ... exceeds ... the average employer contribution rate"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/C#fifth_or_succeeding_benefit_cost_rate_after_floor
+              output: fifth_or_succeeding_benefit_cost_rate_after_floor
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(
+              0,
+              fifth_or_succeeding_benefit_cost_rate_after_floor
+              - average_employer_contribution_rate_for_state_for_calendar_year_preceding_taxable_year
+          )
+
+  - name: fifth_or_succeeding_advances_balance_reduction_rate
+    kind: derived
+    entity: Employer
+    dtype: Rate
+    period: Year
+    source: 26 USC 3302(c)(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "by the amount determined by multiplying the wages ... by the percentage"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/C#fifth_or_succeeding_advances_balance_reduction_applies
+              output: fifth_or_succeeding_advances_balance_reduction_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/C#fifth_or_succeeding_advances_balance_excess_percentage
+              output: fifth_or_succeeding_advances_balance_excess_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if fifth_or_succeeding_advances_balance_reduction_applies: fifth_or_succeeding_advances_balance_excess_percentage else: 0
+
+  - name: fifth_or_succeeding_advances_balance_credit_reduction_amount
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3302(c)(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "multiplying the wages paid by such taxpayer during such taxable year which are attributable to such State by the percentage"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/C#fifth_or_succeeding_advances_balance_reduction_rate
+              output: fifth_or_succeeding_advances_balance_reduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          wages_paid_by_taxpayer_during_taxable_year_attributable_to_state
+          * fifth_or_succeeding_advances_balance_reduction_rate
