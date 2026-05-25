@@ -1,0 +1,91 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3306
+  summary: Paragraph (1) covers that part of remuneration paid after remuneration
+    with respect to employment equal to $7,000 has been paid during the calendar year,
+    and treats certain predecessor remuneration as paid by a successor employer after
+    a substantial acquisition and immediate continued employment.
+rules:
+- name: annual_remuneration_wage_base_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 26 USC 3306(b)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/26/3306
+          excerpt: remuneration ... equal to $7,000
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '7000'
+- name: successor_predecessor_remuneration_considered_paid
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3306(b)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3306
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3306
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if employer_is_successor_employer and successor_acquired_substantially_all_property_used_in_predecessor_trade_or_business_or_separate_unit
+      and successor_immediately_after_acquisition_employs_individual_in_trade_or_business
+      and individual_immediately_prior_to_acquisition_was_employed_in_predecessor_trade_or_business:
+      max(0, predecessor_remuneration_with_respect_to_employment_paid_or_considered_paid_to_individual_during_calendar_year_before_acquisition_excluding_succeeding_paragraphs)
+      else: 0'
+- name: remuneration_excluded_from_wages_after_annual_limit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3306(b)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/26/3306
+          excerpt: after remuneration ... equal to $7,000 ... has been paid
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3306
+          excerpt: other than remuneration referred to in the succeeding paragraphs
+            of this subsection
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3306/b/1#annual_remuneration_wage_base_limit
+          output: annual_remuneration_wage_base_limit
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3306/b/1#successor_predecessor_remuneration_considered_paid
+          output: successor_predecessor_remuneration_considered_paid
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "min(\n    max(0, remuneration_with_respect_to_employment_paid_to_individual_by_employer_during_calendar_year_excluding_succeeding_paragraphs),\n\
+      \    max(\n        0,\n        remuneration_with_respect_to_employment_paid_to_individual_by_employer_during_calendar_year_excluding_succeeding_paragraphs\n\
+      \        + successor_predecessor_remuneration_considered_paid\n        - annual_remuneration_wage_base_limit\n\
+      \    )\n)"
