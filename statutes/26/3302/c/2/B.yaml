@@ -1,0 +1,132 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3302
+  summary: (B) "third or fourth consecutive January 1" with "a balance of such advances";
+    amount determined by "multiplying the wages paid ... attributable to such State"
+    by an excess percentage based on "2.7 percent" and the State average annual wage
+    fraction.
+rules:
+- name: federal_unemployment_credit_reduction_benchmark_rate
+  kind: parameter
+  dtype: Rate
+  source: 26 USC 3302(c)(2)(B)(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: 2.7 percent
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '0.027'
+- name: taxable_year_begins_with_third_or_fourth_consecutive_january1_with_balance_of_advances
+  kind: derived
+  entity: Employer
+  dtype: Judgment
+  period: Year
+  source: 26 USC 3302(c)(2)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: third or fourth consecutive January 1 as of the beginning of which
+            there is a balance of such advances
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'taxable_year_begins_with_third_consecutive_january1_with_balance_of_advances
+
+      or taxable_year_begins_with_fourth_consecutive_january1_with_balance_of_advances'
+- name: third_or_fourth_consecutive_january1_advances_balance_excess_percentage
+  kind: derived
+  entity: Employer
+  dtype: Rate
+  period: Year
+  source: 26 USC 3302(c)(2)(B)(i)-(ii)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: "by which\u2014 (i) 2.7 percent ... exceeds (ii) the average employer\
+            \ contribution rate"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/c/2/B#federal_unemployment_credit_reduction_benchmark_rate
+          output: federal_unemployment_credit_reduction_benchmark_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "max(\n    0,\n    (\n        federal_unemployment_credit_reduction_benchmark_rate\n\
+      \        * wage_base_under_this_chapter\n        / estimated_united_states_average_annual_wage_in_covered_employment_for_calendar_year_of_determination\n\
+      \    )\n    - average_employer_contribution_rate_for_state_for_calendar_year_preceding_taxable_year\n\
+      )"
+- name: third_or_fourth_consecutive_january1_advances_balance_reduction_rate
+  kind: derived
+  entity: Employer
+  dtype: Rate
+  period: Year
+  source: 26 USC 3302(c)(2)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: multiplied by a fraction, the numerator of which is the State's
+            average annual wage ... and the denominator ... wage base
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/c/2/B#taxable_year_begins_with_third_or_fourth_consecutive_january1_with_balance_of_advances
+          output: taxable_year_begins_with_third_or_fourth_consecutive_january1_with_balance_of_advances
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/c/2/B#third_or_fourth_consecutive_january1_advances_balance_excess_percentage
+          output: third_or_fourth_consecutive_january1_advances_balance_excess_percentage
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if taxable_year_begins_with_third_or_fourth_consecutive_january1_with_balance_of_advances:
+      third_or_fourth_consecutive_january1_advances_balance_excess_percentage * state_average_annual_wage_in_covered_employment_for_calendar_year_of_determination
+      / wage_base_under_this_chapter else: 0'
+- name: third_or_fourth_consecutive_january1_advances_balance_credit_reduction_amount
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3302(c)(2)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3302
+          excerpt: amount determined by multiplying the wages paid ... attributable
+            to such State by the percentage
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3302/c/2/B#third_or_fourth_consecutive_january1_advances_balance_reduction_rate
+          output: third_or_fourth_consecutive_january1_advances_balance_reduction_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'wages_paid_by_taxpayer_during_taxable_year_attributable_to_state
+
+      * third_or_fourth_consecutive_january1_advances_balance_reduction_rate'
