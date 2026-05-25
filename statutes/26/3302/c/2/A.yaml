@@ -1,0 +1,123 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3302
+  summary: |-
+    In the case of the taxable year beginning with the second consecutive January 1 with a balance of advances, the reduction is by 5 percent of the section 3301 tax with respect to wages attributable to the State; in succeeding taxable years beginning with consecutive January 1 balances, the reduction is by an additional 5 percent for each such succeeding taxable year.
+imports:
+  - us:statutes/26/3301#federal_unemployment_excise_tax
+rules:
+  - name: second_consecutive_january1_advances_balance_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 3302(c)(2)(A)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "by 5 percent of the tax imposed by section 3301"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          0.05
+
+  - name: succeeding_consecutive_january1_advances_balance_additional_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 3302(c)(2)(A)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "by an additional 5 percent, for each such succeeding taxable year"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          0.05
+
+  - name: advances_credit_reduction_rate
+    kind: derived
+    entity: Employer
+    dtype: Rate
+    period: Year
+    source: 26 USC 3302(c)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "taxable year beginning with the second consecutive January 1"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "any succeeding taxable year beginning with a consecutive January 1"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/A#second_consecutive_january1_advances_balance_reduction_rate
+              output: second_consecutive_january1_advances_balance_reduction_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/A#succeeding_consecutive_january1_advances_balance_additional_reduction_rate
+              output: succeeding_consecutive_january1_advances_balance_additional_reduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if taxable_year_begins_with_second_consecutive_january1_with_balance_of_advances:
+              second_consecutive_january1_advances_balance_reduction_rate
+          else:
+              if taxable_year_begins_with_succeeding_consecutive_january1_with_balance_of_advances:
+                  second_consecutive_january1_advances_balance_reduction_rate
+                  + (
+                      succeeding_consecutive_january1_advances_balance_additional_reduction_rate
+                      * max(0, number_of_succeeding_taxable_years_beginning_with_consecutive_january1_balance)
+                  )
+              else:
+                  0
+
+  - name: advances_credit_reduction_amount
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3302(c)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3302
+              excerpt: "of the tax imposed by section 3301 with respect to the wages paid by such taxpayer during such taxable year which are attributable to such State"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3301#federal_unemployment_excise_tax
+              output: federal_unemployment_excise_tax
+              hash: sha256:c8ab99bf65e149e554b82e856d8497ff9cc7eb2afe853f7e51f17f61fa490c27
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3302/c/2/A#advances_credit_reduction_rate
+              output: advances_credit_reduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          advances_credit_reduction_rate
+          * max(0, federal_unemployment_excise_tax)
