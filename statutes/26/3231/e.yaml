@@ -1,0 +1,394 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3231
+  summary: |-
+    26 USC 3231(e) defines “compensation” for this chapter as money remuneration paid to an individual for employee services, excluding specified sickness/accident/medical plan payments, tips except as provided in paragraph (3), identified bona fide employer-business expense reimbursements, certain section 3121(a)(5) remuneration, qualifying nonresident-alien services, low monthly local-lodge compensation, certain convention-delegate compensation, and other listed benefits; paragraph (2) applies contribution bases; paragraph (3) includes monthly cash tips for section 3201 taxes unless less than $20.
+  deferred_outputs:
+    - output: us:statutes/26/3231/e#compensation
+      reason: >-
+        The complete definition of compensation depends on an exclusion for remuneration
+        that would not be treated as wages by reason of 26 USC 3121(a)(5), but the copied
+        RuleSpec context for 26 USC 3121(a)(5) is deferred and has no executable export.
+        The full final definition also incorporates multiple cross-referenced and
+        purpose-specific branches that are not all available as executable upstream
+        RuleSpec targets in this workspace. Independent source-stated thresholds and
+        computable exclusion/inclusion branches are encoded below.
+rules:
+  - name: monthly_cash_tip_inclusion_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3231(e)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "unless the amount of such cash tips is less than $20"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          20
+
+  - name: local_lodge_monthly_disregard_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3231(e)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "with respect to any calendar month if the amount thereof is less than $25"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          25
+
+  - name: money_remuneration_for_employee_services
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3231(e)(1), first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "any form of money remuneration paid to an individual for services rendered as an employee to one or more employers"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          payment_is_money_remuneration
+          and paid_to_individual
+          and for_services_rendered_as_employee_to_one_or_more_employers
+
+  - name: employer_sickness_accident_medical_death_plan_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3231(e)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "under a plan or system established by an employer ... on account of sickness or accident disability or medical or hospitalization expenses ... or death"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "except that this clause does not apply to a payment for group-term life insurance to the extent that such payment is includible in the gross income of the employee"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          payment_made_to_or_on_behalf_of_employee_or_dependent
+          and payment_made_under_plan_or_system_established_by_employer
+          and employer_plan_covers_employees_generally_or_class_or_classes_and_dependents_if_applicable
+          and payment_on_account_of_sickness_accident_disability_medical_hospitalization_expenses_or_death
+          and not payment_is_group_term_life_insurance_includible_in_employee_gross_income
+
+  - name: employer_sickness_accident_medical_death_plan_excluded_from_compensation
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3231(e)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "Such term does not include ... the amount of any payment"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#employer_sickness_accident_medical_death_plan_exclusion_applies
+              output: employer_sickness_accident_medical_death_plan_exclusion_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if employer_sickness_accident_medical_death_plan_exclusion_applies: payment_amount else: 0
+
+  - name: identified_business_expense_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3231(e)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "an amount paid specifically—either as an advance, as reimbursement or allowance—for traveling or other bona fide and necessary expenses"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "provided any such payment is identified by the employer either by a separate payment or by specifically indicating the separate amounts"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          amount_paid_specifically_as_advance_reimbursement_or_allowance
+          and expenses_are_traveling_or_other_bona_fide_and_necessary_employer_business_expenses
+          and expenses_incurred_or_reasonably_expected_to_be_incurred
+          and employer_identifies_payment_by_separate_payment_or_specific_separate_amounts
+
+  - name: identified_business_expense_reimbursement_excluded_from_compensation
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3231(e)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "Such term does not include ... an amount paid specifically"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#identified_business_expense_reimbursement_exclusion_applies
+              output: identified_business_expense_reimbursement_exclusion_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if identified_business_expense_reimbursement_exclusion_applies: payment_amount else: 0
+
+  - name: qualifying_nonresident_alien_service_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3231(e)(1), nonresident alien sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "service which is performed by a nonresident alien individual for the period he is temporarily present in the United States as a nonimmigrant under subparagraph (F), (J), (M), or (Q)"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          service_performed_by_nonresident_alien_individual
+          and individual_temporarily_present_in_united_states_as_nonimmigrant_under_f_j_m_or_q
+          and service_performed_to_carry_out_purpose_specified_in_f_j_m_or_q
+
+  - name: qualifying_nonresident_alien_service_remuneration_excluded_from_compensation
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3231(e)(1), nonresident alien sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "Such term does not include remuneration for service which is performed by a nonresident alien individual"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#qualifying_nonresident_alien_service_exclusion_applies
+              output: qualifying_nonresident_alien_service_exclusion_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if qualifying_nonresident_alien_service_exclusion_applies: remuneration_amount else: 0
+
+  - name: local_lodge_low_monthly_compensation_disregard_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3231(e)(1), local lodge sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "compensation earned in the service of a local lodge or division of a railway-labor-organization employer"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "if the amount thereof is less than $25"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#local_lodge_monthly_disregard_threshold
+              output: local_lodge_monthly_disregard_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          compensation_earned_in_service_of_local_lodge_or_division_of_railway_labor_organization_employer
+          and monthly_local_lodge_or_division_compensation_amount < local_lodge_monthly_disregard_threshold
+
+  - name: local_lodge_low_monthly_compensation_disregarded_for_sections_3201_and_3221
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 3231(e)(1), local lodge sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "For the purpose of determining the amount of taxes under sections 3201 and 3221 ... shall be disregarded"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#local_lodge_low_monthly_compensation_disregard_applies
+              output: local_lodge_low_monthly_compensation_disregard_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if local_lodge_low_monthly_compensation_disregard_applies: monthly_local_lodge_or_division_compensation_amount else: 0
+
+  - name: convention_delegate_compensation_disregard_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3231(e)(1), convention delegate sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "Compensation for service as a delegate to a national or international convention of a railway labor organization"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "if the individual rendering such service has not previously rendered service, other than as such a delegate"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          compensation_for_service_as_delegate_to_national_or_international_convention_of_railway_labor_organization_employer
+          and individual_has_not_previously_rendered_non_delegate_service_includible_in_years_of_service_for_railroad_retirement_act
+
+  - name: convention_delegate_compensation_disregarded_for_chapter_taxes
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3231(e)(1), convention delegate sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "shall be disregarded for purposes of determining the amount of taxes due pursuant to this chapter"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#convention_delegate_compensation_disregard_applies
+              output: convention_delegate_compensation_disregard_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if convention_delegate_compensation_disregard_applies: compensation_amount else: 0
+
+  - name: cash_tip_inclusion_for_section_3201_taxes_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3231(e)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "cash tips received by an employee in any calendar month in the course of his employment by an employer"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "unless the amount of such cash tips is less than $20"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#monthly_cash_tip_inclusion_threshold
+              output: monthly_cash_tip_inclusion_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          cash_tips_received_by_employee_in_calendar_month_in_course_of_employment_by_employer
+          and monthly_cash_tips_amount >= monthly_cash_tip_inclusion_threshold
+
+  - name: cash_tips_included_as_compensation_for_section_3201_taxes
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 3231(e)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3231
+              excerpt: "the term “compensation” also includes cash tips"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3231/e#cash_tip_inclusion_for_section_3201_taxes_applies
+              output: cash_tip_inclusion_for_section_3201_taxes_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if cash_tip_inclusion_for_section_3201_taxes_applies: cash_tip_amount_for_payment else: 0
