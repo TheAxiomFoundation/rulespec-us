@@ -1,0 +1,130 @@
+format: rulespec/v1
+imports:
+- us:statutes/26/3201#tier_2_employee_tax
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3202
+  deferred_outputs:
+  - output: us:statutes/26/3202#tips_section_3201_tax_collectible_by_employer
+    reason: Tips collection under 26 USC 3202(c) depends on written statements furnished
+      pursuant to section 6053(a) and on the section 3231(e) compensation/tips rules,
+      but no executable RuleSpec context is available for those cited provisions.
+    source_values:
+    - us:statutes/26/3202#monthly_tip_collection_deadline_day
+    - us:statutes/26/3202#quarterly_tip_collection_deadline_day
+  - output: us:statutes/26/3202#group_term_life_insurance_section_3201_tax_paid_by_employee
+    reason: The special rule for group-term life insurance requires determining the
+      section 3201 tax imposed on payments that constitute compensation and coverage
+      periods during which an employment relationship no longer exists. The available
+      section 3201 context exports only an annual tier 2 employee tax and does not
+      provide a payment-scoped section 3201 tax for this subsection.
+  summary: 26 USC 3202(a) requires taxes imposed by section 3201 to be collected by
+    the employer by deducting the amount from employee compensation as paid. Subsection
+    (b) makes an employer required to deduct the tax liable for payment and not liable
+    to any person for such payment. Subsection (c) limits tips collection to written
+    statements under section 6053(a), collectible from compensation under employer
+    control before the 10th day following the month or, under regulations, the 30th
+    day following the quarter; excess uncollected tax is paid by the employee. Subsection
+    (d) provides that subsection (a) does not apply to certain post-employment group-term
+    life insurance compensation, requires separate section 6051 reporting, and makes
+    the employee pay the section 3201 tax on those payments.
+rules:
+- name: monthly_tip_collection_deadline_day
+  kind: parameter
+  dtype: Integer
+  source: 26 USC 3202(c)(1), 3202(c)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/3202
+          excerpt: before the close of the 10th day following the calendar month
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '10'
+- name: quarterly_tip_collection_deadline_day
+  kind: parameter
+  dtype: Integer
+  source: 26 USC 3202(c)(1), 3202(c)(2), 3202(c)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/3202
+          excerpt: the 30th day following the quarter
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '30'
+- name: tier_2_employee_tax_collectible_by_employer_deduction
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3202(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3202
+          excerpt: The taxes imposed by section 3201 shall be collected by the employer
+            of the taxpayer by deducting the amount of the taxes from the compensation
+            of the employee as and when paid.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3201#tier_2_employee_tax
+          output: tier_2_employee_tax
+          hash: sha256:3172cbc30360e50af16165a1e7882996ca5de69751edb5ca2ba3639737f3eff6
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "min(\n    max(0, compensation_of_employee_available_for_employer_deduction),\n\
+      \    max(0, tier_2_employee_tax)\n)"
+- name: employer_section_3201_tax_payment_liability
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3202(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3202
+          excerpt: Every employer required under subsection (a) to deduct the tax
+            shall be liable for the payment of such tax
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if employer_required_under_subsection_a_to_deduct_tax: max(0, tax_required_to_deduct_from_employee_compensation)
+      else: 0'
+- name: employer_indemnified_section_3201_tax_payment_amount
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3202(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3202
+          excerpt: and shall not be liable to any person for the amount of any such
+            payment
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if employer_required_under_subsection_a_to_deduct_tax: max(0, amount_of_section_3201_tax_payment_made_by_employer)
+      else: 0'
