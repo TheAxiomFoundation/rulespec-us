@@ -1,0 +1,186 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3231
+  summary: "26 USC 3231(e)(2) excludes from \u201Ccompensation\u201D remuneration\
+    \ paid during a calendar year after the employer has paid remuneration equal to\
+    \ the applicable base, disregards remuneration not otherwise treated as compensation,\
+    \ excepts specified hospital-insurance rate portions, defines the applicable base\
+    \ for tier 1 and tier 2 purposes, and applies the section 3121(a)(1) successor-employer\
+    \ rule with substitutions."
+  deferred_outputs:
+  - output: us:statutes/26/3231/e/2#compensation_excess_excluded_for_section_3201_a_or_3221_a_rate_portion
+    reason: Clause (iii)(I) requires comparing the rate applicable under section 3201(a)
+      or 3221(a) with the rate of tax in effect under section 3101(b). No copied RuleSpec
+      context provides the rates applicable under section 3201(a) or section 3221(a),
+      so the purpose-specific hospital-insurance carve-out cannot be computed faithfully
+      here.
+    blocked_by:
+    - us:statutes/26/3101/b/1#hospital_insurance_wage_tax_rate
+  - output: us:statutes/26/3231/e/2#compensation_excess_excluded_for_section_3211_a_rate_portion
+    reason: Clause (iii)(II) requires comparing the rate applicable under section
+      3211(a) with the rate of tax in effect under section 1401(b). No copied RuleSpec
+      context provides the rate applicable under section 3211(a), so the purpose-specific
+      hospital-insurance carve-out cannot be computed faithfully here.
+    blocked_by:
+    - us:statutes/26/1401/b/1/rate#self_employment_income_tax_rate
+  - output: us:statutes/26/3231/e/2#applicable_base_for_tier_2_taxes_and_average_monthly_compensation
+    reason: Subparagraph (B)(ii) requires applying section 230 of the Social Security
+      Act while disregarding clause (2) of the first sentence and the second sentence
+      of section 230(c). No copied RuleSpec context provides that section 230 computation,
+      so the adjusted tier 2 applicable base is left deferred.
+rules:
+- name: successor_employer_compensation_base_continuity_applies
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Year
+  source: 26 USC 3231(e)(2)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: the second sentence of section 3121(a)(1) (relating to successor
+            employers) shall apply
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: "\u201Cservices\u201D shall be substituted for \u201Cemployment\u201D"
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: "\u201Ccompensation\u201D shall be substituted for \u201Cremuneration\u201D"
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "(\n    successor_employer_acquired_substantially_all_trade_or_business_property_from_predecessor_during_calendar_year\n\
+      \    or successor_employer_acquired_substantially_all_property_used_in_separate_unit_of_predecessor_trade_or_business_during_calendar_year\n\
+      )\nand individual_rendered_services_to_successor_immediately_after_acquisition\n\
+      and individual_rendered_services_to_predecessor_immediately_before_acquisition"
+- name: predecessor_compensation_counted_for_successor_applicable_base
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3231(e)(2)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: the second sentence of section 3121(a)(1) ... shall apply
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3231/e/2#successor_employer_compensation_base_continuity_applies
+          output: successor_employer_compensation_base_continuity_applies
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if successor_employer_compensation_base_continuity_applies: predecessor_compensation_paid_or_considered_paid_to_individual_before_acquisition_during_calendar_year
+      else: 0'
+- name: compensation_counted_toward_applicable_base_before_payment
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3231(e)(2)(A)(i), (A)(ii), and (C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: after remuneration equal to the applicable base has been paid
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: remuneration which ... is not treated as compensation under this
+            subsection
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3231/e/2#predecessor_compensation_counted_for_successor_applicable_base
+          output: predecessor_compensation_counted_for_successor_applicable_base
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'compensation_without_clause_i_paid_to_individual_by_employer_during_calendar_year_before_payment
+
+      + predecessor_compensation_counted_for_successor_applicable_base'
+- name: remaining_applicable_base_before_payment
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3231(e)(2)(A)(i) and (B)(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: after remuneration equal to the applicable base has been paid
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: applicable base means ... the contribution and benefit base determined
+            under section 230 of the Social Security Act
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3231/e/2#compensation_counted_toward_applicable_base_before_payment
+          output: compensation_counted_toward_applicable_base_before_payment
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "max(\n    0,\n    contribution_and_benefit_base_determined_under_section_230_of_social_security_act_for_calendar_year\n\
+      \    - compensation_counted_toward_applicable_base_before_payment\n)"
+- name: compensation_excess_excluded_before_hospital_insurance_carveout
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3231(e)(2)(A)(i)-(ii)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: "The term \u201Ccompensation\u201D does not include that part of\
+            \ remuneration"
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3231
+          excerpt: There shall not be taken into account ... remuneration which ...
+            is not treated as compensation
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3231/e/2#remaining_applicable_base_before_payment
+          output: remaining_applicable_base_before_payment
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if remuneration_without_clause_i_treated_as_compensation_under_this_subsection:
+      max(0, remuneration_paid_during_calendar_year_to_individual_by_employer_for_services_as_employee
+      - remaining_applicable_base_before_payment) else: 0'
