@@ -1,0 +1,241 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3402
+  deferred_outputs:
+    - output: us:statutes/26/3402/h#average_wage_method_tax_to_withhold_on_each_payment
+      reason: >-
+        Section 3402(h)(1)(B) refers to the amount to be deducted and withheld
+        as if the appropriate average of estimated quarterly wages constituted
+        the actual wages paid. The source does not provide the Secretary-prescribed
+        withholding tables or computational procedure needed to compute that tax.
+      source_values:
+        - us:statutes/26/3402/h#average_wage_method_quarterly_adjustment_amount
+    - output: us:statutes/26/3402/h#other_substantially_same_method_tax_to_withhold
+      reason: >-
+        Section 3402(h)(4) permits other methods requiring substantially the same
+        amount as subsection (a) or (c), but the source and copied context do not
+        provide the Secretary-prescribed subsection (a) or (c) tax tables needed
+        to compute the alternative amount.
+  summary: |-
+    26 USC 3402(h): the Secretary may authorize alternative methods of computing withholding, including average wages with quarter-end adjustment and a 30-day tips timing rule, annualized wages, cumulative wages at employee request, and other methods producing substantially the same withholding as subsection (a) or (c).
+rules:
+  - name: tips_adjustment_deadline_days
+    kind: parameter
+    dtype: Count
+    source: 26 USC 3402(h)(1)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "in the case of tips referred to in subsection (k), within 30 days thereafter"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: average_wage_method_tips_adjustment_deadline_days
+    kind: derived
+    entity: Payment
+    dtype: Count
+    period: Year
+    source: 26 USC 3402(h)(1)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/h#tips_adjustment_deadline_days
+              output: tips_adjustment_deadline_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "in the case of tips referred to in subsection (k), within 30 days thereafter"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_tips_referred_to_in_subsection_k: tips_adjustment_deadline_days else: 0
+
+  - name: average_wage_method_quarterly_adjustment_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(1)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "such amount as may be necessary to adjust the amount actually deducted and withheld ... to the amount required ... without regard to this subsection"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, amount_required_to_be_deducted_and_withheld_during_quarter_without_regard_to_subsection_h - amount_actually_deducted_and_withheld_during_quarter)
+
+  - name: annualized_wages_for_withholding_method
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "multiplying the amount of an employee’s wages for a payroll period by the number of such payroll periods in the calendar year"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          employee_wages_for_payroll_period * number_of_such_payroll_periods_in_calendar_year
+
+  - name: annualized_wage_method_tax_to_withhold_on_payment
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(2)(B)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "dividing the amount of tax determined under subparagraph (B) by the number of payroll periods"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tax_required_on_annualized_wages_if_actual_calendar_year_wages_and_annual_payroll_period / number_of_such_payroll_periods_in_calendar_year
+
+  - name: cumulative_wage_method_aggregate_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(3)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "add the amount of the wages to be paid ... to the total amount of wages paid ... during the calendar year"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          wages_to_be_paid_to_employee_for_payroll_period + total_wages_paid_by_employer_to_employee_during_calendar_year_before_payment
+
+  - name: cumulative_wage_method_average_wages
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(3)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/h#cumulative_wage_method_aggregate_wages
+              output: cumulative_wage_method_aggregate_wages
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "divide the aggregate amount of wages ... by the number of payroll periods to which such aggregate amount of wages relates"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          cumulative_wage_method_aggregate_wages / number_of_payroll_periods_to_which_aggregate_wages_relate
+
+  - name: cumulative_wage_method_excess_tax
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(3)(C)-(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "determine the excess, if any, of the amount of tax computed ... over the total amount of tax deducted and withheld"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_tax_required_under_subsection_a_on_average_wages_for_related_payroll_periods - total_tax_deducted_and_withheld_from_employee_wages_during_calendar_year_before_payment)
+
+  - name: cumulative_wage_method_tax_to_withhold_on_payment
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(h)(3)(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/h#cumulative_wage_method_excess_tax
+              output: cumulative_wage_method_excess_tax
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "in the case of any employee who requests to have the amount of tax ... computed on the basis of his cumulative wages"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "deduct and withhold ... an amount equal to the excess (if any)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if employee_requests_cumulative_wage_withholding_computation: cumulative_wage_method_excess_tax else: 0
+
+  - name: other_substantially_same_method_authorizable
+    kind: derived
+    entity: Employer
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3402(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "any other method which will require the employer to deduct and withhold ... substantially the same amount as would be required ... by applying subsection (a) or (c)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          other_method_requires_substantially_same_amount_as_applying_subsection_a_or_c
