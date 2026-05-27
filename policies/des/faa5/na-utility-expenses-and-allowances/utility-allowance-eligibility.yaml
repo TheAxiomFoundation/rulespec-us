@@ -1,0 +1,225 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+  summary: |-
+    Utility expenses billed separate from or itemized with rent or mortgage payments on a regular basis are used to determine the allowable utility allowance for the NA budgetary unit. The amount is determined by an obligation to pay allowable utility expenses, verified allowable utility expenses, and budgetary-unit size. Budgetary units billed separately for utility expenses may receive one utility allowance: SUA for heating/cooling, qualifying LIHEAP, or heating/cooling expenses exceeding Energy Assistance payments; LUA for at least two non-heating/non-cooling utility expenses; or TUA when obligated to pay only a telephone expense.
+rules:
+  - name: liheap_minimum_annual_payment_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, SUA LIHEAP note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+              excerpt: "The payment must be $20 or more annually"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          20
+
+  - name: liheap_application_month_lookback_months
+    kind: parameter
+    dtype: Integer
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, SUA LIHEAP note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+              excerpt: "received in the application month or any of the 12 months before the application month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: utility_allowance_prerequisites_met
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, utility allowance determination and separately billed utilities
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          budgetary_unit_billed_separately_for_utility_expenses
+          and budgetary_unit_obligated_to_pay_allowable_utility_expenses
+          and budgetary_unit_has_verified_allowable_utility_expenses
+
+  - name: qualifying_liheap_sua_condition
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, SUA LIHEAP condition and note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#liheap_minimum_annual_payment_amount
+              output: liheap_minimum_annual_payment_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          budgetary_unit_received_liheap_payment
+          and liheap_annual_payment_amount >= liheap_minimum_annual_payment_amount
+          and liheap_payment_received_in_application_month_or_lookback_period
+          and budgetary_unit_has_participant_who_is_elderly_or_has_disability
+
+  - name: snap_standard_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, Standard Utility Allowance eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#utility_allowance_prerequisites_met
+              output: utility_allowance_prerequisites_met
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#qualifying_liheap_sua_condition
+              output: qualifying_liheap_sua_condition
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          utility_allowance_prerequisites_met
+          and (
+            budgetary_unit_obligated_to_pay_heating_or_cooling_expense_separately_from_rent_or_mortgage_on_regular_basis
+            or qualifying_liheap_sua_condition
+            or budgetary_unit_heating_or_cooling_expenses_exceed_energy_assistance_payments
+          )
+
+  - name: snap_limited_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, Limited Utility Allowance eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#utility_allowance_prerequisites_met
+              output: utility_allowance_prerequisites_met
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#snap_standard_utility_allowance
+              output: snap_standard_utility_allowance
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          utility_allowance_prerequisites_met
+          and not snap_standard_utility_allowance
+          and budgetary_unit_obligated_to_pay_at_least_two_non_heating_or_non_cooling_utility_expenses
+
+  - name: snap_telephone_utility_allowance_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, Telephone Utility Allowance eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#utility_allowance_prerequisites_met
+              output: utility_allowance_prerequisites_met
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#snap_standard_utility_allowance
+              output: snap_standard_utility_allowance
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#snap_limited_utility_allowance
+              output: snap_limited_utility_allowance
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          utility_allowance_prerequisites_met
+          and not snap_standard_utility_allowance
+          and not snap_limited_utility_allowance
+          and budgetary_unit_obligated_to_pay_only_telephone_expense
+
+  - name: snap_individual_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Utility Expenses and Allowances, block 2, Telephone Utility Allowance eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-2
+              excerpt: "The budgetary unit is eligible for TUA when they are obligated to pay only a telephone expense."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility#snap_telephone_utility_allowance_eligible
+              output: snap_telephone_utility_allowance_eligible
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_telephone_utility_allowance_eligible
