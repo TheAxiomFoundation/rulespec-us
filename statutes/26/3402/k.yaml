@@ -1,0 +1,138 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3402
+  deferred_outputs:
+    - output: us:statutes/26/3402/k#tax_to_deduct_and_withhold_on_tips
+      reason: >-
+        Section 3402(k) applies subsection (a) withholding to tips only when
+        stated conditions are met and only to the extent tax can be deducted
+        from employer-controlled wages and funds. The actual subsection (a) tax
+        is determined under Secretary-prescribed tables or procedures and is
+        deferred in the copied subsection (a) context, so the final tax to
+        deduct and withhold on tips cannot be computed here.
+      source_values:
+        - us:statutes/26/3402/k#tips_withholding_under_subsection_a_applies
+        - us:statutes/26/3402/k#maximum_tip_tax_deduction_and_withholding_amount
+        - us:statutes/26/3402/k#low_monthly_tip_statement_withholding_permitted_for_paragraph_16_b_tips
+  summary: |-
+    26 USC 3402(k): subsection (a) applies to tips constituting wages only when included in a written statement furnished under section 6053(a), and only to the extent withholding can be made from employer-controlled wages excluding tips and employee-turned-over funds before calendar-year close; for section 3401(a)(16)(B) tips, withholding may occur even when monthly statements total less than $20; withholding may not exceed the aggregate wages and funds minus section 3102(a) or 3202(a) tax required to be collected.
+rules:
+  - name: monthly_tip_statement_threshold_for_paragraph_16_b_permission
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3402(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "less than $20"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+
+  - name: tips_withholding_under_subsection_a_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3402(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "In the case of tips which constitute wages"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "only to such tips as are included in a written statement furnished to the employer pursuant to section 6053(a)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tips_constitute_wages
+          and tips_in_written_statement_furnished_to_employer_pursuant_to_section_6053_a
+
+  - name: maximum_tip_tax_deduction_and_withholding_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "only to the extent that the tax can be deducted and withheld by the employer"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "from such wages of the employee (excluding tips, but including funds turned over by the employee to the employer for the purpose of such deduction and withholding) as are under the control of the employer"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "shall not at any time be deducted and withheld in an amount which exceeds the aggregate of such wages and funds ... minus any tax required by section 3102(a) or section 3202(a)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if tips_withholding_under_subsection_a_applies:
+            max(
+              0,
+              aggregate_employer_controlled_wages_excluding_tips_and_employee_turned_over_funds_for_tip_withholding
+              - tax_required_by_section_3102_a_or_3202_a_to_be_collected_from_wages_and_funds
+            )
+          else: 0
+
+  - name: low_monthly_tip_statement_withholding_permitted_for_paragraph_16_b_tips
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 26 USC 3402(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "furnished by an employee a written statement of tips (received in a calendar month) pursuant to section 6053(a)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "to which paragraph (16)(B) of section 3401(a) is applicable"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "may deduct and withhold the tax with respect to such tips from any wages of the employee (excluding tips) under his control"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/k#monthly_tip_statement_threshold_for_paragraph_16_b_permission
+              output: monthly_tip_statement_threshold_for_paragraph_16_b_permission
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          employee_furnished_written_statement_of_tips_received_in_calendar_month_pursuant_to_section_6053_a
+          and tips_are_category_to_which_section_3401_a_16_b_is_applicable
+          and employee_wages_excluding_tips_under_employer_control_are_available_for_withholding
+          and total_tips_in_monthly_statements_furnished_to_employer_for_employee_employment_in_calendar_month < monthly_tip_statement_threshold_for_paragraph_16_b_permission
