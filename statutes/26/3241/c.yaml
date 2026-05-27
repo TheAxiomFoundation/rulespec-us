@@ -1,0 +1,122 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3241
+  summary: |-
+    Defines “average account benefits ratio” as the 10-year average of account benefits ratios, increased to the next highest multiple of 0.1 if needed; defines “account benefits ratio” as specified assets divided by benefits and administrative expenses paid.
+rules:
+  - name: most_recent_fiscal_year_count_for_average_account_benefits_ratio
+    kind: parameter
+    dtype: Count
+    source: 26 USC 3241(c)(1), 10 most recent fiscal years
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3241
+              excerpt: "the 10 most recent fiscal years ending before such calendar year"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          10
+
+  - name: average_account_benefits_ratio_rounding_multiple
+    kind: parameter
+    dtype: Decimal
+    source: 26 USC 3241(c)(1), rounding multiple
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3241
+              excerpt: "If the amount ... is not a multiple of 0.1, such amount shall be increased to the next highest multiple of 0.1."
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          0.1
+
+  - name: unrounded_average_account_benefits_ratio
+    kind: derived
+    entity: TaxUnit
+    dtype: Decimal
+    period: Year
+    source: 26 USC 3241(c)(1), average before rounding
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3241
+              excerpt: "the average ... of the account benefits ratios for the 10 most recent fiscal years ending before such calendar year"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3241/c#most_recent_fiscal_year_count_for_average_account_benefits_ratio
+              output: most_recent_fiscal_year_count_for_average_account_benefits_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          sum_of_account_benefits_ratios_for_most_recent_fiscal_years_ending_before_calendar_year / most_recent_fiscal_year_count_for_average_account_benefits_ratio
+
+  - name: average_account_benefits_ratio
+    kind: derived
+    entity: TaxUnit
+    dtype: Decimal
+    period: Year
+    source: 26 USC 3241(c)(1), Average account benefits ratio
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3241
+              excerpt: "If the amount ... is not a multiple of 0.1, such amount shall be increased to the next highest multiple of 0.1."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3241/c#unrounded_average_account_benefits_ratio
+              output: unrounded_average_account_benefits_ratio
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3241/c#average_account_benefits_ratio_rounding_multiple
+              output: average_account_benefits_ratio_rounding_multiple
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          ceil(unrounded_average_account_benefits_ratio / average_account_benefits_ratio_rounding_multiple) * average_account_benefits_ratio_rounding_multiple
+
+  - name: account_benefits_ratio
+    kind: derived
+    entity: TaxUnit
+    dtype: Decimal
+    period: Year
+    source: 26 USC 3241(c)(2), Account benefits ratio
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3241
+              excerpt: "dividing the fair market value of the assets ... as of the close of such fiscal year by the total benefits and administrative expenses paid"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3241
+              excerpt: "and for years before 2002, the Social Security Equivalent Benefits Account"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          (fair_market_value_of_assets_in_railroad_retirement_account_at_close_of_fiscal_year + fair_market_value_of_assets_in_national_railroad_retirement_investment_trust_at_close_of_fiscal_year + (if fiscal_year_ends_before_social_security_equivalent_benefits_account_cutoff: fair_market_value_of_assets_in_social_security_equivalent_benefits_account_at_close_of_fiscal_year else: 0)) / total_benefits_and_administrative_expenses_paid_from_railroad_retirement_account_and_national_railroad_retirement_investment_trust_during_fiscal_year
