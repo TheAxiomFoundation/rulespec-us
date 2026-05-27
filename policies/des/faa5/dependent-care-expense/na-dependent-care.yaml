@@ -1,0 +1,306 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+  summary: |-
+    Dependent care expenses billed for a dependent child under 18 or an incapacitated adult are allowable when necessary to seek, accept, or continue employment, participate in NA Employment & Training, or attend training or pursue education to prepare for employment. Allowable expenses include required registration fees, mandatory separate activity or meal fees, billed illness or vacation care, mandatory provider-to-school shuttle fees, alternative care, and required co-payments. Expenses are not allowed when already allowed as educational expenses, paid for a dependent child's education, paid by another participant, reimbursements, vendor payments, certain out-of-home care when a capable nonworking exempt parent is in the home, in-kind benefits, or third parties.
+rules:
+  - name: dependent_child_under_age_limit
+    kind: parameter
+    dtype: Count
+    source: DES FAA5 dependent care expense, allowable dependent child age
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: A dependent child under the age of 18.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          18
+
+  - name: dependent_care_expense_recipient_qualifies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 dependent care expense, persons whose care may be allowed
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: A dependent child under the age of 18.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: An incapacitated adult when the cost is not a medical expense.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#dependent_child_under_age_limit
+              output: dependent_child_under_age_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (care_recipient_is_dependent_child and care_recipient_age < dependent_child_under_age_limit)
+          or (
+              care_recipient_is_incapacitated_adult
+              and not expense_is_medical_expense
+          )
+
+  - name: dependent_care_expense_necessary_for_allowable_activity
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 dependent care expense, allowable necessity purposes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Seek, accept, or continue employment
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Participate in NA Employment & Training activities
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Attend training or pursue education to prepare for employment
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: High school; GED classes
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          necessary_to_seek_accept_or_continue_employment
+          or necessary_to_participate_in_na_employment_and_training
+          or necessary_to_attend_training_or_pursue_education_to_prepare_for_employment
+          or necessary_to_attend_high_school
+          or necessary_to_attend_ged_classes
+
+  - name: dependent_care_expense_type_is_allowable
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 dependent care expense, allowable expense types
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: A registration fee that the budgetary unit is required to pay.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Activity or meal fees that are mandatory and separate from the dependent care expense.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Fees for care not provided due to illness or vacation but billed by the provider.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Mandatory fees are billed for shuttle services from the provider to school.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Alternative types of care are provided
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Co-payments that the budgetary unit is required to pay, even when waived by the provider.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          billed_for_dependent_care
+          or required_registration_fee
+          or mandatory_separate_activity_or_meal_fee
+          or provider_billed_fee_for_care_not_provided_due_to_illness_or_vacation
+          or mandatory_provider_to_school_shuttle_fee
+          or after_school_care
+          or special_needs_care
+          or at_risk_youth_program
+          or informal_care_arrangement
+          or adult_day_care_or_day_services
+          or required_copayment
+
+  - name: out_of_home_care_disallowed_due_to_available_parent
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 dependent care expense, out-of-home parent limitation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Costs for care provided out of the home when one parent of the dependent child is in the home
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Not working. Not actively looking for work. Meets an NA work requirement exemption and is not a work registrant. Physically capable of caring for the dependent.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          care_provided_out_of_home
+          and parent_of_dependent_child_is_in_home
+          and parent_is_not_working
+          and parent_is_not_actively_looking_for_work
+          and parent_meets_na_work_requirement_exemption_and_is_not_work_registrant
+          and parent_physically_capable_of_caring_for_dependent
+
+  - name: dependent_care_expense_not_disallowed
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 dependent care expense, nonallowable expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Any portion of an expense that has been allowed as an educational expense.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Costs paid to a facility or provider to pay for the education of a dependent child.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Costs for care paid by ... Another participant ... Reimbursements ... Vendor Payments.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Costs paid in the form of an in-kind benefit, such as food, gas, room.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: Costs paid by a third party.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#out_of_home_care_disallowed_due_to_available_parent
+              output: out_of_home_care_disallowed_due_to_available_parent
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not expense_portion_allowed_as_educational_expense
+          and not cost_paid_to_facility_or_provider_for_dependent_child_education
+          and not cost_paid_by_another_participant_in_case
+          and not cost_paid_by_reimbursement
+          and not cost_paid_by_vendor_payment
+          and not out_of_home_care_disallowed_due_to_available_parent
+          and not cost_paid_by_in_kind_benefit
+          and not cost_paid_by_third_party
+
+  - name: dependent_care_expense_prorated_or_billed_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 dependent care expense, registration fee timing and proration
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: When the registration fee is a one-time fee, the fee is an allowable expense in the month in which it is billed.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+              excerpt: When the registration fee is a recurring fee, prorate the fee over the period of time it is intended to cover.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if required_registration_fee and registration_fee_is_recurring: recurring_registration_fee_prorated_monthly_amount else: billed_dependent_care_expense_amount
+
+  - name: snap_allowable_monthly_dependent_care_expenses
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 dependent care expense, allowable NA dependent care expense
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#dependent_care_expense_recipient_qualifies
+              output: dependent_care_expense_recipient_qualifies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#dependent_care_expense_necessary_for_allowable_activity
+              output: dependent_care_expense_necessary_for_allowable_activity
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#dependent_care_expense_type_is_allowable
+              output: dependent_care_expense_type_is_allowable
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#dependent_care_expense_not_disallowed
+              output: dependent_care_expense_not_disallowed
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#dependent_care_expense_prorated_or_billed_amount
+              output: dependent_care_expense_prorated_or_billed_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if dependent_care_expense_recipient_qualifies and dependent_care_expense_necessary_for_allowable_activity and dependent_care_expense_type_is_allowable and dependent_care_expense_not_disallowed: max(0, dependent_care_expense_prorated_or_billed_amount) else: 0
