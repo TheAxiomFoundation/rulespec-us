@@ -1,0 +1,153 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3402
+  summary: |-
+    26 USC 3402(e): for a payroll period of not more than 31 consecutive days, if remuneration for services during one-half or more of the period constitutes wages, all remuneration for the period is deemed wages; if remuneration for services during more than one-half of the period does not constitute wages, none is deemed wages.
+imports:
+  - us:statutes/26/3401/b#payroll_period
+rules:
+  - name: maximum_consecutive_days_for_payroll_period_deeming_rule
+    kind: parameter
+    dtype: Count
+    source: 26 USC 3402(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "payroll period of not more than 31 consecutive days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          31
+
+  - name: payroll_period_within_deeming_rule_day_limit
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3402(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3401/b#payroll_period
+              output: payroll_period
+              hash: sha256:3c3c9322e48201b138adc220cfcde7691bf2c278e7e7ebfe29be8f970a2be492
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "payroll period of not more than 31 consecutive days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/e#maximum_consecutive_days_for_payroll_period_deeming_rule
+              output: maximum_consecutive_days_for_payroll_period_deeming_rule
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payroll_period
+          and payroll_period_consecutive_days <= maximum_consecutive_days_for_payroll_period_deeming_rule
+
+  - name: all_remuneration_deemed_wages_for_period
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3402(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/e#payroll_period_within_deeming_rule_day_limit
+              output: payroll_period_within_deeming_rule_day_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "remuneration ... for services performed during one-half or more ... constitutes wages"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "all the remuneration ... shall be deemed to be wages"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payroll_period_within_deeming_rule_day_limit
+          and remuneration_for_services_during_one_half_or_more_of_period_constitutes_wages
+
+  - name: no_remuneration_deemed_wages_for_period
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3402(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/e#payroll_period_within_deeming_rule_day_limit
+              output: payroll_period_within_deeming_rule_day_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "remuneration ... for services performed during more than one-half ... does not constitute wages"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "none of the remuneration ... shall be deemed to be wages"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payroll_period_within_deeming_rule_day_limit
+          and remuneration_for_services_during_more_than_one_half_of_period_does_not_constitute_wages
+
+  - name: remuneration_amount_deemed_wages_for_period
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3402(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/e#all_remuneration_deemed_wages_for_period
+              output: all_remuneration_deemed_wages_for_period
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/e#no_remuneration_deemed_wages_for_period
+              output: no_remuneration_deemed_wages_for_period
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "all ... or none ... shall be deemed to be wages"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if all_remuneration_deemed_wages_for_period: remuneration_paid_by_employer_to_employee_for_period else: if no_remuneration_deemed_wages_for_period: 0 else: 0
