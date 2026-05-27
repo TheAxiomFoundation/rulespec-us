@@ -1,43 +1,42 @@
-# California SNAP (CalFresh) — FY 2026 benefit calculation
+# California SNAP (CalFresh) — FY 2026
 #
 # Federal scope mirrors us-co/snap (federal SNAP law applies the same to all
 # states). State scope pulls in the CA-encoded CalFresh sections from MPP
 # 63-xxx; the structure tracks CDSS Manual of Policies and Procedures.
 #
-# Status: bootstrap. axiom-compose#1 is still draft and rulespec-us-ca does
-# not yet expose top-level `snap_benefit` / `snap_eligible` rules — once
-# either composer maturity or atomic-rule coverage closes that gap, this
-# spec becomes runnable end-to-end.
+# Composition is declarative — the transformations block names generic
+# patterns (all_of, derived_relation, any_related) that axiom-compose
+# resolves into runnable RuleSpec rules. None of these patterns are
+# program-specific; the same shape works for any state's SNAP and other
+# benefit programs.
 
 program: us-ca/snap
 period: 2026-01
+
 outputs:
-  - snap_allotment
   - snap_eligible
 
 scope:
   federal:
-    - policies/usda/snap/fy-2026-cola/maximum-allotments
-    - policies/usda/snap/fy-2026-cola/deductions
-    - policies/usda/snap/fy-2026-cola/income-eligibility-standards
     - regulations/7-cfr/273/3
     - regulations/7-cfr/273/4
+    - regulations/7-cfr/273/5
     - regulations/7-cfr/273/6
+    - regulations/7-cfr/273/7
     - regulations/7-cfr/273/10
+    - statutes/7/2012/j
     - statutes/7/2014/e/2
     - statutes/7/2014/e/6/A
     - statutes/7/2017/a
     - regulations/7-cfr/273/24
 
   state:
-    # 63-300: general provisions and definitions
+    # 63-300/400-series: definitions, household composition, residency,
+    # citizenship/alien status, students, work registration, ABAWD
     - regulations/mpp/63-300/1
     - regulations/mpp/63-300/3
     - regulations/mpp/63-300/5
     - regulations/mpp/63-300/6
-
-    # 63-401–63-411: household composition, deprivation, residency,
-    # citizenship/alien status, students, work registration, ABAWD
     - regulations/mpp/63-401/1
     - regulations/mpp/63-402/1
     - regulations/mpp/63-402/11
@@ -74,27 +73,48 @@ scope:
     - regulations/mpp/63-410/6
     - regulations/mpp/63-411/1
 
-    # 63-501–63-503: income, deductions, benefit calculation
-    - regulations/mpp/63-501/11
-    - regulations/mpp/63-502/1
-    - regulations/mpp/63-503/12
-    - regulations/mpp/63-503/14
-    - regulations/mpp/63-503/15
-    - regulations/mpp/63-503/16
-    - regulations/mpp/63-503/22
-    - regulations/mpp/63-503/25
-    - regulations/mpp/63-503/31
-    - regulations/mpp/63-503/41
-    - regulations/mpp/63-503/43
+transformations:
+  # 1. snap_member_eligible — Person-scoped AND of federal eligibility tests.
+  #    Generic `all_of` pattern; CA-specific predicates would extend the
+  #    conditions list when encoded.
+  - pattern: all_of
+    name: snap_member_eligible
+    effective_from: '2026-01-01'
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: us:statutes/7/2014
+    conditions:
+      - snap_member_citizenship_or_alien_status_eligible
+      - snap_member_ssn_requirement_eligible
+      - snap_member_general_work_requirement_eligible
 
-# Known gaps (documented for transparency until closed):
-#
-# 1. No `snap_benefit` / `snap_eligible` top-level rule exists in
-#    rulespec-us-ca yet. axiom-compose is supposed to resolve the named
-#    `outputs` against the assembled atomic rules — once a CA rule chain
-#    produces `snap_benefit`, this spec compiles. Until then, the spec
-#    documents the intended composition without being runnable.
-#
-# 2. Validation needs the federal SnapUnit `derived_relation` to land
-#    somewhere in rulespec-us so CA can reference it. Tracked via the
-#    bucket-E migration work in rulespec-us-co.
+  # 2. snap_unit — filtered membership: household members who pass the
+  #    per-person SNAP eligibility predicate become the SNAP unit.
+  - pattern: derived_relation
+    name: snap_unit
+    effective_from: '2026-01-01'
+    arity: 2
+    source_relation: us:statutes/7/2012/j#relation.member_of_household
+    entity: SnapUnit
+    member_relation: members
+    slot_entities: [Person, Household]
+    predicate: snap_member_eligible
+    source: us:statutes/7/2012/m
+
+  # 3. snap_eligible — household-level eligibility: at least one household
+  #    member passes the per-person SNAP eligibility predicate. Queries
+  #    member_of_household directly rather than the derived `members`
+  #    relation produced by snap_unit — engine doesn't currently bridge
+  #    derived-relation membership back to count_related calls in the
+  #    same program, so the indirection through snap_unit returns 0.
+  #    Functionally equivalent: a SNAP unit exists iff someone passes
+  #    the same predicate that builds the unit.
+  - pattern: any_related
+    name: snap_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    period: Month
+    source: us:statutes/7/2014
+    relation: member_of_household
+    condition: snap_member_eligible
