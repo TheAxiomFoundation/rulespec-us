@@ -1,0 +1,231 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3505
+  summary: Section 3505 makes a lender, surety, or other non-employer person personally
+    liable to the United States for withholding taxes and interest when it directly
+    pays wages for purposes of sections 3102, 3202, 3402, and 3403, or when it supplies
+    funds for the specific purpose of paying wages with actual notice or knowledge
+    that the employer will not make timely withholding-tax payment or deposit. The
+    supplied-funds liability is limited to 25 percent of the amount supplied. Amounts
+    paid under this section are credited against the employer's liability.
+imports:
+- us:statutes/26/3102/a#employer_required_to_collect_section_3101_tax_by_wage_deduction
+- us:statutes/26/3202#employer_section_3201_tax_payment_liability
+- us:statutes/26/3402/a#amount_of_wages_for_withholding_tables
+- us:statutes/26/3403#employer_liability_for_chapter_withholding_tax_payment
+rules:
+- name: supplied_funds_liability_limit_rate
+  kind: parameter
+  dtype: Rate
+  source: 26 USC 3505(b), second sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: limited to an amount equal to 25 percent of the amount so supplied
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '0.25'
+- name: direct_wage_payment_third_party_liability_applies
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Year
+  source: 26 USC 3505(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: if a lender, surety, or other person, who is not an employer under
+            such sections with respect to an employee or group of employees, pays
+            wages directly
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3102/a#employer_required_to_collect_section_3101_tax_by_wage_deduction
+          output: employer_required_to_collect_section_3101_tax_by_wage_deduction
+          hash: sha256:311604c9cc85d575f5115a34f1e664533465f2daea2626cae3518d3b593003e9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3202#employer_section_3201_tax_payment_liability
+          output: employer_section_3201_tax_payment_liability
+          hash: sha256:37979be14574c0f3619fdd88b95c6c753fe279ba96427eeddc45e47c5a995a18
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3402/a#amount_of_wages_for_withholding_tables
+          output: amount_of_wages_for_withholding_tables
+          hash: sha256:f9facf3737b27df1ceb4af84b1f3212a61107e70b029bc13a68b5880832386e4
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3403#employer_liability_for_chapter_withholding_tax_payment
+          output: employer_liability_for_chapter_withholding_tax_payment
+          hash: sha256:8c8164eb226ffa31e3b381d0513429823d8507fd9b230fbd8c0f200028054382
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "third_party_is_lender_surety_or_other_person\nand third_party_is_not_employer_under_sections_3102_3202_3402_and_3403_with_respect_to_employees\n\
+      and third_party_pays_wages_directly_to_employee_group_or_agent\nand (\n    employer_required_to_collect_section_3101_tax_by_wage_deduction\n\
+      \    or employer_section_3201_tax_payment_liability > 0\n    or amount_of_wages_for_withholding_tables\
+      \ > 0\n    or employer_liability_for_chapter_withholding_tax_payment > 0\n)"
+- name: direct_wage_payment_third_party_liability
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3505(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: shall be liable ... in a sum equal to the taxes (together with
+            interest) required to be deducted and withheld from such wages
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3505#direct_wage_payment_third_party_liability_applies
+          output: direct_wage_payment_third_party_liability_applies
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if direct_wage_payment_third_party_liability_applies: max(0, taxes_together_with_interest_required_to_be_deducted_and_withheld_from_directly_paid_wages)
+      else: 0'
+- name: supplied_funds_third_party_liability_applies
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Year
+  source: 26 USC 3505(b), first sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: supplies funds to or for the account of an employer for the specific
+            purpose of paying wages
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: with actual notice or knowledge ... that such employer does not
+            intend to or will not be able to make timely payment or deposit
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'third_party_is_lender_surety_or_other_person
+
+      and third_party_supplies_funds_to_or_for_account_of_employer
+
+      and funds_supplied_for_specific_purpose_of_paying_employer_wages
+
+      and third_party_has_actual_notice_or_knowledge_under_section_6323_i_1_of_employer_withholding_payment_failure'
+- name: supplied_funds_third_party_liability_before_limit
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3505(b), first sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: liable ... in a sum equal to the taxes (together with interest)
+            which are not paid over to the United States by such employer
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3505#supplied_funds_third_party_liability_applies
+          output: supplied_funds_third_party_liability_applies
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: 'if supplied_funds_third_party_liability_applies: max(0, taxes_together_with_interest_not_paid_over_by_employer_with_respect_to_wages_paid_from_supplied_funds)
+      else: 0'
+- name: supplied_funds_third_party_liability_limit
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3505(b), second sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: limited to an amount equal to 25 percent of the amount so supplied
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3505#supplied_funds_liability_limit_rate
+          output: supplied_funds_liability_limit_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: supplied_funds_liability_limit_rate * max(0, amount_supplied_to_or_for_account_of_employer_for_wage_payment_purpose)
+- name: supplied_funds_third_party_liability
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3505(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3505#supplied_funds_third_party_liability_before_limit
+          output: supplied_funds_third_party_liability_before_limit
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3505#supplied_funds_third_party_liability_limit
+          output: supplied_funds_third_party_liability_limit
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "min(\n    supplied_funds_third_party_liability_before_limit,\n    supplied_funds_third_party_liability_limit\n\
+      )"
+- name: employer_liability_credit_for_section_3505_payments
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3505(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3505
+          excerpt: Any amounts paid to the United States pursuant to this section
+            shall be credited against the liability of the employer.
+  versions:
+  - effective_from: '1990-01-01'
+    formula: max(0, amounts_paid_to_united_states_pursuant_to_section_3505)
