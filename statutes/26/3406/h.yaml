@@ -1,0 +1,291 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3406
+  deferred_outputs:
+    - output: us:statutes/26/3406/h#broker
+      reason: >-
+        Section 3406(h)(5)(A) gives "broker" the meaning given by section
+        6045(c)(1), and no copied RuleSpec context provides that definition.
+        The closest-contact, payor-exclusion, and real-estate-broker-exclusion
+        special rules cannot produce a final broker definition without the
+        upstream section 6045(c)(1) baseline and section 6045(e)(2) real estate
+        broker definition or regulations.
+    - output: us:statutes/26/3406/h#original_issue_discount_rules
+      reason: >-
+        Section 3406(h)(7) applies rules similar to section 6049(d)(6) only to
+        the extent provided in regulations. No copied RuleSpec context provides
+        section 6049(d)(6) or the operative regulations.
+  summary: |-
+    For purposes of section 3406: a TIN with an improper number of digits is treated as failure to furnish a TIN; two incorrect TINs in any 3-year period trigger treatment as not furnishing another TIN until Secretary notification of a correct TIN; joint payee payments are attributed to the first listed payee except as regulations provide; payor, broker, readily tradable instrument, original issue discount, notice, and coordination rules are stated.
+rules:
+  - name: incorrect_tin_count_threshold_for_lockout
+    kind: parameter
+    dtype: Count
+    source: 26 USC 3406(h)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "2 incorrect TINs"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          2
+
+  - name: incorrect_tin_lockout_period_years
+    kind: parameter
+    dtype: Count
+    source: 26 USC 3406(h)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "in any 3-year period"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          3
+
+  - name: improper_digit_tin_treated_as_failure_to_furnish
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "treated as failing to furnish his TIN if the TIN furnished does not contain the proper number of digits"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          tin_furnished_does_not_contain_proper_number_of_digits
+
+  - name: second_incorrect_tin_lockout_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "If the payee furnishes the payor 2 incorrect TINs in any 3-year period"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "after receiving notice of the second incorrect TIN"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "until the day on which the payor receives notification from the Secretary that a correct TIN has been furnished"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3406/h#incorrect_tin_count_threshold_for_lockout
+              output: incorrect_tin_count_threshold_for_lockout
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3406/h#incorrect_tin_lockout_period_years
+              output: incorrect_tin_lockout_period_years
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          incorrect_tins_furnished_to_payor_count_in_period >= incorrect_tin_count_threshold_for_lockout
+          and incorrect_tin_count_period_years <= incorrect_tin_lockout_period_years
+          and payor_received_notice_of_second_incorrect_tin
+          and not payor_has_received_secretary_notification_that_correct_tin_has_been_furnished
+
+  - name: joint_payee_payment_attributed_to_first_listed_payee
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "any payment to joint payees shall be treated as if all the payment were made to the first person listed"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "Except to the extent otherwise provided in regulations"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          payment_made_to_joint_payees
+          and not regulations_provide_otherwise_for_joint_payee_payment
+
+  - name: payor
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "a person required to file a return described in paragraph (2) or (3) of subsection (b) with respect to such payment"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          person_required_to_file_return_described_in_subsection_b_2_with_respect_to_payment
+          or person_required_to_file_return_described_in_subsection_b_3_with_respect_to_payment
+
+  - name: readily_tradable_instrument
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "any instrument which is part of an issue any portion of which is traded on an established securities market"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "any instrument which is regularly quoted by brokers or dealers making a market"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "except as otherwise provided in regulations prescribed by the Secretary"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          instrument_is_part_of_issue_with_portion_traded_on_established_securities_market_within_section_453_f_5
+          or (
+              instrument_is_regularly_quoted_by_brokers_or_dealers_making_a_market
+              and not secretary_regulations_provide_otherwise_for_regularly_quoted_instruments
+          )
+
+  - name: payor_must_promptly_furnish_incorrect_tin_notice_copy_to_payee
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "Whenever the Secretary notifies a payor under paragraph (1)(B) of subsection (a) that the TIN furnished by any payee is incorrect"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "the payor shall promptly furnish such copy to the payee"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          secretary_notifies_payor_under_subsection_a_1_B_that_payee_tin_is_incorrect
+
+  - name: payor_must_promptly_notify_secretary_of_other_tin
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(9)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "If the Secretary notifies a payor under paragraph (1)(B) of subsection (a) that the TIN furnished by any payee is incorrect"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "such payee subsequently furnishes another TIN to the payor"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "the payor shall promptly notify the Secretary of the other TIN so furnished"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          secretary_notifies_payor_under_subsection_a_1_B_that_payee_tin_is_incorrect
+          and payee_subsequently_furnishes_another_tin_to_payor
+
+  - name: backup_withheld_payments_treated_as_wages_for_coordination
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(10)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "payments which are subject to withholding under this section shall be treated as if they were wages paid by an employer to an employee"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          payment_subject_to_withholding_under_section_3406
+          and coordination_purpose_is_section_31_or_this_chapter_other_than_section_3402_n_or_subtitle_F_related_to_this_chapter_other_than_section_7205
+
+  - name: backup_withheld_amounts_treated_as_withheld_under_section_3402
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3406(h)(10)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3406
+              excerpt: "amounts deducted and withheld under this section shall be treated as if deducted and withheld under section 3402"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          amount_deducted_and_withheld_under_section_3406
+          and coordination_purpose_is_section_31_or_this_chapter_other_than_section_3402_n_or_subtitle_F_related_to_this_chapter_other_than_section_7205
