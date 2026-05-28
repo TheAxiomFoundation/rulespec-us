@@ -1,0 +1,167 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3402
+  summary: |-
+    "(q) Extension of withholding to certain gambling winnings" defines "winnings which are subject to withholding" as certain proceeds from a wager.
+  deferred_outputs:
+    - output: us:statutes/26/3402/q#gambling_winnings_withholding_tax
+      reason: Requires the third lowest rate of tax applicable under section 1(c), and no copied RuleSpec source provides that upstream rate computation.
+    - output: us:statutes/26/3402/q#nonresident_alien_or_foreign_corporation_other_withholding_exemption_applies
+      reason: Requires determining whether the payment is subject to tax under section 1441(a) or section 1442(a), and no copied RuleSpec source provides those upstream withholding computations.
+    - output: us:statutes/26/3402/q#payment_of_winnings_treated_as_wages_for_section_3404_and_subtitle_f
+      reason: Section 3404 and subtitle F except section 7205 are cited purposes for the treated-as-wages rule, but no copied RuleSpec source provides those purpose-specific downstream computations.
+rules:
+  - name: withholding_winnings_proceeds_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3402(q)(3)(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "more than $5,000"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          5000
+
+  - name: wager_proceeds_to_wager_ratio_threshold
+    kind: parameter
+    dtype: Decimal
+    source: 26 USC 3402(q)(3)(A), (C)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3402
+              excerpt: "at least 300 times"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          300
+
+  - name: wager_proceeds
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Day
+    unit: USD
+    source: 26 USC 3402(q)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3402
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (if proceeds_are_not_money: fair_market_value_of_nonmoney_amount_received_from_wager else: amount_received_from_wager) - amount_wagered
+
+  - name: winnings_subject_to_withholding
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: 26 USC 3402(q)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/3402
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/q#wager_proceeds
+              output: wager_proceeds
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/q#withholding_winnings_proceeds_threshold
+              output: withholding_winnings_proceeds_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/q#wager_proceeds_to_wager_ratio_threshold
+              output: wager_proceeds_to_wager_ratio_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          wager_proceeds > withholding_winnings_proceeds_threshold
+          and (
+            wager_placed_in_state_conducted_lottery_with_state_agency_or_authorized_employee_or_agent
+            or wager_placed_in_sweepstakes
+            or wager_placed_in_wagering_pool
+            or wager_placed_in_lottery_other_than_state_conducted_lottery
+            or (
+              wagering_transaction_in_parimutuel_pool_for_horse_races_dog_races_or_jai_alai
+              and wager_proceeds >= wager_proceeds_to_wager_ratio_threshold * amount_wagered
+            )
+            or (
+              other_wagering_transaction_not_described_by_state_lottery_sweepstakes_wagering_pool_lottery_or_parimutuel_pool
+              and wager_proceeds >= wager_proceeds_to_wager_ratio_threshold * amount_wagered
+            )
+          )
+
+  - name: slot_keno_bingo_tax_exemption_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: 26 USC 3402(q)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3402
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_winnings_from_slot_machine
+          or payment_is_winnings_from_keno
+          or payment_is_winnings_from_bingo
+
+  - name: payment_of_winnings_treated_as_wages_for_section_3403
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: 26 USC 3402(q)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3402
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/q#winnings_subject_to_withholding
+              output: winnings_subject_to_withholding
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          winnings_subject_to_withholding
