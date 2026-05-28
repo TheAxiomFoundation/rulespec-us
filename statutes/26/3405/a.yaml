@@ -1,0 +1,167 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3405
+  summary: |-
+    26 USC 3405(a): the payor of any periodic payment withholds as if the payment were wages for the appropriate payroll period; an individual may elect no withholding until revoked; elections and revocations take effect as provided by section 3402(f)(3); where no withholding allowance certificate is in effect, withholding is determined under Secretary rules.
+  deferred_outputs:
+    - output: us:statutes/26/3405/a#periodic_payment_withholding_amount
+      reason: Section 3405(a)(1) requires the amount that would be required if the periodic payment were wages for the appropriate payroll period, but the Secretary-prescribed wage withholding tables or procedures used under section 3402 are not provided in copied executable context; section 3405(a)(4) also defers no-certificate cases to Secretary-prescribed rules.
+      source_values:
+        - us:statutes/26/3405/a#periodic_payment_amount_treated_as_wages_for_withholding
+imports:
+  - us:statutes/26/3405/e#periodic_payment
+  - us:statutes/26/3402/f#first_certificate_effective_for_payment
+  - us:statutes/26/3402/f#replacement_certificate_default_effective_for_payment
+  - us:statutes/26/3402/f#replacement_certificate_employer_election_earlier_effective_for_payment
+rules:
+  - name: periodic_payment_amount_treated_as_wages_for_withholding
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3405(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3405/e#periodic_payment
+              output: periodic_payment
+              hash: sha256:0f680c84365a9db2da5228475970d56d8fe879ecbc9f8d146a50f10e302d1ca2
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3405
+              excerpt: "if such payment were a payment of wages"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if periodic_payment: max(0, periodic_payment_amount) else: 0
+
+  - name: periodic_payment_no_withholding_election_in_effect
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3405(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3405
+              excerpt: "An individual may elect to have paragraph (1) not apply"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3405
+              excerpt: "Such an election shall remain in effect until revoked"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          individual_elects_no_withholding_for_periodic_payments
+          and not individual_revokes_no_withholding_election_for_periodic_payments
+
+  - name: periodic_payment_withholding_under_paragraph_one_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3405(a)(1), 3405(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3405/e#periodic_payment
+              output: periodic_payment
+              hash: sha256:0f680c84365a9db2da5228475970d56d8fe879ecbc9f8d146a50f10e302d1ca2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3405/a#periodic_payment_no_withholding_election_in_effect
+              output: periodic_payment_no_withholding_election_in_effect
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: default
+            source:
+              corpus_citation_path: us/statute/26/3405
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3405
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          periodic_payment
+          and not periodic_payment_no_withholding_election_in_effect
+
+  - name: periodic_payment_election_or_revocation_effective_for_payment
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3405(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3405
+              excerpt: "shall take effect as provided by subsection (f)(3) of section 3402"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/f#first_certificate_effective_for_payment
+              output: first_certificate_effective_for_payment
+              hash: sha256:54413492205efa896b755bf3a814ad0fc88bad7b3dc76e0d22bf537e1f6bb4cd
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/f#replacement_certificate_default_effective_for_payment
+              output: replacement_certificate_default_effective_for_payment
+              hash: sha256:54413492205efa896b755bf3a814ad0fc88bad7b3dc76e0d22bf537e1f6bb4cd
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3402/f#replacement_certificate_employer_election_earlier_effective_for_payment
+              output: replacement_certificate_employer_election_earlier_effective_for_payment
+              hash: sha256:54413492205efa896b755bf3a814ad0fc88bad7b3dc76e0d22bf537e1f6bb4cd
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          first_certificate_effective_for_payment
+          or replacement_certificate_default_effective_for_payment
+          or replacement_certificate_employer_election_earlier_effective_for_payment
+
+  - name: no_certificate_periodic_payment_secretary_rules_apply
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3405(a)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3405
+              excerpt: "with respect to which a withholding allowance certificate is not in effect"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3405
+              excerpt: "shall be determined under rules prescribed by the Secretary"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          periodic_payment_withholding_allowance_certificate_not_in_effect
