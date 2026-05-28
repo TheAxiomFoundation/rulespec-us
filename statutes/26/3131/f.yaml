@@ -1,0 +1,205 @@
+format: rulespec/v1
+imports:
+- us:statutes/26/3111/b#hospital_insurance_employer_tax
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3131
+  summary: 26 USC 3131(f) defines applicable employment taxes and wages for section
+    3131, denies double benefits, permits an election not to take certain qualified
+    sick leave wages into account, denies the credit to the United States and its
+    agencies or instrumentalities except section 501(c)(1) organizations exempt under
+    section 501(a), extends assessment limitations to 5 years, and coordinates qualified
+    sick leave wages with PPP, venue, and restaurant revitalization programs.
+  deferred_outputs:
+  - output: us:statutes/26/3131/f#applicable_employment_taxes
+    reason: The complete definition includes taxes imposed under section 3221(a) attributable
+      to the rate in effect under section 3111(b), but no copied RuleSpec context
+      provides an executable section 3221(a) target.
+  - output: us:statutes/26/3131/f#wages
+    reason: The complete section-specific definition depends on wages as defined in
+      section 3121(a) determined without regard to paragraphs (1) through (22) of
+      section 3121(b), and compensation as defined in section 3231(e) determined without
+      regard to a sentence in paragraph (1). The copied section 3121(a) and section
+      3231(e) final definition targets are deferred.
+  - output: us:statutes/26/3131/f#credit_after_all_double_benefit_reductions
+    reason: Full double-benefit coordination depends on credits allowed under sections
+      45A, 45P, 45S, 51, 3132, 3134, CARES Act section 2301, and section 41; several
+      cited credit sources are unavailable or deferred as complete executable targets.
+  - output: us:statutes/26/3131/f#assessment_limitation_expiration_date_for_section_3131_credit
+    reason: The rule requires computing a date 5 years after the later of the original-return
+      filing date or the date the return is treated as filed under section 6501(b)(2);
+      RuleSpec has no date-valued output type here and no copied executable section
+      6501(b)(2) target.
+  - output: us:statutes/26/3131/f#governmental_employer_not_denied_section_3131_credit
+    reason: Generated rule kept a local fact for a cited legal section. This output
+      is deferred until the cited source can be encoded or imported without a local
+      cross-reference placeholder.
+rules:
+- name: section_3111_b_applicable_employment_tax_component
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(1)(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: The taxes imposed under section 3111(b).
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3111/b#hospital_insurance_employer_tax
+          output: hospital_insurance_employer_tax
+          hash: sha256:342eabb01340bdb2a8b4785a3948f2c51c59657045662fb4f668b4b7422ee906
+  versions:
+  - effective_from: '1990-01-01'
+    formula: max(0, hospital_insurance_employer_tax)
+- name: elected_out_qualified_sick_leave_wages
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: so much of the qualified sick leave wages paid by an eligible employer
+            as such employer elects ... to not take into account
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "min(\n  max(0, qualified_sick_leave_wages_paid_by_eligible_employer),\n\
+      \  max(0, qualified_sick_leave_wages_employer_elects_not_to_take_into_account)\n\
+      )"
+- name: qualified_sick_leave_wages_after_employer_election
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: This section shall not apply to so much of the qualified sick leave
+            wages ... as such employer elects
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3131/f#elected_out_qualified_sick_leave_wages
+          output: elected_out_qualified_sick_leave_wages
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "max(\n  0,\n  max(0, qualified_sick_leave_wages_paid_by_eligible_employer)\n\
+      \  - elected_out_qualified_sick_leave_wages\n)"
+- name: employer_gross_income_increase_for_section_3131_credit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(3), first sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: the gross income of the employer ... shall be increased by the
+            amount of such credit
+  versions:
+  - effective_from: '1990-01-01'
+    formula: max(0, credit_allowed_under_section_3131_for_calendar_quarter_in_taxable_year)
+- name: wages_taken_into_account_for_section_3131_credit_excluded_from_listed_credits
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(3), second sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: Any wages taken into account ... shall not be taken into account
+            for purposes of determining the credit allowed under sections 45A, 45P,
+            45S, 51, 3132, and 3134.
+  versions:
+  - effective_from: '1990-01-01'
+    formula: max(0, wages_taken_into_account_in_determining_section_3131_credit)
+- name: section_3131_credit_reduction_for_cares_act_or_section_41_credit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(3), third sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: shall be reduced by the portion of the credit allowed under such
+            section 2301 or section 41 which is attributable to such wages
+  versions:
+  - effective_from: '1990-01-01'
+    formula: max(0, portion_of_cares_act_section_2301_or_section_41_credit_attributable_to_wages_taken_into_account_under_section_3131)
+- name: qualified_sick_leave_wages_disallowed_by_program_coordination
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3131(f)(7)(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: shall not apply to so much of the qualified sick leave wages ...
+            as are taken into account as payroll costs
+  versions:
+  - effective_from: '1990-01-01'
+    formula: "max(\n  0,\n  qualified_sick_leave_wages_taken_into_account_as_payroll_costs_for_covered_small_business_act_loan\n\
+      \  + qualified_sick_leave_wages_taken_into_account_as_payroll_costs_for_hard_hit_small_businesses_nonprofits_and_venues_grant\n\
+      \  + qualified_sick_leave_wages_taken_into_account_as_payroll_costs_for_restaurant_revitalization_grant\n\
+      )"
+- name: assessment_limitation_minimum_years_after_later_return_date
+  kind: parameter
+  dtype: Integer
+  source: 26 USC 3131(f)(6)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/26/3131
+          excerpt: 5 years after the later of
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '5'
