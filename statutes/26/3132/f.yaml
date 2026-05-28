@@ -1,0 +1,248 @@
+format: rulespec/v1
+imports:
+- us:statutes/26/3111/b#hospital_insurance_employer_tax
+- us:statutes/26/3132/c#qualified_family_leave_wages
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3132
+  summary: '"Applicable employment taxes" include taxes imposed under section 3111(b)
+    and the section 3221(a) portion attributable to the section 3111(b) rate. The
+    employer''s gross income "shall be increased by the amount of such credit"; elected
+    qualified family leave wages are not taken into account; no credit is allowed
+    to the United States government except specified section 501 organizations; the
+    assessment period shall not expire before "5 years after the later of" the return
+    dates; and qualified family leave wages counted as specified payroll costs are
+    excluded, subject to PPP nonforgiveness guidance.'
+  deferred_outputs:
+  - output: us:statutes/26/3132/f#applicable_employment_taxes
+    reason: The complete definition includes taxes imposed under section 3221(a) attributable
+      to the section 3111(b) rate, but no copied RuleSpec context provides an executable
+      section 3221(a) target.
+  - output: us:statutes/26/3132/f#wages
+    reason: The complete section-specific definition depends on wages as defined in
+      section 3121(a) determined without regard to paragraphs (1) through (22) of
+      section 3121(b), and compensation as defined in section 3231(e) determined without
+      regard to a sentence in paragraph (1); the copied section 3121(a) target is
+      deferred and the needed purpose-specific compensation modification is not available.
+  - output: us:statutes/26/3132/f#credit_after_all_double_benefit_reductions
+    reason: Full double-benefit coordination depends on credits allowed under sections
+      45A, 45P, 45S, 51, 3131, 3134, CARES Act section 2301, and section 41; several
+      cited credit sources are unavailable or deferred as complete executable targets.
+  - output: us:statutes/26/3132/f#assessment_limitation_expiration_date_for_section_3132_credit
+    reason: The rule requires computing a date 5 years after the later of the original-return
+      filing date or the date the return is treated as filed under section 6501(b)(2);
+      RuleSpec has no date-valued output type here and no copied executable section
+      6501(b)(2) target.
+  - output: us:statutes/26/3132/f#governmental_employer_denied_section_3132_credit
+    reason: Generated rule kept a local fact for a cited legal section. This output
+      is deferred until the cited source can be encoded or imported without a local
+      cross-reference placeholder.
+rules:
+- name: section_3111_b_applicable_employment_tax_component
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(1)(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: The taxes imposed under section 3111(b).
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3111/b#hospital_insurance_employer_tax
+          output: hospital_insurance_employer_tax
+          hash: sha256:342eabb01340bdb2a8b4785a3948f2c51c59657045662fb4f668b4b7422ee906
+  versions:
+  - effective_from: '2021-04-01'
+    formula: max(0, hospital_insurance_employer_tax)
+- name: elected_out_qualified_family_leave_wages
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: so much of the qualified family leave wages paid by an eligible
+            employer as such employer elects ... to not take into account
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3132/c#qualified_family_leave_wages
+          output: qualified_family_leave_wages
+          hash: sha256:b82c4c11b811ce6aa08533624caada517c92636f3f25f60f67628eb6551f432c
+  versions:
+  - effective_from: '2021-04-01'
+    formula: "min(\n  max(0, qualified_family_leave_wages),\n  max(0, qualified_family_leave_wages_employer_elects_not_to_take_into_account)\n\
+      )"
+- name: qualified_family_leave_wages_after_employer_election
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: This section shall not apply to so much of the qualified family
+            leave wages ... as such employer elects
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3132/c#qualified_family_leave_wages
+          output: qualified_family_leave_wages
+          hash: sha256:b82c4c11b811ce6aa08533624caada517c92636f3f25f60f67628eb6551f432c
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3132/f#elected_out_qualified_family_leave_wages
+          output: elected_out_qualified_family_leave_wages
+          hash: sha256:local
+  versions:
+  - effective_from: '2021-04-01'
+    formula: "max(\n  0,\n  qualified_family_leave_wages\n  - elected_out_qualified_family_leave_wages\n\
+      )"
+- name: employer_gross_income_increase_for_section_3132_credit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(3), first sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: the gross income of the employer ... shall be increased by the
+            amount of such credit
+  versions:
+  - effective_from: '2021-04-01'
+    formula: max(0, credit_allowed_under_section_3132_for_calendar_quarter_in_taxable_year)
+- name: wages_taken_into_account_for_section_3132_credit_excluded_from_listed_credits
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(3), second sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: Any wages taken into account ... shall not be taken into account
+            for purposes of determining the credit allowed under sections 45A, 45P,
+            45S, 51, 3131, and 3134.
+  versions:
+  - effective_from: '2021-04-01'
+    formula: max(0, wages_taken_into_account_in_determining_section_3132_credit)
+- name: section_3132_credit_reduction_for_cares_act_or_section_41_credit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(3), third sentence
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: shall be reduced by the portion of the credit allowed under such
+            section 2301 or section 41 which is attributable to such wages
+  versions:
+  - effective_from: '2021-04-01'
+    formula: max(0, portion_of_cares_act_section_2301_or_section_41_credit_attributable_to_wages_taken_into_account_under_section_3132)
+- name: assessment_limitation_minimum_years_after_later_return_date
+  kind: parameter
+  dtype: Integer
+  source: 26 USC 3132(f)(6)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: 5 years after the later of
+  versions:
+  - effective_from: '2021-04-01'
+    formula: '5'
+- name: qualified_family_leave_wages_preserved_by_unforgiven_ppp_loan_rule
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(7)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: payroll costs paid during the covered period shall not fail to
+            be treated as qualified family leave wages ... to the extent that
+  versions:
+  - effective_from: '2021-04-01'
+    formula: "min(\n  max(0, qualified_family_leave_wages_taken_into_account_as_payroll_costs_for_covered_small_business_act_loan),\n\
+      \  max(\n    0,\n    payroll_costs_paid_during_covered_period_for_covered_small_business_act_7_a_37_loan_not_forgiven_by_decision\n\
+      \    + payroll_costs_paid_during_covered_period_for_covered_small_business_act_7a_loan_not_forgiven_by_decision\n\
+      \  )\n)"
+- name: qualified_family_leave_wages_disallowed_by_program_coordination
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 3132(f)(7)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/26/3132
+          excerpt: This section shall not apply to so much of the qualified family
+            leave wages ... as are taken into account as payroll costs
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3132/f#qualified_family_leave_wages_preserved_by_unforgiven_ppp_loan_rule
+          output: qualified_family_leave_wages_preserved_by_unforgiven_ppp_loan_rule
+          hash: sha256:local
+  versions:
+  - effective_from: '2021-04-01'
+    formula: "max(\n  0,\n  max(0, qualified_family_leave_wages_taken_into_account_as_payroll_costs_for_covered_small_business_act_loan)\n\
+      \  - qualified_family_leave_wages_preserved_by_unforgiven_ppp_loan_rule\n  +\
+      \ max(0, qualified_family_leave_wages_taken_into_account_as_payroll_costs_for_hard_hit_small_businesses_nonprofits_and_venues_grant)\n\
+      \  + max(0, qualified_family_leave_wages_taken_into_account_as_payroll_costs_for_restaurant_revitalization_grant)\n\
+      )"
