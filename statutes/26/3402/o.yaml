@@ -1,0 +1,330 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3402
+  summary: 26 USC 3402(o) extends withholding to "any supplemental unemployment compensation
+    benefit", requested annuity payments, and requested non-wage sick pay, treating
+    covered payments "as if it were a payment of wages by an employer to an employee
+    for a payroll period." It defines those payment categories, provides that requested
+    annuity or sick-pay withholding is the amount "specified by the payee", prorated
+    for payments greater or less than a full payment, sets written-request requirements
+    including sick-pay timing for "payments made more than 7 days after" furnishing,
+    creates a collective-bargaining sick-pay special rule, and states that the subsection
+    does not apply to a section 3405(e)(1) designated distribution.
+  deferred_outputs:
+  - output: us:statutes/26/3402/o#payment_treated_as_wages_by_employer_to_employee_for_payroll_period
+    reason: Paragraph (6) makes subsection (o) inapplicable to amounts that are designated
+      distributions within the meaning of 26 USC 3405(e)(1), but no copied RuleSpec
+      source provides that definition.
+  - output: us:statutes/26/3402/o#amount_to_deduct_and_withhold_under_subsection_o
+    reason: A final subsection-level withholding amount must apply the section 3405(e)(1)
+      designated-distribution exclusion in paragraph (6); that upstream definition
+      is not available in copied RuleSpec context.
+rules:
+- name: sick_pay_request_effective_wait_days
+  kind: parameter
+  dtype: Count
+  source: 26 USC 3402(o)(4)(C)(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/3402
+          excerpt: payments made more than 7 days after the date on which such request
+            is furnished to the payor
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '7'
+- name: supplemental_unemployment_compensation_benefit_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Day
+  unit: USD
+  source: 26 USC 3402(o)(2)(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if amount_paid_to_employee_pursuant_to_employer_party_plan_because_of_qualifying_involuntary_separation:
+      supplemental_unemployment_compensation_benefit_includible_in_employee_gross_income_amount
+      else: 0'
+- name: supplemental_unemployment_compensation_benefit
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(2)(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: supplemental_unemployment_compensation_benefit_amount > 0
+- name: annuity
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(2)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: amount_paid_to_individual_as_pension_or_annuity
+- name: sick_pay
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(2)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'amount_paid_to_employee_pursuant_to_plan_to_which_employer_is_party
+
+      and payment_is_remuneration_or_in_lieu_for_temporary_absence_due_to_sickness_or_personal_injuries'
+- name: sick_pay_not_constituting_wages
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(1)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'sick_pay
+
+      and sick_pay_does_not_constitute_wages_determined_without_regard_to_subsection'
+- name: withholding_request_form_requirements_satisfied
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(4)(A)-(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'request_made_by_payee_in_writing_to_person_making_payments
+
+      and request_contains_payee_social_security_number
+
+      and request_specifies_amount_to_deduct_from_each_full_payment'
+- name: sick_pay_request_timing_satisfied
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(4)(C)(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/3402/o#sick_pay_request_effective_wait_days
+          output: sick_pay_request_effective_wait_days
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'days_after_sick_pay_request_furnished_to_payor > sick_pay_request_effective_wait_days
+
+      or payor_elects_request_effective_earlier_than_default'
+- name: annuity_request_timing_satisfied
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(4)(C)(ii)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'annuity_request_effective_time_prescribed_by_secretary_has_arrived
+
+      or payor_elects_request_effective_earlier_than_default'
+- name: sick_pay_withholding_request_in_effect_for_payment
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(1)(C), (4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'sick_pay_not_constituting_wages
+
+      and withholding_request_form_requirements_satisfied
+
+      and sick_pay_request_timing_satisfied'
+- name: annuity_withholding_request_in_effect_for_payment
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(1)(B), (4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'annuity
+
+      and withholding_request_form_requirements_satisfied
+
+      and annuity_request_timing_satisfied'
+- name: annuity_or_sick_pay_withholding_request_applies_to_payment
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'annuity_withholding_request_in_effect_for_payment
+
+      or sick_pay_withholding_request_in_effect_for_payment'
+- name: request_specified_amount_satisfies_regulatory_minimum
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: specified_withholding_amount_in_request >= minimum_withholding_amount_under_secretary_regulations
+- name: request_specified_withholding_amount_for_payment
+  kind: derived
+  entity: Payment
+  dtype: Money
+  period: Day
+  unit: USD
+  source: 26 USC 3402(o)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if annuity_or_sick_pay_withholding_request_applies_to_payment and request_specified_amount_satisfies_regulatory_minimum:\n\
+      \  if payment_is_greater_or_less_than_full_payment:\n    specified_withholding_amount_in_request\
+      \ * (payment_amount / full_payment_amount)\n  else:\n    specified_withholding_amount_in_request\n\
+      else:\n  0"
+- name: collective_bargaining_sick_pay_special_rule_applies
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)(5)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'sick_pay_not_constituting_wages
+
+      and sick_pay_paid_pursuant_to_collective_bargaining_agreement_between_employee_representatives_and_one_or_more_employers
+
+      and collective_bargaining_agreement_specifies_paragraph_applies_and_determines_withholding_amount
+
+      and individual_social_security_number_furnished_to_payor
+
+      and payor_furnished_information_needed_for_collective_bargaining_sick_pay_withholding'
+- name: subsection_o_payment_category_before_designated_distribution_coordination
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Day
+  source: 26 USC 3402(o)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/3402
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'supplemental_unemployment_compensation_benefit
+
+      or annuity_withholding_request_in_effect_for_payment
+
+      or sick_pay_withholding_request_in_effect_for_payment
+
+      or collective_bargaining_sick_pay_special_rule_applies'
