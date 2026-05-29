@@ -1,0 +1,223 @@
+format: rulespec/v1
+imports:
+  - us:statutes/26/3131/a#qualified_sick_leave_wages_credit_against_applicable_employment_taxes
+  - us:statutes/26/3132/a#qualified_family_leave_wages_credit_against_applicable_employment_taxes
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3134
+  summary: |-
+    Qualified wages with respect to any employee taken into account under subsection (a) "shall not exceed $10,000." For a recovery startup business, the credit after that wage cap "shall not exceed $50,000." The credit "shall not exceed the applicable employment taxes (reduced by any credits allowed under sections 3131 and 3132)," and any excess "shall be treated as an overpayment."
+rules:
+  - name: qualified_wages_employee_calendar_quarter_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3134(b)(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: shall not exceed $10,000
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          10000
+
+  - name: qualified_wages_taken_into_account_for_employee_for_calendar_quarter
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3134(b)(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: The amount of qualified wages with respect to any employee which may be taken into account
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3134/b#qualified_wages_employee_calendar_quarter_cap
+              output: qualified_wages_employee_calendar_quarter_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          min(
+              max(0, qualified_wages_with_respect_to_employee_for_calendar_quarter),
+              qualified_wages_employee_calendar_quarter_cap
+          )
+
+  - name: recovery_startup_business_credit_calendar_quarter_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 3134(b)(1)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: shall not exceed $50,000
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          50000
+
+  - name: employee_retention_credit_after_recovery_startup_business_cap
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3134(b)(1)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: eligible employer which is a recovery startup business
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: the amount of the credit allowed under subsection (a) (after application of subparagraph (A))
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3134/b#recovery_startup_business_credit_calendar_quarter_cap
+              output: recovery_startup_business_credit_calendar_quarter_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          if employer_is_recovery_startup_business: min(
+              max(0, employee_retention_credit_under_subsection_a_after_employee_wage_cap_for_calendar_quarter),
+              recovery_startup_business_credit_calendar_quarter_cap
+          ) else: max(0, employee_retention_credit_under_subsection_a_after_employee_wage_cap_for_calendar_quarter)
+
+  - name: employment_tax_limitation_for_employee_retention_credit
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3134(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: applicable employment taxes (reduced by any credits allowed under sections 3131 and 3132)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3131/a#qualified_sick_leave_wages_credit_against_applicable_employment_taxes
+              output: qualified_sick_leave_wages_credit_against_applicable_employment_taxes
+              hash: sha256:eb18d4a79c2902f4018ec4acfa89e326b6b86646355ace8ae4a89ab37c4f8aa9
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3132/a#qualified_family_leave_wages_credit_against_applicable_employment_taxes
+              output: qualified_family_leave_wages_credit_against_applicable_employment_taxes
+              hash: sha256:f249f97f60dad580a6e353f961a820960551254b821e267853fba2af34a1dfc2
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          max(
+              0,
+              applicable_employment_taxes_on_wages_paid_to_all_employees_for_calendar_quarter
+              - qualified_sick_leave_wages_credit_against_applicable_employment_taxes
+              - qualified_family_leave_wages_credit_against_applicable_employment_taxes
+          )
+
+  - name: employee_retention_credit_after_employment_tax_limitation
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3134(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: The credit allowed by subsection (a) with respect to any calendar quarter shall not exceed the applicable employment taxes
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3134/b#employee_retention_credit_after_recovery_startup_business_cap
+              output: employee_retention_credit_after_recovery_startup_business_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3134/b#employment_tax_limitation_for_employee_retention_credit
+              output: employment_tax_limitation_for_employee_retention_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          min(
+              employee_retention_credit_after_recovery_startup_business_cap,
+              employment_tax_limitation_for_employee_retention_credit
+          )
+
+  - name: employee_retention_credit_refundable_excess
+    kind: derived
+    entity: Employer
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3134(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: If the amount of the credit under subsection (a) exceeds the limitation of paragraph (2)
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3134
+              excerpt: such excess shall be treated as an overpayment
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3134/b#employee_retention_credit_after_recovery_startup_business_cap
+              output: employee_retention_credit_after_recovery_startup_business_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3134/b#employment_tax_limitation_for_employee_retention_credit
+              output: employment_tax_limitation_for_employee_retention_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          max(
+              0,
+              employee_retention_credit_after_recovery_startup_business_cap
+              - employment_tax_limitation_for_employee_retention_credit
+          )

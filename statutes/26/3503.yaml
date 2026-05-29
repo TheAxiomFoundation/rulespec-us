@@ -1,0 +1,97 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/3503
+  summary: |-
+    Tax paid under chapter 21 or 22 for a period for which the taxpayer is not liable under that chapter is credited against tax imposed by the other chapter, and any balance is refunded.
+rules:
+  - name: chapter_21_or_22_tax_paid_for_period_without_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3503
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3503
+              excerpt: "Any tax paid under chapter 21 or 22 by a taxpayer with respect to any period with respect to which he is not liable to tax under such chapter"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3503
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if tax_paid_under_chapter_21_or_22_for_period_with_no_liability_under_that_chapter: max(0, tax_paid_under_chapter_21_or_22_for_period) else: 0
+
+  - name: credit_against_tax_imposed_by_other_chapter
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3503
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3503
+              excerpt: "shall be credited against the tax, if any, imposed by such other chapter upon the taxpayer"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3503#chapter_21_or_22_tax_paid_for_period_without_liability
+              output: chapter_21_or_22_tax_paid_for_period_without_liability
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          min(
+              chapter_21_or_22_tax_paid_for_period_without_liability,
+              max(0, tax_imposed_by_other_chapter_on_taxpayer)
+          )
+
+  - name: refund_balance_after_other_chapter_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3503
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3503
+              excerpt: "and the balance, if any, shall be refunded"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3503#chapter_21_or_22_tax_paid_for_period_without_liability
+              output: chapter_21_or_22_tax_paid_for_period_without_liability
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3503#credit_against_tax_imposed_by_other_chapter
+              output: credit_against_tax_imposed_by_other_chapter
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(
+              0,
+              chapter_21_or_22_tax_paid_for_period_without_liability
+              - credit_against_tax_imposed_by_other_chapter
+          )
