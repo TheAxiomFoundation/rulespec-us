@@ -1,0 +1,146 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+  summary: |-
+    Households must meet the applicable gross income standard, except for
+    households containing elderly or disabled members meeting 106 CMR 361.210
+    or public assistance categorically eligible households per 106 CMR 365.180.
+    SNAP-only TANF Services categorically eligible households must meet the
+    gross income standard at 106 CMR 364.976. Non categorically-eligible
+    households must meet the gross income standard at 106 CMR 364.950.
+    Countable gross income equals gross income minus exclusions in
+    106 CMR 363.230. If countable gross income is greater than the standard,
+    the household is ineligible; if equal to or less than the standard, net
+    income eligibility must be determined per 106 CMR 364.550. Net income per
+    106 CMR 364.550 is the sole basis of eligibility for households with an
+    elderly or disabled member meeting the above requirement that are not
+    categorically eligible per 106 CMR 365.180.
+rules:
+  - name: countable_gross_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 364.370 ("gross income minus the exclusions listed in 106 CMR 363.230")
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "The household's gross income minus the exclusions listed in 106 CMR 363.230 : Excluded Income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, household_gross_income - household_excluded_income_under_363_230)
+  - name: applicable_gross_income_standard
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 364.370 (chooses between 364.976 and 364.950 standards)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "SNAP-only TANF Services categorically eligible households must meet the gross income standard at 106 CMR 364.976 . Non categorically-eligible households must meet the gross income standard at 106 CMR 364.950 ."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_is_snap_only_tanf_services_categorically_eligible: gross_income_standard_under_364_976 else: gross_income_standard_under_364_950
+  - name: exempt_from_gross_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.370 (exception for elderly/disabled meeting 361.210 or public assistance categorically eligible per 365.180; not extended to SNAP-only TANF Services categorically eligible households)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "except for households containing elderly or disabled members meeting the requirements of 106 CMR 361.210 : Elderly or Disabled Individuals or public assistance categorically eligible households, in accordance with 106 CMR 365.180"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "SNAP-only TANF Services categorically eligible households must meet the gross income standard at 106 CMR 364.976"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (household_contains_elderly_or_disabled_member_meeting_361_210
+            or household_is_public_assistance_categorically_eligible_per_365_180)
+          and not household_is_snap_only_tanf_services_categorically_eligible
+  - name: meets_gross_income_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.370 (countable gross income equal to or less than the applicable standard)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "If this countable gross income is greater than the standard, the household is ineligible. If the countable gross income is equal to or less than the standard, the household's net income eligibility must be determined"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          countable_gross_income <= applicable_gross_income_standard
+  - name: net_income_sole_basis_of_eligibility
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.370 (net income at 364.550 is the sole basis for elderly/disabled households not categorically eligible per 365.180)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "Net income in accordance with 106 CMR 364.550 is the sole basis of eligibility for households with an elderly or disabled member who meet the above requirement and are not categorically eligible as provided in 106 CMR 365.180"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_contains_elderly_or_disabled_member_meeting_361_210
+          and not household_is_public_assistance_categorically_eligible_per_365_180
+          and not household_is_snap_only_tanf_services_categorically_eligible
+  - name: household_meets_income_eligibility
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.370 (gross income test, except when exempt; net income test always determined when not ineligible on gross)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "If the countable gross income is equal to or less than the standard, the household's net income eligibility must be determined in accordance with 106 CMR 364.550"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/370/block-1
+              excerpt: "Households must meet the applicable gross income standard, except for households containing elderly or disabled members meeting the requirements of 106 CMR 361.210"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (exempt_from_gross_income_test or meets_gross_income_standard)
+          and household_meets_net_income_standard_under_364_550
