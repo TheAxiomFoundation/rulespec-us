@@ -13,6 +13,7 @@ module:
 imports:
   - us:policies/usda/snap/fy-2026-cola/maximum-allotments
   - us:regulations/7-cfr/273/10
+  - us:statutes/7/2014/e/6/A
   - us:statutes/7/2017/a
 rules:
   - name: snap_initial_month_proration_start_date
@@ -87,7 +88,23 @@ rules:
     source: 10 CCR 2506-1 section 4.207.2(C)
     versions:
       - effective_from: '2025-10-01'
-        formula: floor(snap_allotment_before_minimum * snap_initial_month_proration_factor)
+        formula: |-
+          min(
+              snap_calculated_monthly_allotment_before_minimums,
+              floor(snap_calculated_monthly_allotment_before_minimums * snap_initial_month_proration_factor)
+          )
+  - name: snap_initial_month_allotment_after_minimum_issuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.207.2 and 7 CFR 273.10(e)(2)(ii)(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_initial_month_prorated_allotment < snap_initial_month_minimum_issuance: 0 else: snap_initial_month_prorated_allotment
+
   - name: snap_allotment
     kind: derived
     entity: Household
@@ -101,5 +118,48 @@ rules:
           if snap_eligible:
               if snap_initial_month_proration_applies:
                   snap_initial_month_allotment_after_minimum_issuance
-              else: snap_regular_month_allotment
+              else:
+                  snap_monthly_allotment
           else: 0
+  - name: snap_maximum_allotment_for_household_size
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_maximum_allotment
+  - name: snap_maximum_allotment_for_one_person_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_one_person_thrifty_food_plan_cost
+  - name: household_initial_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          initial_application_month
+  - name: state_agency_rounds_thirty_percent_net_income_up
+    kind: parameter
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          false
