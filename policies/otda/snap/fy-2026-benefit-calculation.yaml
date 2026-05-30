@@ -1,5 +1,7 @@
 format: rulespec/v1
 module:
+  proof_validation:
+    required: true
   kind: composition
   summary: |-
     New York SNAP FY 2026 benefit calculation composition. This module imports
@@ -41,6 +43,15 @@ imports:
   - us-ny:regulations/18-nycrr/387/12/f/3/v/b
   - us-ny:regulations/18-nycrr/387/12/f/3/v/c
 rules:
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+
   - name: shelter_costs
     kind: derived
     entity: Household
@@ -48,6 +59,14 @@ rules:
     period: Month
     unit: USD
     source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -55,21 +74,150 @@ rules:
           + snap_standard_utility_allowance
           + snap_limited_utility_allowance
           + snap_individual_utility_allowance
+  - name: snap_gross_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              snap_countable_earned_income
+              + snap_countable_unearned_income
+          )
+  - name: snap_monthly_household_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              snap_countable_earned_income
+              + snap_countable_unearned_income
+          )
+  - name: ny_snap_excess_shelter_cost
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              snap_allowable_shelter_costs
+              - (snap_net_income_pre_shelter * snap_excess_shelter_income_share)
+          )
+  - name: snap_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_full_excess_shelter_deduction_applies:
+              ny_snap_excess_shelter_cost
+          else:
+              min(ny_snap_excess_shelter_cost, snap_maximum_excess_shelter_deduction_48_states_dc)
+  - name: snap_initial_month_allotment_after_minimum_issuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_initial_month_prorated_allotment < snap_initial_month_minimum_issuance:
+              0
+          else:
+              snap_initial_month_prorated_allotment
   - name: snap_ssn_eligible
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
     source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
     versions:
       - effective_from: '2025-10-01'
-        formula: count_where(member_of_household, snap_member_ssn_requirement_eligible) > 0
+        formula: count_where(member_of_household, snap_member_ssn_requirement_ineligible) == 0
   - name: snap_residency_citizenship_eligible
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
     source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -81,30 +229,56 @@ rules:
     dtype: Judgment
     period: Month
     source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          count_where(member_of_household, snap_member_work_requirement_eligible) > 0
-          and count_where(member_of_household, snap_member_work_requirement_ineligible) == 0
+          count_where(member_of_household, snap_member_work_requirement_ineligible) == 0
   - name: snap_student_eligible
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
     source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
     versions:
       - effective_from: '2025-10-01'
-        formula: count_where(member_of_household, snap_member_student_eligible) > 0
+        formula: count_where(member_of_household, snap_member_student_ineligible) == 0
   - name: snap_eligible
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
     source: New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          snap_income_eligible
+          (
+            snap_income_limit_exemption_for_categorically_eligible_household
+            or snap_standard_income_eligible
+          )
           and (snap_resource_eligible or ny_snap_categorically_eligible)
           and snap_ssn_eligible
           and snap_work_requirement_eligible
