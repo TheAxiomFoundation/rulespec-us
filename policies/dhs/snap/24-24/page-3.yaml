@@ -1,0 +1,94 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-24/page-3
+  summary: |-
+    When pending Families First or SSI applications are approved after the SNAP application has been denied but is still within 60 days, the caseworker should update the SNAP application with any changes since the last interview. A new interview is not required. Benefits should be pro-rated from the first day the Families First or SSI benefits are payable, or the date of the original SNAP application, whichever is later. If Families First or SSI benefits are terminated, continuing eligibility should be determined under normal SNAP policy and procedures for non-categorically eligible households.
+rules:
+  - name: pending_families_first_or_ssi_approval_window_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: Policy 24.24, page 3, pending Families First or SSI applications approved after SNAP denial
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-24/page-3
+              excerpt: "still within 60 days"
+    versions:
+      - effective_from: '2021-06-15'
+        formula: |-
+          60
+
+  - name: denied_snap_application_update_without_new_interview_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Policy 24.24, page 3, pending Families First or SSI applications approved after SNAP denial
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-24/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-24/page-3#pending_families_first_or_ssi_approval_window_days
+              output: pending_families_first_or_ssi_approval_window_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-06-15'
+        formula: |-
+          pending_families_first_or_ssi_application_approved_after_snap_application_denied
+          and snap_application_days_since_denial <= pending_families_first_or_ssi_approval_window_days
+
+  - name: snap_benefits_proration_start_day_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Policy 24.24, page 3, proration after pending Families First or SSI approval
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-24/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-24/page-3#denied_snap_application_update_without_new_interview_applies
+              output: denied_snap_application_update_without_new_interview_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-06-15'
+        formula: |-
+          denied_snap_application_update_without_new_interview_applies
+          and day_is_later_of_first_families_first_or_ssi_payable_day_and_original_snap_application_day
+
+  - name: continuing_snap_eligibility_under_non_categorical_policy_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.24, page 3, terminated Families First or SSI benefits for categorically eligible household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-24/page-3
+    versions:
+      - effective_from: '2021-06-15'
+        formula: |-
+          categorically_eligible_household_families_first_or_ssi_benefits_terminated

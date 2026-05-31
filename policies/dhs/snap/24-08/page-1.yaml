@@ -1,0 +1,166 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+  summary: |-
+    As a condition of eligibility for SNAP, the SSN or an application for an SSN for all household members receiving or applying to receive benefits must be obtained. A verbal statement providing the SSN is sufficient if validated through data exchange; if not validated, TDHS staff must obtain documentation. If the SSN is unknown or has never been obtained, the individual must apply for one or provide proof of an application through enumeration at birth. In the case of a newborn, the household has six months from the birth month or until the next recertification, whichever is later, to provide the SSN. Any individual who refuses or fails to provide a valid SSN or an application for an SSN to TDHS will be determined to be an ineligible household member.
+rules:
+  - name: newborn_ssn_provision_month_limit
+    kind: parameter
+    dtype: Integer
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+              excerpt: "six months from the birth month"
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          6
+
+  - name: ssn_validated_by_verbal_statement
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          person_provided_verbal_ssn_statement
+          and ssn_validated_through_data_exchange
+
+  - name: documented_ssn_provided
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          individual_provided_ss_card
+          or individual_provided_other_ssa_correspondence_with_name_and_account_number
+
+  - name: valid_ssn_provided_to_tdhs
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          ssn_validated_by_verbal_statement
+          or documented_ssn_provided
+
+  - name: ssn_application_provided_to_tdhs
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          individual_applied_for_ssn_through_local_ssa_office
+          or individual_provided_proof_of_ssn_application_through_enumeration_at_birth
+
+  - name: newborn_within_ssn_provision_period
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+              excerpt: "newborn, the household has six months from the birth month or until the next recertification, whichever is later"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-08/page-1#newborn_ssn_provision_month_limit
+              output: newborn_ssn_provision_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          individual_is_newborn
+          and (months_since_birth_month <= newborn_ssn_provision_month_limit or next_recertification_has_not_occurred)
+
+  - name: enumeration_requirement_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          valid_ssn_provided_to_tdhs
+          or ssn_application_provided_to_tdhs
+          or newborn_within_ssn_provision_period
+
+  - name: ineligible_household_member_due_to_enumeration
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Enumeration Requirement Policy 24.08, page 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-08/page-1
+    versions:
+      - effective_from: '2021-04-15'
+        formula: |-
+          household_member_receiving_or_applying_to_receive_snap_benefits
+          and not enumeration_requirement_satisfied

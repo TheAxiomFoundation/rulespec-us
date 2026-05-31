@@ -1,0 +1,207 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+  summary: |-
+    "not more than twelve (12) months prior to the date on which TDHS is notified, or otherwise discovers that a loss to a HH has occurred."
+    "Regardless of whether a HH is currently eligible or ineligible, the county office shall restore lost benefits to a HH by issuing an allotment equal to the amount of benefits that were lost."
+    "If a claim against a HH is unpaid or held in suspense, the amount to be restored shall be offset against the amount due on the claim before the balance, if any, is restored to the HH."
+rules:
+  - name: restoration_lookback_month_limit
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: Policy 24.22, page 12, restoration time limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "not more than twelve (12) months prior"
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          12
+
+  - name: loss_month_within_restoration_time_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, page 12, restoration time limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "not more than twelve (12) months prior to the date on which TDHS is notified, or otherwise discovers"
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          months_prior_to_tdhs_notification_or_discovery_of_loss <= restoration_lookback_month_limit
+
+  - name: restored_lost_benefit_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Policy 24.22, page 12, items 5(a) and 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          if loss_month_within_restoration_time_limit: max(0, lost_benefits_for_month) else: 0
+
+  - name: allotment_issued_with_restoration
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Policy 24.22, page 12, item 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          if household_currently_eligible: max(0, current_eligible_allotment) + restored_lost_benefit_allotment else: restored_lost_benefit_allotment
+
+  - name: offset_amount_against_claim
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Policy 24.22, page 12, item 9(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          if claim_against_household_unpaid_or_held_in_suspense: min(restored_lost_benefit_allotment, max(0, amount_due_on_claim)) else: 0
+
+  - name: balance_restored_after_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Policy 24.22, page 12, item 9(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          max(0, restored_lost_benefit_allotment - offset_amount_against_claim)
+
+  - name: household_restoration_recipient
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, page 12, item 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          lost_benefits_are_due_to_household
+          and (
+            household_contains_majority_of_individuals_who_were_members_when_loss_occurred
+            or (
+              not county_office_can_locate_or_determine_household_containing_majority
+              and household_contains_individual_who_was_head_when_loss_occurred
+            )
+          )
+
+  - name: monthly_installment_restoration_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, page 12, item 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+              excerpt: "Effective Date: 08/15/2019"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-12
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          lost_benefits_are_due_to_household
+          and household_reasonably_requests_monthly_installments_to_restore_lost_benefits

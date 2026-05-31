@@ -1,0 +1,225 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+  summary: |-
+    TDHS initiates collection action by written demand letter stating the amount owed, reason, claim period, offsets, payment method, fair-hearing rights, and free legal representation information when available. If a participating household does not respond within thirty (30) days after the notice is mailed, TDHS will reduce the SNAP allotment after adverse notification is received. A fair hearing may be requested within the first ninety (90) days after receipt of the initial demand letter. Inadvertent household or administrative error claims may be suspended for claims under thirty-five dollars ($35) that cannot be recovered through allotment reduction, when the household cannot be located, or when referred for prosecution or ADH.
+rules:
+  - name: collection_response_deadline_days
+    kind: parameter
+    dtype: Count
+    source: Policy 24.22, section 4(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+              excerpt: "within thirty (30) days of the date the notice is mailed"
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          30
+
+  - name: initial_demand_letter_fair_hearing_request_period_days
+    kind: parameter
+    dtype: Count
+    source: Policy 24.22, section 4(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+              excerpt: "within the first ninety (90) days after receipt of the initial demand letter"
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          90
+
+  - name: small_claim_suspension_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Policy 24.22, section 5(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+              excerpt: "the claim is less than thirty-five dollars ($35)"
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          35
+
+  - name: demand_letter_contains_required_information
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 3(a)-(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          demand_letter_states_amount_owed
+          and demand_letter_states_reason_for_claim
+          and demand_letter_states_claim_period
+          and demand_letter_states_offsets_done
+          and demand_letter_states_how_to_pay
+          and demand_letter_states_fair_hearing_rights_when_required
+          and demand_letter_states_free_legal_representation_information_when_available
+
+  - name: collection_action_initiated_by_written_demand_letter
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          household_received_written_demand_letter
+          and demand_letter_contains_required_information
+
+  - name: household_failed_to_respond_within_collection_deadline
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 4(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-22/page-8#collection_response_deadline_days
+              output: collection_response_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          collection_action_initiated_by_written_demand_letter
+          and days_since_written_demand_notice_was_mailed > collection_response_deadline_days
+          and not household_responded_to_written_demand_letter
+
+  - name: allotment_reduction_after_adverse_notification_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 4(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-22/page-8#household_failed_to_respond_within_collection_deadline
+              output: household_failed_to_respond_within_collection_deadline
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          household_failed_to_respond_within_collection_deadline
+          and household_currently_participating_in_snap
+          and adverse_notification_received
+
+  - name: initial_demand_letter_fair_hearing_request_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 4(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-22/page-8#initial_demand_letter_fair_hearing_request_period_days
+              output: initial_demand_letter_fair_hearing_request_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          initial_demand_letter_sent
+          and individual_requested_fair_hearing
+          and days_after_initial_demand_letter_receipt <= initial_demand_letter_fair_hearing_request_period_days
+
+  - name: other_collection_actions_may_be_pursued
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 4(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          household_failed_to_respond_to_written_demand_letter
+          and claim_is_inadvertent_household_error_or_administrative_error_or_ipv
+
+  - name: inadvertent_household_or_administrative_error_claim_may_be_suspended
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.22, section 5(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-22/page-8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-22/page-8#small_claim_suspension_threshold
+              output: small_claim_suspension_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-08-15'
+        formula: |-
+          claim_is_inadvertent_household_error_or_administrative_error
+          and ((no_collection_action_initiated and claim_amount < small_claim_suspension_threshold and claim_cannot_be_recovered_through_allotment_reduction) or household_cannot_be_located or claim_referred_for_prosecution_or_adh)

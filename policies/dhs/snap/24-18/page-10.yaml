@@ -1,0 +1,112 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+  summary: |-
+    "The total non-reimbursable medical cost exceeds thirty five dollars ($35) per month. The thirty five dollar ($35) exclusion will be applied to the HH, not to individuals." Medical expenses must be verified before deduction. One-time medical expenses may be considered only for the existing current balance, if the expense still exists and has not previously been considered.
+rules:
+  - name: monthly_medical_expense_exclusion
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Policy 24.18(Q)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "thirty five dollars ($35) per month"
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          35
+
+  - name: medical_expense_deduction_after_exclusion
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Policy 24.18(Q)(1), (Q)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "The balance, in excess of the monthly thirty five dollar ($35) exclusion, is counted as a medical expense."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "All medical expenses must be verified prior to allowing them as deductions."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-18/page-10#monthly_medical_expense_exclusion
+              output: monthly_medical_expense_exclusion
+              hash: sha256:local
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          if all_medical_expenses_verified and total_non_reimbursable_medical_cost > monthly_medical_expense_exclusion: max(0, total_non_reimbursable_medical_cost - monthly_medical_expense_exclusion) else: 0
+
+  - name: one_time_medical_expense_considered_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Policy 24.18(Q)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "It will be established that the medical expense still exists"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "if it has been considered in the SNAP budget before, it cannot be considered again"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "Only the existing balance can be considered."
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          if one_time_medical_expense_still_exists and not one_time_medical_expense_previously_considered and one_time_medical_expense_verified: max(0, current_balance_of_one_time_medical_expense) else: 0
+
+  - name: attendant_meal_related_medical_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Policy 24.18(P)(13)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+              excerpt: "deduct an amount equal to the one-person allotment if the HH furnishes the majority of the attendant’s meals"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-10
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          if attendant_or_home_care_costs_necessary_due_to_age_infirmity_or_illness and household_furnishes_majority_of_attendants_meals: max(0, one_person_allotment_in_effect_at_applicable_certification) else: 0
