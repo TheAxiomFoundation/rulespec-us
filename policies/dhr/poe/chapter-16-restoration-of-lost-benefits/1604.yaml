@@ -1,0 +1,84 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-al/manual/dhr/poe/chapter-16-restoration-of-lost-benefits/1604
+  summary: |-
+    Individuals disqualified for Intentional Program Violation (IPV) are entitled to restoration of any benefits lost during the months that they were disqualified, not to exceed 12 months prior to the date of county department notification, only if the decision which resulted in disqualification is subsequently reversed. For each month the individual was disqualified, not to exceed 12 months prior to county department notification, the amount to be restored shall be determined by comparing the allotment the household received with the allotment the household would have received had the disqualified member been allowed to participate. Participation in an administrative disqualification hearing in which the household contests the State agency's assertion of IPV shall be considered notification that the household is requesting restored benefits.
+rules:
+  - name: maximum_months_prior_to_notification
+    kind: parameter
+    dtype: Integer
+    source: AL DHR POE 1604 - "not to exceed 12 months prior to the date of county department notification"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-16-restoration-of-lost-benefits/1604
+              excerpt: "not to exceed 12 months prior to the date of county department notification"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+  - name: ipv_restoration_entitlement_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: AL DHR POE 1604 - entitlement to restoration only if IPV disqualification decision is subsequently reversed
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-16-restoration-of-lost-benefits/1604
+              excerpt: "entitled to restoration of any benefits lost during the months that they were disqualified ... only if the decision which resulted in disqualification is subsequently reversed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_was_disqualified_for_ipv
+          and ipv_disqualification_decision_subsequently_reversed
+          and month_is_within_disqualification_period
+          and month_is_within_12_months_prior_to_county_notification
+  - name: household_requested_restoration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: AL DHR POE 1604 - participation in administrative disqualification hearing contesting IPV is considered notification requesting restored benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-16-restoration-of-lost-benefits/1604
+              excerpt: "Participation in an administrative disqualification hearing in which the household contests the State agency's assertion of Intentional Program Violation shall be considered notification that the household is requesting restored benefits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_explicitly_requested_restored_benefits
+          or household_participated_in_administrative_disqualification_hearing_contesting_ipv
+  - name: monthly_lost_benefit_restoration_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: AL DHR POE 1604 - amount restored is allotment household would have received had disqualified member participated minus allotment received
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-16-restoration-of-lost-benefits/1604
+              excerpt: "the amount to be restored, if any, shall be determined by comparing the allotment the household received with the allotment the household would have received had the disqualified member been allowed to participate. If the household received a smaller allotment than it should have received, the difference equals the amount to be restored."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if ipv_restoration_entitlement_holds_for_month: max(0, allotment_household_would_have_received_with_disqualified_member - allotment_household_received) else: 0
