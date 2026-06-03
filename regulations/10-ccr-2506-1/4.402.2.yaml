@@ -1,86 +1,232 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual averages income intended to cover a specific
-    period by dividing by the number of months the income is intended to
-    cover. Annual self-employment income and annual contract income are
-    averaged over 12 months, except contract income paid on an hourly or
-    piecework basis. Educational income is prorated over the period it is
-    intended to cover. Other households, including migrant or seasonal
-    workers, may elect to average fluctuating income over the period it is
-    intended to cover, but self-employment, contract, and fluctuating income
-    are not averaged or annualized for migrant households that are destitute of
-    income. Known income from 2 previous months may be averaged and projected
-    when representative.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+  summary: |-
+    Income intended to cover a specific period is divided by the number of months it is intended to cover. Annual self-employment and non-hourly contract income are annualized over a twelve-month period; educational income is prorated over its intended period; other households may elect to average fluctuating income. Self-employment, contract, and fluctuating income are not averaged or annualized for migrant households destitute of income. Averaged or prorated amounts are added to other household income to determine monthly SNAP income.
 rules:
+  - name: snap_income_annualization_months
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1, 4.402.2(A)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+              excerpt: twelve (12) month period
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
   - name: snap_average_monthly_income_for_intended_period
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: 10 CCR 2506-1 section 4.402.2
-    versions:
-      - effective_from: '2025-10-01'
-        formula: income_intended_to_cover_specific_period / income_intended_cover_months
-  - name: snap_self_employment_income_annualized_under_4_402_2
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.402.2(A)(1)
+    source: 10 CCR 2506-1, 4.402.2 introductory paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if household_derives_annual_income_from_self_employment and not snap_destitute_income_household:
-              annual_self_employment_income / 12
-          else: 0
-  - name: snap_contract_income_annualized_under_4_402_2
+          income_intended_to_cover_specific_period / income_intended_cover_months
+
+  - name: snap_self_employment_income_annualization_applies
     kind: derived
     entity: Household
-    dtype: Money
+    dtype: Judgment
     period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.402.2(A)(2)
+    source: 10 CCR 2506-1, 4.402.2(A)(1) and exception paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if household_derives_annual_income_from_contract and not contract_income_hourly_or_piecework and not snap_destitute_income_household:
-              annual_contract_income / 12
-          else: 0
-  - name: snap_educational_income_prorated_under_4_402_2
+          household_derives_annual_income_from_self_employment
+          and not migrant_household_destitute_of_income_under_section_4_406
+
+  - name: snap_self_employment_average_monthly_income
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: 10 CCR 2506-1 section 4.402.2(A)(3)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: educational_income / educational_income_intended_cover_months
-  - name: snap_fluctuating_income_averaged_under_4_402_2
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.402.2(A)(4)
+    source: 10 CCR 2506-1, 4.402.2(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+              excerpt: income annualized over a twelve (12) month period
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if household_elects_to_average_fluctuating_income and not snap_destitute_income_household:
-              fluctuating_income_intended_to_cover_period / fluctuating_income_intended_cover_months
-          else: 0
-  - name: snap_projected_monthly_income_from_known_previous_months
+          if snap_self_employment_income_annualization_applies: annual_self_employment_income / snap_income_annualization_months else: 0
+
+  - name: snap_contract_income_annualization_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.402.2(A)(2) and exception paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_derives_annual_income_from_contract
+          and not contract_income_received_on_hourly_or_piecework_basis
+          and not migrant_household_destitute_of_income_under_section_4_406
+
+  - name: snap_contract_average_monthly_income
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: 10 CCR 2506-1 section 4.402.2(C)
+    source: 10 CCR 2506-1, 4.402.2(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+              excerpt: contract income shall have that income averaged over a twelve (12) month period
     versions:
       - effective_from: '2025-10-01'
-        formula: known_income_from_previous_months / known_previous_month_count
+        formula: |-
+          if snap_contract_income_annualization_applies: annual_contract_income / snap_income_annualization_months else: 0
+
+  - name: snap_educational_average_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1, 4.402.2(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+              excerpt: educational income as defined in Section 4.404, D
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_receives_educational_income_defined_in_section_4_404_d: educational_income_defined_in_section_4_404_d / educational_income_intended_cover_months else: 0
+
+  - name: snap_fluctuating_income_averaging_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.402.2(A)(4) and exception paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_elects_to_average_fluctuating_income
+          and fluctuating_income_intended_to_cover_specific_period
+          and not migrant_household_destitute_of_income_under_section_4_406
+
+  - name: snap_fluctuating_average_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1, 4.402.2(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_fluctuating_income_averaging_applies: fluctuating_income_intended_to_cover_period / fluctuating_income_intended_cover_months else: 0
+
+  - name: snap_prospective_average_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1, 4.402.2(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          anticipated_income_considering_fluctuations / anticipated_income_average_month_count
+
+  - name: snap_monthly_income_with_averaged_components
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1, 4.402.2(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          other_monthly_household_income + snap_self_employment_average_monthly_income + snap_contract_average_monthly_income + snap_educational_average_monthly_income + snap_fluctuating_average_monthly_income
