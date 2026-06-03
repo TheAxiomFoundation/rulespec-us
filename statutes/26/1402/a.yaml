@@ -7,8 +7,54 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/1402
+  deferred_outputs:
+    - output: us:statutes/26/1402/a#comprehensive_net_earnings_from_self_employment_after_all_paragraph_1_through_17_adjustments
+      reason: >-
+        The full subsection (a) computation requires all paragraph (1) through
+        (17) exclusions and special rules, including rentals, dividends and
+        interest, gains and losses, net operating loss and personal exemption
+        disallowances, community-property rules, Puerto Rico and possession
+        rules, minister and church employee rules, partner retirement payments,
+        limited partner rules, Indian fishing-rights income, section 199
+        disallowance, and qualified joint venture treatment. Several cited
+        legal dependencies, including sections 702(a)(8), 631, 107, 119,
+        414(e), 707(c), 7873, 199, and 761(f), are not available as executable
+        RuleSpec outputs in this prompt. The executable rules below compute a
+        core subsection (a) amount from boundary inputs already adjusted for the
+        unavailable exclusions and special rules, plus the directly stated
+        paragraph (12) rate deduction.
+    - output: us:statutes/26/1402/a#agricultural_optional_method_net_earnings
+      blocked_by:
+        - us:statutes/26/3121/g#agricultural_labor
+      reason: >-
+        The agricultural optional method requires applying section 3121(g)
+        agricultural-labor classification to the trade or business, section
+        707(c) guaranteed-payment reductions, statutory upper and lower limits,
+        and partnership distributive-share mechanics. The copied context does
+        not provide all mechanics needed for a faithful executable output.
+    - output: us:statutes/26/1402/a#nonfarm_optional_method_net_earnings
+      reason: >-
+        The nonfarm optional method requires subsection (h) regular-basis
+        status, statutory upper and lower limits, aggregation across all trades
+        or businesses and partnerships, a five-taxable-year limit, and
+        coordination with the agricultural optional method. Those mechanics are
+        not fully available in this source slice.
+    - output: us:statutes/26/1402/a#partner_distributive_share_timing_for_different_taxable_years
+      reason: >-
+        The timing rule for a partner whose taxable year differs from the
+        partnership year depends on partnership ordinary income or loss and
+        section 702(a)(8) distributive-share mechanics. No copied context
+        provides an executable section 702(a)(8) output.
   summary: |-
-    (a) Net earnings from self-employment The term “net earnings from self-employment” means the gross income derived by an individual from any trade or business carried on by such individual, less the deductions allowed by this subtitle which are attributable to such trade or business, plus his distributive share (whether or not distributed) of income or loss described in section 702(a)(8) from any trade or business carried on by a partnership of which he is a member; except that in computing such gross income and deductions and such distributive share of partnership ordinary income or loss— ... (12) in lieu of the deduction provided by section 164(f) (relating to deduction for one-half of self-employment taxes), there shall be allowed a deduction equal to the product of— (A) the taxpayer’s net earnings from self-employment for the taxable year (determined without regard to this paragraph), and (B) one-half of the sum of the rates imposed by subsections (a) and (b) of section 1401 for such year (determined without regard to the rate imposed under paragraph (2) of section 1401(b)); ... If the taxable year of a partner is different from that of the partnership, the distributive share which he is required to include in computing his net earnings from self-employment shall be based on the ordinary income or loss of the partnership for any taxable year of the partnership ending within or with his taxable year.
+    “Net earnings from self-employment” means gross income derived by an
+    individual from a trade or business carried on by the individual, less
+    attributable subtitle deductions, plus the individual’s distributive share
+    of section 702(a)(8) income or loss from a partnership trade or business,
+    subject to the exclusions and special rules in paragraphs (1) through (17).
+    Paragraph (12) allows, in lieu of the section 164(f) deduction, a deduction
+    equal to net earnings determined without paragraph (12) multiplied by
+    one-half of the section 1401(a) and section 1401(b) rates, determined
+    without the section 1401(b)(2) rate.
 rules:
   - name: self_employment_tax_equivalent_deduction_fraction
     kind: parameter
@@ -21,39 +67,15 @@ rules:
             kind: parameter
             source:
               corpus_citation_path: us/statute/26/1402
+              excerpt: "one-half of the sum of the rates imposed by subsections (a) and (b) of section 1401"
     versions:
       - effective_from: '1990-01-01'
         formula: |-
           1 / 2
 
-  - name: net_earnings_before_paragraph_12_adjustment
+  - name: paragraph_12_non_additional_section_1401_rate_sum
     kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 26 USC 1402(a), before paragraph (12)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: definition
-            source:
-              corpus_citation_path: us/statute/26/1402
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/1402
-    versions:
-      - effective_from: '1990-01-01'
-        formula: |-
-          self_employment_trade_or_business_gross_income
-          - self_employment_trade_or_business_deductions
-          + partnership_section_702_a_8_income_or_loss
-
-  - name: paragraph_12_deduction_rate
-    kind: derived
-    entity: TaxUnit
+    entity: Person
     dtype: Rate
     period: Year
     source: 26 USC 1402(a)(12)(B)
@@ -64,6 +86,7 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/1402
+              excerpt: "sum of the rates imposed by subsections (a) and (b) of section 1401 for such year (determined without regard to the rate imposed under paragraph (2) of section 1401(b))"
           - path: versions[0].formula
             kind: import
             import:
@@ -79,19 +102,15 @@ rules:
     versions:
       - effective_from: '1990-01-01'
         formula: |-
-          self_employment_tax_equivalent_deduction_fraction
-          * (
-              self_employment_oasdi_tax_rate
-              + self_employment_hospital_insurance_tax_rate
-          )
+          self_employment_oasdi_tax_rate
+          + self_employment_hospital_insurance_tax_rate
 
-  - name: paragraph_12_deduction
+  - name: paragraph_12_deduction_rate
     kind: derived
-    entity: TaxUnit
-    dtype: Money
+    entity: Person
+    dtype: Rate
     period: Year
-    unit: USD
-    source: 26 USC 1402(a)(12)
+    source: 26 USC 1402(a)(12)(B)
     metadata:
       proof:
         atoms:
@@ -99,19 +118,32 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/1402
+              excerpt: "one-half of the sum of the rates imposed by subsections (a) and (b) of section 1401"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#self_employment_tax_equivalent_deduction_fraction
+              output: self_employment_tax_equivalent_deduction_fraction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#paragraph_12_non_additional_section_1401_rate_sum
+              output: paragraph_12_non_additional_section_1401_rate_sum
+              hash: sha256:local
     versions:
       - effective_from: '1990-01-01'
         formula: |-
-          net_earnings_before_paragraph_12_adjustment
-          * paragraph_12_deduction_rate
+          self_employment_tax_equivalent_deduction_fraction
+          * paragraph_12_non_additional_section_1401_rate_sum
 
-  - name: net_earnings_from_self_employment
+  - name: net_earnings_before_paragraph_12_adjustment
     kind: derived
-    entity: TaxUnit
+    entity: Person
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 1402(a), including paragraph (12)
+    source: "26 USC 1402(a): Net earnings from self-employment The term “net earnings from self-employment” means the gross in..."
     metadata:
       proof:
         atoms:
@@ -119,10 +151,79 @@ rules:
             kind: definition
             source:
               corpus_citation_path: us/statute/26/1402
+              excerpt: "gross income derived by an individual from any trade or business carried on by such individual, less the deductions allowed by this subtitle which are attributable to such trade or business, plus his distributive share"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          adjusted_self_employment_trade_or_business_gross_income
+          - adjusted_self_employment_trade_or_business_deductions
+          + adjusted_partnership_section_702_a_8_income_or_loss
+
+  - name: paragraph_12_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(a)(12)(A)-(B)
+    metadata:
+      proof:
+        atoms:
           - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/statute/26/1402
+              excerpt: "the product of— (A) the taxpayer’s net earnings from self-employment for the taxable year (determined without regard to this paragraph), and (B) one-half of the sum of the rates"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#net_earnings_before_paragraph_12_adjustment
+              output: net_earnings_before_paragraph_12_adjustment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#paragraph_12_deduction_rate
+              output: paragraph_12_deduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(0, net_earnings_before_paragraph_12_adjustment)
+          * paragraph_12_deduction_rate
+
+  - name: net_earnings_from_self_employment
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: "26 USC 1402(a): Net earnings from self-employment The term “net earnings from self-employment” means the gross in..."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "The term “net earnings from self-employment” means the gross income derived by an individual from any trade or business carried on by such individual, less the deductions"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "in lieu of the deduction provided by section 164(f) ... there shall be allowed a deduction equal to the product of"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#net_earnings_before_paragraph_12_adjustment
+              output: net_earnings_before_paragraph_12_adjustment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a#paragraph_12_deduction
+              output: paragraph_12_deduction
+              hash: sha256:local
     versions:
       - effective_from: '1990-01-01'
         formula: |-
