@@ -1,70 +1,111 @@
 format: rulespec/v1
 imports:
-- us:statutes/26/3111/a#employer_oasdi_excise_tax_rate
-- us:statutes/26/3111/b#hospital_insurance_employer_tax_rate
+  - us:statutes/26/3111/a#employer_oasdi_excise_tax_rate
+  - us:statutes/26/3111/b#hospital_insurance_employer_tax_rate
+  - us:statutes/26/3241/a#applicable_percentage_for_sections_3211_b_and_3221_b_for_purposes_of_subsection_a
 module:
   proof_validation:
     required: true
   source_verification:
     corpus_citation_path: us/statute/26/3221
-  summary: 26 USC 3221 imposes on every employer tier 1 and tier 2 excise taxes on
-    compensation paid for services. The tier 1 applicable percentage is the sum of
-    the rates in effect under section 3111(a) and (b); the tier 2 percentage is determined
-    under section 3241. Section 3231(e)(2) governs different contribution bases for
-    the taxes imposed by subsections (a) and (b).
+  summary: |-
+    Subsection (a) defines its applicable percentage as the sum of rates in effect under section 3111(a) and (b). Subsection (b) uses the percentage determined under section 3241, and subsection (c) cross-references section 3231(e)(2) for different contribution bases.
   deferred_outputs:
-  - output: us:statutes/26/3221/a#tier_1_employer_tax
-    reason: Subsection (c) directs application of different contribution bases under
-      section 3231(e)(2) for the tax imposed by subsection (a). The available section
-      3231(e)(2) context defers the purpose-specific hospital-insurance carve-out
-      needed to determine the compensation base for the section 3221(a) tax, so a
-      raw compensation-times-rate formula would ignore the statutory base rule.
-    blocked_by:
-    - us:statutes/26/3231/e/2#compensation_excess_excluded_for_section_3201_a_or_3221_a_rate_portion
-    source_values:
-    - us:statutes/26/3221#tier_1_applicable_percentage
-  - output: us:statutes/26/3221/b#tier_2_employer_tax
-    reason: Subsection (c) directs application of different contribution bases under
-      section 3231(e)(2) for the tax imposed by subsection (b). The available section
-      3231(e)(2) context defers the applicable base for tier 2 taxes, so the tier
-      2 tax cannot be faithfully computed on raw compensation paid.
-    blocked_by:
-    - us:statutes/26/3231/e/2#applicable_base_for_tier_2_taxes_and_average_monthly_compensation
-    source_values:
-    - us:statutes/26/3221#tier_2_applicable_percentage
-  - output: us:statutes/26/3221/b#tier_2_applicable_percentage
-    reason: Generated rule used a local name that collides with a sibling RuleSpec
-      export. This output is deferred until it can be encoded with a semantic branch-specific
-      name without creating ambiguous sibling imports.
+    - output: us:statutes/26/3221/a#tier_1_employer_tax
+      reason: Subsection (c) directs application of different contribution bases under section 3231(e)(2) for the tax imposed by subsection (a). The copied section 3231(e)(2) context is payment-scoped and does not provide a single employer-level compensation base or payment-to-employer aggregation for applying the capped and uncapped portions of the section 3221(a) tax.
+      source_values:
+        - us:statutes/26/3221#tier_1_applicable_rate
+    - output: us:statutes/26/3221/b#tier_2_employer_tax
+      reason: Subsection (c) directs application of different contribution bases under section 3231(e)(2) for the tax imposed by subsection (b). The copied context does not provide an executable employer-level compensation base for section 3221(b) tier 2 taxes, so the tax cannot be computed faithfully from raw compensation paid.
+      source_values:
+        - us:statutes/26/3221#tier_2_applicable_rate
 rules:
-- name: tier_1_applicable_percentage
-  kind: derived
-  entity: Employer
-  dtype: Rate
-  period: Year
-  source: 26 USC 3221(a)
-  metadata:
-    proof:
-      atoms:
-      - path: versions[0].formula
-        kind: formula
-        source:
-          corpus_citation_path: us/statute/26/3221
-          excerpt: "the term \u201Capplicable percentage\u201D means the percentage\
-            \ equal to the sum of the rates of tax in effect under subsections (a)\
-            \ and (b) of section 3111"
-      - path: versions[0].formula
-        kind: import
-        import:
-          target: us:statutes/26/3111/a#employer_oasdi_excise_tax_rate
-          output: employer_oasdi_excise_tax_rate
-          hash: sha256:0bca2cb6ef64473e7a802903f3c3ffd0afb887c481303cad6d620b9b2159ef82
-      - path: versions[0].formula
-        kind: import
-        import:
-          target: us:statutes/26/3111/b#hospital_insurance_employer_tax_rate
-          output: hospital_insurance_employer_tax_rate
-          hash: sha256:02cb26afb163a49113d15e8cea6adc2f2c8e82e67a2dc46b905950d39c2f198e
-  versions:
-  - effective_from: '1990-01-01'
-    formula: employer_oasdi_excise_tax_rate + hospital_insurance_employer_tax_rate
+  - name: tier_1_tax_tier_identifier
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 3221(a), Tier 1 tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3221
+              excerpt: Tier 1 tax
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          1
+
+  - name: tier_2_tax_tier_identifier
+    kind: parameter
+    dtype: Integer
+    source: 26 USC 3221(b), Tier 2 tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/3221
+              excerpt: Tier 2 tax
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          2
+
+  - name: tier_1_applicable_rate
+    kind: derived
+    entity: Employer
+    dtype: Rate
+    period: Year
+    source: 26 USC 3221(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3221
+              excerpt: applicable percentage means the percentage equal to the sum of the rates of tax in effect under subsections (a) and (b) of section 3111
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3111/a#employer_oasdi_excise_tax_rate
+              output: employer_oasdi_excise_tax_rate
+              hash: sha256:0bca2cb6ef64473e7a802903f3c3ffd0afb887c481303cad6d620b9b2159ef82
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3111/b#hospital_insurance_employer_tax_rate
+              output: hospital_insurance_employer_tax_rate
+              hash: sha256:02cb26afb163a49113d15e8cea6adc2f2c8e82e67a2dc46b905950d39c2f198e
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          employer_oasdi_excise_tax_rate + hospital_insurance_employer_tax_rate
+
+  - name: tier_2_applicable_rate
+    kind: derived
+    entity: Employer
+    dtype: Rate
+    period: Year
+    source: 26 USC 3221(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3221
+              excerpt: equal to the percentage determined under section 3241
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3241/a#applicable_percentage_for_sections_3211_b_and_3221_b_for_purposes_of_subsection_a
+              output: applicable_percentage_for_sections_3211_b_and_3221_b_for_purposes_of_subsection_a
+              hash: sha256:5b6d46041c0e43977ba63434eebbc87e21027ee23ff99dda03e19f4ceb50d442
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          applicable_percentage_for_sections_3211_b_and_3221_b_for_purposes_of_subsection_a
