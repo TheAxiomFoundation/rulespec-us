@@ -1,0 +1,200 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+  summary: |-
+    Live-in attendants may participate as separate households, but required household combinations under Section 2.2 are not live-in attendants. A temporarily absent person from a certified SNAP household is considered living with the household when the location is known, the person was included before absence, there is a definite return plan, and return is expected before the next certification period; near the end of a certification period, return within 30 days of the new certification period is temporary. For joint physical custody with equal time, include the child in the household that applies first, or if both apply/receive benefits, only after both custodians agree.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-26#live_in_attendant_may_participate_as_separate_household
+      reason: Live-in attendant separate-household treatment is limited by required household combinations described in Section 2.2, which is not available in copied context.
+    - output: us-sc:policies/dss/snap-policy-manual/page-26#applicant_required_household_combination_considered_living_together
+      reason: Applicant-household living-together treatment depends on required household combinations specified in Section 2.2, which is not available in copied context.
+rules:
+  - name: days_after_new_certification_period_for_near_end_return
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual p. 26, Temporary absence exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+              excerpt: "within 30 days of the new certification period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: absence_expected_return_within_near_end_exception_window
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Temporary absence exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+              excerpt: "within 30 days of the new certification period"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-26#days_after_new_certification_period_for_near_end_return
+              output: days_after_new_certification_period_for_near_end_return
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_left_snap_household_near_end_of_certification_period
+          and expected_return_days_after_new_certification_period_begins <= days_after_new_certification_period_for_near_end_return
+
+  - name: absence_is_temporary
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Temporary absence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-26#absence_expected_return_within_near_end_exception_window
+              output: absence_expected_return_within_near_end_exception_window
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          persons_location_is_known
+          and person_was_included_in_certified_snap_case_before_absence
+          and definite_plan_for_return_exists
+          and (person_expected_to_return_before_next_certification_period_begins or absence_expected_return_within_near_end_exception_window)
+
+  - name: temporarily_absent_person_considered_living_with_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Temporary absence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-26#absence_is_temporary
+              output: absence_is_temporary
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_temporarily_absent_from_snap_household
+          and snap_household_has_been_certified_to_receive_snap_benefits
+          and absence_is_temporary
+
+  - name: jointly_custodied_child_equal_time_in_household_that_applies_first
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Joint physical custody
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          child_under_joint_physical_custody
+          and child_spends_equal_amount_of_time_in_each_household
+          and household_applies_first
+          and not both_custodial_households_apply_for_or_receive_snap_benefits
+
+  - name: jointly_custodied_child_equal_time_in_agreed_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Joint physical custody
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          child_under_joint_physical_custody
+          and child_spends_equal_amount_of_time_in_each_household
+          and both_custodial_households_apply_for_or_receive_snap_benefits
+          and both_custodians_agree_to_include_child_in_this_household
+
+  - name: jointly_custodied_child_equal_time_included_in_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Joint physical custody
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-26#jointly_custodied_child_equal_time_in_household_that_applies_first
+              output: jointly_custodied_child_equal_time_in_household_that_applies_first
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-26#jointly_custodied_child_equal_time_in_agreed_household
+              output: jointly_custodied_child_equal_time_in_agreed_household
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          jointly_custodied_child_equal_time_in_household_that_applies_first
+          or jointly_custodied_child_equal_time_in_agreed_household
+
+  - name: second_home_may_apply_or_report_child_resides
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 26, Joint physical custody
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          child_began_to_reside_in_second_home

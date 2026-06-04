@@ -1,0 +1,145 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+  summary: |-
+    HUD payments supplemented with TANF funds are excluded. NOTE: Effective May 1, 2019, interest income of any amount must be verified. Kinship Care Payments ... Count the same as foster care payments for child(ren) who are considered members of the household. Monies which are withdrawn from trust funds considered to be excludable resources under Section 10.7 ... considered income in the month received, unless otherwise exempt under ... Section 11.6. Native American payments for tribes: Exclude up to $2,000 per year ... derived from interests in trust. Exclude all tribal dividend money deposited into a child’s trust. Count casino profit payments as unearned income in the month received. Do not apply the $2000 exclusion.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-145#trust_fund_withdrawal_income_in_month_received
+      reason: The trust-fund withdrawal rule depends on trust funds considered excludable resources under Section 10.7 and exemptions under Section 11.6, but those cited upstream legal mechanics are not available in copied context.
+rules:
+  - name: native_american_trust_interest_annual_exclusion_limit
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: SNAP Manual p.145, item X
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+              excerpt: "Exclude up to $2,000 per year"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2000
+  - name: hud_housing_payment_excluded_from_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p.145, HUD payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (payment_is_hud_payment_for_housing and payment_paid_solely_to_landlord_or_mortgagee)
+          or payment_is_hud_payment_supplemented_with_tanf_funds
+  - name: interest_income_verification_required
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p.145, item T
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+              excerpt: "Effective May 1, 2019"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+              excerpt: "interest income of any amount must be verified"
+    versions:
+      - effective_from: '2019-05-01'
+        formula: |-
+          payment_is_interest_income
+  - name: kinship_care_payment_counted_as_foster_care_payment
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p.145, item U
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_kinship_care_payment
+          and child_considered_member_of_household
+  - name: tribal_dividend_deposited_into_childs_trust_excluded_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.145, item X exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_tribal_dividend_deposited_into_childs_trust: max(0, payment_amount) else: 0
+  - name: casino_profit_payment_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.145, item X exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+              excerpt: "Count casino profit payments as unearned income in the month received. Do not apply the $2000 exclusion."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_native_american_casino_profit_payment: max(0, payment_amount) else: 0
+  - name: native_american_trust_interest_income_excluded_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: SNAP Manual p.145, item X
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-145
+              excerpt: "Exclude up to $2,000 per year"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(max(0, native_american_income_derived_from_interests_in_trust_excluding_casino_profit_amount), native_american_trust_interest_annual_exclusion_limit)

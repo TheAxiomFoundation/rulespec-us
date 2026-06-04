@@ -1,0 +1,162 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+  summary: |-
+    If the Agency determines that a loss of benefits has occurred, and the household is entitled to restoration of those benefits, the Agency will automatically take action to restore any benefits that were lost. Benefits will not be restored if lost more than 12 months before the relevant discovery or notice month. A household disputing restoration may request a fair hearing within 90 days; favorable decisions require restoration. Losses more than 12 months before the Agency was initially informed of possible entitlement will not be restored.
+rules:
+  - name: agency_discovery_restoration_lookback_month_limit
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 21.2, Errors Discovered by the Agency
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+              excerpt: "lost more than 12 months prior to the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: disputed_benefit_fair_hearing_request_day_limit
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 21.3, Disputed Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+              excerpt: "may request a fair hearing within 90 days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+
+  - name: lost_benefit_within_agency_discovery_restoration_window
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 21.2, Errors Discovered by the Agency
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+              excerpt: "benefits will not be restored if the benefits were lost more than 12 months prior"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-252#agency_discovery_restoration_lookback_month_limit
+              output: agency_discovery_restoration_lookback_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          months_between_lost_benefit_month_and_agency_discovery_or_notice_month <= agency_discovery_restoration_lookback_month_limit
+
+  - name: agency_must_restore_discovered_lost_benefits
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 21.2, Errors Discovered by the Agency
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-252#lost_benefit_within_agency_discovery_restoration_window
+              output: lost_benefit_within_agency_discovery_restoration_window
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_determines_loss_of_benefits_occurred
+          and household_entitled_to_restoration_of_lost_benefits
+          and lost_benefit_within_agency_discovery_restoration_window
+
+  - name: fair_hearing_request_timely_for_disputed_restoration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 21.3, Disputed Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+              excerpt: "may request a fair hearing within 90 days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-252#disputed_benefit_fair_hearing_request_day_limit
+              output: disputed_benefit_fair_hearing_request_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          days_since_household_was_notified_of_entitlement_or_agency_determination <= disputed_benefit_fair_hearing_request_day_limit
+
+  - name: agency_must_restore_lost_benefits_after_favorable_fair_hearing
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 21.3, Disputed Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-252#lost_benefit_within_agency_discovery_restoration_window
+              output: lost_benefit_within_agency_discovery_restoration_window
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          fair_hearing_decision_is_favorable_to_household
+          and lost_benefit_within_agency_discovery_restoration_window
+
+  - name: incorrect_allotment_loss_calculated_only_for_participation_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 21.4(A), Computing the Amount to be Restored
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-252
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_was_eligible_but_received_incorrect_allotment
+          and household_participated_in_month

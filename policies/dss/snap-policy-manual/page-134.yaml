@@ -1,0 +1,133 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+  summary: |-
+    Military pay/LES is counted as income for the month intended rather than the month received. Count listed military pay items as earned income, excluding combat-zone deployment pay not received immediately before deployment, Clothing Maintenance Allowance, and GI Bill reductions. Rental property income is earned/self-employment income only if a household member actively manages the property at least an average of 20 hours a week.
+rules:
+  - name: rental_property_management_average_weekly_hours_threshold
+    kind: parameter
+    dtype: Decimal
+    period: Week
+    source: SNAP Manual page 134, Rental Property
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+              excerpt: "at least an average of 20 hours a week"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+
+  - name: military_pay_is_counted_earned_income_category
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 134, Military Pay
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_military_housing_or_subsistence_allowance_shown_on_wage_statement
+          or payment_is_basic_allowance_for_housing
+          or payment_is_basic_allowance_for_subsistence
+          or payment_is_family_subsistence_supplemental_allowance
+          or payment_is_leave_or_separate_rations
+          or payment_is_regular_sea_pay_for_enlisted_personnel
+          or payment_is_career_sea_pay_for_qualifying_enlisted_personnel
+          or payment_is_national_guard_pay
+
+  - name: military_pay_earned_income_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 134, Military Pay Exceptions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          combat_zone_deployment_pay_not_received_immediately_prior
+          or payment_is_clothing_maintenance_allowance
+          or payment_is_basic_pay_reduction_for_gi_bill
+
+  - name: military_pay_counted_as_earned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 134, Military Pay
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_for_month_intended and military_pay_is_counted_earned_income_category and not military_pay_earned_income_exclusion_applies: max(0, military_pay_amount) else: 0
+
+  - name: nonhousehold_member_military_deposit_counted_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 134, Military Pay NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if military_member_not_in_household_deposits_earned_income_into_joint_account_with_household_member: max(0, deposited_military_earned_income_amount) else: 0
+
+  - name: rental_property_income_counted_as_self_employment_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 134, Rental Property
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-134
+              excerpt: "at least an average of 20 hours a week"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_rental_property_income and household_member_actively_manages_rental_property and rental_property_management_average_weekly_hours >= rental_property_management_average_weekly_hours_threshold: max(0, rental_property_income_amount) else: 0

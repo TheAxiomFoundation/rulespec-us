@@ -1,0 +1,151 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+  summary: |-
+    "The following persons are not eligible to participate as separate households or as a member of any household" including specified non-citizens, students, work-requirement disqualifications, ineligible ABAWDs, SSN/IPV disqualifications, drug-related felony convictions after August 22, 1996 subject to expungement or pardon, fleeing felons/probation or parole violators, TANF sanction noncooperation, certain convicted felons out of sentence compliance, and residents of an institution. Institutional residence applies when the institution provides "the majority of their meals (over 50 percent of three meals daily)" as normal services.
+rules:
+  - name: institutional_meal_majority_threshold_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual Section 2.3, institutional residents
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+              excerpt: "over 50 percent"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: daily_meal_reference_count
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual Section 2.3, institutional residents
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+              excerpt: "three meals daily"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: resident_of_institution_for_snap
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Section 2.3(11)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-27#institutional_meal_majority_threshold_rate
+              output: institutional_meal_majority_threshold_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-27#daily_meal_reference_count
+              output: daily_meal_reference_count
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          institution_provides_meals_as_part_of_normal_services
+          and meals_provided_by_institution_daily > institutional_meal_majority_threshold_rate * daily_meal_reference_count
+
+  - name: drug_related_felony_conviction_for_snap
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Section 2.3(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          drug_offense_classified_as_felony
+          and drug_offense_has_controlled_substance_element
+          and (drug_offense_resulted_in_conviction_after_trial or person_pleaded_guilty_to_felony_drug_charge)
+
+  - name: drug_related_felony_disqualification_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Section 2.3(7), note and exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          drug_related_felony_conviction_for_snap
+          and drug_related_felony_offense_occurred_after_disqualification_start_date
+          and not person_provides_verification_of_expungement_of_felony_drug_conviction
+          and not person_provides_verification_of_pardon_of_felony_drug_conviction
+
+  - name: person_ineligible_to_participate_in_snap
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Section 2.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-27
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_ineligible_non_citizen
+          or person_is_ineligible_student
+          or person_disqualified_for_noncompliance_with_work_requirements
+          or person_is_ineligible_abawd_due_to_time_limit
+          or person_disqualified_for_failure_to_provide_ssn
+          or person_disqualified_for_intentional_program_violation
+          or drug_related_felony_disqualification_applies
+          or person_is_fleeing_to_avoid_prosecution_or_custody
+          or person_is_violating_condition_of_probation_or_parole
+          or person_disqualified_for_failure_without_good_cause_to_cooperate_with_tanf_work_requirement
+          or person_convicted_of_certain_crime_and_out_of_compliance_with_sentence
+          or resident_of_institution_for_snap

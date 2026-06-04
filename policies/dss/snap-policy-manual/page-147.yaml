@@ -1,0 +1,150 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+  summary: |-
+    Rental property income is gross income minus actual cost of doing business when the household member is not actively engaged in management at least 20 hours a week; the 40% cost of doing business applies to earned income only. Reverse mortgage income is excluded with a verifiable repayment agreement and counted as unearned income without one. Royalties above $400 must be averaged; up to $400 annually is excluded. Severance pay is income if more than one payment is made, but a non-recurring lump sum is treated as a resource.
+rules:
+  - name: rental_property_active_management_hours_threshold
+    kind: parameter
+    dtype: Decimal
+    period: Week
+    source: SNAP Manual p.147, item DD
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+              excerpt: "at least 20 hours a week"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+
+  - name: earned_income_cost_of_doing_business_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual p.147, item DD note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+              excerpt: "The 40% cost of doing business applies to earned income only."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.40
+
+  - name: annual_royalty_exclusion_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: SNAP Manual p.147, item II
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+              excerpt: "Up to $400 annually is excluded"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          400
+
+  - name: rental_property_countable_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.147, item DD
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-147#rental_property_active_management_hours_threshold
+              output: rental_property_active_management_hours_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_rental_property_income and rental_property_management_hours_per_week < rental_property_active_management_hours_threshold: max(0, rental_property_gross_income - rental_property_actual_cost_of_doing_business) else: 0
+
+  - name: reverse_mortgage_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.147, item HH
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_reverse_mortgage_income and not reverse_mortgage_has_verifiable_repayment_agreement: reverse_mortgage_income_amount else: 0
+
+  - name: annual_countable_royalty_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: SNAP Manual p.147, item II
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-147#annual_royalty_exclusion_limit
+              output: annual_royalty_exclusion_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_royalty: max(0, annual_royalty_income - annual_royalty_exclusion_limit) else: 0
+
+  - name: severance_countable_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.147, item JJ
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-147
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_severance_pay and severance_more_than_one_payment_made and not severance_payment_is_non_recurring_lump_sum: severance_payment_amount else: 0

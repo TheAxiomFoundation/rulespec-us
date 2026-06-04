@@ -1,0 +1,215 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+  summary: |-
+    The following households are categorically eligible for SNAP: households in which all members receive or are authorized to receive TANF cash, SSI, or TANF and/or SSI benefits. Expanded categorical eligibility includes households in which any member receives or is authorized to receive Family Independence Information and Referral Services, provided to households at or below 130% of FPL; those households have resources excluded, must meet non-financial criteria, are not subject to gross or net income limits, and categorical eligibility does not continue if verified gross income is above the identified FPL.
+rules:
+  - name: family_independence_information_referral_fpl_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual Chapter 4.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+              excerpt: "at or below 130% of the Federal Poverty Level (FPL)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.30
+
+  - name: household_all_members_receive_or_authorized_tanf_or_ssi
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          all_members_receive_or_authorized_tanf_cash
+          or all_members_receive_or_authorized_ssi_benefits
+          or all_members_receive_or_authorized_tanf_and_or_ssi_benefits
+
+  - name: joint_institution_ssi_application_categorical_eligibility_blocked
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(B) Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          resident_of_public_institution_applied_jointly_for_ssi_and_snap_before_release
+          and ssa_has_found_potential_ssi_eligibility_before_release
+          and not ssa_has_made_final_ssi_eligibility
+          and not institution_has_released_individual
+
+  - name: tanf_or_ssi_categorically_eligible_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(A)-(C) and Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_all_members_receive_or_authorized_tanf_or_ssi
+          and not joint_institution_ssi_application_categorical_eligibility_blocked
+
+  - name: household_income_at_or_below_family_independence_fpl_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+              excerpt: "at or below 130% of the Federal Poverty Level (FPL)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-44#family_independence_information_referral_fpl_limit_rate
+              output: family_independence_information_referral_fpl_limit_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_gross_income <= family_independence_information_referral_fpl_limit_rate * federal_poverty_level_for_household
+
+  - name: expanded_categorically_eligible_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-44#household_income_at_or_below_family_independence_fpl_limit
+              output: household_income_at_or_below_family_independence_fpl_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          any_member_receives_or_authorized_family_independence_information_referral_services
+          and household_income_at_or_below_family_independence_fpl_limit
+          and household_meets_non_financial_snap_eligibility_criteria
+
+  - name: expanded_categorical_resources_excluded
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-44#expanded_categorically_eligible_household
+              output: expanded_categorically_eligible_household
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          expanded_categorically_eligible_household
+
+  - name: expanded_categorical_income_limits_not_applied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-44#expanded_categorically_eligible_household
+              output: expanded_categorically_eligible_household
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          expanded_categorically_eligible_household
+
+  - name: categorically_eligible_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Chapter 4.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-44
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-44#tanf_or_ssi_categorically_eligible_household
+              output: tanf_or_ssi_categorically_eligible_household
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-44#expanded_categorically_eligible_household
+              output: expanded_categorically_eligible_household
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tanf_or_ssi_categorically_eligible_household
+          or expanded_categorically_eligible_household

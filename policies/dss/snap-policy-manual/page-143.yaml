@@ -1,0 +1,115 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-143
+  summary: |-
+    Direct money payments are income when they can be construed as a gain or benefit, except payments not considered a gain or benefit to the household. Disability benefits are payments made if an employee cannot work due to illness or an accident. Dividends: income above $400 must be averaged over the period payments cover and anticipated over the certification period; up to $400 annually is excluded under SC TANF Policy. Foster care payments are counted as unearned income when a foster child or foster adult is included in the SNAP household, with stated exclusions for a child/adult not in the budget, one-time initial placement allowances, and quarterly clothing allowances for children in licensed/approved foster care.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-143#trust_fund_dividend_countable_unearned_income
+      reason: Dividends from trust funds depend on unavailable Section 10.7 resource exclusions and Section 11.6 income exclusions.
+    - output: us-sc:policies/dss/snap-policy-manual/page-143#educational_assistance_countable_unearned_income
+      reason: Educational assistance countability depends on unavailable Section 11.6 income exclusions and South Carolina TANF educational-assistance exclusions.
+rules:
+  - name: annual_dividend_exclusion_limit
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: SNAP Manual page 143(K), Dividends
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-143
+              excerpt: "Up to $400 annually is excluded"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          400
+
+  - name: direct_money_payment_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 143(I), Direct money payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-143
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if direct_money_payment_can_be_construed_as_gain_or_benefit and not direct_money_payment_not_considered_gain_or_benefit_to_household: payment_amount else: 0
+
+  - name: disability_benefit_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 143(J), Disability benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-143
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_made_because_employee_cannot_work_due_to_illness_or_accident: payment_amount else: 0
+
+  - name: dividend_countable_unearned_income_above_annual_exclusion
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Year
+    unit: USD
+    source: SNAP Manual page 143(K), Dividends
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-143
+              excerpt: "Income above $400"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-143#annual_dividend_exclusion_limit
+              output: annual_dividend_exclusion_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, annual_dividend_income - annual_dividend_exclusion_limit)
+
+  - name: foster_care_payment_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 143(N), Foster care payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-143
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if foster_care_payment_made_to_provider_for_needs_of_individual_in_care and foster_child_or_adult_included_in_snap_household and not foster_child_or_adult_not_in_budget and not foster_care_one_time_initial_placement_allowance and not foster_care_quarterly_clothing_allowance_for_child_with_licensed_or_approved_provider: payment_amount else: 0

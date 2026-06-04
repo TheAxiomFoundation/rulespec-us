@@ -1,0 +1,138 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+  summary: |-
+    If a household is entitled to expedited service, the Agency must conduct the interview and complete the application process within the expedited service standards. The first day of this count is the calendar day following application filing date. If the Agency properly prescreened the household for expedited service resulting in the correct interview notice being sent, then the household must contact the Agency for their interview by the sixth day (or if the sixth day falls on weekend or holiday the household has until the next business day) in order to receive expedited service. Otherwise, the household will lose its entitlement to expedited service, unless the household’s failure to call by the 6th day is due to an Agency caused delay. In all cases, the applicant's identity will be verified through a collateral contact or readily available documentary evidence. All reasonable efforts will be made to verify residency, income, liquid resources and all other required factors, but benefits will not be delayed beyond the delivery standards solely because these eligibility factors have not been verified.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-74#expedited_processing_standard_start_date_for_late_determination
+      reason: The late-determination rule depends on entitlement to expedited service and the required prescreening test in Section 6.5, which is cited but not available in copied RuleSpec context.
+rules:
+  - name: household_contact_deadline_day_count
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual page 74, expedited-service interview contact note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+              excerpt: "by the sixth day"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          6
+
+  - name: expedited_service_count_starts_day_after_application_filing
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual page 74, expedited-service processing count
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          day_is_calendar_day_following_application_filing_date
+
+  - name: household_timely_contacts_agency_for_expedited_interview
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual page 74, expedited-service interview contact note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+              excerpt: "by the sixth day (or if the sixth day falls on weekend or holiday the household has until the next business day)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-74#household_contact_deadline_day_count
+              output: household_contact_deadline_day_count
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_contacts_agency_for_interview_by_contact_deadline
+          and (
+            application_count_day <= household_contact_deadline_day_count
+            or (sixth_day_falls_on_weekend_or_holiday and household_contacts_agency_for_interview_by_next_business_day)
+          )
+
+  - name: household_retains_expedited_service_after_correct_notice
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual page 74, expedited-service interview contact note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-74#household_timely_contacts_agency_for_expedited_interview
+              output: household_timely_contacts_agency_for_expedited_interview
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_properly_prescreened_household_for_expedited_service
+          and correct_interview_notice_sent
+          and (household_timely_contacts_agency_for_expedited_interview or failure_to_call_by_contact_deadline_due_to_agency_caused_delay)
+
+  - name: applicant_identity_verified_for_expedited_service
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual page 74, Section 6.7(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_identity_verified_through_collateral_contact
+          or applicant_identity_verified_through_readily_available_documentary_evidence
+
+  - name: non_identity_eligibility_verification_absence_does_not_delay_expedited_benefits
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual page 74, Section 6.7(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-74
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          delay_would_be_solely_because_residency_income_liquid_resources_or_other_required_factors_not_verified

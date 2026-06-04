@@ -1,0 +1,219 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+  summary: |-
+    The Agency will provide eligible households that complete the initial application process an opportunity to participate as soon as possible, but no later than 30 calendar days following the date the application was filed. An application is filed the day the SNAP office receives an application containing the applicant's name and address, which is signed by either a responsible member of the household or the household's authorized representative. Households which apply for initial month benefits after the 15th of the month ... will be issued a combined allotment ... The Agency will provide SNAP benefits as two separate allotments, made available at the same time. Households that are found to be ineligible will be sent a notice of denial as soon as possible but not later than 30 calendar days following the date the application was filed.
+rules:
+  - name: normal_processing_maximum_calendar_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 6.1 Normal Processing Standards
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "no later than 30 calendar days following the date the application was filed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: prerelease_processing_maximum_calendar_days_after_release
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 6.1 Normal Processing Standards
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "not later than 30 calendar days from the date of release"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: aggregate_allotment_application_day_threshold
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 6.2 Aggregate (Combined) Allotments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "after the 15th of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          15
+
+  - name: denial_notice_maximum_calendar_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 6.3 Denying the Application
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "not later than 30 calendar days following the date the application was filed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: application_filed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 6.1 Normal Processing Standards
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          snap_office_received_application
+          and application_contains_applicant_name
+          and application_contains_applicant_address
+          and application_signed_by_responsible_household_member_or_authorized_representative
+
+  - name: normal_processing_opportunity_to_participate_due_within_calendar_days
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: SNAP Manual 6.1 Normal Processing Standards
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "eligible households that complete the initial application process ... no later than 30 calendar days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-70#normal_processing_maximum_calendar_days
+              output: normal_processing_maximum_calendar_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if application_filed and household_eligible and initial_application_process_completed: normal_processing_maximum_calendar_days else: 0
+
+  - name: prerelease_opportunity_to_participate_due_within_calendar_days_after_release
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: SNAP Manual 6.1 Normal Processing Standards
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "For residents of public institutions ... not later than 30 calendar days from the date of release"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-70#prerelease_processing_maximum_calendar_days_after_release
+              output: prerelease_processing_maximum_calendar_days_after_release
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if resident_of_public_institution_applied_for_snap_before_release and application_filed and household_eligible: prerelease_processing_maximum_calendar_days_after_release else: 0
+
+  - name: combined_allotment_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 6.2 Aggregate (Combined) Allotments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "apply for initial month benefits after the 15th of the month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-70#aggregate_allotment_application_day_threshold
+              output: aggregate_allotment_application_day_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          application_day_of_month > aggregate_allotment_application_day_threshold
+          and processed_under_normal_processing_timeframes
+          and application_process_completed_within_30_days_of_application
+          and eligible_for_initial_month_benefits
+          and eligible_for_next_subsequent_month_benefits
+
+  - name: aggregate_allotment_provided_as_two_separate_allotments_at_same_time
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 6.2 Aggregate (Combined) Allotments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          combined_allotment_required
+
+  - name: denial_notice_due_within_calendar_days
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: SNAP Manual 6.3 Denying the Application
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-70
+              excerpt: "Households that are found to be ineligible ... not later than 30 calendar days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-70#denial_notice_maximum_calendar_days
+              output: denial_notice_maximum_calendar_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if application_filed and household_found_ineligible: denial_notice_maximum_calendar_days else: 0

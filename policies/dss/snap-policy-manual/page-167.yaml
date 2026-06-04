@@ -1,0 +1,263 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+  summary: |-
+    Other educational assistance not totally excluded: if earmarked under MPE, exclude earmarked amount or amount verified, whichever is greater; if earmarked other than under MPE, exclude as a reimbursement; if no earmarking for dependent care, do not exclude from educational assistance. CCDBG payments are excluded income to the household containing the children as vendor payments, with no deduction allowed; payments to the child care provider count as earned income. Reimbursed dependent care expenses: excess reimbursement is income, and excess charge is deductible. Vendor paid dependent care expenses are excluded as income, with no deduction allowed. Child support deduction is allowed for household members who make legally obligated child support payments to or for a non-household member, including vendor payments.
+rules:
+  - name: educational_assistance_dependent_care_exclusion
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If earmarked under miscellaneous personal expenses (MPE), exclude earmarked amount or amount verified, whichever is greater."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If there is no earmarking for dependent care (under MPE or otherwise), do not exclude from educational assistance."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if educational_assistance_is_earmarked_under_mpe_for_dependent_care: max(educational_assistance_earmarked_dependent_care_amount, verified_dependent_care_expense_amount) else: if educational_assistance_is_earmarked_other_than_mpe_for_dependent_care: educational_assistance_earmarked_dependent_care_amount else: 0
+
+  - name: educational_assistance_dependent_care_deduction
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "Allow dependent care deduction on CHIP EXNS screen for amounts used over and above the earmarked amount."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If household verifies dependent care expense which, with total exclusions, is more than total grant, allow a deduction for the excess"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if educational_assistance_is_earmarked_under_mpe_for_dependent_care: max(0, verified_dependent_care_expense_amount + educational_assistance_total_exclusions_amount - educational_assistance_total_grant_amount) else: if educational_assistance_is_earmarked_other_than_mpe_for_dependent_care: max(0, dependent_care_amount_used_from_educational_assistance - educational_assistance_earmarked_dependent_care_amount) else: verified_dependent_care_expense_amount
+
+  - name: ccdbg_payment_excluded_income_to_household
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "Payments made under the Child Care and Development Block Grant (CCDBG) ... Exclude income to the household containing the children"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_made_under_ccdbg_to_household_containing_children: payment_amount else: 0
+
+  - name: ccdbg_dependent_care_deduction
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "No deduction allowed. If an individual pays out-of-pocket costs, a deduction may be allowed for this amount."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_made_under_ccdbg_to_household_containing_children: individual_out_of_pocket_child_care_cost_amount else: 0
+
+  - name: ccdbg_provider_earned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "Count payments to the individual providing the child care as earned income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_made_to_individual_providing_child_care: payment_amount else: 0
+
+  - name: reimbursed_dependent_care_excess_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If reimbursement exceeds charge, count excess as income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_reimbursed_dependent_care_expense: max(0, dependent_care_reimbursement_amount - dependent_care_charge_amount) else: 0
+
+  - name: reimbursed_dependent_care_excess_deduction
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If charge exceeds reimbursement, allow deduction for excess amount charged."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_reimbursed_dependent_care_expense: max(0, dependent_care_charge_amount - dependent_care_reimbursement_amount) else: 0
+
+  - name: vendor_paid_dependent_care_excluded_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "Vendor paid dependent care expenses Exclude as income. No deduction allowed."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_vendor_paid_dependent_care_expense: payment_amount else: 0
+
+  - name: vendor_paid_dependent_care_deduction
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "Vendor paid dependent care expenses Exclude as income. No deduction allowed."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0
+
+  - name: attendant_care_elected_dependent_care_deduction
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If qualifies under both the dependent care and medical deduction, treat cost as medical expense or a dependent care expense, but not both."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if attendant_care_cost_qualifies_under_both_dependent_care_and_medical_deduction and attendant_care_cost_treated_as_dependent_care_expense: attendant_care_cost_amount else: 0
+
+  - name: attendant_care_elected_medical_expense
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.6(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "If qualifies under both the dependent care and medical deduction, treat cost as medical expense or a dependent care expense, but not both."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if attendant_care_cost_qualifies_under_both_dependent_care_and_medical_deduction and attendant_care_cost_treated_as_medical_expense: attendant_care_cost_amount else: 0
+
+  - name: child_support_payment_deductible_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.167, 12.7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "A deduction is allowed for household members who make legally obligated child support payments to or for an individual living outside of the household"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-167
+              excerpt: "This deduction will include legally obligated payments made to a third party on behalf of the non-household member (vendor payments)."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_member_makes_legally_obligated_child_support_payment_to_or_for_non_household_member: payment_amount else: 0

@@ -1,0 +1,147 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+  summary: |-
+    Assistance payments from Federal or federally aided public assistance programs, general assistance programs, or other need-based assistance programs are unearned income, including vendor payments unless specifically exempt under Section 11.6. Cash contributions are monetary gifts from non-household members, excluding contributions from sanctioned/disqualified persons whose income is already counted. Cash donations are monetary gifts from organizations, with private nonprofit charitable organization donations excluded up to $300 in a Federal fiscal year quarter. Child support paid directly, through court, or through CSSD is income, while lump-sum court-ordered arrearages are resources. Deferred payment loans for education are no longer income effective April 1, 2012.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-142#assistance_payment_unearned_income_amount
+      reason: The full assistance-payment unearned-income output depends on whether a vendor payment is specifically exempt from countable income under Section 11.6, which is cited but not available in copied RuleSpec context. This file encodes only the independently source-grounded non-vendor assistance-payment branch.
+rules:
+  - name: private_nonprofit_charitable_donation_quarterly_exclusion_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual p. 142 (F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+              excerpt: "not to exceed $300 in a Federal fiscal year quarter"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          300
+
+  - name: non_vendor_assistance_payment_unearned_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 142 (D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+              excerpt: "unless the vendor payment is specifically exempt"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if (assistance_payment_from_federal_or_federally_aided_public_assistance_program or assistance_payment_from_general_assistance_program or assistance_payment_from_other_need_based_assistance_program or assistance_payment_requires_work_without_compensation_other_than_assistance) and not assistance_payment_is_vendor_payment_to_third_party_on_behalf_of_household: payment_amount else: 0
+
+  - name: cash_contribution_unearned_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 142 (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if cash_contribution_monetary_gift_from_non_household_member and not contributor_excluded_from_snap_household_due_to_sanction_or_disqualification_with_income_already_counted: payment_amount else: 0
+
+  - name: cash_donation_unearned_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 142 (F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+              excerpt: "Count any amount over the $300 limit as unearned income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if cash_donation_monetary_gift_from_organization: if donation_received_from_private_nonprofit_charitable_organization: max(0, payment_amount - min(private_nonprofit_charitable_donation_exclusion_available_for_federal_fiscal_year_quarter, private_nonprofit_charitable_donation_quarterly_exclusion_limit)) else: payment_amount else: 0
+
+  - name: child_support_unearned_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 142 (G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if (child_support_payment_made_directly_to_household_from_absent_parent or child_support_payment_made_through_court or child_support_arrearage_ordered_by_court_to_be_paid_on_regular_basis or child_support_paid_through_cssd or tanf_child_support_payment_must_be_transferred_to_title_iv_d_agency) and not child_support_arrearage_ordered_by_court_to_be_paid_in_lump_sum: payment_amount else: 0
+
+  - name: deferred_payment_loan_for_education_excluded_from_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 142 (H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+              excerpt: "Effective April 1, 2012"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-142
+    versions:
+      - effective_from: '2012-04-01'
+        formula: |-
+          payment_is_deferred_payment_loan_for_education

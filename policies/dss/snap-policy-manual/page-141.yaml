@@ -1,0 +1,136 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+  summary: |-
+    Costs not allowed include net losses from previous periods; expenses covered by the earned income deduction in Section 12.3, including taxes, retirement set-asides, and work-related personal expenses; home produce for family consumption; family living expenses; entertainment; personal debts; depreciation except as allowed in capital gains income; and any amount exceeding boarder lodging and meal payments. Unearned income is all income not earned from a job or profession and includes adoption subsidies except medical care portions, alimony paid directly to the household from non-household members excluding withheld fees, and annuities averaged over the period intended to cover.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-141#cost_disallowed_because_covered_by_earned_income_deduction
+      reason: The source excludes expenses covered by the earned income deduction in Section 12.3, but that cited section is not available in copied context.
+rules:
+  - name: payment_is_allowed_self_employment_cost
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 141, allowed cost list
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_principal_purchase_price_of_income_producing_real_estate
+          or payment_is_principal_purchase_price_of_income_producing_capital_asset_equipment_machinery_or_other_durable_good
+          or payment_is_interest_to_purchase_income_producing_property
+          or payment_is_insurance_premium
+          or payment_is_tax_on_income_producing_property
+          or payment_is_internet_access_fee_for_business_selling_goods_through_internet
+
+  - name: payment_is_disallowed_self_employment_cost
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 141, costs not allowed
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_net_loss_from_previous_period
+          or payment_is_cost_of_producing_home_produce_intended_for_family_consumption
+          or payment_is_family_living_expense
+          or payment_is_entertainment_expense
+          or payment_is_personal_debt
+          or payment_is_depreciation_expense_not_allowed_in_capital_gains_income
+          or payment_amount_exceeds_household_boarder_payment_for_lodging_and_meals
+
+  - name: adoption_subsidy_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 141, Unearned Income Description (A) Adoption subsidy
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+              excerpt: "Exception: any portion which covers medical care"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_adoption_subsidy: max(0, adoption_subsidy_payment_amount - adoption_subsidy_portion_covers_medical_care) else: 0
+
+  - name: alimony_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 141, Unearned Income Description (B) Alimony payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+              excerpt: "excluding any fees withheld"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_alimony_paid_directly_to_household_from_non_household_member: max(0, alimony_payment_amount - alimony_fees_withheld) else: 0
+
+  - name: annuity_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 141, Unearned Income Description (C) Annuities
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_annuity: annuity_average_amount_over_period_intended_to_cover else: 0
+
+  - name: countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 141, Section 11.5 Unearned Income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-141
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          adoption_subsidy_countable_unearned_income + alimony_countable_unearned_income + annuity_countable_unearned_income

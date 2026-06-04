@@ -1,0 +1,248 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+  summary: |-
+    Twenty percent of gross earned income as defined in Section 11.3 Earned Income is disregarded for each employed household member. Earnings excluded in Section 11.6 Income Exclusions will not be included in gross earned income for purposes of computing the earned income deduction. The earned income deduction is not applied when specified intentional program violation or earned-income reporting overpayment determinations are made. Excess shelter deduction is the monthly shelter expenses in excess of 50 percent of the household's income after all other deductions have been allowed. Households containing an elderly or disabled member are entitled to an unlimited excess shelter deduction; all other households are limited to the maximum excess shelter deduction.
+rules:
+  - name: earned_income_deduction_rate
+    kind: parameter
+    dtype: Rate
+    period: Month
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "Twenty percent of gross earned income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+
+  - name: shelter_excess_income_fraction
+    kind: parameter
+    dtype: Rate
+    period: Month
+    source: SNAP Manual Section 12.4(1) Shelter Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "in excess of 50 percent of the household's income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: farm_self_employment_loss
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "Subtract the allowable costs of doing business"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, farm_self_employment_allowable_costs_of_doing_business - farm_self_employment_gross_income)
+
+  - name: farm_self_employment_net_profit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "Apply the earned income deduction to any net profit. If there is no net profit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, farm_self_employment_gross_income - farm_self_employment_allowable_costs_of_doing_business)
+
+  - name: nonfarm_self_employment_net_profit_after_farm_loss
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "Subtract the allowable costs of doing business and any farm losses"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, nonfarm_self_employment_gross_income - nonfarm_self_employment_allowable_costs_of_doing_business - farm_self_employment_loss)
+
+  - name: remaining_non_self_employment_earned_income_after_farm_loss
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "farm loss to be offset against earned income that is not from self-employment"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, non_self_employment_gross_earned_income - max(0, farm_self_employment_loss - max(0, nonfarm_self_employment_gross_income - nonfarm_self_employment_allowable_costs_of_doing_business)))
+
+  - name: earned_income_base_for_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "Earnings excluded in Section 11.6 Income Exclusions will not be included"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, farm_self_employment_net_profit + nonfarm_self_employment_net_profit_after_farm_loss + remaining_non_self_employment_earned_income_after_farm_loss - earnings_excluded_under_section_11_6)
+
+  - name: earned_income_deduction_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "disregarded for each employed household member"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "The earned income deduction is not applied when"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          employed_household_member
+          and not benefit_integrity_claims_specialist_calculates_intentional_program_violation_claim
+          and not determining_overpayment_due_to_household_failure_to_report_earned_income_timely
+
+  - name: earned_income_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.3 Earned Income Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "Twenty percent of gross earned income"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "The earned income deduction is not applied when"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if earned_income_deduction_applies: earned_income_deduction_rate * earned_income_base_for_deduction else: 0
+
+  - name: preliminary_excess_shelter_expense
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.4(1) Shelter Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "monthly shelter expenses in excess of 50 percent of the household's income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, monthly_shelter_expenses - shelter_excess_income_fraction * household_income_after_all_other_deductions)
+
+  - name: excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 12.4(1) Shelter Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "elderly or disabled ... unlimited excess shelter deduction"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-160
+              excerpt: "not to exceed the amount noted in Section 12.1 (C)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_elderly_or_disabled_member: preliminary_excess_shelter_expense else: min(preliminary_excess_shelter_expense, maximum_excess_shelter_deduction_under_section_12_1_C)

@@ -1,0 +1,227 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+  summary: |-
+    For households that wish to claim a utility deduction for an unoccupied home, the Agency will verify actual utility expenses because only actual utility costs, not the MUA or BUA, may be allowed. The Agency verifies shelter expenses and, if an expense cannot be verified within 30 days of application, determines eligibility and benefits without the unverified deduction. Medical expenses deductible under Section 12.8 are verified; recurring expenses use the anticipated monthly average and non-recurring out-of-pocket expenses are prorated over the certification period. Verified out-of-pocket medical expenses over $35.00 but not over $210.00 per month receive the Standard Medical deduction; verified expenses over $210.00 per month receive the Excess Medical deduction.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-59#eligible_unoccupied_home_shelter_expense_deduction
+      reason: The source allows an expense deduction for an eligible unoccupied home by cross-reference to Section 12.4(3)(E), but that cited source is not available and defines the needed eligibility mechanics.
+    - output: us-sc:policies/dss/snap-policy-manual/page-59#medical_expense_deductible_under_section_12_8
+      reason: The source requires verification of medical expenses deductible under Section 12.8, but that cited source is not available and defines the deductible medical expense mechanics.
+rules:
+  - name: shelter_expense_verification_processing_standard_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual page 59, Shelter expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+              excerpt: "within 30 days of the date of application"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: standard_medical_deduction_lower_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+              excerpt: "more than $35.00"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35.00
+
+  - name: standard_medical_deduction_upper_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+              excerpt: "do not exceed $210.00 per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          210.00
+
+  - name: excess_medical_deduction_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+              excerpt: "more than $210.00 per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          210.00
+
+  - name: unoccupied_home_utility_deduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual page 59, Utility deduction for unoccupied home
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_wishes_to_claim_utility_deduction_for_unoccupied_home: actual_utility_expenses_for_unoccupied_home else: 0
+
+  - name: shelter_expense_excluded_from_initial_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 59, Shelter expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-59#shelter_expense_verification_processing_standard_days
+              output: shelter_expense_verification_processing_standard_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          shelter_expense_cannot_be_verified_within_days_from_application >= shelter_expense_verification_processing_standard_days
+
+  - name: recurring_medical_expense_monthly_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          anticipated_monthly_average_recurring_medical_expenses
+
+  - name: nonrecurring_medical_expense_monthly_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          nonrecurring_out_of_pocket_medical_expenses / certification_period_months
+
+  - name: standard_medical_deduction_must_be_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-59#standard_medical_deduction_lower_threshold
+              output: standard_medical_deduction_lower_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-59#standard_medical_deduction_upper_threshold
+              output: standard_medical_deduction_upper_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          verified_out_of_pocket_medical_expenses_per_month > standard_medical_deduction_lower_threshold
+          and verified_out_of_pocket_medical_expenses_per_month <= standard_medical_deduction_upper_threshold
+
+  - name: excess_medical_deduction_must_be_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 59, Medical expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-59
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-59#excess_medical_deduction_threshold
+              output: excess_medical_deduction_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          verified_out_of_pocket_medical_expenses_per_month > excess_medical_deduction_threshold

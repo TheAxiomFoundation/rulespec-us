@@ -1,0 +1,119 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+  summary: |-
+    "A child who meets the above criteria must have his/her earned income budgeted the month after the child turns 18 years of age." "If a child’s income cannot be distinguished from that of other household members, the total earnings must be prorated equally between the working members and the child’s share excluded." "Domestic Volunteer Service Act payments This income is excluded." "Exception to Title I payments: Include payments as earned income if individual was NOT receiving SNAP/TANF benefits prior to beginning volunteer service." "Educational assistance which has a work requirement ... in excess of the amount excluded in Section 11.7 Educational Assistance."
+rules:
+  - name: child_earned_income_budgeting_required_after_turning_18
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 132, child earned income paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "the month after the child turns 18 years of age"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          child_meets_above_criteria
+          and budget_month_is_month_after_child_turns_18
+
+  - name: child_indistinguishable_earnings_excluded_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 132, child earned income proration sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "total earnings must be prorated equally between the working members and the child’s share excluded"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if child_meets_above_criteria and child_income_cannot_be_distinguished_from_other_household_members and working_members_and_child_count > 0: max(0, total_earnings_of_working_members_and_child / working_members_and_child_count) else: 0
+
+  - name: title_i_domestic_volunteer_service_act_payment_included_as_earned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 132, Domestic Volunteer Service Act payments paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "Include payments as earned income if individual was NOT receiving SNAP/TANF benefits prior to beginning volunteer service."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_domestic_volunteer_service_act_payment
+          and payment_is_title_i_domestic_volunteer_service_act_payment
+          and not individual_was_receiving_snap_or_tanf_benefits_prior_to_beginning_volunteer_service
+
+  - name: domestic_volunteer_service_act_payment_excluded_from_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 132, Domestic Volunteer Service Act payments paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "This income is excluded. ... Exception to Title I payments"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_domestic_volunteer_service_act_payment
+          and not title_i_domestic_volunteer_service_act_payment_included_as_earned_income
+
+  - name: work_requirement_educational_assistance_earned_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 132, Educational Assistance paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "Educational assistance which has a work requirement ... in excess of the amount excluded in Section 11.7 Educational Assistance."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "Earned income from work study programs that are funded under Section 1087 of the Higher Education Act is excluded."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-132
+              excerpt: "Any educational assistance excluded under South Carolina TANF rules is also excluded for SNAP."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if educational_assistance_has_work_requirement and not work_study_program_funded_under_section_1087_of_higher_education_act and not educational_assistance_excluded_under_south_carolina_tanf_rules: max(0, educational_assistance_amount - educational_assistance_amount_excluded_under_section_11_7) else: 0

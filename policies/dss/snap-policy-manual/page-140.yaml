@@ -1,0 +1,113 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+  summary: |-
+    "Deduct 40% of the total income from total income derived in (A) to arrive at the self-employment income." "Self-employed households who do not incur any allowable self-employment costs are not eligible to receive the standard deduction." "Actual self-employment costs are not allowed." "Divide the remaining amount of self-employment income by the number of months over which the income will be averaged."
+rules:
+  - name: standard_self_employment_expense_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual page 140(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+              excerpt: "The 40% expense deduction is a mandatory standard deduction"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.40
+
+  - name: allowable_self_employment_cost
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 140(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          cost_is_identifiable_labor
+          or cost_is_stock_raw_material_seed_fertilizer_or_livestock_feed
+          or cost_is_feed_for_work
+          or cost_is_rent_or_building_maintenance
+          or cost_is_business_telephone
+          or cost_is_motor_vehicle_operating_cost_required_for_business
+
+  - name: standard_self_employment_expense_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 140(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+              excerpt: "Self-employed households who do not incur any allowable self-employment costs are not eligible to receive the standard deduction."
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+              excerpt: "Deduct 40% of the total income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_incurs_allowable_self_employment_costs: standard_self_employment_expense_deduction_rate * max(0, total_self_employment_income_before_expense_deduction) else: 0
+
+  - name: self_employment_income_after_expense_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 140(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+              excerpt: "Deduct 40% of the total income from total income derived in (A) to arrive at the self-employment income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          total_self_employment_income_before_expense_deduction - standard_self_employment_expense_deduction
+
+  - name: monthly_net_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 140(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-140
+              excerpt: "Divide the remaining amount of self-employment income by the number of months over which the income will be averaged."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          self_employment_income_after_expense_deduction / self_employment_averaging_month_count
