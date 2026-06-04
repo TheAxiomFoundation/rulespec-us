@@ -1,0 +1,163 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+  summary: |-
+    Payment and eligibility for cases with eligible members with earned income are determined using earned income disregards. At application, gross earned income minus the $90 disregard plus countable unearned income must not exceed the need standard; if it does not, a 100% earned-income disregard applies for the first certification period, and 67% applies after that. Current assistance units receive 100% for a new earned-income source in the first impacted certification period and 67% for a current earned-income source.
+rules:
+  - name: application_earned_income_disregard
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 9 CCR 2503-6 3.606.2(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "ninety dollar ($90.00) earned income disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+
+  - name: first_certification_period_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 9 CCR 2503-6 3.606.2(A)(1), (A)(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "one hundred percent (100%) disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.00
+
+  - name: later_or_current_source_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 9 CCR 2503-6 3.606.2(A)(1), (A)(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "sixty seven percent (67%) disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.67
+
+  - name: application_income_after_initial_disregard
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-6 3.606.2(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "gross earned income minus the ninety dollar ($90.00) earned income disregard, plus any countable unearned income"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "$90.00"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, gross_earned_income - application_earned_income_disregard) + countable_unearned_income
+
+  - name: application_income_within_need_standard
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-6 3.606.2(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "shall not exceed the need standard for the household size"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          application_income_after_initial_disregard <= need_standard_for_household_size
+
+  - name: earned_income_disregard_rate_for_payment
+    kind: derived
+    entity: TanfUnit
+    dtype: Rate
+    period: Month
+    source: 9 CCR 2503-6 3.606.2(A)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "a one hundred percent (100%) disregard shall be applied ... for the first certification period"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "after the first certification period, a sixty seven percent (67%) disregard"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "A new source of earned income shall receive a one hundred percent (100%)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "A current source of earned income shall receive the sixty seven (67%) disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if is_application and application_income_within_need_standard and is_first_certification_period:
+            first_certification_period_earned_income_disregard_rate
+          else: if currently_receiving_basic_cash_assistance and earned_income_is_new_source and is_first_certification_period_income_impacts:
+            first_certification_period_earned_income_disregard_rate
+          else:
+            later_or_current_source_earned_income_disregard_rate
+
+  - name: earned_income_disregard_amount_for_payment
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-6 3.606.2(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.2
+              excerpt: "All payments shall be calculated by using applicable disregards."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, gross_earned_income) * earned_income_disregard_rate_for_payment
