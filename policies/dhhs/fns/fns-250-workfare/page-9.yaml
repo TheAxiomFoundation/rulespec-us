@@ -1,0 +1,155 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+  summary: |-
+    "Reimburse volunteer participants for transportation and other expenses incurred ... that are reasonably necessary and directly related to participation in the Workfare Program."
+    "Reimburse up to the amount the county has agreed upon per month" based on actual expenses, a flat monthly fee, or direct transportation/vendor arrangements.
+    "Participant reimbursements are matched with 50% federal funds."
+    Terminate volunteer status when the volunteer moves from the service area, no longer wishes to participate, or does not attend Workfare activities and has no contact with the Workfare worker.
+rules:
+  - name: federal_reimbursement_match_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 250.05(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+              excerpt: "Participant reimbursements are matched with 50% federal funds."
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          0.50
+
+  - name: termination_documentation_transmission_deadline_calendar_days
+    kind: parameter
+    dtype: Count
+    source: FNS 250.06(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+              excerpt: "within 10 calendar days"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          10
+
+  - name: workfare_participant_reimbursement_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 250.05(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          volunteer_participant_has_transportation_or_other_expenses_reasonably_necessary_and_directly_related_to_workfare_participation
+          and participant_complied_during_time_period
+
+  - name: workfare_participant_reimbursement_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 250.05(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+              excerpt: "Reimburse up to the amount the county has agreed upon per month"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          if workfare_participant_reimbursement_allowed: min(county_agreed_monthly_reimbursement_amount, (if county_uses_flat_monthly_fee_for_expenses_incurred: flat_monthly_fee_for_expenses_incurred else: participation_expenses_incurred_or_anticipated_for_coming_month)) else: 0
+
+  - name: federal_match_amount_for_participant_reimbursement
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 250.05(B) NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+              excerpt: "matched with 50% federal funds"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-250-workfare/page-9#federal_reimbursement_match_rate
+              output: federal_reimbursement_match_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          workfare_participant_reimbursement_amount * federal_reimbursement_match_rate
+
+  - name: volunteer_workfare_status_must_be_terminated
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 250.06(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          volunteer_moved_from_workfare_service_area
+          or volunteer_no_longer_wishes_to_participate_in_workfare_program
+          or (volunteer_does_not_attend_workfare_activities and no_contact_with_workfare_worker)
+
+  - name: volunteer_termination_documentation_transmission_timely
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 250.06(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-250-workfare/page-9
+              excerpt: "send to the Workfare worker within 10 calendar days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-250-workfare/page-9#termination_documentation_transmission_deadline_calendar_days
+              output: termination_documentation_transmission_deadline_calendar_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          calendar_days_since_effective_change <= termination_documentation_transmission_deadline_calendar_days

@@ -1,0 +1,211 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+  summary: |-
+    500.01 Simplified Reporting Category applies to all FNS units except Simplified Nutritional Assistance Program units and Transitional FNS units. 500.02 FNS households containing only specified individuals without earned income are certified for 12 months; all other households are certified for six (6) months. 500.03 SR households must report during the certification period when an ABAWD stops working an average of 80 hours per month in non-waiver counties, or when income for a household at or below the 130% maximum allowable gross income limit exceeds the 130% limit for its household size at certification; ineligible or disqualified persons are not counted for unit size, the reporting limit does not change during certification, and once income exceeds the limit the household is no longer required to report income changes.
+rules:
+  - name: earned_work_hours_reporting_average_monthly_hours
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: FNS 500.03(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+              excerpt: "an average of 80 hours per month"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          80
+
+  - name: gross_income_reporting_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 500.03(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+              excerpt: "130% maximum allowable gross income limit"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          1.30
+
+  - name: certification_period_for_specified_individuals_without_earned_income
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: FNS 500.02(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+              excerpt: "certified for 12 months"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          12
+
+  - name: certification_period_for_all_other_households
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: FNS 500.02(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+              excerpt: "certified for six (6) months"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          6
+
+  - name: simplified_reporting_category_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 500.01
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          not household_is_simplified_nutritional_assistance_program_unit
+          and not household_is_transitional_fns_unit
+
+  - name: certification_period_months
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: FNS 500.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1#certification_period_for_specified_individuals_without_earned_income
+              output: certification_period_for_specified_individuals_without_earned_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1#certification_period_for_all_other_households
+              output: certification_period_for_all_other_households
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          if household_contains_only_specified_individuals_as_defined_in_fns_212 and household_is_without_earned_income: certification_period_for_specified_individuals_without_earned_income else: certification_period_for_all_other_households
+
+  - name: abawd_stopped_work_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 500.03(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1#earned_work_hours_reporting_average_monthly_hours
+              output: earned_work_hours_reporting_average_monthly_hours
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          household_includes_abawd
+          and household_is_in_non_waiver_county
+          and abawd_stopped_working_average_hours_per_month < earned_work_hours_reporting_average_monthly_hours
+
+  - name: income_increase_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 500.03(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1#gross_income_reporting_limit_rate
+              output: gross_income_reporting_limit_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          household_income_at_or_below_reporting_limit_at_certification
+          and not household_income_has_already_exceeded_reporting_limit_during_certification_period
+          and household_income > gross_income_reporting_limit_rate * maximum_allowable_gross_income_limit_for_fns_unit_size_at_certification
+
+  - name: simplified_reporting_change_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 500.03(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1#abawd_stopped_work_reporting_required
+              output: abawd_stopped_work_reporting_required
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-500-sr-category-and-reporting-requirements/page-1#income_increase_reporting_required
+              output: income_increase_reporting_required
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          abawd_stopped_work_reporting_required
+          or income_increase_reporting_required

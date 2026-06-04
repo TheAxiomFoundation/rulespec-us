@@ -1,0 +1,187 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+  summary: |-
+    Deny the FNS application on the processing due date if the FNS unit failed to provide applicant-responsible verifications, unless the unit has good cause. The agency must have requested verification using DSS-8650, offered assistance if needed, and allowed at least ten calendar days. Do not deny for failure to provide verification of deductions. When the 30th calendar day falls on a non-workday, NC FAST extends the processing due date to the next workday for denials; do not key a denial before the extended due date.
+rules:
+  - name: minimum_verification_response_period_days
+    kind: parameter
+    dtype: Count
+    source: FNS 440 Application Disposition, Change #02-2022, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+              excerpt: "Allow the FNS unit at least ten calendar days to provide the information."
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          10
+
+  - name: normal_application_processing_calendar_days
+    kind: parameter
+    dtype: Count
+    source: FNS 440 Application Disposition, Change #02-2022, D.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+              excerpt: "When the 30th calendar day falls on a non-workday"
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          30
+
+  - name: verification_response_period_sufficient
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 440 Application Disposition, Change #02-2022, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-440-application-disposition/page-3#minimum_verification_response_period_days
+              output: minimum_verification_response_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          calendar_days_allowed_to_provide_information >= minimum_verification_response_period_days
+
+  - name: application_denial_for_failure_to_provide_verification_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 440 Application Disposition, Change #02-2022, D.1-D.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-440-application-disposition/page-3#verification_response_period_sufficient
+              output: verification_response_period_sufficient
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          processing_due_date_has_arrived
+          and fns_unit_failed_to_provide_applicant_responsible_verifications
+          and agency_requested_verification_using_dss_8650
+          and agency_offered_assistance_obtaining_requested_information_if_needed
+          and verification_response_period_sufficient
+          and not fns_unit_has_good_cause_for_failure_to_provide_verifications
+          and not missing_verification_is_only_for_deductions
+
+  - name: application_processed_without_unverified_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 440 Application Disposition, Change #02-2022, D.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-440-application-disposition/page-3#verification_response_period_sufficient
+              output: verification_response_period_sufficient
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          missing_verification_is_only_for_deductions
+          and agency_requested_non_required_deduction_verifications
+          and verification_response_period_sufficient
+
+  - name: denial_keying_before_extended_due_date_prohibited
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 440 Application Disposition, Change #02-2022, D.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          thirtieth_calendar_day_falls_on_non_workday
+          and current_day_is_before_extended_processing_due_date
+
+  - name: deny_first_thirty_days_when_information_received_on_extended_due_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 440 Application Disposition, Change #02-2022, D.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-440-application-disposition/page-3#normal_application_processing_calendar_days
+              output: normal_application_processing_calendar_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          thirtieth_calendar_day_falls_on_non_workday
+          and current_day_is_extended_processing_due_date
+          and applicant_responsible_information_received_on_current_day
+          and days_since_application_filing >= normal_application_processing_calendar_days
+
+  - name: reopen_evaluation_required_following_extended_due_date_denial
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 440 Application Disposition, Change #02-2022, D.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-440-application-disposition/page-3
+    versions:
+      - effective_from: '2022-03-01'
+        formula: |-
+          denial_for_failure_to_provide_information_was_keyed_on_extended_processing_due_date
+          and current_day_is_next_workday_after_extended_processing_due_date

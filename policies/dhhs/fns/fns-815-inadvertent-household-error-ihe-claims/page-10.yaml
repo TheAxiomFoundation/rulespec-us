@@ -1,0 +1,162 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+  summary: |-
+    If a recoupment improperly occurs after a request for an appeal, restore the amount recouped until the appeal is resolved. Additional payments may be lump-sum, FNS benefits, or cash; cash is keyed in EPICS with code “FSC” and does not increase recoupment beyond the standard 10% or $10, whichever is greater. NC FAST automatically begins an allotment reduction when the last cash payment date is more than 60 days old.
+rules:
+  - name: standard_recoupment_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 815, page 10, additional payment and recoupment limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "standard 10% or $10, whichever is greater"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          0.10
+
+  - name: standard_minimum_recoupment_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 815, page 10, additional payment and recoupment limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "standard 10% or $10, whichever is greater"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: cash_payment_staleness_threshold_days
+    kind: parameter
+    dtype: Count
+    source: FNS 815, page 10, automatic allotment reduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "last cash payment date is more than 60 days old"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          60
+
+  - name: appeal_recoupment_restore_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 815, page 10, appeal recoupment restoration
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if appeal_requested and appeal_unresolved and recoupment_improperly_occurred_after_appeal_request: max(0, amount_recouped_after_appeal_request) else: 0
+
+  - name: standard_monthly_recoupment_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 815, page 10, standard recoupment limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "standard 10% or $10, whichever is greater"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10#standard_recoupment_rate
+              output: standard_recoupment_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10#standard_minimum_recoupment_amount
+              output: standard_minimum_recoupment_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          max(standard_minimum_recoupment_amount, standard_recoupment_rate * max(0, monthly_allotment_amount))
+
+  - name: additional_cash_payment_does_not_increase_recoupment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 10, additional cash payment effect
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "cash payment is being made in addition to that month’s recoupment"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "will not increase the amount of recoupment beyond the standard 10% or $10"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          epics_method_of_payment_is_fsc
+          and cash_payment_is_in_addition_to_months_recoupment
+          and monthly_recoupment_amount <= standard_monthly_recoupment_limit
+
+  - name: automatic_allotment_reduction_begins
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 10, automatic allotment reduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10
+              excerpt: "last cash payment date is more than 60 days old"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-10#cash_payment_staleness_threshold_days
+              output: cash_payment_staleness_threshold_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          days_since_last_cash_payment > cash_payment_staleness_threshold_days

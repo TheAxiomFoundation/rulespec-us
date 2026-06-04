@@ -1,0 +1,226 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+  summary: |-
+    515.01 A. Evaluate and react, as appropriate to the following changes, within ten calendar days of receipt of the change: required reports, changes reported directly to the FNS worker, changes known to Work First, changes reported from DSS programs/units, or NC FAST new/changed information with a generated FNS worker task. NOTE: If multiple changes are reported on the same day, determine if the changes are reportable, react to the combined effect of the change and act accordingly. B. Do not act on third-party medical-expense changes for medical-deduction households unless verified upon receipt and no household contact is required; a decrease in gross monthly income of less than $50; or an income change not expected to continue for at least one month beyond the reported month.
+rules:
+  - name: change_reaction_deadline_calendar_days
+    kind: parameter
+    dtype: Count
+    source: FNS 515.01 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+              excerpt: "within ten calendar days"
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          10
+
+  - name: gross_monthly_income_decrease_no_action_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 515.01 B.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+              excerpt: "less than $50"
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          50
+
+  - name: change_is_within_reaction_scope
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_required_to_be_reported_under_fns_unit_reporting_requirements
+          or change_reported_by_fns_unit_directly_to_fns_worker
+          or change_known_to_work_first
+          or change_reported_directly_to_fns_worker_from_dss_program_or_unit
+          or change_known_to_agency_as_nc_fast_new_or_changed_information_with_task_generated_to_fns_worker
+
+  - name: third_party_medical_expense_change_verified_without_household_contact
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_is_medical_expense_change
+          and household_eligible_for_medical_deduction
+          and medical_expense_change_source_is_third_party
+          and medical_expense_information_verified_upon_receipt
+          and not medical_expense_information_questionable
+          and medical_expense_change_does_not_require_contact_with_household
+
+  - name: third_party_medical_expense_change_not_actionable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_is_medical_expense_change
+          and household_eligible_for_medical_deduction
+          and medical_expense_change_source_is_third_party
+          and not third_party_medical_expense_change_verified_without_household_contact
+
+  - name: gross_monthly_income_decrease_below_no_action_threshold
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 B.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+              excerpt: "A decrease in the household’s gross monthly income of less than $50."
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_is_decrease_in_gross_monthly_income
+          and household_gross_monthly_income_decrease_amount < gross_monthly_income_decrease_no_action_threshold
+
+  - name: income_change_lacks_required_expected_duration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 B.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_is_income_change
+          and not income_change_expected_to_continue_for_at_least_one_month_beyond_reported_month
+
+  - name: change_requires_action_during_certification_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 A-B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_is_within_reaction_scope
+          and not third_party_medical_expense_change_not_actionable
+          and not gross_monthly_income_decrease_below_no_action_threshold
+          and not income_change_lacks_required_expected_duration
+
+  - name: calendar_days_to_act_on_change
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: FNS 515.01 A-B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          if change_requires_action_during_certification_period: change_reaction_deadline_calendar_days else: 0
+
+  - name: household_reported_medical_expense_change_can_be_verified_and_reacted_to
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 B.1.c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          change_is_medical_expense_change
+          and medical_expense_change_reported_by_household
+
+  - name: same_day_reported_changes_require_combined_effect_reaction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 515.01 A Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-515-sr-changes-during-the-certification-period/page-1
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          multiple_changes_reported_on_same_day
+          and same_day_reported_changes_are_reportable

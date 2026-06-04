@@ -1,0 +1,197 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+  summary: |-
+    Treat guardianship payments authorized under the Demonstration Projects Section of Title IV-E the same as foster care payments. Determine if the FNS unit wishes to include the child receiving guardianship payment. If yes, include the child as a member of the FNS unit, count the guardianship payment as unearned income. If no, treat the child as a boarder and exclude the child and the guardianship payment. An absent wage earner is included in the FNS unit and all non-prorated gross income is counted. For military absent wage earners, if absent less than 30 days continue to include the member and count his income; if absent 30 days or more, do not include the individual or his income, and count cash contributions and joint-account deposits as unearned income. If the absent wage earner has a joint account with an FNS unit member, count deposits to that account as unearned income unless a resulting trust exists. Non-HH members: Do not count any of the income.
+rules:
+  - name: military_absence_exclusion_day_threshold
+    kind: parameter
+    dtype: Count
+    source: FNS 350, page 4, Section I.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+              excerpt: "If absent 30 days or more"
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          30
+
+  - name: guardianship_payment_recipient_included_in_fns_unit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 350, page 4, guardianship payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          child_receives_guardianship_payment
+          and fns_unit_wishes_to_include_child_receiving_guardianship_payment
+
+  - name: guardianship_payment_counted_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 350, page 4, guardianship payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          payment_is_guardianship_payment
+          and fns_unit_wishes_to_include_child_receiving_guardianship_payment
+
+  - name: guardianship_payment_recipient_treated_as_boarder
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 350, page 4, guardianship payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          child_receives_guardianship_payment
+          and not fns_unit_wishes_to_include_child_receiving_guardianship_payment
+
+  - name: absent_wage_earner_included_in_fns_unit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 350, page 4, Section I.2-I.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-350-whose-income-is-counted/page-4#military_absence_exclusion_day_threshold
+              output: military_absence_exclusion_day_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          person_is_absent_wage_earner
+          and (not absent_wage_earner_is_in_military or absent_days < military_absence_exclusion_day_threshold)
+
+  - name: absent_wage_earner_gross_income_counted
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350, page 4, Section I.2-I.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-350-whose-income-is-counted/page-4#absent_wage_earner_included_in_fns_unit
+              output: absent_wage_earner_included_in_fns_unit
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          if absent_wage_earner_included_in_fns_unit: absent_wage_earner_gross_income else: 0
+
+  - name: military_absent_wage_earner_cash_contributions_counted_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 350, page 4, Section I.3.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-350-whose-income-is-counted/page-4#military_absence_exclusion_day_threshold
+              output: military_absence_exclusion_day_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          payment_is_cash_contribution_to_fns_unit
+          and payer_is_military_absent_wage_earner
+          and absent_days >= military_absence_exclusion_day_threshold
+
+  - name: joint_account_deposit_counted_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 350, page 4, Section I.3.b and I.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          payment_is_deposit_to_joint_checking_or_savings_account_with_fns_unit_member
+          and depositor_is_absent_wage_earner
+          and not resulting_trust_exists_for_such_account
+
+  - name: non_household_member_income_counted
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350, page 4, Section J
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-4
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          if person_is_non_household_member: 0 else: person_income

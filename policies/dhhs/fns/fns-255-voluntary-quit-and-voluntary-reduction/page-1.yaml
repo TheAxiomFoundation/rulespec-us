@@ -1,0 +1,231 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+  summary: |-
+    FNS 255.00 provides that an individual required to meet FNS 240 work registration requirements may be disqualified if the individual voluntarily quits a job of 30 hours per week or equivalent wages, or voluntarily reduces work hours or wages below that threshold. FNS 255.01 requires determining quits/reductions during the 30 days before application or any time during certification, and states the quit or reduction must be voluntary and without good cause. A reduction below 30 hours does not remove work-requirement exemption if weekly wages still exceed federal minimum wage multiplied by 30.
+  deferred_outputs:
+    - output: us-nc:policies/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1#fns_member_disqualified_for_voluntary_quit
+      reason: The source makes disqualification subject to an exemption defined in Section 255.02 and ends before stating the disqualification schedule introduced by "as follows"; the cited subsection and remaining schedule are not available in this source unit.
+rules:
+  - name: full_time_hours_threshold
+    kind: parameter
+    dtype: Decimal
+    period: Week
+    source: FNS 255.00(A), FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "30 hours per week"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          30
+
+  - name: application_lookback_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "30 days prior to the date of application"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          30
+
+  - name: voluntary_quit_job_meets_hours_or_wage_threshold
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.00(A), FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "average of 30 hours or more per week or have had earnings equivalent to the federal minimum wage multiplied by 30 hours"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          quit_job_average_weekly_hours >= full_time_hours_threshold
+          or quit_job_weekly_wages >= federal_minimum_wage * full_time_hours_threshold
+
+  - name: voluntary_quit_review_required_at_application
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "during the 30 days prior to the date of application"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          fns_application_interview
+          and fns_member_voluntarily_quit_job
+          and quit_occurred_within_application_lookback_days
+
+  - name: voluntary_quit_review_required_at_recertification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "during the recertification ... at any time during a certification period"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          fns_recertification
+          and fns_member_voluntarily_quit_job
+          and quit_occurred_during_certification_period
+
+  - name: voluntary_reduction_prior_job_meets_hours_or_wage_threshold
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.00(B), FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "before reduction, the individual was employed 30 hours or more per week or have had earnings equivalent to the federal minimum wage multiplied by 30 hours"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          pre_reduction_weekly_hours >= full_time_hours_threshold
+          or pre_reduction_weekly_wages >= federal_minimum_wage * full_time_hours_threshold
+
+  - name: voluntary_reduction_below_hours_or_wage_threshold
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.00(B), FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "reduces their work hours (effort) to less than 30 hours per week or reducing wages to less than minimum wage times 30 hours per week"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          post_reduction_weekly_hours < full_time_hours_threshold
+          or post_reduction_weekly_wages < federal_minimum_wage * full_time_hours_threshold
+
+  - name: voluntary_reduction_without_good_cause
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "The reduction must have been voluntary and without good cause."
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          fns_member_voluntarily_reduced_work_effort
+          and not reduction_had_good_cause
+
+  - name: voluntary_reduction_review_required_at_application
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "during the 30 days prior to the date of application"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          fns_application_interview
+          and fns_member_voluntarily_reduced_work_effort
+          and reduction_occurred_within_application_lookback_days
+
+  - name: voluntary_reduction_review_required_at_recertification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "during the recertification ... at any time during a certification period"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          fns_recertification
+          and fns_member_voluntarily_reduced_work_effort
+          and reduction_occurred_during_certification_period
+
+  - name: remains_exempt_from_work_requirements_after_reduction
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 255.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-255-voluntary-quit-and-voluntary-reduction/page-1
+              excerpt: "reduces work hours to less than 30 a week, but continues to earn weekly wages that exceed the Federal minimum wage multiplied by 30"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          post_reduction_weekly_hours < full_time_hours_threshold
+          and post_reduction_weekly_wages > federal_minimum_wage * full_time_hours_threshold

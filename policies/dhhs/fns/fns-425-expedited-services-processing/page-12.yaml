@@ -1,0 +1,289 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+  summary: |-
+    Income normally received less often than monthly is treated as from a new source when income of more than $25 was not received at the last scheduled payment date or interval. Households with terminated-source income before application and new-source income after application may still be destitute if they receive no other income in the application month and more than $25 from the new source will not be received by the tenth calendar day after application. Travel advances excluded as reimbursements do not affect destitute determination; written-contract wage advances are counted as income but are not a new source and do not prohibit destitute status. Expedited-service timeliness is measured by BAVDT, which must be less than seven calendar days from application; with a valid EBT card at approval, add one processing day to the processing date to determine BAVDT.
+rules:
+  - name: destitute_income_source_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 425, page 12, destitute income source threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "more than $25"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          25
+
+  - name: destitute_new_source_receipt_calendar_day_limit
+    kind: parameter
+    dtype: Integer
+    source: FNS 425, page 12, terminated and new source destitute condition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "by the tenth calendar day after the date of application"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          10
+
+  - name: expedited_service_timeliness_calendar_day_limit
+    kind: parameter
+    dtype: Integer
+    source: FNS 425.11, expedited service application timeliness measure
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "less than seven (7) calendar days"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          7
+
+  - name: bavdt_valid_ebt_card_processing_day_addition
+    kind: parameter
+    dtype: Integer
+    source: FNS 425.11.A, valid EBT card BAVDT calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "add one processing day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          1
+
+  - name: less_often_than_monthly_income_considered_new_source
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 425, page 12, item ii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "income is normally received less often than monthly"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "income of more than $25 was not received"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          income_normally_received_less_often_than_monthly
+          and income_amount_not_received_at_last_scheduled_payment_date_or_interval_prior_to_next_scheduled_payment > destitute_income_source_threshold
+
+  - name: terminated_and_new_source_income_household_considered_destitute
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 425, page 12, item 3.c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "receive both income from a terminated source prior to the date of application and income from a new source after the date of application"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "receives no other income in the month of application"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "Income of more than $25 from the new source will not be received by the tenth calendar day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          household_receives_income_from_terminated_source_before_application_and_new_source_after_application
+          and household_receives_no_other_income_in_month_of_application
+          and (
+            new_source_income_amount_to_be_received <= destitute_income_source_threshold
+            or new_source_income_receipt_calendar_days_after_application > destitute_new_source_receipt_calendar_day_limit
+          )
+
+  - name: travel_advance_counted_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 425, page 12, travel advances
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "if the travel advance is by written contract"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "the wage advance is counted as income"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          if payment_is_travel_advance and travel_advance_by_written_contract_as_advance_of_wages_subtracted_from_later_wages: max(0, travel_advance_amount) else: 0
+
+  - name: travel_advance_reimbursement_excluded_from_destitute_determination
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 425, page 12, travel advance reimbursements
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "payments are excluded as reimbursements"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "does not affect the determination of whether a household is destitute"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          payment_is_travel_advance
+          and travel_advance_excluded_as_reimbursement
+
+  - name: wage_advance_for_travel_costs_not_considered_new_source_of_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 425, page 12, wage advance for travel costs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "The receipt of a wage advance for travel costs is not considered a new source of income"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          payment_is_travel_advance
+          and payment_is_wage_advance_for_travel_costs
+
+  - name: wage_advance_for_travel_costs_does_not_prohibit_destitute_status
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 425, page 12, wage advance for travel costs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "The amount of the wage advance to cover travel costs does not prohibit the FNS unit from being considered destitute"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          payment_is_travel_advance
+          and payment_is_wage_advance_for_travel_costs
+
+  - name: migrant_moving_between_growers_has_terminated_and_new_income_source
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 425, page 12, migrant farmworker income source note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "moves from one grower to another to have moved from a terminated income source to a new source"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          migrant_travels_with_same_crew_chief
+          and migrant_moves_from_one_grower_to_another
+
+  - name: benefit_availability_days_from_application_for_valid_ebt_card
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: FNS 425.11.A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "If the FNS unit has a valid EBT card when approved, you must add one processing day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          if fns_unit_has_valid_ebt_card_when_approved: application_processed_days_from_application + bavdt_valid_ebt_card_processing_day_addition else: 0
+
+  - name: expedited_service_application_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 425.11, expedited service application timeliness measure
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "This is known as the Benefit Availability Date (BAVDT)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-12
+              excerpt: "To be considered timely the BAVDT must be less than seven (7) calendar days"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          benefit_availability_days_from_application < expedited_service_timeliness_calendar_day_limit

@@ -1,0 +1,236 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+  summary: |-
+    "Compliance is measured from the date the FNS household has both a valid EBT card and access to the FNS benefits. This is known as the Benefit Availability Date (BAVDT). To be considered timely the BAVDT must be less than 25 days from the date of application." If a new EBT card is issued, allow "one processing day plus two days" for receipt. Processing Time is "BAVDT - (minus) AD"; any application with processing time "greater than 25 calendar days" is overdue.
+rules:
+  - name: ebt_card_processing_day_allowance
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 420.05(A), (B)(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "one processing day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          1
+  - name: ebt_card_receipt_day_allowance
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 420.05(A), (B)(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "two days for receipt of the EBT card"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          2
+  - name: normal_application_timeliness_limit_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 420.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "less than 25 days from the date of application"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          25
+  - name: normal_application_overdue_threshold_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 420.05(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "greater than 25 calendar days"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          25
+  - name: food_purchase_opportunity_deadline_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 420.05 Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "no later than the 30th calendar day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          30
+  - name: benefit_availability_days_after_disposition
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: FNS 420.05(B)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "If a new EBT card is issued BAVDT = DD + 1 processing day + 2 days"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "If no new EBT card is issued BAVDT = DD = 1 processing day"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-420-normal-application-processing/page-4#ebt_card_processing_day_allowance
+              output: ebt_card_processing_day_allowance
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-420-normal-application-processing/page-4#ebt_card_receipt_day_allowance
+              output: ebt_card_receipt_day_allowance
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          if new_ebt_card_is_issued: ebt_card_processing_day_allowance + ebt_card_receipt_day_allowance else: ebt_card_processing_day_allowance
+  - name: normal_application_processing_time_days
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: FNS 420.05(B)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "PT = BAVDT - (minus) AD"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          benefit_availability_days_after_application
+  - name: normal_application_is_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 420.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "BAVDT must be less than 25 days from the date of application"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-420-normal-application-processing/page-4#normal_application_timeliness_limit_days
+              output: normal_application_timeliness_limit_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          normal_application_processing_time_days < normal_application_timeliness_limit_days
+  - name: normal_application_is_overdue
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 420.05(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "processing time is greater than 25 calendar days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-420-normal-application-processing/page-4#normal_application_overdue_threshold_days
+              output: normal_application_overdue_threshold_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          normal_application_processing_time_days > normal_application_overdue_threshold_days
+  - name: caseworker_delay_good_cause_unavailable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 420.04(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          normal_application_not_processed_timely_due_to_caseworker_delay
+  - name: household_has_valid_ebt_and_access_by_food_purchase_deadline
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 420.05 Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-420-normal-application-processing/page-4
+              excerpt: "access to FNS benefits ... no later than the 30th calendar day"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-420-normal-application-processing/page-4#food_purchase_opportunity_deadline_days
+              output: food_purchase_opportunity_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          normal_application_processing_time_days <= food_purchase_opportunity_deadline_days

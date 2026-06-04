@@ -1,0 +1,189 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+  summary: |-
+    "Do not count vendor payments paid to a provider for care of a FNS unit member." Domestic employment is counted as wages if an employee/employer relationship exists and treated as self-employment if not. Educational assistance for source-designated room and board is countable unearned income and is prorated over its intended period. FCIC and private nonrecurring crop-insurance payments are resources. Foster care / Guardianship payments are unearned income only when the child is included in the FNS unit.
+rules:
+  - name: vendor_payment_excluded_from_countable_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315, page 11, paragraph D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "Do not count vendor payments paid to a provider for care of a FNS unit member."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_vendor_payment
+          and payment_paid_to_provider_for_care_of_fns_unit_member
+
+  - name: domestic_employment_income_counted_as_wages
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.14 Domestic Employment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "If such as relationship exists, count the income as wages."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_domestic_employment_income
+          and employee_employer_relationship_exists
+
+  - name: domestic_employment_income_treated_as_self_employment
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.14 Domestic Employment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "If no such relationship exists, treat as self-employment."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_domestic_employment_income
+          and not employee_employer_relationship_exists
+
+  - name: educational_assistance_countable_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.15(A) Educational Assistance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "The only sources of countable educational assistance is assistance for normal living expenses, which are room and board."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_educational_assistance
+          and assistance_is_for_room_and_board
+          and room_and_board_designation_made_by_income_source_not_school
+
+  - name: monthly_countable_educational_assistance_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.15(B) Educational Assistance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "Regardless of the date of receipt, prorate the income over the period it is intended to cover."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if educational_assistance_countable_as_unearned_income: educational_assistance_room_and_board_amount_for_intended_period / educational_assistance_intended_period_month_count else: 0
+
+  - name: educational_assistance_continues_counted_after_student_drops_out
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.15(C) Educational Assistance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "If the educational assistance is prorated as income and the student drops out of school, continue to count the assistance"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          educational_assistance_countable_as_unearned_income
+          and student_drops_out_during_intended_period
+
+  - name: fcic_crop_insurance_payment_counted_as_resource
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.16(D) Federal Crop Insurance Corporation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "The insurance payments are paid out as a nonrecurring lump-sum payment. Therefore, they are considered a resource."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_fcic_crop_insurance_payment
+
+  - name: private_crop_insurance_settlement_counted_as_resource
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.16(E) Federal Crop Insurance Corporation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "private companies that are made as a nonrecurring lump-sum payment are counted as a resource in the month of receipt and until spent"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_private_crop_insurance_settlement
+          and payment_is_nonrecurring_lump_sum
+          and (month_is_month_of_receipt or not payment_has_been_spent)
+
+  - name: foster_care_or_guardianship_payment_counted_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.17 Foster Care / Guardianship Payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-11
+              excerpt: "counted as unearned income only when the FNS unit chooses to include the child"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_foster_care_or_guardianship
+          and fns_unit_chooses_to_include_child

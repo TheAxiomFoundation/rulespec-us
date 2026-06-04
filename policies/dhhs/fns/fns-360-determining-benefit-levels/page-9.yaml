@@ -1,0 +1,132 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+  summary: |-
+    "Subtract line b from line a. Multiply line c. by the full monthly allotment on line 28. Divide line d by 30. Round down to whole dollars. Result is prorated allotment."
+    "If the prorated allotment is less than $10, issue no benefits for the initial month. If the allotment prorates to zero, do not deny the application."
+rules:
+  - name: initial_month_proration_denominator
+    kind: parameter
+    dtype: Integer
+    source: FNS 360, Determining Benefit Levels, Section 360 Change #01-2025, page 9, prorated allotment computation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+              excerpt: "Divide line d by 30."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: initial_month_minimum_issuance_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 360, Determining Benefit Levels, Section 360 Change #01-2025, page 9, item 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+              excerpt: "less than $10"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: initial_month_prorated_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 360, Determining Benefit Levels, Section 360 Change #01-2025, page 9, prorated allotment computation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+              excerpt: "Subtract line b from line a. Multiply line c. by the full monthly allotment"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+              excerpt: "Divide line d by 30. Round down to whole dollars."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-360-determining-benefit-levels/page-9#initial_month_proration_denominator
+              output: initial_month_proration_denominator
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          floor(((initial_month_proration_line_a - date_of_application_day) * full_monthly_allotment) / initial_month_proration_denominator)
+
+  - name: initial_month_issuable_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 360, Determining Benefit Levels, Section 360 Change #01-2025, page 9, item 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+              excerpt: "If the prorated allotment is less than $10, issue no benefits"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-360-determining-benefit-levels/page-9#initial_month_prorated_allotment
+              output: initial_month_prorated_allotment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-360-determining-benefit-levels/page-9#initial_month_minimum_issuance_threshold
+              output: initial_month_minimum_issuance_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if initial_month_prorated_allotment < initial_month_minimum_issuance_threshold: 0 else: initial_month_prorated_allotment
+
+  - name: application_denial_barred_because_prorated_allotment_is_zero
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 360, Determining Benefit Levels, Section 360 Change #01-2025, page 9, item 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-9
+              excerpt: "If the allotment prorates to zero, do not deny the application."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-360-determining-benefit-levels/page-9#initial_month_prorated_allotment
+              output: initial_month_prorated_allotment
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          initial_month_prorated_allotment == 0

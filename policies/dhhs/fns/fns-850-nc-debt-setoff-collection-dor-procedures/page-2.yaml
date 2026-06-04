@@ -1,0 +1,196 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+  summary: |-
+    In determining delinquency, EPICS examines Payments and/or Adjustments recorded within the last 60 days; Cash and Recoupment payments are considered, and only ADJ-Adjustment offsets a payment. The NC Debt Setoff field must be blank for setoff to occur. A debtor making payments under a county repayment agreement must be blocked from DOR interception, and the block must be removed if payments stop. A Claim Debtor is submitted if requirements are met and all claim balances total $50.00 or more. A debtor is not forwarded to DOR if he has neither a CCID Name nor a SSN.
+rules:
+  - name: delinquency_determination_lookback_days
+    kind: parameter
+    dtype: Count
+    source: FNS 850.02.C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+              excerpt: "within the last 60 days"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          60
+
+  - name: nc_debt_setoff_minimum_total_claim_balance
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 850.02.F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+              excerpt: "totals $50.00 or more"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          50.00
+
+  - name: payment_or_adjustment_in_delinquency_lookback_window
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: FNS 850.02.C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+              excerpt: "recorded in EPICS within the last 60 days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2#delinquency_determination_lookback_days
+              output: delinquency_determination_lookback_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          days_since_payment_or_adjustment_recorded <= delinquency_determination_lookback_days
+
+  - name: collection_payment_considered_for_delinquency
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: FNS 850.02.C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+              excerpt: "C - Cash R - Recoupment"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2#payment_or_adjustment_in_delinquency_lookback_window
+              output: payment_or_adjustment_in_delinquency_lookback_window
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          payment_or_adjustment_in_delinquency_lookback_window
+          and (collection_method_is_cash or collection_method_is_recoupment)
+
+  - name: adjustment_offsets_payment_for_delinquency
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: FNS 850.02.C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+              excerpt: "only value that offsets a payment for delinquency determination is ADJ-Adjustment"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2#payment_or_adjustment_in_delinquency_lookback_window
+              output: payment_or_adjustment_in_delinquency_lookback_window
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          payment_or_adjustment_in_delinquency_lookback_window
+          and adjustment_code_is_adj_adjustment
+
+  - name: dor_interception_block_required_due_to_repayment_agreement
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 850.02.E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          debtor_has_repayment_agreement_with_county
+          and debtor_making_payments_according_to_repayment_agreement
+
+  - name: dor_interception_block_removal_required_due_to_void_repayment_agreement
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 850.02.E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          debtor_has_repayment_agreement_with_county
+          and debtor_stopped_making_payments_according_to_repayment_agreement
+
+  - name: claim_debtor_satisfies_page_2_nc_debt_setoff_submission_conditions
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 850.02.D-F, H
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2
+              excerpt: "totals $50.00 or more"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2#nc_debt_setoff_minimum_total_claim_balance
+              output: nc_debt_setoff_minimum_total_claim_balance
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-2#dor_interception_block_required_due_to_repayment_agreement
+              output: dor_interception_block_required_due_to_repayment_agreement
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          nc_debt_setoff_field_is_blank
+          and current_balance_for_all_claims_as_debtor >= nc_debt_setoff_minimum_total_claim_balance
+          and (debtor_has_common_client_id_name or debtor_has_ssn)
+          and not dor_interception_block_required_due_to_repayment_agreement

@@ -1,0 +1,159 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+  summary: '340.13 MEDICAL DEDUCTIONS A. Eligibility: Any specified person, except
+    ineligible aliens, ineligible ABAWDS, or individuals ineligible for failure to
+    enumerate, is allowed a medical deduction for medical expenses not paid or reimbursed
+    by another source. NC FAST only allows a deduction for amounts that exceed $35
+    per month. Allowable medical expenses include health and hospital insurance premiums
+    for the specified person, co-payments, and costs associated with a service animal
+    trained to serve the needs of an elderly or disabled person.'
+rules:
+- name: medical_expense_monthly_disregard
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 340.13(A)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+          excerpt: amounts that exceed $35 per month
+  versions:
+  - effective_from: '2025-12-01'
+    formula: '35'
+- name: person_allowed_medical_deduction_status
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 340.13(A)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+  versions:
+  - effective_from: '2025-12-01'
+    formula: 'person_is_specified_person_as_defined_in_fns_212_02
+
+      and not person_is_ineligible_alien
+
+      and not person_is_ineligible_abawd
+
+      and not person_is_ineligible_for_failure_to_enumerate'
+- name: service_animal_expense_allowable_medical_expense
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 340.13(B)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+  versions:
+  - effective_from: '2025-12-01'
+    formula: 'animal_is_specially_trained_to_assist_recipient_with_medical_issue
+
+      and service_animal_cost_serves_needs_of_elderly_or_disabled_person'
+- name: currently_allowable_medical_expense_amount
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 340.13(A)(1), 340.13(B)(1)-(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+  versions:
+  - effective_from: '2025-12-01'
+    formula: 'if person_allowed_medical_deduction_status: unreimbursed_specified_person_health_and_hospital_insurance_premium_amount
+      + unreimbursed_copayment_amount + (if service_animal_expense_allowable_medical_expense:
+      unreimbursed_service_animal_expense_amount else: 0) else: 0'
+- name: formerly_member_specified_person_expense_allowable
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 340.13(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+  versions:
+  - effective_from: '2025-12-01'
+    formula: 'person_was_fns_household_member_immediately_before_hospital_nursing_home_or_death
+
+      and household_is_responsible_for_payment'
+- name: formerly_member_allowable_medical_expense_amount
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 340.13(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+  versions:
+  - effective_from: '2025-12-01'
+    formula: 'if formerly_member_specified_person_expense_allowable: incurred_former_member_medical_expense_amount
+      else: 0'
+- name: medical_deduction_amount
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 340.13(A)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-16
+          excerpt: No medical deduction will be given unless the specified person(s)
+            in the FNS unit has more than $35 in monthly medical expenses.
+  versions:
+  - effective_from: '2025-12-01'
+    formula: 'if monthly_allowable_medical_expenses_for_specified_persons_in_fns_unit
+      > medical_expense_monthly_disregard: max(0, monthly_allowable_medical_expenses_for_specified_persons_in_fns_unit
+      - medical_expense_monthly_disregard) else: 0'

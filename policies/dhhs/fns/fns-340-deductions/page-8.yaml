@@ -1,0 +1,91 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-8
+  summary: |-
+    Allow as a shelter deduction any utility expenses that are identified separately from a rent or mortgage payment. Allowable utility expenses include heating and cooling, electricity, cooking fuel, water and sewage, septic tank installation and maintenance, well installation and maintenance, garbage and trash collection fees, and the basic service fees for one telephone. Non-allowable utility expenses include deposits charged on utilities, late fees and past due amounts, appliance costs, and Internet charges.
+rules:
+  - name: basic_service_telephone_count_limit
+    kind: parameter
+    dtype: Count
+    source: FNS 340.09(A)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-8
+              excerpt: "The basic service fees for one telephone"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          1
+
+  - name: utility_expense_is_allowable_shelter_deduction
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340.09(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-340-deductions/page-8#basic_service_telephone_count_limit
+              output: basic_service_telephone_count_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          utility_expense_identified_separately_from_rent_or_mortgage_payment
+          and (
+            payment_is_heating_or_cooling_expense
+            or payment_is_electricity
+            or payment_is_cooking_fuel
+            or payment_is_water_or_sewage
+            or payment_is_septic_tank_installation_or_maintenance
+            or payment_is_well_installation_or_maintenance
+            or payment_is_garbage_or_trash_collection_fee
+            or (
+              payment_is_basic_service_fee_for_telephone
+              and telephone_basic_service_count <= basic_service_telephone_count_limit
+            )
+          )
+          and not payment_is_deposit_charged_on_utility
+          and not payment_is_late_fee_or_past_due_amount
+          and not payment_is_cost_of_appliance
+          and not payment_is_internet_charge
+
+  - name: allowable_utility_shelter_deduction_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340.09
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-340-deductions/page-8#utility_expense_is_allowable_shelter_deduction
+              output: utility_expense_is_allowable_shelter_deduction
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          if utility_expense_is_allowable_shelter_deduction: max(0, utility_expense_amount) else: 0

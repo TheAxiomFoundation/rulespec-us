@@ -1,0 +1,249 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+  summary: |-
+    If the debtor does not contest the remand decision within 10 calendar days, the local agency must send a DSS-8658. Allotment reduction is 20% of entitlement or $20, whichever is greater; NC FAST recoups the entire allotment if the allotment is $20 or less, and allotment reduction must not be initiated on initial allotments. Wage garnishment is for IPV claims only; accounts must be 60 days delinquent and a civil action initiated, and garnishment cannot exceed 20% of monthly net income.
+rules:
+  - name: remand_contest_wait_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 820, page 15, C.2.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+              excerpt: "within 10 calendar days"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: allotment_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 820, page 15, D.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+              excerpt: "reduced by 20% of the entitlement"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          0.20
+
+  - name: allotment_reduction_minimum_amount
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820, page 15, D.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+              excerpt: "$20, whichever is greater"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          20
+
+  - name: garnishment_delinquency_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 820, page 15, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+              excerpt: "Accounts must be 60 days delinquent"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          60
+
+  - name: garnishment_maximum_rate_of_monthly_net_income
+    kind: parameter
+    dtype: Rate
+    source: FNS 820, page 15, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+              excerpt: "cannot exceed 20% of the monthly net income"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          0.20
+
+  - name: dss_8658_required_after_uncontested_remand
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 820, page 15, C.2.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15#remand_contest_wait_days
+              output: remand_contest_wait_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          local_agency_verified_with_hearings_and_appeals_debtor_has_not_contested_remand_decision
+          and days_since_remand_decision >= remand_contest_wait_days
+
+  - name: voluntary_repayment_agreement_binding
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 820, page 15, D.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          dss_8604_signed_by_debtor
+          and dss_8604_signed_by_local_agency_representative
+          and not debtor_defaults_on_payments
+
+  - name: allotment_reduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820, page 15, D.3 and note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15#allotment_reduction_rate
+              output: allotment_reduction_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15#allotment_reduction_minimum_amount
+              output: allotment_reduction_minimum_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if allotment_is_initial:
+            0
+          else:
+            if monthly_allotment <= allotment_reduction_minimum_amount:
+              monthly_allotment
+            else:
+              max(allotment_reduction_rate * monthly_entitlement, allotment_reduction_minimum_amount)
+
+  - name: garnishment_available_for_ipv_claim
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 820, page 15, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15#garnishment_delinquency_days
+              output: garnishment_delinquency_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          claim_is_intentional_program_violation
+          and account_delinquent_days >= garnishment_delinquency_days
+          and civil_action_initiated
+
+  - name: monthly_net_income_for_garnishment
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820, page 15, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          max(0, monthly_gross_earned_income - legally_withheld_deductions)
+
+  - name: maximum_monthly_wage_garnishment_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820, page 15, D.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-15#garnishment_maximum_rate_of_monthly_net_income
+              output: garnishment_maximum_rate_of_monthly_net_income
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          garnishment_maximum_rate_of_monthly_net_income * monthly_net_income_for_garnishment

@@ -1,0 +1,257 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+  summary: '315.01(A)-(B): ASCS crop-loss payments "are counted as earned self-employment
+    income except when provided as a loan"; "Farm loans are excluded from income";
+    ASCS payments from a Presidential declared disaster or emergency "are excluded
+    from income and resources."
+
+    315.02(A)-(C): For affidavits signed on or after December 19, 1997, count the
+    full countable income of the sponsor and spouse if living together as unearned
+    income until citizenship, 40 qualifying quarters, or sponsor death; federal means-tested
+    assistance quarters after January 1, 1997 do not count; prorate sponsor income
+    if the sponsor signed for more than one alien; allow a 20% earned income deduction
+    in the stated three-year deeming calculation.'
+rules:
+- name: ascs_payment_counted_as_earned_self_employment_income
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Month
+  source: FNS 315.01(A)-(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: counted as earned self-employment income except when provided as
+            a loan
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: Presidential declared disaster or emergency
+  versions:
+  - effective_from: '2022-01-11'
+    formula: 'payment_is_ascs_crop_loss_payment
+
+      and not payment_is_provided_as_loan
+
+      and not payment_results_from_presidential_declared_disaster_or_emergency'
+- name: ascs_payment_excluded_from_income
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Month
+  source: FNS 315.01(A)-(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: Farm loans are excluded from income
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: excluded from income and resources
+  versions:
+  - effective_from: '2022-01-11'
+    formula: '(payment_is_ascs_crop_loss_payment and payment_is_provided_as_loan)
+
+      or (payment_is_ascs_crop_loss_payment and payment_results_from_presidential_declared_disaster_or_emergency)'
+- name: ascs_payment_excluded_from_resources
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Month
+  source: FNS 315.01(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: Presidential declared disaster or emergency
+  versions:
+  - effective_from: '2022-01-11'
+    formula: 'payment_is_ascs_crop_loss_payment
+
+      and payment_results_from_presidential_declared_disaster_or_emergency'
+- name: sponsor_income_deeming_qualifying_quarter_threshold
+  kind: parameter
+  dtype: Count
+  source: FNS 315.02(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: 40 qualifying quarters of social security coverage
+  versions:
+  - effective_from: '2022-01-11'
+    formula: '40'
+- name: quarter_counts_as_qualifying_social_security_coverage
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 315.02(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: Beginning January 1, 1997
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: received federal means-tested assistance
+  versions:
+  - effective_from: '1997-01-01'
+    formula: 'wage_earner_has_social_security_coverage_for_quarter
+
+      and not wage_earner_received_federal_means_tested_assistance_in_quarter'
+- name: alien_has_creditable_qualifying_quarters_for_deeming_end
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 315.02(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: worked or can be credited with 40 qualifying quarters
+  versions:
+  - effective_from: '2022-01-11'
+    formula: creditable_qualifying_social_security_quarters >= sponsor_income_deeming_qualifying_quarter_threshold
+- name: alien_sponsor_income_deeming_continues
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 315.02(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: signed on or after December 19, 1997
+      - path: versions[0].formula
+        kind: ordering
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: until whichever of the earliest occurs
+  versions:
+  - effective_from: '2022-01-11'
+    formula: 'affidavit_signed_or_resigned_on_or_after_sponsor_deeming_start_date
+
+      and not alien_has_become_citizen
+
+      and not alien_has_creditable_qualifying_quarters_for_deeming_end
+
+      and not alien_sponsor_has_died'
+- name: alien_sponsor_countable_income_before_proration
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: FNS 315.02(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: full amount of countable income for the sponsor and his spouse
+            (if living together)
+  versions:
+  - effective_from: '2022-01-11'
+    formula: 'sponsor_countable_income + (if sponsor_and_spouse_live_together: sponsor_spouse_countable_income
+      else: 0)'
+- name: alien_sponsor_unearned_income
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: FNS 315.02(A)-(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: Count as unearned income the full amount
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: "prorate the sponsor\u2019s income among the sponsored aliens"
+  versions:
+  - effective_from: '2022-01-11'
+    formula: "if alien_sponsor_income_deeming_continues:\n  if sponsored_alien_count\
+      \ > 1:\n    alien_sponsor_countable_income_before_proration / sponsored_alien_count\n\
+      \  else:\n    alien_sponsor_countable_income_before_proration\nelse:\n  0"
+- name: sponsor_earned_income_deduction_rate
+  kind: parameter
+  dtype: Rate
+  source: FNS 315.02(C)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: earned income deduction of 20%
+  versions:
+  - effective_from: '2022-01-11'
+    formula: '0.20'
+- name: sponsor_earned_income_after_deduction_in_three_year_deeming_calculation
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: FNS 315.02(C)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: for three years from the date signed or re-signed
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-1
+          excerpt: Determine the total monthly countable earned income
+  versions:
+  - effective_from: '2022-01-11'
+    formula: 'if affidavit_signed_or_resigned_on_or_after_sponsor_deeming_start_date
+      and within_three_years_from_affidavit_signed_or_resigned: total_monthly_countable_earned_income_of_sponsor_and_spouse
+      * (1 - sponsor_earned_income_deduction_rate) else: 0'

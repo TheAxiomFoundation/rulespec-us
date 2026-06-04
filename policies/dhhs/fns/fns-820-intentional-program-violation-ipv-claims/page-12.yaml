@@ -1,0 +1,185 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+  summary: |-
+    "EPICS sends the DSS-8554, Letter of Overissuance, to each debtor if the amount due is greater than 0." "All household members who were 18 years old or older at the time of the overissuance are debtors." A participating household may request a Fair Hearing "within 90 days of the DSS-8554" for specified disputes, and benefits continue if the request is timely and the certification period has not expired.
+rules:
+  - name: restored_benefits_prior_discovery_month_limit
+    kind: parameter
+    dtype: Count
+    source: FNS 820, page 12, A.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+              excerpt: "Do not restore benefits more than 12 months prior to the Date of Discovery."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          12
+
+  - name: allotment_reduction_notice_working_day_period
+    kind: parameter
+    dtype: Count
+    source: FNS 820, page 12, B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+              excerpt: "ten working day notice expires"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: fair_hearing_request_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: FNS 820, page 12, B.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+              excerpt: "within 90 days of the DSS-8554"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          90
+
+  - name: claim_debtor
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 12, A.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          person_was_household_member_at_time_of_overissuance
+          and person_was_18_or_older_at_time_of_overissuance
+
+  - name: dss_8554_letter_sent_to_debtor
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 12, A.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          claim_debtor
+          and claim_amount_due_greater_than_zero
+          and (
+            not claim_category_change_occurs
+            or claim_pending_adh_or_court_determined_to_ipv_ihe_or_ae
+          )
+
+  - name: restored_benefit_within_discovery_lookback
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 12, A.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+              excerpt: "Do not restore benefits more than 12 months prior to the Date of Discovery."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          restored_benefit_months_prior_to_date_of_discovery <= restored_benefits_prior_discovery_month_limit
+
+  - name: allotment_reduction_effective_after_notice_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 12, B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+              excerpt: "effective the month following the month in which the ten working day notice expires"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          participating_household
+          and working_days_since_dss_8554_notice >= allotment_reduction_notice_working_day_period
+          and current_month_follows_month_in_which_ten_working_day_notice_expires
+
+  - name: fair_hearing_request_within_allowed_scope
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 12, B.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+              excerpt: "within 90 days of the DSS-8554"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          household_requests_fair_hearing
+          and days_since_dss_8554_letter <= fair_hearing_request_calendar_day_limit
+          and (
+            household_disagrees_with_claim_amount
+            or household_disagrees_with_recoupment_amount
+            or household_asserts_claim_previously_paid_in_full
+          )
+
+  - name: benefits_continue_on_prior_basis_after_fair_hearing_request
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 12, B.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          fair_hearing_request_within_allowed_scope
+          and household_certification_period_has_not_expired

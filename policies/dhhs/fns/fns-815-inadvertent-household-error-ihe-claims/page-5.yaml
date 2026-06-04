@@ -1,0 +1,216 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+  summary: |-
+    Use the Program Integrity trial budget for calculation. The claim amount is the difference between the correct allotment and the allotment the household received.
+    For each month of the overissuance, verify each source of unreported income. Use actual income, and do not convert.
+    Use DES wage match for verification when actual wages are not available; use gross quarterly income divided by three months, or average over the employment period if employment was less than three months.
+    Verify and allow dependent care expenses each month as a deduction; allow only the amount the FNS unit is responsible for paying. If unreported information makes a household eligible for a medical deduction, verify and allow actual expenses.
+    Count means-tested State and federal assistance payments for the intended overissued month; for other income, count income in the month received. For mailed payments, add three days mailing time. Count the actual amount of Work First, SSI, RSDI, or VA received, even when erroneous.
+rules:
+  - name: des_quarter_month_count
+    kind: parameter
+    dtype: Count
+    source: Section 815 Change #3-2017, C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+              excerpt: "gross quarterly income, divided by three months"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          3
+
+  - name: mailed_payment_mailing_time_days
+    kind: parameter
+    dtype: Count
+    source: Section 815 Change #3-2017, G
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+              excerpt: "add three days mailing time"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          3
+
+  - name: ihe_claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 815 Change #3-2017
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          max(0, allotment_household_received - correct_allotment)
+
+  - name: unreported_income_amount_for_overissuance_budget
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 815 Change #3-2017, C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if actual_unreported_income_available: actual_unreported_income_amount else: if employment_was_less_than_three_months: des_gross_income_over_employment_period / employment_period_month_count else: des_gross_quarterly_income / des_quarter_month_count
+
+  - name: countable_income_from_ineligible_or_disqualified_members
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 815 Change #3-2017, D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          countable_income_from_certain_ineligible_household_members + countable_income_from_disqualified_household_members
+
+  - name: allowable_dependent_care_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 815 Change #3-2017, E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if dependent_care_expense_verified: fns_unit_responsible_dependent_care_expense else: 0
+
+  - name: allowable_medical_deduction_from_unreported_information
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 815 Change #3-2017, E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if unreported_information_makes_household_eligible_for_medical_deduction and medical_expenses_verified: actual_medical_expenses else: 0
+
+  - name: means_tested_assistance_counted_for_intended_overissued_month
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Section 815 Change #3-2017, F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          payment_is_means_tested_state_or_federal_assistance
+          and payment_is_intended_for_overissued_month
+
+  - name: other_income_counted_in_month_received
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Section 815 Change #3-2017, F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          not payment_is_means_tested_state_or_federal_assistance
+          and payment_received_in_current_month
+
+  - name: mailed_payment_receipt_offset_days
+    kind: derived
+    entity: Payment
+    dtype: Count
+    period: Month
+    source: Section 815 Change #3-2017, G
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if payment_is_mailed: mailed_payment_mailing_time_days else: 0
+
+  - name: actual_work_first_ssi_rsdi_va_amount_counted
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 815 Change #3-2017, H
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-5
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if payment_is_work_first_ssi_rsdi_or_va_received: payment_actual_amount_received else: 0

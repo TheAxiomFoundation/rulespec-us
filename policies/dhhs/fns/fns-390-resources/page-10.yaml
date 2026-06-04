@@ -1,0 +1,104 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-10
+  summary: |-
+    "Count the remainder as the resource." If verification is necessary, use DSS-8650, explain the Financial Privacy Act on DSS-3431 when account verification is not readily available or assistance is requested, and request a DSS-3431 signed by all account holders within ten calendar days. "Exclude all tax-deferred retirement accounts." Funds released from these accounts are counted as income when reasonably anticipated; remaining funds are not counted as a resource.
+rules:
+  - name: financial_account_verification_response_days
+    kind: parameter
+    dtype: Count
+    source: FNS 390.08(D)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-10
+              excerpt: "within ten calendar days"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          10
+
+  - name: financial_account_resource_amount
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.08(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-10
+              excerpt: "Count the remainder as the resource."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          financial_account_remainder_after_outstanding_checks
+
+  - name: tax_deferred_retirement_account_resource_excluded
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390.09
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-10
+              excerpt: "Exclude all tax-deferred retirement accounts."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_tax_deferred_retirement_account
+
+  - name: tax_deferred_retirement_account_countable_resource_amount
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.09
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-10
+              excerpt: "Do not count the remaining funds as a resource."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          if asset_is_tax_deferred_retirement_account: 0 else: asset_resource_amount_before_retirement_account_exclusion
+
+  - name: released_retirement_account_funds_counted_as_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 390.09 note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-10
+              excerpt: "Any funds released from these accounts would be counted as income received when it can be reasonably anticipated."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          payment_is_funds_released_from_tax_deferred_retirement_account
+          and payment_can_be_reasonably_anticipated

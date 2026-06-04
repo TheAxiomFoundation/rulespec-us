@@ -1,0 +1,275 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+  summary: |-
+    Section 600 Change #01-2025 October 01, 2025. Process a Regular Food and Nutrition Services Application for SNAP benefits within 30 days from the date of application when SNAP eligibility is determined after completion. Applicants with shelter expenses that exceed $200 per month or medical expenses that exceed $35 per month may qualify for more benefits by applying for Regular Food and Nutrition Services. Current FNS cases meeting SNAP eligibility criteria automatically convert to SNAP when the SNAP allotment is equal to or greater than the current allotment. Authorized representative procedures include mailing DSS-1688 and DSS-8650 when requested, issuing an EBT card upon receipt of DSS-1688, and not pending a SNAP application more than 30 days if DSS-1688 has not been returned unless the authorized representative signed for the client.
+rules:
+  - name: snap_application_processing_deadline_days
+    kind: parameter
+    dtype: Count
+    source: FNS 600, Section 600 Change #01-2025, item K
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "Process the application for SNAP benefits within 30 days from the date of application."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: regular_fns_shelter_expense_more_benefits_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 600, Section 600 Change #01-2025, item K note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "shelter expenses that exceed $200 per month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          200
+
+  - name: regular_fns_medical_expense_more_benefits_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 600, Section 600 Change #01-2025, item K note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "medical expenses that exceed $35 per month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          35
+
+  - name: missing_dss_1688_pending_limit_days
+    kind: parameter
+    dtype: Count
+    source: FNS 600.05(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "Do not pend a SNAP application for more than 30 days if the DSS-1688 has not been returned."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: regular_fns_application_used_for_snap_processing
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 600, Section 600 Change #01-2025, item K
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          individual_completes_regular_fns_application
+          and individual_determined_snap_eligible_after_completion
+
+  - name: snap_application_processed_within_deadline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FNS 600, Section 600 Change #01-2025, item K
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "Process the application for SNAP benefits within 30 days from the date of application."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4#snap_application_processing_deadline_days
+              output: snap_application_processing_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          days_from_application_to_processing <= snap_application_processing_deadline_days
+
+  - name: may_qualify_for_more_benefits_by_regular_fns
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 600, Section 600 Change #01-2025, item K note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "shelter expenses that exceed $200 per month or medical expenses that exceed $35 per month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4#regular_fns_shelter_expense_more_benefits_threshold
+              output: regular_fns_shelter_expense_more_benefits_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4#regular_fns_medical_expense_more_benefits_threshold
+              output: regular_fns_medical_expense_more_benefits_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          shelter_expenses > regular_fns_shelter_expense_more_benefits_threshold
+          or medical_expenses > regular_fns_medical_expense_more_benefits_threshold
+
+  - name: fns_case_automatically_converts_to_snap
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 600.04(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          current_fns_case_meets_snap_eligibility_criteria
+          and snap_allotment_amount >= current_fns_allotment_amount
+
+  - name: converted_snap_case_requires_new_dss_1688
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 600.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not household_is_converted_snap_case
+
+  - name: authorized_representative_forms_must_be_mailed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 600.05(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          applicant_checked_application_indicating_authorized_representative_needed
+
+  - name: authorized_representative_processed_and_ebt_card_issued
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 600.05(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          dss_1688_received_by_local_dss
+
+  - name: snap_application_may_be_processed_without_dss_1688
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 600.05(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "If the DSS-1688 is not returned to the local DSS, process the application without the form, unless the authorized representative signed the application on behalf of the client."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          dss_1688_not_returned_to_local_dss
+          and not authorized_representative_signed_application_on_behalf_of_client
+
+  - name: snap_application_pended_too_long_for_missing_dss_1688
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 600.05(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4
+              excerpt: "Do not pend a SNAP application for more than 30 days if the DSS-1688 has not been returned."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-4#missing_dss_1688_pending_limit_days
+              output: missing_dss_1688_pending_limit_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          dss_1688_not_returned_to_local_dss
+          and days_application_pended_for_missing_dss_1688 > missing_dss_1688_pending_limit_days

@@ -1,0 +1,126 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+  summary: |-
+    If a household's benefits have been expunged within the previous three years, adjust the claim by subtracting the amount of the expunged benefits; do not apply any amount which exceeds the claim balance. Delinquent debts are automatically submitted to the US Treasury Department for collection using EPICS. Unspecified joint cash collections for combined public assistance/FNS recipient claims must be prorated. Any claim or portion may be compromised if the local agency can reasonably determine the household's economic circumstances indicate the claim will not be repaid in three years; restored benefits or supplements apply to the full amount, including compromised amounts.
+rules:
+  - name: expunged_benefits_applied_to_claim
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 810, page 12, Section 6(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+              excerpt: "within the previous three years, adjust the claim by subtracting the amount of the expunged benefits"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+              excerpt: "Do not apply any amount which exceeds the claim balance."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if household_benefits_expunged_within_previous_three_years: min(expunged_benefits_amount, claim_balance) else: 0
+
+  - name: delinquent_debt_submitted_to_treasury_offset_program
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 12, Section 7(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          debt_is_delinquent
+
+  - name: fns_prorated_share_of_unspecified_joint_cash_collection
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 810, page 12, Section E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if unspecified_joint_cash_collection_received_for_combined_public_assistance_fns_recipient_claim: joint_cash_collection_amount * fns_prorated_share_rate else: 0
+
+  - name: claim_may_be_compromised
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 12, Section F(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+              excerpt: "claim will not be repaid in three (3) years"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          local_agency_reasonably_determines_household_economic_circumstances_indicate_claim_will_not_be_repaid_in_three_years
+
+  - name: restored_benefits_apply_to_full_claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 810, page 12, Section F(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if restored_benefits_or_supplements_available: min(restored_benefits_or_supplements_amount, full_claim_amount_including_compromised_amount) else: 0
+
+  - name: compromised_portion_may_be_reinstated
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 12, Section F(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-12
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          compromised_claim_subsequently_becomes_delinquent

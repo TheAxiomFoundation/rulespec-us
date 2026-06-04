@@ -1,0 +1,186 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+  summary: |-
+    Once the student turns 18: Test prospectively for the month after the student turns 18, including the student's gross earned income. Count the full (non-prorated) income of fleeing felons, probation/parole violators, aggravated sexual abuse, murder, and sexual assault violators. Unless exempt, count sponsor and living-together spouse income for sponsored aliens until citizenship, 40 qualifying quarters, or sponsor death. If the FNS unit includes a foster child, include the foster child's countable income and foster care payment; otherwise exclude both.
+rules:
+  - name: student_gross_earned_income_counted_after_turning_eighteen
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350, page 3, item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "Once the student turns 18: Test prospectively for the month after the student turns 18, including the student's gross earned income."
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          if month_after_student_turns_eighteen: student_gross_earned_income else: 0
+
+  - name: full_non_prorated_income_counted_for_disqualified_individual
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "Count the full (non-prorated) income of these individuals."
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          if person_is_fleeing_felon or person_is_probation_or_parole_violator or person_is_aggravated_sexual_abuse_violator or person_is_murder_violator or person_is_sexual_assault_violator: individual_income else: 0
+
+  - name: sponsored_alien
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 350(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "A sponsored alien is an alien admitted lawfully for permanent residence who is sponsored financially by an individual. Refugees and Asylees are not sponsored."
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          alien_is_lawfully_admitted_for_permanent_residence_and_sponsored_financially_by_individual
+          and not alien_is_refugee
+          and not alien_is_asylee
+
+  - name: sponsored_alien_qualifying_quarters_threshold
+    kind: parameter
+    dtype: Count
+    source: FNS 350(F)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "40 qualifying quarters"
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          40
+
+  - name: sponsored_alien_has_required_qualifying_quarters
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 350(F)(2) and Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "Has earned or can be credited with 40 qualifying quarters"
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          alien_earned_or_creditable_qualifying_quarters_excluding_federal_means_tested_assistance >= sponsored_alien_qualifying_quarters_threshold
+
+  - name: sponsor_deeming_period_continues
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 350(F)(1)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "until whichever occurs earlier: 1. The alien becomes a citizen; or 2. Has earned or can be credited with 40 qualifying quarters; or 3. The sponsor dies."
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          not alien_has_become_citizen
+          and not sponsored_alien_has_required_qualifying_quarters
+          and not sponsor_has_died
+
+  - name: sponsor_and_spouse_countable_income_for_deeming
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "count the full amount of countable income of the sponsor and his spouse (if living together)"
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          sponsor_countable_income + (if sponsor_spouse_lives_with_sponsor: sponsor_spouse_countable_income else: 0)
+
+  - name: sponsor_income_deemed_to_sponsored_alien
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "count the full amount of countable income of the sponsor and his spouse (if living together) as unearned income"
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          if sponsored_alien and affidavit_of_support_signed_or_resigned_on_or_after_deeming_start_date and not sponsored_alien_exempt_from_sponsor_deeming and sponsor_deeming_period_continues: sponsor_and_spouse_countable_income_for_deeming else: 0
+
+  - name: foster_child_income_counted_when_included
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 350(G)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-350-whose-income-is-counted/page-3
+              excerpt: "If yes, include the foster child's countable income, count the foster care payment... If no, exclude the foster child's income including the foster care payment."
+    versions:
+      - effective_from: '2021-11-01'
+        formula: |-
+          if fns_unit_wishes_to_include_foster_child: foster_child_countable_income + foster_care_payment else: 0

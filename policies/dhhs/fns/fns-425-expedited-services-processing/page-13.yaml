@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+  summary: |-
+    If a new EBT card is issued, allow one processing day plus two days for receipt of the EBT card to determine the BAVDT. Processing Time is BAVDT minus Application Date. Any application with processing time greater than four calendar days is overdue; processing by the 4th calendar day allows access no later than the seventh calendar day from application.
+rules:
+  - name: processing_day_allowance_for_new_ebt_card
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.C.3.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "one processing day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          1
+
+  - name: receipt_days_for_new_ebt_card
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.C.3.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "2 days for receipt of the EBT card"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          2
+
+  - name: normal_timeliness_overdue_threshold_days
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "greater than four calendar days"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          4
+
+  - name: latest_access_day_from_application
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.D note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "no later than the seventh calendar day from the date of application"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          7
+
+  - name: benefit_availability_days_after_disposition
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.B and 425.C.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "If a new EBT card is issued BAVDT = DD + 1 processing day + 2 days"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          if new_ebt_card_is_issued_when_approved: processing_day_allowance_for_new_ebt_card + receipt_days_for_new_ebt_card else: processing_day_allowance_for_new_ebt_card
+
+  - name: processing_time_days
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.C.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "PT = BAVDT - AD"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          application_to_disposition_calendar_days + benefit_availability_days_after_disposition
+
+  - name: application_is_overdue
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "processing time is greater than four calendar days"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          processing_time_days > normal_timeliness_overdue_threshold_days
+
+  - name: processing_deadline_days_after_application_for_new_ebt_card
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Day
+    source: FNS 425 Expedited Service Processing, Section 425.D note and Processing Deadline Example 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "processing deadline is June 14th"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-425-expedited-services-processing/page-13
+              excerpt: "Processing by the 4th calendar day"
+    versions:
+      - effective_from: '2024-03-01'
+        formula: |-
+          normal_timeliness_overdue_threshold_days - processing_day_allowance_for_new_ebt_card

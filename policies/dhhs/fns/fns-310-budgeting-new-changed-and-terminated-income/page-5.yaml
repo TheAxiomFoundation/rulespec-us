@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+  summary: |-
+    "Initial application or reapplication: Budget the actual income received for the month of application. Budget the calculated and converted monthly amount for ongoing months." "Recertification: Budget the calculated and converted monthly amount for the first month of the new certification period and ongoing months." "Use only full pay(s) received to project the expected income." "Budget the calculated and converted amount the month following the expiration of the DSS-8553 Notice of Adverse Action." If no full representative pay has been received, request hourly pay rate, expected work hours per pay period, pay dates, frequency of receipt, and first pay date, and calculate monthly income based on verified information.
+rules:
+  - name: pays_received_to_date_by_person
+    kind: data_relation
+    data_relation:
+      predicate: pays_received_to_date_by_person
+      arity: 2
+      arguments: [Person, Payment]
+    source: FNS 310.04(A)(1)
+
+  - name: full_representative_pays_received_count
+    kind: derived
+    entity: Person
+    dtype: Count
+    period: Month
+    source: FNS 310.04(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Change #01-2023 January 09, 2023"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "received at least one (1) full representative pay to date"
+    versions:
+      - effective_from: '2023-01-09'
+        formula: |-
+          count_where(pays_received_to_date_by_person, pay_is_full_representative_pay)
+
+  - name: converted_monthly_income_from_full_representative_pays
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 310.04(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Change #01-2023 January 09, 2023"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Use only full pay(s) received to project the expected income"
+    versions:
+      - effective_from: '2023-01-09'
+        formula: |-
+          if full_representative_pays_received_count >= 1: (sum_where(pays_received_to_date_by_person, pay_amount, pay_is_full_representative_pay) / full_representative_pays_received_count) * monthly_conversion_factor_for_pay_frequency else: 0
+
+  - name: budgeted_new_or_changed_income_after_dss_8553_notice
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 310.04(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Change #01-2023 January 09, 2023"
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Budget the calculated and converted amount the month following the expiration of the DSS-8553"
+    versions:
+      - effective_from: '2023-01-09'
+        formula: |-
+          if full_representative_pays_received_count >= 1 and month_is_following_expiration_of_dss_8553_notice_of_adverse_action: converted_monthly_income_from_full_representative_pays else: 0
+
+  - name: converted_monthly_income_from_verified_hourly_information
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 310.04(B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Change #01-2023 January 09, 2023"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "hourly pay rate, expected number of work hours per pay period"
+    versions:
+      - effective_from: '2023-01-09'
+        formula: |-
+          if full_representative_pays_received_count < 1: hourly_pay_rate * expected_work_hours_per_pay_period * monthly_conversion_factor_for_pay_frequency else: 0
+
+  - name: budgeted_income_for_initial_or_reapplication
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 310, page 5, item 4(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Change #01-2023 January 09, 2023"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Budget the actual income received for the month of application"
+    versions:
+      - effective_from: '2023-01-09'
+        formula: |-
+          if month_is_month_of_application: actual_income_received_for_month_of_application else: if month_is_ongoing_month: calculated_and_converted_monthly_income else: 0
+
+  - name: budgeted_income_for_recertification
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 310, page 5, item 4(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "Change #01-2023 January 09, 2023"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-310-budgeting-new-changed-and-terminated-income/page-5
+              excerpt: "first month of the new certification period and ongoing months"
+    versions:
+      - effective_from: '2023-01-09'
+        formula: |-
+          if month_is_first_month_of_new_certification_period or month_is_ongoing_month: calculated_and_converted_monthly_income else: 0

@@ -1,0 +1,205 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+  summary: |-
+    The FNS unit may be eligible to receive a replacement of fraud loss benefits if the DSS-8644 affidavit is submitted no later than 30 calendar days from discovery of EBT fraud loss, the request is made by an accepted signed-affidavit method, and the affidavit includes the household's actual amount of EBT fraud loss. The household's maximum replacement is the lesser of the EBT fraud loss requested or two times the monthly allotment last/immediately prior to the theft.
+rules:
+  - name: ebt_fraud_loss_report_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: FNS 905.03(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+              excerpt: "no later than 30 calendar days from discovery"
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          30
+
+  - name: ebt_fraud_loss_replacement_monthly_allotment_multiplier
+    kind: parameter
+    dtype: Integer
+    source: FNS 905.03(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+              excerpt: "two times the monthly allotment"
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          2
+
+  - name: ebt_fraud_loss_request_submitted_by_accepted_method
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 905.03(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          signed_affidavit_submitted_by_mail
+          or signed_affidavit_submitted_by_fax
+          or signed_affidavit_submitted_in_person
+          or signed_affidavit_submitted_over_phone_with_telephonic_signature
+          or (local_agency_accepts_email_affidavits and signed_affidavit_submitted_by_email)
+          or (local_agency_accepts_portal_affidavits and signed_affidavit_submitted_by_portal)
+
+  - name: ebt_fraud_loss_request_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 905.03(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+              excerpt: "submitted to the county DSS no later than 30 calendar days from discovery"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#ebt_fraud_loss_report_calendar_day_limit
+              output: ebt_fraud_loss_report_calendar_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          dss_8644_affidavit_submitted_to_county_dss
+          and days_from_discovery_to_affidavit_submission <= ebt_fraud_loss_report_calendar_day_limit
+
+  - name: ebt_fraud_loss_request_attested_with_actual_loss_amount
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 905.03(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          dss_8644_affidavit_includes_household_actual_ebt_fraud_loss_amount
+          and fns_unit_attested_by_signed_affidavit
+
+  - name: eligible_for_ebt_fraud_loss_replacement
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 905.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#ebt_fraud_loss_request_timely
+              output: ebt_fraud_loss_request_timely
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#ebt_fraud_loss_request_submitted_by_accepted_method
+              output: ebt_fraud_loss_request_submitted_by_accepted_method
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#ebt_fraud_loss_request_attested_with_actual_loss_amount
+              output: ebt_fraud_loss_request_attested_with_actual_loss_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          ebt_fraud_loss_request_timely
+          and ebt_fraud_loss_request_submitted_by_accepted_method
+          and ebt_fraud_loss_request_attested_with_actual_loss_amount
+
+  - name: maximum_ebt_fraud_loss_replacement_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 905.03(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+              excerpt: "lesser of the amount of EBT fraud loss requested by the household or two times the monthly allotment"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#ebt_fraud_loss_replacement_monthly_allotment_multiplier
+              output: ebt_fraud_loss_replacement_monthly_allotment_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          min(household_ebt_fraud_loss_requested_amount, ebt_fraud_loss_replacement_monthly_allotment_multiplier * monthly_allotment_last_immediately_prior_to_theft)
+
+  - name: approved_ebt_fraud_loss_replacement_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 905.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#eligible_for_ebt_fraud_loss_replacement
+              output: eligible_for_ebt_fraud_loss_replacement
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-905-replacement-of-authorized-issuance/page-3#maximum_ebt_fraud_loss_replacement_amount
+              output: maximum_ebt_fraud_loss_replacement_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-09-01'
+        formula: |-
+          if eligible_for_ebt_fraud_loss_replacement: maximum_ebt_fraud_loss_replacement_amount else: 0
