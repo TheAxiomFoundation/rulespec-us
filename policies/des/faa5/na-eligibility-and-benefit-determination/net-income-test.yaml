@@ -1,0 +1,125 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-6
+  summary: |-
+    The NA net income test subtracts the 20% earned income deduction from gross countable earned income, adds countable monthly unearned income, subtracts other allowable NA income deductions, and denies the NA application when the budgetary unit does not pass the net income test.
+rules:
+  - name: na_earned_income_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: FAA5 NA Eligibility and Benefit Determination, block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-6
+              excerpt: "Subtract the 20% NA earned income deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+
+  - name: net_earned_income_after_na_earned_income_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/net-income-test#na_earned_income_deduction_rate
+              output: na_earned_income_deduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, gross_countable_earned_income - (na_earned_income_deduction_rate * gross_countable_earned_income))
+
+  - name: na_net_income_for_income_test
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/net-income-test#net_earned_income_after_na_earned_income_deduction
+              output: net_earned_income_after_na_earned_income_deduction
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, net_earned_income_after_na_earned_income_deduction + countable_monthly_unearned_income - other_allowable_na_income_deductions)
+
+  - name: na_net_income_test_passes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-6
+              excerpt: "When the budgetary unit does not pass the net income test, the NA application is denied."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/net-income-test#na_net_income_for_income_test
+              output: na_net_income_for_income_test
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          na_net_income_for_income_test <= applicable_na_net_monthly_income_standard
+
+  - name: na_application_denied_due_to_net_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-6
+              excerpt: "When the budgetary unit does not pass the net income test, the NA application is denied."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/net-income-test#na_net_income_test_passes
+              output: na_net_income_test_passes
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not na_net_income_test_passes
