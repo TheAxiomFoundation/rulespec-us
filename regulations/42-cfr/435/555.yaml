@@ -1,0 +1,337 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/42/435/555
+  summary: |-
+    "At State option, the agency may provide that an applicable individual ... is deemed to have demonstrated community engagement ... for a month" in which the individual experiences a short-term hardship event. A short-term hardship event includes listed inpatient or similar-acuity services, certain President-declared emergencies or disasters, CMS-determined high county unemployment, or outside-community travel for necessary treatment of a serious or complex medical condition. "A State must not apply paragraph (a) ... to a specified excluded individual."
+imports:
+  - us:regulations/42-cfr/435/551#applicable_individual
+rules:
+  - name: short_term_hardship_exception_implements_section_1902_xx
+    kind: source_relation
+    source_relation:
+      type: implements
+      target: us:statutes/42/1396a/xx
+      basis:
+        delegation: us:statutes/42/1396a/xx#state_must_apply_community_engagement_requirement
+    source: 42 CFR 435.550
+
+  - name: inpatient_psychiatric_service_under_age_limit
+    kind: parameter
+    dtype: Count
+    source: 42 CFR 435.555(d)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "for individuals under the age of 21"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          21
+
+  - name: high_unemployment_fixed_rate_threshold
+    kind: parameter
+    dtype: Rate
+    source: 42 CFR 435.555(d)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "8 percent"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.08
+
+  - name: high_unemployment_national_rate_multiplier
+    kind: parameter
+    dtype: Decimal
+    source: 42 CFR 435.555(d)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "1.5 times the national unemployment rate"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.5
+
+  - name: under_age_for_inpatient_psychiatric_service_category
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(d)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "for individuals under the age of 21"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#inpatient_psychiatric_service_under_age_limit
+              output: inpatient_psychiatric_service_under_age_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_age < inpatient_psychiatric_service_under_age_limit
+
+  - name: high_unemployment_rate_threshold_for_short_term_hardship
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.555(d)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "at or above the lesser of-- (i) 8 percent; or (ii) 1.5 times the national unemployment rate"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#high_unemployment_fixed_rate_threshold
+              output: high_unemployment_fixed_rate_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#high_unemployment_national_rate_multiplier
+              output: high_unemployment_national_rate_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(high_unemployment_fixed_rate_threshold, national_unemployment_rate * high_unemployment_national_rate_multiplier)
+
+  - name: inpatient_or_similar_acuity_services_short_term_hardship_event
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(d)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#under_age_for_inpatient_psychiatric_service_category
+              output: under_age_for_inpatient_psychiatric_service_category
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          request_for_inpatient_or_similar_acuity_hardship_exception_made_by_applicable_individual_or_representative
+          and (
+            individual_received_inpatient_hospital_nursing_facility_intermediate_care_facility_services_for_all_or_part_of_month
+            or (
+              individual_received_inpatient_psychiatric_hospital_services_for_under_age_service_category_for_all_or_part_of_month
+              and under_age_for_inpatient_psychiatric_service_category
+            )
+            or individual_received_other_services_of_similar_acuity_for_all_or_part_of_month
+          )
+
+  - name: presidential_emergency_or_disaster_short_term_hardship_event
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "must not require ... to make a request for the circumstances described in paragraphs (d)(2) and (3)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (
+            individual_resides_in_county_or_equivalent_with_presidential_national_emergency
+            and national_emergency_affects_ability_to_demonstrate_community_engagement_in_relevant_area
+          )
+          or (
+            individual_resides_in_county_or_equivalent_with_presidential_stafford_disaster_or_emergency
+            and (
+              stafford_incident_period_month_is_within_required_exception_duration
+              or cms_approved_extended_stafford_exception_duration_based_on_persistent_barriers
+            )
+          )
+
+  - name: high_unemployment_short_term_hardship_event
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(d)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#high_unemployment_rate_threshold_for_short_term_hardship
+              output: high_unemployment_rate_threshold_for_short_term_hardship
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          state_requested_cms_unemployment_rate_hardship_exception
+          and unemployment_rate_data_is_from_us_bls_or_other_reliable_source
+          and county_or_equivalent_unemployment_rate >= high_unemployment_rate_threshold_for_short_term_hardship
+
+  - name: outside_community_medical_travel_short_term_hardship_event
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          request_for_outside_community_medical_travel_hardship_exception_made_by_applicable_individual_or_representative
+          and medical_services_are_necessary_to_treat_serious_or_complex_medical_condition
+          and necessary_medical_services_are_not_available_within_community_of_residence
+          and (
+            individual_must_travel_outside_community_for_extended_period_to_receive_necessary_medical_services
+            or (
+              dependent_of_applicable_individual_must_travel_outside_community_for_extended_period_to_receive_necessary_medical_services
+              and (
+                applicable_individual_travels_with_dependent
+                or (
+                  not applicable_individual_travels_with_dependent
+                  and applicable_individual_took_leave_or_absented_from_community_engagement_activities_for_dependent_condition_or_travel
+                )
+              )
+            )
+          )
+
+  - name: short_term_hardship_event
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#inpatient_or_similar_acuity_services_short_term_hardship_event
+              output: inpatient_or_similar_acuity_services_short_term_hardship_event
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#presidential_emergency_or_disaster_short_term_hardship_event
+              output: presidential_emergency_or_disaster_short_term_hardship_event
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#high_unemployment_short_term_hardship_event
+              output: high_unemployment_short_term_hardship_event
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#outside_community_medical_travel_short_term_hardship_event
+              output: outside_community_medical_travel_short_term_hardship_event
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          inpatient_or_similar_acuity_services_short_term_hardship_event
+          or presidential_emergency_or_disaster_short_term_hardship_event
+          or high_unemployment_short_term_hardship_event
+          or outside_community_medical_travel_short_term_hardship_event
+
+  - name: community_engagement_deemed_demonstrated_for_short_term_hardship
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.555(a), (f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "At State option"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/555
+              excerpt: "A State must not apply paragraph (a) ... to a specified excluded individual"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/551#applicable_individual
+              output: applicable_individual
+              hash: sha256:cca95e1fa04f699fa6772bcb8f861f973d78bd86a027414e6be1cb26467e2c01
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/555#short_term_hardship_event
+              output: short_term_hardship_event
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          state_elected_short_term_hardship_exception_option
+          and applicable_individual
+          and short_term_hardship_event

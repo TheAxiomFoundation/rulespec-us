@@ -1,0 +1,316 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/42/435/557
+  summary: |-
+    The agency must use reliable information available to the State to verify community engagement compliance, deemed compliance, or specified excluded status before requesting additional information. Claims and encounter data for medical frailty verification look back to the preceding 12 months. Beginning January 1, 2028, documentation is required when reasonably available, other information must be accepted when documentation is not reasonably available, and medical-frailty statements under penalty of perjury may be accepted only once during a period of enrollment. States must apply automatic short-term hardship exceptions for specified emergency, disaster, and unemployment-based area events.
+rules:
+  - name: adjudicated_claims_lookback_months
+    kind: parameter
+    dtype: Count
+    source: 42 CFR 435.557(a), (f)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+              excerpt: "Claim(s) relevant to the individual that have been adjudicated in the preceding 12 months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: encounter_data_lookback_months
+    kind: parameter
+    dtype: Count
+    source: 42 CFR 435.557(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+              excerpt: "Encounter data, as relevant to the individual, for the preceding 12 months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: secretary_service_new_data_source_connection_deadline_months
+    kind: parameter
+    dtype: Count
+    source: 42 CFR 435.557(e)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+              excerpt: "no later than 12 months after information from the data source first becomes available"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: medical_frailty_claim_is_reliable_information_available
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(f)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/557#adjudicated_claims_lookback_months
+              output: adjudicated_claims_lookback_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          claim_is_relevant_to_individual
+          and claim_has_been_adjudicated
+          and adjudicated_claim_age_in_months <= adjudicated_claims_lookback_months
+
+  - name: medical_frailty_encounter_data_is_reliable_information_available
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(f)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/557#encounter_data_lookback_months
+              output: encounter_data_lookback_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          encounter_data_is_relevant_to_individual
+          and encounter_data_age_in_months <= encounter_data_lookback_months
+
+  - name: additional_information_request_permitted_after_reliable_information_exhausted
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(b), (c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          all_reliable_information_available_to_state_checked
+          and not compliance_deemed_compliance_or_exclusion_verified_using_reliable_information
+          and (
+            no_reliable_information_available_to_state
+            or reliable_information_not_reasonably_compatible_with_information_provided_by_or_on_behalf_of_individual
+          )
+
+  - name: documentation_required_when_reasonably_available_after_mandate
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(b)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+              excerpt: "Beginning on January 1, 2028"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '2028-01-01'
+        formula: |-
+          documentation_is_reasonably_available
+          and verification_is_not_for_medically_frail_special_medical_needs_exclusion
+          and (
+            no_reliable_information_available_to_state
+            or reliable_information_not_reasonably_compatible_with_information_provided_by_or_on_behalf_of_individual
+          )
+
+  - name: other_information_must_be_accepted_when_documentation_unavailable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(b)(2)(iii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          no_reasonably_available_documentation_exists
+          and other_information_satisfies_state_criteria_for_verification_without_documentation
+
+  - name: denial_or_termination_barred_for_absent_unavailable_documentation
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(b)(2)(iii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_unable_to_produce_documentation
+          and no_documentation_exists_or_is_reasonably_available
+          and denial_or_termination_would_be_based_solely_on_failure_to_produce_documentation
+
+  - name: prompt_enrollment_required_pending_exclusion_verification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          sufficient_information_verifies_compliance_or_deemed_compliance
+          and information_suggests_specified_excluded_status_but_more_information_needed
+          and individual_is_not_already_enrolled
+
+  - name: specified_excluded_status_reverification_barred_between_redeterminations
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_was_determined_specified_excluded_at_last_determination_redetermination_or_more_frequent_verification
+          and not agency_has_information_indicating_specified_excluded_status_changed
+
+  - name: medical_frailty_statement_may_be_accepted_once_during_period_of_enrollment
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(f)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+              excerpt: "Beginning on January 1, 2028"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '2028-01-01'
+        formula: |-
+          statement_under_penalty_of_perjury_sufficient_to_verify_medical_frailty
+          and not statement_under_penalty_of_perjury_already_accepted_for_medical_frailty_during_period_of_enrollment
+          and (
+            no_reliable_information_available_to_state
+            or reliable_information_not_reasonably_compatible_with_information_provided_by_or_on_behalf_of_individual
+          )
+
+  - name: automatic_short_term_hardship_exception_required_for_area_event
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(f)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          state_elects_optional_short_term_hardship_exception
+          and applicable_individual_required_to_demonstrate_community_engagement_for_month
+          and (
+            individual_resides_in_emergency_or_disaster_county_or_equivalent
+            or individual_resides_in_secretary_approved_unemployment_exception_county_or_equivalent
+          )
+
+  - name: secretary_service_new_data_source_connection_timely
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.557(e)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/557
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/557#secretary_service_new_data_source_connection_deadline_months
+              output: secretary_service_new_data_source_connection_deadline_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          new_data_source_contains_reliable_information_relevant_to_community_engagement_verification
+          and state_established_connection_or_approved_alternative_for_new_data_source
+          and months_since_new_data_source_first_available_through_secretary_service <= secretary_service_new_data_source_connection_deadline_months
