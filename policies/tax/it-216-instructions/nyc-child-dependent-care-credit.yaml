@@ -1,0 +1,296 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+  summary: |-
+    Caution: If your FAGI is over $30,000 or you have no children under 4 years old, stop; you do not qualify for the New York City child and dependent care credit. Worksheet 2 computes line 7 by multiplying line 1 by the line 2/line 3 ratio, capped at 100% (1.0000), and then by the NYC limitation table decimal. Full-year New York City residents enter line 7 on Form IT-216, line 24. Part-year residents complete lines 8-13: the credit first reduces New York City tax liability to zero, and remaining excess is refunded based on the ratio of resident period income to combined income.
+rules:
+  - name: nyc_credit_fagi_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 caution
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "FAGI is over $30,000"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          30000
+
+  - name: worksheet_ratio_cap
+    kind: parameter
+    dtype: Rate
+    source: IT-216-I (2025), Worksheet 2 lines 4 and 12
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "cannot exceed 100% (1.0000)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          1.0000
+
+  - name: maximum_nyc_credit_limitation_rate
+    kind: parameter
+    dtype: Rate
+    source: IT-216-I (2025), instructions for Worksheet 2, line 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "can be as much as 75%"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          0.75
+
+  - name: qualifies_for_nyc_child_dependent_care_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: IT-216-I (2025), Worksheet 2 caution and line 1 instructions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "FAGI is over $30,000"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "no children under 4 years old"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          fagi <= nyc_credit_fagi_threshold
+          and has_child_under_four_years_old
+          and qualifies_for_new_york_state_child_dependent_care_credit
+
+  - name: form_it216_line_4_child_care_expense_ratio
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: IT-216-I (2025), Worksheet 2 line 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "Divide line 2 by line 3"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "cannot exceed 100% (1.0000)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          min(worksheet_ratio_cap, form_it216_line_23_amount / form_it216_line_3a_amount)
+
+  - name: form_it216_line_5_prorated_state_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 line 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "Multiply line 1 by line 4"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          form_it216_line_14_amount * form_it216_line_4_child_care_expense_ratio
+
+  - name: nyc_credit_limitation_decimal_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: IT-216-I (2025), Worksheet 2 line 6 and instructions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "as much as 75%"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          min(maximum_nyc_credit_limitation_rate, nyc_child_dependent_care_credit_limitation_table_decimal_amount)
+
+  - name: nyc_child_dependent_care_credit_before_part_year_allocation
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 line 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "Multiply line 5 by line 6"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if qualifies_for_nyc_child_dependent_care_credit: form_it216_line_5_prorated_state_credit * nyc_credit_limitation_decimal_amount else: 0
+
+  - name: part_year_nonrefundable_nyc_child_dependent_care_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 line 8 and part-year resident instructions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if is_part_year_new_york_city_resident: min(nyc_child_dependent_care_credit_before_part_year_allocation, new_york_city_tax_liability_for_credit) else: 0
+
+  - name: part_year_excess_nyc_child_dependent_care_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 line 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "Subtract line 8 from line 7"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          max(0, nyc_child_dependent_care_credit_before_part_year_allocation - part_year_nonrefundable_nyc_child_dependent_care_credit)
+
+  - name: part_year_resident_period_income_ratio
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: IT-216-I (2025), Worksheet 2 line 12
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "Divide line 10 by line 11"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "cannot exceed 100% (1.0000)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          min(worksheet_ratio_cap, form_it360_1_line_18_column_b_amount / form_it360_1_line_18_column_a_amount)
+
+  - name: refundable_part_year_nyc_child_dependent_care_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 line 13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "Multiply line 9 by line 12"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+              excerpt: "If the result is zero percent (0%)"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if is_part_year_new_york_city_resident: part_year_excess_nyc_child_dependent_care_credit * part_year_resident_period_income_ratio else: 0
+
+  - name: form_it216_line_24_nyc_child_dependent_care_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IT-216-I (2025), Worksheet 2 lines 7 and 13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/form/tax/it-216-instructions/page-6
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if is_full_year_new_york_city_resident: nyc_child_dependent_care_credit_before_part_year_allocation else: refundable_part_year_nyc_child_dependent_care_credit
