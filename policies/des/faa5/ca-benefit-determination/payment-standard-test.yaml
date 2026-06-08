@@ -1,0 +1,137 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-5
+  summary: |-
+    The CA payment standard test is used to approve, deny, or close CA and Two Parent Employment Program (TPEP) benefits. Prospective eligibility includes meeting the needy family criteria and having less income than the payment standard for the size of the budgetary unit living in the home. Net income is subtracted from the CA payment standard; when the net unrounded payment is at least one cent, the budgetary unit is prospectively eligible.
+imports:
+  - us-az:policies/des/faa5/ca-payment-standard-a1-2fa2#ca_annual_payment_standard
+rules:
+  - name: minimum_positive_net_unrounded_payment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FAA5 CA Benefit Determination, CA Payment Standard Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-5
+              excerpt: "at least one cent"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          0.01
+
+  - name: ca_payment_standard_net_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FAA5 CA Benefit Determination, CA Payment Standard Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-5
+              excerpt: "earned income deductions are subtracted from the gross countable income to determine the net income"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          gross_countable_income - ca_earned_income_deductions
+
+  - name: ca_payment_standard_net_unrounded_payment
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FAA5 CA Benefit Determination, CA Payment Standard Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-5
+              excerpt: "Net income is subtracted from the CA payment standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-payment-standard-a1-2fa2#ca_annual_payment_standard
+              output: ca_annual_payment_standard
+              hash: sha256:6e7e560d6d2ef6c449bb667afaa40c15b91f86f8cffe32fa715b08b11d3247d8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/payment-standard-test#ca_payment_standard_net_income
+              output: ca_payment_standard_net_income
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          max(0, ca_annual_payment_standard - ca_payment_standard_net_income)
+
+  - name: ca_payment_standard_test_met
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Year
+    source: FAA5 CA Benefit Determination, CA Payment Standard Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-5
+              excerpt: "When the net unrounded payment is at least one cent, the budgetary unit is prospectively eligible."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/payment-standard-test#ca_payment_standard_net_unrounded_payment
+              output: ca_payment_standard_net_unrounded_payment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/payment-standard-test#minimum_positive_net_unrounded_payment
+              output: minimum_positive_net_unrounded_payment
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          ca_payment_standard_net_unrounded_payment >= minimum_positive_net_unrounded_payment
+
+  - name: ca_prospective_eligibility_requirements_met
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Year
+    source: FAA5 CA Benefit Determination, CA Payment Standard Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-5
+              excerpt: "Prospective eligibility includes meeting the needy family criteria and having less income than the payment standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/payment-standard-test#ca_payment_standard_test_met
+              output: ca_payment_standard_test_met
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          needy_family_criteria_met
+          and ca_payment_standard_test_met

@@ -1,0 +1,215 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+  summary: |-
+    The CA Needy Family Test is used to determine whether the dependent child resides in a needy family. The test is based on the earned and unearned income of the family of the caretaker relative. When the adult caretaker is a nonparent caretaker relative (NPCR) applying for the child only, the family's combined income cannot exceed 130% of the current FPL. When the caretaker relative is a parent or the NPCR is applying for themself and the child, the family's combined income cannot exceed 100% of the current FPL. The test is not conducted on Kinship Foster Care child-only cases.
+rules:
+  - name: npcr_child_only_needy_family_fpl_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "cannot exceed 130% of the current Federal Poverty Level (FPL)"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          1.30
+
+  - name: parent_or_npcr_self_and_child_needy_family_fpl_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "cannot exceed 100% of the current FPL"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          1.00
+
+  - name: caretaker_relative_family_combined_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "based on the earned and unearned income of the family"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          caretaker_relative_family_earned_income + caretaker_relative_family_unearned_income
+
+  - name: ca_needy_family_income_limit_branch_applies
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Year
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "adult caretaker is a nonparent caretaker relative (NPCR) ... applying for the child only"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "caretaker relative is a parent ... or the NPCR is applying for themself and the child"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          adult_caretaker_is_nonparent_caretaker_relative_applying_for_child_only
+          or caretaker_relative_is_parent_or_nonparent_caretaker_relative_applying_for_self_and_child
+
+  - name: ca_needy_family_income_limit_rate
+    kind: derived
+    entity: TanfUnit
+    dtype: Rate
+    period: Year
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "cannot exceed 130% ... cannot exceed 100%"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#npcr_child_only_needy_family_fpl_limit_rate
+              output: npcr_child_only_needy_family_fpl_limit_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#parent_or_npcr_self_and_child_needy_family_fpl_limit_rate
+              output: parent_or_npcr_self_and_child_needy_family_fpl_limit_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          if adult_caretaker_is_nonparent_caretaker_relative_applying_for_child_only: npcr_child_only_needy_family_fpl_limit_rate else: if caretaker_relative_is_parent_or_nonparent_caretaker_relative_applying_for_self_and_child: parent_or_npcr_self_and_child_needy_family_fpl_limit_rate else: 0
+
+  - name: ca_needy_family_income_limit
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "The family size of the caretaker relative is used for the CA Needy Family Test"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#ca_needy_family_income_limit_rate
+              output: ca_needy_family_income_limit_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          ca_needy_family_income_limit_rate * current_federal_poverty_level_for_caretaker_relative_family_size
+
+  - name: ca_needy_family_test_conducted
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Year
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "All members of the caretaker relative's family must be registered to the case"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "not conducted on Kinship Foster Care (KFC) child only cases and some Tribal TANF budgetary units"
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          all_members_of_caretaker_relative_family_registered_to_case
+          and not kinship_foster_care_child_only_case
+          and not tribal_tanf_budgetary_unit_for_which_ca_needy_family_test_is_not_conducted
+
+  - name: needy_family_criteria_met
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Year
+    source: FAA5 CA Benefit Determination, CA Needy Family Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/ca-benefit-determination/block-4
+              excerpt: "determine whether the dependent child resides in a needy family"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#ca_needy_family_test_conducted
+              output: ca_needy_family_test_conducted
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#ca_needy_family_income_limit_branch_applies
+              output: ca_needy_family_income_limit_branch_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#caretaker_relative_family_combined_income
+              output: caretaker_relative_family_combined_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/ca-benefit-determination/needy-family-test#ca_needy_family_income_limit
+              output: ca_needy_family_income_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-09-02'
+        formula: |-
+          ca_needy_family_test_conducted
+          and ca_needy_family_income_limit_branch_applies
+          and caretaker_relative_family_combined_income <= ca_needy_family_income_limit
