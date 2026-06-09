@@ -1,0 +1,189 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+  summary: |-
+    The gross income test is applied in eligibility and benefit determinations at 130% or 185% of FPL. Gross income is all countable income received by the budgetary unit, excluding farm self-employment loss; elderly/disabled units use only the net income test, and categorically eligible units need neither gross nor net income tests.
+rules:
+  - name: standard_gross_income_fpl_rate
+    kind: parameter
+    dtype: Rate
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "based on 130% or 185% of the Federal Poverty Level (FPL)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.30
+
+  - name: expanded_gross_income_fpl_rate
+    kind: parameter
+    dtype: Rate
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "based on 130% or 185% of the Federal Poverty Level (FPL)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.85
+
+  - name: na_gross_income_for_income_test
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "Gross income is the total of all countable income received by the budgetary unit not including the farm self-employment loss."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_countable_income_received_by_budgetary_unit_excluding_farm_self_employment_loss)
+
+  - name: applicable_na_gross_monthly_income_standard
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "based on 130% or 185% of the Federal Poverty Level (FPL)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#standard_gross_income_fpl_rate
+              output: standard_gross_income_fpl_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#expanded_gross_income_fpl_rate
+              output: expanded_gross_income_fpl_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if expanded_gross_income_test_applies: expanded_gross_income_fpl_rate * federal_poverty_level_for_budgetary_unit_size else: standard_gross_income_fpl_rate * federal_poverty_level_for_budgetary_unit_size
+
+  - name: na_gross_income_test_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "Budgetary units containing elderly or disabled participants. Only the net income test applies to these budgetary units."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "Categorically eligible budgetary units. These budgetary units are not required to meet the gross or the net income tests."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not budgetary_unit_contains_elderly_or_disabled_participant
+          and not budgetary_unit_is_categorically_eligible
+
+  - name: na_gross_income_test_passes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "The countable gross income is compared to the maximum income allowable by budgetary unit size"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#na_gross_income_for_income_test
+              output: na_gross_income_for_income_test
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#applicable_na_gross_monthly_income_standard
+              output: applicable_na_gross_monthly_income_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#na_gross_income_test_required
+              output: na_gross_income_test_required
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (not na_gross_income_test_required)
+          or na_gross_income_for_income_test <= applicable_na_gross_monthly_income_standard
+
+  - name: na_application_denied_due_to_gross_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-5
+              excerpt: "The countable gross income is compared to the maximum income allowable by budgetary unit size"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#na_gross_income_test_required
+              output: na_gross_income_test_required
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/gross-income-test#na_gross_income_test_passes
+              output: na_gross_income_test_passes
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          na_gross_income_test_required
+          and not na_gross_income_test_passes
