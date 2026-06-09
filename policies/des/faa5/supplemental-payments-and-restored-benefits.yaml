@@ -1,0 +1,201 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+  summary: |-
+    Underpayments occur when it is discovered that a budgetary unit is entitled to supplemental payments or restored benefits.
+rules:
+  - name: na_restored_benefit_lookback_limit_months
+    kind: parameter
+    dtype: Count
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Restored Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+              excerpt: "NA benefits are restored for no more than 12 months"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          12
+
+  - name: budgetary_unit_underpayment_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Policy
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          budgetary_unit_case_denied_in_error
+          or budgetary_unit_case_closed_in_error
+          or budgetary_unit_received_less_than_correct_benefit_amount_for_prior_month
+          or (
+            budgetary_unit_received_less_than_correct_benefit_amount_for_current_month
+            and current_month_benefits_already_received
+          )
+
+  - name: supplemental_payment_issuable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Supplemental Payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          budgetary_unit_entitled_to_additional_benefits_over_issued
+          and (
+            benefit_month_is_current_calendar_month
+            or benefit_month_is_future_month
+          )
+          and (
+            reported_change_indicates_additional_benefits
+            or case_read_correction_indicates_additional_benefits
+            or appeal_remand_indicates_additional_benefits
+            or oarc_recouped_more_na_or_ca_benefits_than_owed_in_overpayment
+          )
+
+  - name: na_restoration_trigger_event_occurred
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Restored Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          faa_receives_request_for_restoration_of_benefits
+          or faa_notifies_or_discovers_loss_of_benefits_occurred
+          or budgetary_unit_requests_appeal_due_to_adverse_action_resulting_in_loss_of_benefits
+          or intentional_program_violation_disqualification_reversal_notification_received
+          or budgetary_unit_receives_favorable_decision_through_appeal_judicial_or_court_action
+          or faa_discovers_application_processed_untimely
+
+  - name: na_restored_benefit_month_within_lookback_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Restored Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/supplemental-payments-and-restored-benefits#na_restored_benefit_lookback_limit_months
+              output: na_restored_benefit_lookback_limit_months
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/supplemental-payments-and-restored-benefits#na_restoration_trigger_event_occurred
+              output: na_restoration_trigger_event_occurred
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          na_restoration_trigger_event_occurred
+          and months_before_na_restoration_trigger_date <= na_restored_benefit_lookback_limit_months
+
+  - name: restored_na_benefits_issuable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Restored Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/supplemental-payments-and-restored-benefits#na_restored_benefit_month_within_lookback_limit
+              output: na_restored_benefit_month_within_lookback_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          budgetary_unit_entitled_to_additional_na_benefits
+          and benefit_month_is_before_current_calendar_month
+          and na_restored_benefit_month_within_lookback_limit
+
+  - name: restored_ca_benefits_issuable_without_month_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, Restored Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          budgetary_unit_entitled_to_additional_ca_benefits
+          and benefit_month_is_before_current_calendar_month
+          and verification_and_sufficient_documentation_support_reason_for_restoring_ca_benefits
+
+  - name: faa_caused_underpayment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DES FAA5, Supplemental Payments and Restored Benefits, FAA Caused Underpayment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/supplemental-payments-and-restored-benefits
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          faa_failed_to_allow_required_time_to_verify_expense_and_benefits_were_reduced
+          or faa_failed_to_act_within_proper_time_frame_on_reported_change_that_would_have_increased_benefits
+          or faa_failed_to_update_mass_change_information_that_would_have_increased_benefits
+          or faa_incorrectly_stopped_or_denied_benefits
+          or faa_incorrectly_calculated_benefits
+          or intentional_program_violation_disqualification_period_reversed_by_court_of_law
+          or appeal_decision_in_favor_requires_supplemental_payments_or_restored_na_benefits
