@@ -1,0 +1,181 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+  summary: |-
+    NA benefits for the first approval month are prorated from the date the application is turned in to the end of the application month. An aggregate allotment is the total first two months' benefits and is issued when the unit applies after the 15th calendar day, is eligible for the application month and following month, completes the application process, and provides required verification except postponed verification; expedites are entitled even when verification is postponed.
+rules:
+  - name: aggregate_allotment_application_day_threshold
+    kind: parameter
+    dtype: Integer
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "after the 15th calendar day of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          15
+
+  - name: aggregate_allotment_month_count
+    kind: parameter
+    dtype: Count
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "first two months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2
+
+  - name: first_approval_month_na_benefit_after_proration
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "prorated from the date the application is turned in to the end of the application month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if initial_month_proration_applies: max(0, full_application_month_na_allotment * application_month_days_from_turn_in_through_end / calendar_days_in_application_month) else: max(0, full_application_month_na_allotment)
+
+  - name: application_turned_in_after_aggregate_allotment_day_threshold
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "applies for the first month's benefits after the 15th calendar day of the month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/first-month-benefit-proration#aggregate_allotment_application_day_threshold
+              output: aggregate_allotment_application_day_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          application_turn_in_calendar_day > aggregate_allotment_application_day_threshold
+
+  - name: aggregate_allotment_verification_requirement_met
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "Provides all required verification (except postponed verification)"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "Expedites are entitled to aggregate allotments even when verification is postponed."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          all_required_verification_provided_except_postponed
+          or (expedited_budgetary_unit and verification_is_postponed)
+
+  - name: aggregate_allotment_issue_conditions_met
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "An aggregate allotment is issued to budgetary units when all of the following occur"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/first-month-benefit-proration#application_turned_in_after_aggregate_allotment_day_threshold
+              output: application_turned_in_after_aggregate_allotment_day_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/first-month-benefit-proration#aggregate_allotment_verification_requirement_met
+              output: aggregate_allotment_verification_requirement_met
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          application_turned_in_after_aggregate_allotment_day_threshold
+          and eligible_for_application_month
+          and eligible_for_following_month
+          and ongoing_eligibility_established_for_second_month
+          and initial_month_proration_applies
+          and application_process_completed
+          and aggregate_allotment_verification_requirement_met
+
+  - name: aggregate_allotment_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-8
+              excerpt: "The aggregate allotment includes the prorated month's allotment and the full benefit for the second month."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/first-month-benefit-proration#first_approval_month_na_benefit_after_proration
+              output: first_approval_month_na_benefit_after_proration
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/first-month-benefit-proration#aggregate_allotment_issue_conditions_met
+              output: aggregate_allotment_issue_conditions_met
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if aggregate_allotment_issue_conditions_met: max(0, first_approval_month_na_benefit_after_proration + full_second_month_na_benefit) else: 0
