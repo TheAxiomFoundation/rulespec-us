@@ -1,0 +1,108 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/regulation/106-cmr/364/600/block-1
+  summary: |-
+    Once a household has been determined eligible for SNAP, the case manager
+    determines the household's monthly allotment. Categorically eligible
+    households with three or more members who do not qualify for a benefit
+    because their income exceeds the level for which benefits are issued
+    cannot be denied; they must be suspended in accordance with 106 CMR
+    365.180. When the calculated amount is zero or less, the household is
+    ineligible for benefits since its net income exceeds the level at which
+    benefits are issued.
+rules:
+  - name: minimum_household_size_for_categorical_suspension
+    kind: parameter
+    dtype: Count
+    source: 106 CMR 364.600
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/600/block-1
+              excerpt: "Categorically eligible households with three or more members"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+  - name: calculated_allotment_is_zero_or_less
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.600
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/600/block-1
+              excerpt: "when the calculated amount is zero or less"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          calculated_monthly_allotment <= 0
+  - name: household_must_be_suspended
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.600
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/600/block-1
+              excerpt: "Categorically eligible households with three or more members who do not qualify for a benefit because their income exceeds the level for which benefits are issued cannot be denied. These households must be suspended"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_categorically_eligible
+          and household_size >= minimum_household_size_for_categorical_suspension
+          and calculated_allotment_is_zero_or_less
+  - name: household_ineligible_due_to_zero_allotment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.600
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/600/block-1
+              excerpt: "when the calculated amount is zero or less, the household is ineligible for benefits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          calculated_allotment_is_zero_or_less
+          and not household_must_be_suspended
+  - name: monthly_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 364.600
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/600/block-1
+              excerpt: "The resulting amount is the household's monthly allotment."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, calculated_monthly_allotment)
