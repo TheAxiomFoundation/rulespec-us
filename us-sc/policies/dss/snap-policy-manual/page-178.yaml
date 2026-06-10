@@ -1,0 +1,132 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+  summary: |-
+    "Earned and unearned educational income ... after allowable exclusions, will be averaged over the period which it is intended to cover."
+    "Except as provided in Section 13.5 Determining Deductions (3) Anticipating expenses, a deduction will be allowed only in the month the expense is billed or otherwise becomes due..."
+    "Households may elect to have fluctuating expenses averaged" and may average less-than-monthly or one-time expenses over the stated coverage or certification period.
+    "The Agency will calculate a household's expenses based on the expenses the household expects to be billed for during the certification period."
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-178#educational_income_after_allowable_exclusions
+      reason: Educational assistance exclusions are governed by Section 11.7, which is cited but not available in copied context; this module only prorates an already exclusion-adjusted educational income amount.
+    - output: us-sc:policies/dss/snap-policy-manual/page-178#allowable_deduction_category
+      reason: The source limits allowable deductions to certain dependent care, shelter, child support, and medical costs described in Chapter 12, but Chapter 12 is cited and not available in copied context.
+    - output: us-sc:policies/dss/snap-policy-manual/page-178#anticipated_actual_utility_costs_for_household_not_assigned_mua_or_bua
+      reason: The MUA and BUA classifications are cited to Section 12.5, which is unavailable, and the copied source sentence is truncated before completing the utility-cost rule.
+rules:
+  - name: educational_income_monthly_countable_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 178, educational income paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if educational_income_received_this_month or household_anticipates_receiving_educational_income_or_first_installment_this_month: earned_and_unearned_educational_income_after_allowable_exclusions / educational_income_intended_coverage_month_count else: 0
+
+  - name: billed_expense_deductible_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 178, §13.5(1) Billed expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if expense_billed_or_due_this_month and not expense_has_already_been_deducted and not household_expense_is_calculated_by_anticipation: max(0, billed_expense_amount - amount_carried_forward_from_past_billing_period) else: 0
+
+  - name: fluctuating_expense_averaged_monthly_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 178, §13.5(2) Averaging expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_elects_to_average_fluctuating_expense: max(0, fluctuating_expense_amount) / fluctuating_expense_averaging_period_month_count else: 0
+
+  - name: less_often_than_monthly_expense_averaged_forward_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 178, §13.5(2) Averaging expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_elects_to_average_less_often_than_monthly_expense: max(0, less_often_than_monthly_expense_amount) / less_often_than_monthly_expense_averaging_period_month_count else: 0
+
+  - name: one_time_expense_averaged_over_certification_period_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 178, §13.5(2) Averaging expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_elects_to_average_one_time_expense: max(0, one_time_expense_amount) / certification_period_month_count else: 0
+
+  - name: anticipated_expense_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p. 178, §13.5(3) Anticipating expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-178
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_reasonably_certain_expense_change_will_occur: max(0, expected_changed_expense_amount) else: max(0, most_recent_month_billed_expense_amount)

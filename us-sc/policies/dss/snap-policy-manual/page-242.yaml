@@ -1,0 +1,230 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+  summary: 'To be determined an ESAP household; the household must meet the following
+    requirements: (A) All household members are elderly (age 60 or older) (B) The
+    household has no earned income. (C) No member of the household receives SNAP benefits
+    under SCCAP. Households mandatory for SCCAP "Y" cannot participate in ESAP. ...
+    (D) Complete an interview at initial application and reapplication. ... Eligible
+    ESAP households are assigned a 36-month (3-year) certification period.'
+  deferred_outputs:
+  - output: us-sc:policies/dss/snap-policy-manual/page-242#esap_certification_period_months
+    reason: Generated rule used a local name that collides with a sibling RuleSpec
+      export. This output is deferred until it can be encoded with a semantic branch-specific
+      name without creating ambiguous sibling imports.
+  - output: us-sc:policies/dss/snap-policy-manual/page-242#esap_household_certification_period_months
+    reason: Generated rule depends on an output that validation deferred because it
+      flattened thresholded, capped, base-limited, or cross-referenced mechanics,
+      or borrowed an unrelated same-named section term.
+rules:
+- name: member_of_household
+  kind: data_relation
+  data_relation:
+    predicate: member_of_household
+    arity: 2
+    arguments:
+    - Person
+    - Household
+  source: SC SNAP Manual 19.11(A), page 242
+- name: esap_elderly_age_threshold
+  kind: parameter
+  dtype: Integer
+  source: SC SNAP Manual 19.11(A), page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: All household members are elderly (age 60 or older)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '60'
+- name: esap_certification_period_years
+  kind: parameter
+  dtype: Count
+  source: SC SNAP Manual 19.11, page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: 36-month (3-year) certification period
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '3'
+- name: person_at_least_esap_elderly_age
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: SC SNAP Manual 19.11(A), page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: All household members are elderly (age 60 or older)
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: age 60 or older
+  versions:
+  - effective_from: '0001-01-01'
+    formula: person_age >= esap_elderly_age_threshold
+- name: esap_verification_requirements_satisfied
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SC SNAP Manual 19.11, page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: unless questionable
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: If information regarding non-citizen status is needed
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "(\n  not information_regarding_noncitizen_status_is_needed\n  or noncitizen_status_verification_provided\n\
+      )\nand (\n  not information_is_questionable\n  or questionable_information_verification_provided\n\
+      )"
+- name: esap_household
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SC SNAP Manual 19.11, page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: The household has no earned income.
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: Households mandatory for SCCAP "Y" cannot participate in ESAP.
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: Complete an interview at initial application and reapplication.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'len(member_of_household) > 0
+
+      and count_where(member_of_household, person_at_least_esap_elderly_age) == len(member_of_household)
+
+      and household_has_no_earned_income
+
+      and count_where(member_of_household, member_receives_snap_under_sccap) == 0
+
+      and not household_mandatory_for_sccap_y
+
+      and household_completed_required_esap_interview
+
+      and esap_verification_requirements_satisfied'
+- name: esap_household_certification_period_years
+  kind: derived
+  entity: Household
+  dtype: Count
+  period: Month
+  source: SC SNAP Manual 19.11, page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: Eligible ESAP households are assigned a 36-month (3-year) certification
+            period.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if esap_household: esap_certification_period_years else: 0'
+- name: esap_indicator_on_chip_inrd_is_y
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SC SNAP Manual 19.11, page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: the ESAP indicator on CHIP INRD screen will be coded "Y"
+  versions:
+  - effective_from: '0001-01-01'
+    formula: esap_household
+- name: esap_benefit_calculation_uses_regular_snap_rules
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SC SNAP Manual 19.11, page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: ESAP benefits will be calculated the same as for any regular SNAP
+            household.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: esap_household
+- name: sccap_e_household_must_participate_in_esap
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SC SNAP Manual 19.11(C), page 242
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-242
+          excerpt: Households that meet the definition for SCCAP but participate in
+            the regular SNAP under SCCAP "E" must participate in ESAP if they meet
+            ESAP eligibility.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'household_meets_sccap_definition
+
+      and household_participates_in_regular_snap_under_sccap_e
+
+      and esap_household'

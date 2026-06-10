@@ -1,0 +1,150 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+  summary: |-
+    At initial certification, a household will be assigned one utility allowance based on utility cost: actual verified utility cost if not entitled to MUA or BUA, MUA if entitled, BUA if entitled, or no utility deduction. To be entitled to the MUA, the household must incur and be billed for, or expect to incur during the next heating or cooling season, heating or cooling costs; or must have received a LIHEAP payment greater than $20 within the past 12 months.
+rules:
+  - name: liheap_payment_threshold_for_mua
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: SNAP Manual 12.5(2)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+              excerpt: "LIHEAP payment greater than $20 within the past 12 months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+
+  - name: household_has_mua_heating_or_cooling_cost
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 12.5(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_incurred_and_billed_separately_for_heating_cost
+          or household_expects_to_incur_heating_cost_next_heating_or_cooling_season
+          or household_incurred_and_billed_separately_for_cooling_cost
+          or household_expects_to_incur_cooling_cost_next_heating_or_cooling_season
+
+  - name: household_received_mua_qualifying_liheap_payment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 12.5(2)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+              excerpt: "LIHEAP payment greater than $20 within the past 12 months"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#liheap_payment_threshold_for_mua
+              output: liheap_payment_threshold_for_mua
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_received_liheap_payment_within_past_12_months
+          and household_liheap_payment_amount > liheap_payment_threshold_for_mua
+
+  - name: household_entitled_to_mandatory_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 12.5(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#household_has_mua_heating_or_cooling_cost
+              output: household_has_mua_heating_or_cooling_cost
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#household_received_mua_qualifying_liheap_payment
+              output: household_received_mua_qualifying_liheap_payment
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_has_mua_heating_or_cooling_cost
+          or household_received_mua_qualifying_liheap_payment
+
+  - name: household_actual_verified_utility_cost_allowance_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 12.5(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#household_entitled_to_mandatory_utility_allowance
+              output: household_entitled_to_mandatory_utility_allowance
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_has_actual_verified_utility_cost
+          and not household_entitled_to_mandatory_utility_allowance
+          and not household_entitled_to_basic_utility_allowance
+
+  - name: household_basic_utility_allowance_deduction_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 12.5(1), Note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-163
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_entitled_to_basic_utility_allowance
+          and household_submitted_utility_verification

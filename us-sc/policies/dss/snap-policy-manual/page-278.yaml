@@ -1,0 +1,201 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+  summary: |-
+    QC findings are reported to the county on SNAP QC Active or Caper Reports; error reports include the SNAP QC Corrective Action form, which must be returned within 10 working days from mailing. SNAP households are required to cooperate in a QC review. Refusal results in state-review case closure until cooperation or 125 days after the annual review period; federal-review case closure until cooperation or seven months after the annual review period; reapplication subject to 100% verification except expedited-service households; and examination for possible willful-misrepresentation referral.
+rules:
+  - name: corrective_action_return_deadline_working_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 25.3, Quality Control (QC) Findings
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+              excerpt: "within 10 working days from the date of mailing"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: state_review_noncooperation_closure_limit_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 25.4(A), State reviews
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+              excerpt: "125 days after the end of the annual review period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          125
+
+  - name: federal_review_noncooperation_closure_limit_months
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 25.4(A), Federal reviews
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+              excerpt: "seven months after the end of the annual review period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          7
+
+  - name: reapplication_verification_rate_after_qc_refusal
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual 25.4(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+              excerpt: "subject to 100% verification of eligibility requirements"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.00
+
+  - name: county_corrective_action_form_timely_return_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 25.3, Quality Control (QC) Findings
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-278#corrective_action_return_deadline_working_days
+              output: corrective_action_return_deadline_working_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          qc_error_report_includes_corrective_action_form
+          and working_days_since_mailing <= corrective_action_return_deadline_working_days
+
+  - name: state_review_case_closure_for_refusal_to_cooperate_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 25.4(A), State reviews
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-278#state_review_noncooperation_closure_limit_days
+              output: state_review_noncooperation_closure_limit_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_refused_to_cooperate_in_state_qc_review
+          and not household_has_cooperated_in_qc_review
+          and days_after_annual_review_period_end <= state_review_noncooperation_closure_limit_days
+
+  - name: federal_review_case_closure_for_refusal_to_cooperate_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 25.4(A), Federal reviews
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-278#federal_review_noncooperation_closure_limit_months
+              output: federal_review_noncooperation_closure_limit_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_refused_to_cooperate_in_federal_qc_review
+          and not household_has_cooperated_in_qc_review
+          and months_after_annual_review_period_end <= federal_review_noncooperation_closure_limit_months
+
+  - name: reapplication_subject_to_full_verification_after_qc_refusal
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 25.4(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-278#reapplication_verification_rate_after_qc_refusal
+              output: reapplication_verification_rate_after_qc_refusal
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_reapplies_after_refusal_to_cooperate_in_qc_review
+          and reapplication_verification_rate_after_qc_refusal == 1.00
+          and not household_is_eligible_for_expedited_service
+
+  - name: possible_willful_misrepresentation_referral_examination_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 25.4(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-278
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_refused_to_cooperate_in_qc_review

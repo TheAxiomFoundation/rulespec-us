@@ -1,0 +1,254 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+  summary: |-
+    "The eligibility and benefit level of any remaining household members of a household containing individuals determined to be ineligible for refusal to obtain or provide an SSN or for not meeting the time limit for ABAWD, will be determined as follows: (A) Resources. The resources of such ineligible members will continue to count in their entirety ... (B) Income. A pro rata share ... (C) Deductible expenses. The 20 percent earned income deduction will apply ... EXCEPTION: If the household is entitled to the MUA or BUA, the expense will not be prorated ... (D) Eligibility and benefit level. Such ineligible members will not be included when determining their households' sizes ..." The page also begins rules for ineligible non-citizens, including full counting of their resources.
+rules:
+  - name: earned_income_deduction_rate_for_prorated_ineligible_member_income
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual p.189(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+              excerpt: "The 20 percent earned income deduction"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+
+  - name: resources_of_ssn_or_abawd_ineligible_members_counted_for_remaining_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit: resources_of_members_ineligible_for_ssn_refusal_or_abawd_time_limit else: 0
+
+  - name: prorated_income_of_ssn_or_abawd_ineligible_members_counted_for_remaining_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit and household_member_count > 0: max(0, gross_income_of_members_ineligible_for_ssn_refusal_or_abawd_time_limit - allowable_exclusions_from_income_of_members_ineligible_for_ssn_refusal_or_abawd_time_limit) * max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) / household_member_count else: 0
+
+  - name: earned_income_deduction_for_prorated_ssn_or_abawd_ineligible_member_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+              excerpt: "The 20 percent earned income deduction will apply to the prorated income earned by such ineligible members"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit and household_member_count > 0: earned_income_deduction_rate_for_prorated_ineligible_member_income * max(0, earned_income_of_members_ineligible_for_ssn_refusal_or_abawd_time_limit_after_allowable_exclusions) * max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) / household_member_count else: 0
+
+  - name: prorated_child_support_paid_or_billed_to_ssn_or_abawd_ineligible_members_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit and household_member_count > 0: child_support_payments_paid_by_or_billed_to_members_ineligible_for_ssn_refusal_or_abawd_time_limit * max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) / household_member_count else: 0
+
+  - name: prorated_shelter_expenses_paid_or_billed_to_ssn_or_abawd_ineligible_members_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(C) and Exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit and household_member_count > 0: shelter_expenses_other_than_mua_bua_paid_by_or_billed_to_members_ineligible_for_ssn_refusal_or_abawd_time_limit * max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) / household_member_count else: 0
+
+  - name: prorated_dependent_care_paid_or_billed_to_ssn_or_abawd_ineligible_members_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit and household_member_count > 0: dependent_care_expenses_paid_by_or_billed_to_members_ineligible_for_ssn_refusal_or_abawd_time_limit * max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) / household_member_count else: 0
+
+  - name: mua_bua_expense_allowed_without_proration
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(2)(C) Exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_entitled_to_mua_or_bua: mua_bua_expense else: 0
+
+  - name: household_size_for_benefit_level_excluding_ssn_or_abawd_ineligible_members
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: SNAP Manual p.189(2)(D)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit: max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) else: household_member_count
+
+  - name: household_size_for_standard_deduction_excluding_ssn_or_abawd_ineligible_members
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: SNAP Manual p.189(2)(D)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit: max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) else: household_member_count
+
+  - name: household_size_for_income_standards_excluding_ssn_or_abawd_ineligible_members
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: SNAP Manual p.189(2)(D)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit: max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) else: household_member_count
+
+  - name: household_size_for_resource_limits_excluding_ssn_or_abawd_ineligible_members
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: SNAP Manual p.189(2)(D)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_member_ineligible_for_ssn_refusal_or_abawd_time_limit: max(0, household_member_count - members_ineligible_for_ssn_refusal_or_abawd_time_limit_count) else: household_member_count
+
+  - name: resources_of_ineligible_noncitizens_counted_for_remaining_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual p.189(3)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-189
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_contains_ineligible_noncitizen: resources_of_ineligible_noncitizens else: 0

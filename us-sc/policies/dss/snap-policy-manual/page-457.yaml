@@ -1,0 +1,213 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+  summary: "\u201CExcluded funds that are kept in a separate account, and that are\
+    \ not commingled in an account with non-excluded funds, will retain their resource\
+    \ exclusion for an unlimited period of time.\u201D \u201CAll other excluded moneys\
+    \ which are commingled in an account with non-excluded funds will retain their\
+    \ exemption for six months from the date they are commingled. After six months\
+    \ from the date of commingling, all funds in the commingled account will be counted\
+    \ as a resource.\u201D \u201CAt the time of application, households subject to\
+    \ resource determination will be asked to provide information regarding any resources\
+    \ ... transferred within the 3-month period immediately preceding the date of\
+    \ application.\u201D"
+  deferred_outputs:
+  - output: us-sc:policies/dss/snap-policy-manual/page-457#vehicle_excluded_due_to_inaccessible_value
+    reason: Vehicle exclusion for inaccessible value depends on missing Section 10.7
+      Exclusions from Resources (S), which is not provided in context.
+  - output: us-sc:policies/dss/snap-policy-manual/page-457#student_or_self_employment_commingled_exclusion_retained
+    reason: The special commingled-funds rule for student and self-employment household
+      resources depends on missing Section 10.7 Exclusions from Resources (K), which
+      is not provided in context.
+rules:
+- name: inaccessible_vehicle_sale_return_limit
+  kind: parameter
+  dtype: Money
+  period: Month
+  unit: USD
+  source: SNAP Manual page 457, Section 10.7 vehicle exclusion item (ix)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+          excerpt: not more than $1,500
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1500'
+- name: other_commingled_excluded_money_retention_months
+  kind: parameter
+  dtype: Count
+  period: Month
+  source: SNAP Manual page 457, Section 10.8 Handling of Excluded Funds
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+          excerpt: will retain their exemption for six months
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '6'
+- name: transfer_lookback_months
+  kind: parameter
+  dtype: Count
+  period: Month
+  source: SNAP Manual page 457, Section 10.9 Transfer of Resources
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+          excerpt: within the 3-month period immediately preceding the date of application
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '3'
+- name: leased_vehicle_excluded
+  kind: derived
+  entity: Asset
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual page 457, Section 10.7 vehicle exclusion item (x)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'asset_is_vehicle
+
+      and vehicle_is_leased
+
+      and vehicle_title_retained_by_owner
+
+      and not household_has_bought_vehicle'
+- name: leased_vehicle_value_counted_as_lump_sum_when_refunded
+  kind: derived
+  entity: Asset
+  dtype: Money
+  period: Month
+  unit: USD
+  source: SNAP Manual page 457, note following Section 10.7 vehicle exclusion item
+    (x)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if dollar_value_accrued_in_lease_is_refunded_to_household: dollar_value_accrued_in_lease
+      else: 0'
+- name: non_commingled_excluded_funds_retain_exclusion
+  kind: derived
+  entity: Asset
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual page 457, Section 10.8 Handling of Excluded Funds
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'funds_are_excluded
+
+      and kept_in_separate_account
+
+      and not commingled_with_non_excluded_funds'
+- name: other_commingled_excluded_money_retain_exemption
+  kind: derived
+  entity: Asset
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual page 457, Section 10.8 Handling of Excluded Funds
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-457#other_commingled_excluded_money_retention_months
+          output: other_commingled_excluded_money_retention_months
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'funds_are_excluded
+
+      and commingled_with_non_excluded_funds
+
+      and other_excluded_money_not_student_or_self_employment_resource
+
+      and months_since_commingled <= other_commingled_excluded_money_retention_months'
+- name: other_commingled_account_counted_as_resource
+  kind: derived
+  entity: Asset
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual page 457, Section 10.8 Handling of Excluded Funds
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-457#other_commingled_excluded_money_retention_months
+          output: other_commingled_excluded_money_retention_months
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'funds_are_excluded
+
+      and commingled_with_non_excluded_funds
+
+      and other_excluded_money_not_student_or_self_employment_resource
+
+      and months_since_commingled > other_commingled_excluded_money_retention_months'
+- name: household_must_provide_recent_transfer_information
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual page 457, Section 10.9 Transfer of Resources
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-457
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'at_time_of_application
+
+      and household_subject_to_resource_determination
+
+      and household_member_or_counted_ineligible_or_disqualified_person_transferred_resource
+
+      and transferred_resource_within_transfer_lookback_months_before_application'

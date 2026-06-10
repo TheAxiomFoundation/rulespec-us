@@ -1,0 +1,218 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+  summary: |-
+    An individual meeting the SCCAP "Y" definition may be excluded from SCCAP "Y" and participate in regular SNAP under SCCAP "E" only if verified shelter and utility expenses exceed the higher standard (over $701 per month), out-of-pocket medical expenses exceed $50 per month, or the individual pays legally obligated child support outside the household. To be determined a SCCAP "Y" household, SDX pay status must be C01, E01, M01, or M02; marital status must be AI, BI, or DI; federal living arrangement code must be A; the individual must not have earned income; and gross amount must equal the appropriate federal benefit rate with frequency code C.
+rules:
+  - name: sccap_y_shelter_utility_higher_standard_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 237, SCCAP "Y" exclusion conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+              excerpt: "over $701 per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          701
+
+  - name: sccap_y_medical_expense_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 237, SCCAP "Y" exclusion conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+              excerpt: "in excess of $50 per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          50
+
+  - name: sccap_y_shelter_utility_expense_exception_verified
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 237, SCCAP "Y" exclusion conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+              excerpt: "shelter and utility expenses in excess of the higher standard (over $701 per month)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-237#sccap_y_shelter_utility_higher_standard_threshold
+              output: sccap_y_shelter_utility_higher_standard_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_verified_shelter_and_utility_expenses
+          and shelter_and_utility_expenses > sccap_y_shelter_utility_higher_standard_threshold
+
+  - name: sccap_y_medical_expense_exception_verified
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 237, SCCAP "Y" exclusion conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+              excerpt: "out-of-pocket medical expenses in excess of $50 per month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-237#sccap_y_medical_expense_threshold
+              output: sccap_y_medical_expense_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_verified_out_of_pocket_medical_expenses
+          and out_of_pocket_medical_expenses > sccap_y_medical_expense_threshold
+
+  - name: sccap_y_child_support_exception_verified
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 237, SCCAP "Y" exclusion conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+              excerpt: "paying legally obligated child support to someone outside of the household"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_verified_legally_obligated_child_support
+          and pays_legally_obligated_child_support_to_someone_outside_household
+
+  - name: sccap_y_exclusion_to_regular_snap_under_sccap_e_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 237, SCCAP "Y" exclusion conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-237#sccap_y_shelter_utility_expense_exception_verified
+              output: sccap_y_shelter_utility_expense_exception_verified
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-237#sccap_y_medical_expense_exception_verified
+              output: sccap_y_medical_expense_exception_verified
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-237#sccap_y_child_support_exception_verified
+              output: sccap_y_child_support_exception_verified
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_meets_sccap_y_definition
+          and (sccap_y_shelter_utility_expense_exception_verified
+          or sccap_y_medical_expense_exception_verified
+          or sccap_y_child_support_exception_verified)
+
+  - name: sccap_y_household_determined_from_sdx
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 237, section 19.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          sdx_pay_status_code_is_c01_e01_m01_or_m02
+          and sdx_marital_status_code_is_ai_bi_or_di
+          and sdx_federal_living_arrangement_code_is_a
+          and not household_individual_has_earned_income
+          and sdx_gross_amount_equals_appropriate_federal_benefit_rate
+          and sdx_gross_amount_frequency_code_is_c
+
+  - name: ssi_resource_eligible_household_meets_snap_resource_eligibility
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 237, section 19.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_meets_resource_eligibility_for_ssi
+
+  - name: sccap_y_snap_benefits_begin_on_application_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual page 237, section 19.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-237
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          day_is_sccap_y_application_date
+          and sccap_y_application_received_from_source_other_than_ssa
+          and applicant_receiving_ssi_at_time_of_sccap_application

@@ -1,0 +1,133 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+  summary: |-
+    Unless questionable, the Agency must accept the household's statement as to fair market value of any vehicle six years old or older. The fair market value of custom made, antique and classic vehicles must be verified, regardless of age. In determining household resources, excluded resources include one burial plot per household member; resources with cash value not accessible to the household; and specified earned income tax credit exclusions. ABLE-account exclusions and Federal earned-income-tax-credit exclusions tied to cited IRC sections are deferred pending upstream citation encoding.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-451#able_account_excluded_resource
+      reason: The ABLE-account exclusion depends on the unavailable cited definition in section 529A.
+    - output: us-sc:policies/dss/snap-policy-manual/page-451#federal_earned_income_tax_credit_excluded_resource
+      reason: The Federal earned income tax credit branch depends on the unavailable cited mechanics of section 3507 of the Internal Revenue Code.
+rules:
+  - name: older_vehicle_age_threshold_years
+    kind: parameter
+    dtype: Integer
+    source: SNAP Manual 451 vehicle valuation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+              excerpt: "six years old or older"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          6
+
+  - name: vehicle_household_statement_of_fair_market_value_must_be_accepted
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 451 vehicle valuation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle
+          and asset_age_years >= older_vehicle_age_threshold_years
+          and household_stated_fair_market_value
+          and not information_provided_by_household_is_questionable
+          and not asset_is_custom_made_vehicle
+          and not asset_is_antique_vehicle
+          and not asset_is_classic_vehicle
+
+  - name: vehicle_fair_market_value_must_be_verified
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 451 vehicle valuation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle
+          and (asset_is_custom_made_vehicle or asset_is_antique_vehicle or asset_is_classic_vehicle)
+
+  - name: burial_plot_excluded_resource
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 451 section 10.7(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+              excerpt: "One burial plot per household member"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_burial_plot
+          and burial_plot_is_within_one_per_household_member
+
+  - name: inaccessible_cash_value_resource_excluded
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 451 section 10.7(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          resource_has_cash_value
+          and not cash_value_accessible_to_household
+
+  - name: state_or_local_earned_income_tax_credit_excluded_for_twelve_months
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 451 section 10.7(D)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-451
+              excerpt: "Any Federal, State or local earned income tax credit received by any household member will be excluded for 12 months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_state_or_local_earned_income_tax_credit
+          and household_was_participating_in_snap_at_receipt
+          and household_participates_continuously_during_twelve_month_period

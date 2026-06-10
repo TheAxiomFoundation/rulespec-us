@@ -1,0 +1,222 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+  summary: Households with an elderly or disabled member must meet net income eligibility
+    standards; households without such a member must meet both net and gross standards;
+    categorically eligible households do not have to meet either. Gross income standards
+    are 130 percent of the Federal income poverty level. Annual poverty guidelines
+    are divided by 12 for monthly gross and net standards, rounding upward as necessary.
+rules:
+- name: gross_income_standard_percentage
+  kind: parameter
+  dtype: Rate
+  source: SNAP Manual ch. 11, section 11.1(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+          excerpt: 130 percent of the Federal income poverty level
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1.30'
+- name: monthly_standard_conversion_months
+  kind: parameter
+  dtype: Integer
+  source: SNAP Manual ch. 11, section 11.1 notes
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+          excerpt: divided by 12 to determine the monthly
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '12'
+- name: gross_income
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: SNAP Manual ch. 11, section 11.1(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+  versions:
+  - effective_from: '0001-01-01'
+    formula: total_non_excluded_income_before_deductions
+- name: net_income
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: SNAP Manual ch. 11, section 11.1(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+  versions:
+  - effective_from: '0001-01-01'
+    formula: gross_income - allowable_deductions
+- name: monthly_gross_income_standard
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: SNAP Manual ch. 11, section 11.1(1) note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+          excerpt: 130 percent of the annual income poverty guidelines will be divided
+            by 12
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#gross_income_standard_percentage
+          output: gross_income_standard_percentage
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#monthly_standard_conversion_months
+          output: monthly_standard_conversion_months
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: ceil((annual_federal_income_poverty_guideline * gross_income_standard_percentage)
+      / monthly_standard_conversion_months)
+- name: monthly_net_income_standard
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: SNAP Manual ch. 11, section 11.1(2) note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+          excerpt: annual income poverty guidelines will be divided by 12
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#monthly_standard_conversion_months
+          output: monthly_standard_conversion_months
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: ceil(annual_federal_income_poverty_guideline / monthly_standard_conversion_months)
+- name: gross_income_standard_met
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual ch. 11, section 11.1(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#gross_income
+          output: gross_income
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#monthly_gross_income_standard
+          output: monthly_gross_income_standard
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: gross_income <= monthly_gross_income_standard
+- name: net_income_standard_met
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual ch. 11, section 11.1(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#net_income
+          output: net_income
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#monthly_net_income_standard
+          output: monthly_net_income_standard
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: net_income <= monthly_net_income_standard
+- name: income_eligibility_standards_met
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual ch. 11, section 11.1
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-128
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#gross_income_standard_met
+          output: gross_income_standard_met
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-128#net_income_standard_met
+          output: net_income_standard_met
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "household_is_categorically_eligible\nor (household_contains_elderly_or_disabled_member\
+      \ and net_income_standard_met)\nor (\n  not household_contains_elderly_or_disabled_member\n\
+      \  and net_income_standard_met\n  and gross_income_standard_met\n)"

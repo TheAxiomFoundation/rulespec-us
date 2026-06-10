@@ -1,0 +1,156 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+  summary: |-
+    "Only the following will be excluded from household income and no other income will be excluded:" demonstration project vendor payments; educational assistance; educational assistance vendor payments, except living-expense vendor assistance is treated the same as direct educational assistance; federal law income exclusions; and GA vendor payments except some housing vendor payments. Worker’s compensation benefits include amounts deducted to repay claims for intentional program violations.
+  deferred_outputs:
+    - output: us-sc:policies/dss/snap-policy-manual/page-152#educational_assistance_excluded_from_household_income
+      reason: The source cites Section 11.7 for Educational Assistance, and that upstream source is not available; the cited section is needed to compute the educational-assistance exclusion surface.
+    - output: us-sc:policies/dss/snap-policy-manual/page-152#federal_law_income_exclusion_applies
+      reason: The source points to Section 11.8 for Federal Law Income Exclusions, and that upstream source is not available in this slice.
+rules:
+  - name: workers_compensation_benefit_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 152, Worker’s Compensation Benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          workers_compensation_cash_paid_to_employee + workers_compensation_amount_deducted_to_repay_intentional_program_violation_claims
+  - name: demonstration_project_vendor_payment_excluded_from_household_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 152, Section 11.6(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_in_kind_or_vendor_payment_normally_excluded_as_income
+          and payment_converted_in_whole_or_part_to_direct_cash_payment
+          and conversion_under_federally_authorized_demonstration_project_or_federal_law_waiver
+  - name: educational_assistance_vendor_payment_excluded_from_household_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 152, Section 11.6(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          educational_assistance_provided_to_third_party_on_behalf_of_household
+          and not educational_assistance_vendor_payment_for_living_expenses
+  - name: educational_assistance_vendor_payment_treated_as_direct_educational_assistance
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 152, Section 11.6(C) exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          educational_assistance_provided_to_third_party_on_behalf_of_household
+          and educational_assistance_vendor_payment_for_living_expenses
+  - name: tanf_excluded_educational_assistance_excluded_from_snap_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 152, Section 11.6(B)-(C) notes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          educational_assistance_excluded_under_south_carolina_tanf_rules
+  - name: ga_vendor_payment_excluded_from_household_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 152, Section 11.6(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          ga_vendor_payment_made_under_state_or_local_ga_or_comparable_basic_assistance_program
+          and (
+            not ga_vendor_payment_for_housing
+            or ga_housing_vendor_payment_for_energy_assistance
+          )
+  - name: ga_housing_vendor_payment_counted_as_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 152, Section 11.6(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-152
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          ga_vendor_payment_made_under_state_or_local_ga_or_comparable_basic_assistance_program
+          and ga_vendor_payment_for_housing
+          and not ga_housing_vendor_payment_for_energy_assistance
