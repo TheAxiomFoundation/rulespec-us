@@ -1,0 +1,256 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+  summary: |-
+    EPICS selects Food and Nutrition Services debtors for NC DOR debt setoff when the claim is in Collection or Terminated status, the claim type is IHE or IPV, selected claim current balances total $50.00 or more, the debtor is not in recoupment status within the last 60 days, the debtor is delinquent, and the NC Debt Setoff Indicator is not H, L, S, or X. Delinquency requires the claim establishment date to be at least 60 days prior to the current date and either no county approved repayment agreement or a skipped/short payment under such an agreement.
+rules:
+  - name: minimum_selected_claim_current_balance_for_debt_setoff
+    kind: parameter
+    dtype: Money
+    period: Day
+    unit: USD
+    source: FS 850.02(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "Total of all selected claim current balance amount(s) must be $50.00 or more."
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          50
+
+  - name: delinquency_claim_establishment_age_days
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: FS 850.02(A)(5)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "Claim Establishment Date ... must be at least 60 days prior to the Current Date"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          60
+
+  - name: recoupment_lookback_days
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: FS 850.02(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "identified as a recoupment in the last 60 days"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          60
+
+  - name: claim_status_dor_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          claim_referral_status_is_collection
+          or claim_referral_status_is_terminated
+
+  - name: claim_type_dor_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          claim_type_is_ihe
+          or claim_type_is_ipv
+
+  - name: selected_claim_current_balance_meets_debt_setoff_minimum
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "Total of all selected claim current balance amount(s) must be $50.00 or more."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#minimum_selected_claim_current_balance_for_debt_setoff
+              output: minimum_selected_claim_current_balance_for_debt_setoff
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          total_selected_claim_current_balance_amount >= minimum_selected_claim_current_balance_for_debt_setoff
+
+  - name: claim_not_in_recent_recoupment_status
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "Must not be in Recoupment status (identified as a recoupment in the last 60 days)."
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          not claim_identified_as_recoupment_within_recoupment_lookback_period
+
+  - name: claim_debtor_delinquent_on_dor_eligible_claim
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "Claim Establishment Date ... at least 60 days prior ... and ... no ... repayment agreement, or ... skipped payments or paid less"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#delinquency_claim_establishment_age_days
+              output: delinquency_claim_establishment_age_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          days_since_claim_establishment >= delinquency_claim_establishment_age_days
+          and (
+            not debtor_entered_county_approved_repayment_agreement
+            or debtor_skipped_payments_under_county_approved_repayment_agreement
+            or debtor_paid_less_than_county_approved_repayment_amount
+          )
+
+  - name: nc_debt_setoff_indicator_allows_submission
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+              excerpt: "Must not have a NC Debt Setoff Indicator of H, L, S, or X."
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          not nc_debt_setoff_indicator_is_h
+          and not nc_debt_setoff_indicator_is_l
+          and not nc_debt_setoff_indicator_is_s
+          and not nc_debt_setoff_indicator_is_x
+
+  - name: claim_debtor_selected_for_nc_dor_debt_setoff
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 850.02(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#claim_status_dor_eligible
+              output: claim_status_dor_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#claim_type_dor_eligible
+              output: claim_type_dor_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#selected_claim_current_balance_meets_debt_setoff_minimum
+              output: selected_claim_current_balance_meets_debt_setoff_minimum
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#claim_not_in_recent_recoupment_status
+              output: claim_not_in_recent_recoupment_status
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#claim_debtor_delinquent_on_dor_eligible_claim
+              output: claim_debtor_delinquent_on_dor_eligible_claim
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-1#nc_debt_setoff_indicator_allows_submission
+              output: nc_debt_setoff_indicator_allows_submission
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          claim_status_dor_eligible
+          and claim_type_dor_eligible
+          and selected_claim_current_balance_meets_debt_setoff_minimum
+          and claim_not_in_recent_recoupment_status
+          and claim_debtor_delinquent_on_dor_eligible_claim
+          and nc_debt_setoff_indicator_allows_submission

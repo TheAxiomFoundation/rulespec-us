@@ -1,0 +1,140 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+  summary: |-
+    Section 600 Change #01-2025 October 01, 2025. "SSI is suspended or terminated: a. A task is generated for SSI individuals 60 days after SSI income is suspended or terminated. b. Update appropriate evidence and send a DSS-8553, Notice of Adverse Action, to terminate the case." "Household member is deceased: Update appropriate evidence and close the SNAP case. A Notice of Adverse Action is not required." "Disqualified and Ineligible individuals: Update appropriate evidence and send a DSS-8553 to terminate the SNAP case if the individual is" in the listed categories, including lottery and/or gambling winnings "in the amount of $4,500 or more." "An Authorized Representative report... Household member is institutionalized: Update appropriate evidence and send a DSS-8553 to terminate the case."
+rules:
+  - name: ssi_task_generation_wait_days
+    kind: parameter
+    dtype: Count
+    source: FNS 600 Section 600, Change #01-2025, SSI suspended or terminated
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "60 days after SSI income is suspended or terminated"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "October 01, 2025"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          60
+  - name: lottery_or_gambling_winnings_disqualification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 600 Section 600, Change #01-2025, disqualified and ineligible individuals
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "lottery and/or gambling winnings in the amount of $4,500 or more"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "October 01, 2025"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          4500
+  - name: ssi_suspension_task_generated
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 600 Section 600, Change #01-2025, SSI suspended or terminated
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "A task is generated for SSI individuals 60 days after SSI income is suspended or terminated."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          days_since_ssi_income_suspended_or_terminated_for_ssi_individual >= ssi_task_generation_wait_days
+  - name: individual_disqualified_or_ineligible_for_snap_case_termination
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 600 Section 600, Change #01-2025, disqualified and ineligible individuals
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "send a DSS-8553 to terminate the SNAP case if the individual is"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ineligible_alien
+          or ineligible_as_fleeing_felon_or_probation_parole_violator
+          or disqualified_for_enumeration
+          or disqualified_for_controlled_substance_felony_conviction
+          or disqualified_for_fraudulently_misrepresenting_identity_and_residence
+          or disqualified_for_intentional_program_violation
+          or (won_lottery_or_gambling_winnings and lottery_or_gambling_winnings_amount >= lottery_or_gambling_winnings_disqualification_threshold)
+          or aggravated_sexual_abuse_murder_or_sexual_assault_violator
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments: [Person, Household]
+    source: FNS 600 Section 600, Change #01-2025, household member and individual case actions
+  - name: snap_case_requires_adverse_action_notice_to_terminate
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 600 Section 600, Change #01-2025, DSS-8553 termination actions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "send a DSS-8553, Notice of Adverse Action, to terminate the case"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_ssi_is_suspended_or_terminated
+          or authorized_representative_reports_household_member_institutionalized
+          or count_where(member_of_household, individual_disqualified_or_ineligible_for_snap_case_termination) >= 1
+  - name: snap_case_closure_without_adverse_action_notice_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 600 Section 600, Change #01-2025, household member deceased
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-600-simplified-nutritional-assistance-program-snap/page-6
+              excerpt: "Household member is deceased: Update appropriate evidence and close the SNAP case. A Notice of Adverse Action is not required."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          count_where(member_of_household, household_member_is_deceased) >= 1

@@ -1,0 +1,78 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-9
+  summary: |-
+    390.07 CHILD TAX CREDIT ... refundable income tax credit of up to $2,000 per child. This credit is excluded from consideration as a resource for the month of receipt and the month following receipt. 390.08 ... Subtract from the account value any money which was counted as income in the month and any penalties or fees for early withdrawal.
+rules:
+  - name: maximum_child_tax_credit_per_child
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.07 Child Tax Credit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-9
+              excerpt: "up to $2,000 per child"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          2000
+
+  - name: child_tax_credit_resource_exclusion
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.07 Child Tax Credit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-9
+              excerpt: "excluded from consideration as a resource for the month of receipt and the month following receipt"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-9
+              excerpt: "up to $2,000 per child"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-390-resources/page-9#maximum_child_tax_credit_per_child
+              output: maximum_child_tax_credit_per_child
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          if child_tax_credit_received_in_current_month or child_tax_credit_received_in_immediately_prior_month: min(child_tax_credit_amount_remaining_in_resource, maximum_child_tax_credit_per_child * child_count_for_child_tax_credit) else: 0
+
+  - name: countable_account_resource_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.08(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-9
+              excerpt: "Subtract from the account value any money which was counted as income in the month and any penalties or fees for early withdrawal."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          max(0, account_value - money_counted_as_income_in_month - early_withdrawal_penalties_or_fees)

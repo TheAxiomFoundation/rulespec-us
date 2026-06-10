@@ -1,0 +1,122 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+  summary: |-
+    "Use the actual dependent care expense, including cents; do not round and convert amounts paid weekly, bi-weekly, or semi-monthly to a monthly amount." "Enter the actual monthly converted expense paid for each dependent in NC FAST." "If one dependent care payment is paid for more than one child or incapacitated adult, enter each child's or incapacitated adult's portion."
+    "A FNS unit is entitled to a shelter/utility deduction when shelter and/or utility expenses exceed 50% of the monthly income after the earned income, standard, medical, dependent care, and child support deduction have been subtracted." "Only that portion of the shelter and/or utility expense which represents the regular monthly payment is used." "Allow a deduction for expenses that are incurred or billed, whether paid or not, up to the monthly shelter cap." "If the FNS unit contains a specified person, it is not subject to the shelter cap."
+rules:
+  - name: shelter_excess_threshold_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 340.05(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+              excerpt: "exceed 50% of the monthly income"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          0.50
+
+  - name: monthly_dependent_care_expense_to_enter_for_dependent
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340 dependent care deduction entry instructions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          if dependent_care_payment_covers_more_than_one_child_or_incapacitated_adult: dependent_care_payment_portion_for_this_dependent else: actual_monthly_converted_dependent_care_expense_paid_for_dependent
+
+  - name: adjusted_monthly_income_after_shelter_prior_deductions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340.05(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          monthly_income - earned_income_deduction - standard_deduction - medical_deduction - dependent_care_deduction - child_support_deduction
+
+  - name: household_shelter_utility_expense_allowed_for_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340.05(B)-(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          if shelter_or_utility_expense_incurred_or_billed and fns_unit_responsible_for_shelter_or_utility_expense: (if fns_unit_contains_specified_person: regular_monthly_shelter_and_utility_expense else: min(regular_monthly_shelter_and_utility_expense, monthly_shelter_cap)) else: 0
+
+  - name: shelter_utility_deduction_entitlement
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 340.05(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+              excerpt: "exceed 50% of the monthly income"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          household_shelter_utility_expense_allowed_for_deduction > shelter_excess_threshold_rate * adjusted_monthly_income_after_shelter_prior_deductions
+
+  - name: shelter_utility_deduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340.05(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-4
+              excerpt: "exceed 50% of the monthly income"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          max(0, household_shelter_utility_expense_allowed_for_deduction - shelter_excess_threshold_rate * adjusted_monthly_income_after_shelter_prior_deductions)

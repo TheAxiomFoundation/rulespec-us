@@ -1,0 +1,282 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+  summary: |-
+    Count as a resource any EITC payments left at the end of the 12-month exclusion period. Exclude mandatory GI Bill salary-reduction funds. Exclude certain jointly owned resources of a battered-spouse shelter resident, property that cannot be sold for a significant return, and excluded funds kept separate or temporarily commingled.
+rules:
+  - name: eitc_exclusion_period_months
+    kind: parameter
+    dtype: Count
+    source: FNS 390 Resources, Section 390, page 15, EITC payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+              excerpt: "12-month exclusion period"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          12
+
+  - name: commingled_excluded_funds_exclusion_period_months
+    kind: parameter
+    dtype: Count
+    source: FNS 390 Resources, Section 390, page 15, Combined Funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+              excerpt: "six months from the date of commingling"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          6
+
+  - name: sale_cost_resource_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 390 Resources, Section 390, page 15, Property That Cannot Be Sold for a Significant Return
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+              excerpt: "50 percent or more of the applicable resource limit"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          0.50
+
+  - name: significant_return_full_value_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 390 Resources, Section 390, page 15, Property That Cannot Be Sold for a Significant Return
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+              excerpt: "full value of the resource is less than $3,000"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          3000
+
+  - name: eitc_payment_remaining_after_exclusion_counts_as_resource
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, EITC payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+              excerpt: "left at the end of the 12-month exclusion period"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-390-resources/page-15#eitc_exclusion_period_months
+              output: eitc_exclusion_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_eitc_payment
+          and months_since_eitc_payment_received >= eitc_exclusion_period_months
+
+  - name: mandatory_gi_bill_salary_reduction_fund_excluded_from_resources
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, GI Bill funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_gi_bill_fund
+          and asset_set_aside_as_mandatory_salary_reduction_for_military_personnel
+          and asset_used_to_fund_veterans_educational_act
+
+  - name: battered_spouse_shelter_joint_resource_excluded
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Resources of Battered Woman
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          applicant_resides_in_battered_spouse_shelter
+          and asset_owned_jointly_with_former_household_member
+          and shelter_resident_access_to_resource_value_depends_on_joint_owner_agreement
+          and joint_owner_still_resides_in_former_household
+
+  - name: battered_spouse_shelter
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Resources of Battered Woman
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          facility_is_public_or_private_nonprofit_residential_facility
+          and facility_serves_battered_spouses_and_children
+          and (not facility_serves_other_individuals or facility_has_long_term_area_set_aside_only_for_battered_spouses_and_children)
+
+  - name: property_cannot_be_sold_for_significant_return
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Property That Cannot Be Sold for a Significant Return
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-390-resources/page-15#sale_cost_resource_limit_rate
+              output: sale_cost_resource_limit_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-390-resources/page-15#significant_return_full_value_limit
+              output: significant_return_full_value_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          not asset_is_vehicle
+          and not asset_is_financial_instrument
+          and expected_cost_to_sell_resource >= sale_cost_resource_limit_rate * applicable_resource_limit
+          and full_value_of_resource < significant_return_full_value_limit
+
+  - name: excluded_funds_in_separate_account_excluded_from_resources
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Combined Funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_excluded_funds
+          and funds_kept_in_separate_account
+
+  - name: commingled_excluded_funds_temporarily_excluded_from_resources
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Combined Funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+              excerpt: "six months from the date of commingling"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-390-resources/page-15#commingled_excluded_funds_exclusion_period_months
+              output: commingled_excluded_funds_exclusion_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_excluded_funds
+          and excluded_funds_are_combined_with_countable_funds
+          and months_since_commingling < commingled_excluded_funds_exclusion_period_months
+
+  - name: prorated_student_or_self_employed_commingled_funds_excluded_from_resources
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Combined Funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          excluded_resources_of_student_or_self_employed_member_were_prorated_as_income
+          and prorated_excluded_resources_are_commingled_with_countable_funds
+          and within_period_over_which_resources_were_prorated
+
+  - name: commingled_account_funds_count_as_resource_after_exclusion_period
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 Resources, Section 390, page 15, Combined Funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-15
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          funds_are_in_commingled_account
+          and exclusion_period_for_commingled_funds_has_ended

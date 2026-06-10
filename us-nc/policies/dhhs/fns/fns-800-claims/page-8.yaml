@@ -1,0 +1,249 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+  summary: |-
+    Responsible household members must be 18 years or old at the time of the overissuance, included in the FNS Unit, someone who should have been included in the FNS Unit, or an emancipated minor head of household. Do not include as a debtor someone who was included in the FNS Unit when it is proven that person no longer lived in the household. A local agency has 180 days to investigate a referral and an additional 180 days to establish a claim after Date of Discovery. Suspected overissuance or IPV referrals must be entered into EPICS within 10 business days. IPV with no determinable overissuance requires a $1.00 claim within 180 days, except when the casehead has no SSN.
+rules:
+  - name: referral_investigation_deadline_days
+    kind: parameter
+    dtype: Count
+    source: Section 800.H
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "180 days to investigate a referral"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          180
+
+  - name: claim_establishment_deadline_days_after_discovery
+    kind: parameter
+    dtype: Count
+    source: Section 800.H
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "additional 180 days to establish a claim"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          180
+
+  - name: epics_referral_entry_deadline_business_days
+    kind: parameter
+    dtype: Count
+    source: Section 800.H.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "entered into EPICS within 10 business days"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          10
+
+  - name: ipv_no_overissuance_claim_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Section 800.H.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "established for $1.00"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          1.00
+
+  - name: responsible_household_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Section 800.G
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          person_was_aged_at_least_18_at_time_of_overissuance
+          and (
+            person_was_included_in_fns_unit
+            or person_should_have_been_included_in_fns_unit
+            or person_was_emancipated_minor_head_of_household
+          )
+          and not person_was_included_in_fns_unit_but_proven_no_longer_lived_in_household
+
+  - name: epics_referral_entry_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Section 800.H.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "within 10 business days"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          suspected_overissuance_or_ipv_referral_made_to_program_integrity
+          and business_days_since_referral_to_program_integrity <= epics_referral_entry_deadline_business_days
+
+  - name: date_of_discovery_entry_required_for_open_epics_referral
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Section 800.I.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "within 180 days of the Referral Date"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          epics_referral_has_been_created
+          and date_of_discovery_is_still_zero
+          and days_since_referral_date >= referral_investigation_deadline_days
+
+  - name: claim_establishment_required_after_overissuance_discovery
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Section 800.H.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "within 180 days from the Date of Discovery"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          overissuance_determined_during_investigation
+          and days_since_date_of_discovery <= claim_establishment_deadline_days_after_discovery
+
+  - name: referral_unsubstantiation_required_when_no_overissuance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Section 800.H.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          investigation_determined_no_overissuance_occurred_or_can_be_determined
+
+  - name: ipv_no_overissuance_dollar_claim_required
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Day
+    unit: USD
+    source: Section 800.H.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "$1.00"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          if ipv_occurred_but_no_overissuance_can_be_determined and casehead_has_social_security_number: ipv_no_overissuance_claim_amount else: 0
+
+  - name: ipv_no_overissuance_claim_must_be_established_within_deadline
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Section 800.H.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+              excerpt: "within a 180 days from the Date of Discovery"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-8
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          ipv_occurred_but_no_overissuance_can_be_determined
+          and casehead_has_social_security_number
+          and days_since_date_of_discovery <= claim_establishment_deadline_days_after_discovery

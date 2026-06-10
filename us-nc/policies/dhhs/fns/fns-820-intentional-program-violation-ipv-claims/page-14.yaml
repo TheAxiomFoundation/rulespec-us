@@ -1,0 +1,181 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+  summary: |-
+    NC FAST automatically begins allotment reduction when the last cash payment date in EPICS is more than two months delinquent, or when cash payments are posted as "FSC." Participating households that choose cash payments before recoupment must pay a higher amount than 20% of the allotment or $20, whichever is greater. A nonparticipating household may request a Fair Hearing within 90 days of the Notice of Overissuance; collection action ceases once a Fair Hearing has been requested.
+rules:
+  - name: cash_payment_delinquency_month_threshold
+    kind: parameter
+    dtype: Count
+    source: FNS 820, page 14, B.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "more than two months delinquent"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          2
+
+  - name: participating_cash_payment_allotment_rate_floor
+    kind: parameter
+    dtype: Rate
+    source: FNS 820, page 14, B.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "20% of the allotment"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          0.20
+
+  - name: participating_cash_payment_dollar_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 820, page 14, B.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "$20, whichever is greater"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          20
+
+  - name: fair_hearing_request_deadline_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FNS 820, page 14, C.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "within 90 days of the date of the Notice of Overissuance"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          90
+
+  - name: participating_cash_payment_minimum_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 820, page 14, B.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "higher amount than 20% of the allotment or $20, whichever is greater"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14#participating_cash_payment_allotment_rate_floor
+              output: participating_cash_payment_allotment_rate_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14#participating_cash_payment_dollar_floor
+              output: participating_cash_payment_dollar_floor
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          max(participating_cash_payment_allotment_rate_floor * monthly_allotment_amount, participating_cash_payment_dollar_floor)
+
+  - name: allotment_reduction_automatically_begins
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 14, B.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "more than two months delinquent, or when cash payments are posted as \"FSC.\""
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14#cash_payment_delinquency_month_threshold
+              output: cash_payment_delinquency_month_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          last_cash_payment_delinquent_months > cash_payment_delinquency_month_threshold
+          or cash_payments_posted_as_fsc
+
+  - name: fair_hearing_request_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 820, page 14, C.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "within 90 days of the date of the Notice of Overissuance"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14#fair_hearing_request_deadline_days
+              output: fair_hearing_request_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          days_since_notice_of_overissuance <= fair_hearing_request_deadline_days
+
+  - name: collection_action_ceases_after_fair_hearing_request
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 820, page 14, C.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-14
+              excerpt: "Cease all collection action once a Fair Hearing has been requested."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          fair_hearing_has_been_requested

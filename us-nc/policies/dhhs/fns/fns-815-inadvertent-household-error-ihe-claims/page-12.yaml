@@ -1,0 +1,152 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+  summary: '"A debtor may not appeal the DSS-8658 after a claim has been remanded
+    back to the local agency." "The allotment is reduced by 10% or $10, whichever
+    is greater. NC FAST recoups the entire allotment if the allotment is $10 or less."
+    "Do not initiate allotment reduction on initial allotments." A FNS unit may make
+    a voluntary EBT-account payment toward an outstanding FNS claim; one-time reductions
+    may be orally authorized, while non-one-time reductions require written authorization
+    on DSS-8217 signed by the head of household and caseworker.'
+rules:
+- name: dss_8658_appeal_available_after_claim_remand
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 815 page 12 note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+  versions:
+  - effective_from: '2017-09-20'
+    formula: 'debtor_has_dss_8658
+
+      and not claim_has_been_remanded_back_to_local_agency'
+- name: allotment_reduction_minimum_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 815 page 12, Section D.3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+          excerpt: or $10, whichever is greater
+  versions:
+  - effective_from: '2017-09-20'
+    formula: '10'
+- name: entire_allotment_recoupment_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 815 page 12, Section D.3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+          excerpt: if the allotment is $10 or less
+  versions:
+  - effective_from: '2017-09-20'
+    formula: '10'
+- name: allotment_reduction_applies
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: FNS 815 page 12, Section D.3 note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+  versions:
+  - effective_from: '2017-09-20'
+    formula: 'household_has_outstanding_fns_claim
+
+      and not allotment_is_initial_allotment'
+- name: local_allotment_reduction_amount
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: FNS 815 page 12, Section D.3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+          excerpt: reduced by 10% or $10, whichever is greater
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+          excerpt: recoups the entire allotment if the allotment is $10 or less
+  versions:
+  - effective_from: '2017-09-20'
+    formula: "if allotment_reduction_applies:\n  if monthly_allotment_amount <= entire_allotment_recoupment_threshold:\n\
+      \    max(0, monthly_allotment_amount)\n  else:\n    max(allotment_reduction_minimum_amount,\
+      \ allotment_reduction_rate * max(0, monthly_allotment_amount))\nelse:\n  0"
+- name: cash_voluntary_repayment_agreement_binding
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: FNS 815 page 12, Section D.2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+  versions:
+  - effective_from: '2017-09-20'
+    formula: 'dss_8604_signed_by_debtor
+
+      and dss_8604_signed_by_local_agency_representative
+
+      and not debtor_defaults_on_dss_8604'
+- name: voluntary_ebt_debit_authorized
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: FNS 815 page 12, Section D.4.a
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-12
+  versions:
+  - effective_from: '2017-09-20'
+    formula: "fns_unit_chooses_voluntary_ebt_payment_toward_outstanding_claim\nand\
+      \ (\n  (ebt_debit_is_one_time_reduction and oral_permission_given_in_person_or_by_telephone\
+      \ and dss_8217_documents_verbal_reduction)\n  or\n  (not ebt_debit_is_one_time_reduction\
+      \ and written_authorization_provided_on_dss_8217 and dss_8217_signed_by_caseworker\
+      \ and (dss_8217_signed_by_head_of_household or dss_8217_authorized_by_head_of_household_spouse_or_authorized_representative))\n\
+      )"
+imports:
+- us-nc:policies/dhhs/fns/fns-810-administrative-error-ae-claims/page-10#allotment_reduction_rate

@@ -1,0 +1,168 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+  summary: |-
+    390.14 NON-COUNTABLE RESOURCES: excludes household goods and personal effects; mortgage escrow accounts; installment contract sales producing income consistent with fair market value; resources of an incorporated business; portions of resources counted as income; energy assistance payments or allowances; and EITC payments for 12 months from receipt if FNS participation conditions continue, with certain administrative breaks of one month or less disregarded.
+rules:
+  - name: eitc_resource_exclusion_period_months
+    kind: parameter
+    dtype: Count
+    source: FNS 390.14(G)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+              excerpt: "Exclude these payments for 12 months from the month of receipt."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          12
+
+  - name: eitc_administrative_break_maximum_months
+    kind: parameter
+    dtype: Count
+    source: FNS 390.14(G)(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+              excerpt: "Breaks in participation of one month or less due to administrative reasons"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          1
+
+  - name: eitc_payment_within_resource_exclusion_period
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390.14(G)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+              excerpt: "Month of receipt is month 1 of the 12-month exclusion period."
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+              excerpt: "Exclude these payments for 12 months from the month of receipt."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          months_since_eitc_receipt_count >= 1
+          and months_since_eitc_receipt_count <= eitc_resource_exclusion_period_months
+
+  - name: eitc_participation_requirement_met
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390.14(G)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+              excerpt: "Breaks in participation of one month or less due to administrative reasons"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          eitc_recipient_was_fns_participant_when_payment_received
+          and (
+            eitc_recipient_continues_to_participate_through_exclusion_period
+            or (
+              break_in_participation_due_to_administrative_reason
+              and break_in_participation_month_count <= eitc_administrative_break_maximum_months
+            )
+          )
+
+  - name: eitc_payment_excluded_from_resources
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390.14(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_eitc_payment
+          and eitc_payment_within_resource_exclusion_period
+          and eitc_participation_requirement_met
+
+  - name: asset_excluded_from_fns_resources
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390.14(A)-(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_household_good_or_personal_effect
+          or asset_is_mortgage_escrow_account
+          or installment_contract_sale_produces_income_consistent_with_fair_market_value
+          or asset_is_resource_of_incorporated_business
+          or asset_portion_was_counted_as_income_for_period_intended_to_cover
+          or asset_is_energy_assistance_payment_or_allowance_under_federal_state_or_local_law
+          or eitc_payment_excluded_from_resources
+
+  - name: online_account_unused_for_qualified_expense_counted_as_liquid_resource
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390 page 14 carryover text
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-14
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          asset_is_funds_in_the_online_account
+          and not funds_from_that_online_account_used_for_qualified_expense

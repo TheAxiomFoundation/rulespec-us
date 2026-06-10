@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+  summary: |-
+    Money intercepted by DOR is applied to all selected claims for a single program. A DOR intercept for Food and Nutrition Services can not be applied to a Work First or Medicaid claim under any circumstance. The debtor is refunded any money intercepted that exceeds the total owed by the debtor for that program. DOR intercept is applied to the debt even if the debtor becomes nondelinquent from the time of the intercept to the end of the 30 day notice period. Debtors should expect refunds 8 to 10 weeks after interception. All NC Debt Setoff payments are recorded by EPICS with "N" for the method of collection.
+rules:
+  - name: notice_period_days_after_intercept
+    kind: parameter
+    dtype: Count
+    source: Section 850.07(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+              excerpt: "end of the 30 day notice period"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          30
+
+  - name: refund_expected_minimum_weeks_after_interception
+    kind: parameter
+    dtype: Count
+    source: Section 850.07(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+              excerpt: "refunds 8 to 10 weeks after interception"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          8
+
+  - name: refund_expected_maximum_weeks_after_interception
+    kind: parameter
+    dtype: Count
+    source: Section 850.07(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+              excerpt: "refunds 8 to 10 weeks after interception"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          10
+
+  - name: nc_debt_setoff_method_of_collection_code
+    kind: parameter
+    dtype: String
+    source: Section 850.07(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+              excerpt: "recorded by EPICS with \"N\" for the 'method of collection'"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          "N"
+
+  - name: dor_intercept_may_be_applied_to_target_claim
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: Section 850.07(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          payment_is_dor_intercept
+          and target_claim_is_selected_for_debt_setoff
+          and target_claim_is_for_same_program_as_intercept
+          and not target_claim_is_work_first_claim
+          and not target_claim_is_medicaid_claim
+
+  - name: dor_intercept_applies_to_debt_despite_nondelinquency
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: Section 850.07(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+              excerpt: "applied to the debt even if the debtor becomes nondelinquent"
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          payment_is_dor_intercept
+          and debtor_became_nondelinquent_from_intercept_to_end_of_notice_period
+
+  - name: intercepted_overcollection_refund_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Day
+    unit: USD
+    source: Section 850.07(D), Section 850.07(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          if payment_is_dor_intercept: max(0, intercepted_amount_for_program - total_owed_by_debtor_for_program) else: 0
+
+  - name: nc_debt_setoff_payment_recorded_method_code
+    kind: derived
+    entity: Payment
+    dtype: String
+    period: Day
+    source: Section 850.07(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-850-nc-debt-setoff-collection-dor-procedures/page-4#nc_debt_setoff_method_of_collection_code
+              output: nc_debt_setoff_method_of_collection_code
+              hash: sha256:local
+    versions:
+      - effective_from: '2010-06-01'
+        formula: |-
+          if payment_is_nc_debt_setoff_payment: nc_debt_setoff_method_of_collection_code else: ""

@@ -1,0 +1,210 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+  summary: |-
+    If good cause is established and the agency cannot schedule the second interview until after the 20th day but before or after the 30th day following application, schedule as soon as possible, allow ten days for verifications, do not deny on the 30th day, pend under FNS 420.03, and provide benefits from the original application date if eligible. Households that fail to contact the agency by the 30th day must reapply.
+rules:
+  - name: verification_response_period_days
+    kind: parameter
+    dtype: Count
+    source: FNS 415 Interviewing, Section H.1.b and H.2.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+              excerpt: "Allow the household ten days to provide all necessary verifications"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          10
+
+  - name: second_interview_late_threshold_days
+    kind: parameter
+    dtype: Count
+    source: FNS 415 Interviewing, Section H.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+              excerpt: "after the 20th day but before the 30th day"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          20
+
+  - name: application_thirtieth_day_deadline
+    kind: parameter
+    dtype: Count
+    source: FNS 415 Interviewing, Sections H.1, H.2, and I
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+              excerpt: "after the 30th day following the date of application"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          30
+
+  - name: agency_second_interview_delay_before_thirtieth_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section H.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-415-interviewing/page-7#second_interview_late_threshold_days
+              output: second_interview_late_threshold_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-415-interviewing/page-7#application_thirtieth_day_deadline
+              output: application_thirtieth_day_deadline
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          good_cause_established
+          and agency_cannot_schedule_second_interview_until_day > second_interview_late_threshold_days
+          and agency_cannot_schedule_second_interview_until_day < application_thirtieth_day_deadline
+
+  - name: agency_second_interview_delay_after_thirtieth_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section H.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-415-interviewing/page-7#application_thirtieth_day_deadline
+              output: application_thirtieth_day_deadline
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          good_cause_established
+          and agency_cannot_schedule_second_interview_until_day > application_thirtieth_day_deadline
+
+  - name: allow_ten_days_for_verifications_after_agency_delay
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section H.1.b and H.2.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-415-interviewing/page-7#verification_response_period_days
+              output: verification_response_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          (agency_second_interview_delay_before_thirtieth_day or agency_second_interview_delay_after_thirtieth_day)
+          and verification_days_allowed == verification_response_period_days
+
+  - name: application_must_not_be_denied_on_thirtieth_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section H.1.c and H.2.c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-415-interviewing/page-7#application_thirtieth_day_deadline
+              output: application_thirtieth_day_deadline
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          (agency_second_interview_delay_before_thirtieth_day or agency_second_interview_delay_after_thirtieth_day)
+          and current_day_after_application == application_thirtieth_day_deadline
+
+  - name: benefits_from_original_application_date_after_agency_delay
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section H.1.e and H.2.e
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          household_determined_eligible
+          and (agency_second_interview_delay_before_thirtieth_day or agency_second_interview_delay_after_thirtieth_day)
+
+  - name: household_must_reapply_after_no_contact_by_thirtieth_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section I
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-415-interviewing/page-7#application_thirtieth_day_deadline
+              output: application_thirtieth_day_deadline
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          household_failed_to_contact_agency
+          and current_day_after_application == application_thirtieth_day_deadline

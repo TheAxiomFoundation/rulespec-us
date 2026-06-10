@@ -1,0 +1,136 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+  summary: |-
+    "allow the customer 20% of his reported and verified medical expenses as a deduction." Section 340.17 lists allowable medical expenses not covered by Medicare Qualified Beneficiaries, Medicare, Medicaid, MQB, and CAP, including prescriptions, over-the-counter medications or supplies, private medical insurance premium, medical care, lodging, transportation, dental care, corrective lenses subject to a cataract-surgery exception, and specified Medicaid items.
+rules:
+  - name: reported_verified_medical_expense_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 340 Deductions, page 25
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+              excerpt: "20% of his reported and verified medical expenses"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          0.20
+
+  - name: reported_verified_medical_expense_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340 Deductions, page 25
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+              excerpt: "20% of his reported and verified medical expenses as a deduction"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-340-deductions/page-25#reported_verified_medical_expense_deduction_rate
+              output: reported_verified_medical_expense_deduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          reported_verified_medical_expense_deduction_rate * max(0, reported_and_verified_medical_expenses)
+
+  - name: mqb_noncovered_allowable_medical_expense
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340.17(A), page 25
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          expense_not_covered_by_medicare_qualified_beneficiary_program
+          and (
+            expense_is_prescription
+            or expense_is_over_the_counter_medication_or_supply
+            or expense_is_private_medical_insurance_premium
+            or expense_is_non_county_initiated_medical_care_lodging_or_transportation
+            or expense_is_dental_care
+            or (expense_is_corrective_lenses_for_eyes and not cataract_surgery_is_done)
+          )
+
+  - name: medicare_noncovered_allowable_medical_expense
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340.17(B), page 25
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          expense_not_covered_by_medicare
+          and (
+            expense_is_prescription
+            or expense_is_over_the_counter_medication_or_supply
+            or expense_is_private_medical_insurance_premium
+            or expense_is_medical_care_lodging_or_transportation
+            or expense_is_dental_care
+            or (expense_is_corrective_lenses_for_eyes and not cataract_surgery_is_done)
+          )
+
+  - name: medicaid_noncovered_allowable_medical_expense
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340.17(C), page 25
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-25
+              excerpt: "Over six prescriptions"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          expense_not_covered_by_medicaid
+          and (
+            (expense_is_over_six_prescriptions and not prescription_over_six_is_life_threatening)
+            or expense_is_over_the_counter_medication_or_supply
+            or expense_is_private_medical_insurance_premium
+            or expense_is_non_county_initiated_medical_care_lodging_or_transportation
+            or expense_is_flu_shot
+            or expense_is_routine_foot_care
+            or expense_is_artificial_limb
+            or expense_is_hearing_aid_or_supply
+          )

@@ -1,0 +1,128 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+  summary: |-
+    H. Apprenticeship is a component that is an employer-driven, "learn-while-you- earn" program that combines on-the-job training ... with job-related instruction in curricula tied to the attainment of national skills standards. 245.03 PARTICIPANT REIMBURSEMENT REQUIREMENTS A. The FNS E&T Program requires that participants are reimbursed for actual expenses incurred (e.g. transportation, books and personal safety items). ... Participant expenses that are paid by the Employment and Training Partner are to be received by the participant within 30 calendar days of compliance. ... Reimburse participants for transportation and other expenses ... 1. Actual expenses incurred up to the amount the county has agreed upon per month; or 2. A flat monthly fee, for expenses incurred, up to the amount the county has agreed upon; or 3. A predetermined prorated amount that is specified in the county E&T Plan of Action.
+  deferred_outputs:
+    - output: us-nc:policies/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6#apprenticeship_component
+      reason: The source defines Apprenticeship as an E&T component, but the supported RuleSpec entity list does not include a program-component entity.
+rules:
+  - name: partner_reimbursement_payment_deadline_calendar_days
+    kind: parameter
+    dtype: Integer
+    source: FNS 245.03(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+              excerpt: "within 30 calendar days of compliance"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          30
+
+  - name: local_dss_reimbursement_payable_to_participant
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 245.03(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          expense_reimbursed_by_local_dss
+          and et_partner_confirmed_participant_compliance
+          and reimbursement_in_accordance_with_county_employment_and_training_plan_of_action
+
+  - name: partner_reimbursement_timing_requirement_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 245.03(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+              excerpt: "within 30 calendar days of compliance"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          not participant_expenses_paid_by_employment_and_training_partner
+          or (
+            participant_received_partner_payment_within_calendar_days_after_compliance <= partner_reimbursement_payment_deadline_calendar_days
+            and partner_payment_in_accordance_with_reimbursement_agreement_and_plan_of_action
+          )
+
+  - name: actual_expense_reimbursement_method_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 245.03(B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          min(max(0, actual_reimbursable_transportation_and_other_expenses_incurred), max(0, county_agreed_monthly_reimbursement_amount))
+
+  - name: flat_monthly_fee_reimbursement_method_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 245.03(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          if participant_incurred_reimbursement_expenses: min(max(0, flat_monthly_fee_for_expenses_incurred), max(0, county_agreed_monthly_reimbursement_amount)) else: 0
+
+  - name: prorated_reimbursement_method_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 245.03(B)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-245-employment-and-training-e-and-t/page-6
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          if prorated_amount_specified_in_county_et_plan_of_action: max(0, predetermined_prorated_reimbursement_amount_specified_in_county_et_plan_of_action) else: 0

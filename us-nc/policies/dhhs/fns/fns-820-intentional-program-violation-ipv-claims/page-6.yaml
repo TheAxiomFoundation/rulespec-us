@@ -1,0 +1,134 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+  summary: |-
+    Use the actual unreported income received by each household member, actual expenses for deductions (except utility expenses), household size, and other household circumstances for unreported information/changes.
+    EXCEPTION: Do not allow the earned income deduction for that portion of the earned income which was not reported. If the household reports part but not all earned income, allow the deduction for the part that was reported.
+    Use the Program Integrity trial budget for calculation. Enter unreported earned income as unearned on the Program Integrity trial budget to prevent earned income deductions. The claim amount is the difference between the correct allotment and the allotment the household received.
+    For each month of the overissuance, verify each source of unreported income. Use actual income; do not convert.
+    Use the gross quarterly income, divided by three months, to obtain the average amount per month.
+  deferred_outputs:
+    - output: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6#utility_deductions_used_for_overissuance
+      reason: The source directs allowable utility-expense deductions to Section 4080.22, which is not available in copied RuleSpec context.
+    - output: us-nc:policies/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6#claim_amount_when_first_pay_date_cannot_be_obtained
+      reason: The source directs cases where first-pay information cannot be obtained to Section 820.05 for further instructions; that upstream source is not available.
+rules:
+  - name: des_quarterly_average_month_count
+    kind: parameter
+    dtype: Count
+    source: FNS 820 IPV Claims, page 6, section C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+              excerpt: "Use the gross quarterly income, divided by three months"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          3
+
+  - name: unreported_wages_used_for_overissuance
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820 IPV Claims, page 6, section C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+              excerpt: "Use actual income; do not convert. Use the Division of Employment Security (DES) wage match when actual wages are not available"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if actual_wages_are_available: actual_unreported_wages_received else: if employment_period_month_count < des_quarterly_average_month_count: des_gross_income_for_employment_period / employment_period_month_count else: des_gross_quarterly_income / des_quarterly_average_month_count
+
+  - name: earned_income_deduction_base_for_overissuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820 IPV Claims, page 6, section B exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+              excerpt: "Do not allow the earned income deduction for that portion of the earned income which was not reported"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          min(max(0, actual_earned_income_received), max(0, reported_earned_income_amount))
+
+  - name: unreported_earned_income_treated_as_unearned_in_trial_budget
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820 IPV Claims, page 6, section B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+              excerpt: "Enter unreported earned income as unearned on the Program Integrity trial budget to prevent earned income deductions"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          max(0, actual_earned_income_received - reported_earned_income_amount)
+
+  - name: nonutility_deductions_used_for_overissuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820 IPV Claims, page 6, section B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+              excerpt: "Use deductions that were allowed in the original budget unless there was an unreported change in the month of overissuance"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if unreported_change_affects_nonutility_deduction_in_month: max(0, actual_verified_nonutility_expenses) else: max(0, original_nonutility_deductions_allowed)
+
+  - name: claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820 IPV Claims, page 6, section B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-6
+              excerpt: "The claim amount is the difference between the correct allotment and the allotment the household received"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          max(0, allotment_household_received - correct_allotment)

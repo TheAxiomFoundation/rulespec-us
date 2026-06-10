@@ -1,0 +1,84 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-835-report-of-erroneous-issuance-dss-1682/page-3
+  summary: '"For claims, use only the months of overissuance. For the months of underissuance,
+    always enter zeros..." "For restored benefits enter the allotment received and
+    correct allotment as indicated... The amount in the overissuance/underissuance
+    column will be a negative amount to indicate an underissuance." "Restore benefits
+    when the total of column 8k is negative. A claim is appropriate when the total
+    in column 8k is positive."'
+rules:
+- name: item_8k_overissuance_underissuance_amount
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: DSS-1682 Item 8k instructions, Section 835 page 3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-835-report-of-erroneous-issuance-dss-1682/page-3
+  versions:
+  - effective_from: '2017-04-01'
+    formula: "if report_is_for_claim:\n  max(0, allotment_received - correct_allotment)\n\
+      else:\n  if report_is_for_restoration:\n    min(0, allotment_received - correct_allotment)\n\
+      \  else:\n    0"
+- name: item_9_restore_benefits_required
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: DSS-1682 Item 9 instructions, Section 835 page 3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-835-report-of-erroneous-issuance-dss-1682/page-3
+          excerpt: Restore benefits when the total of column 8k is negative.
+  versions:
+  - effective_from: '2017-04-01'
+    formula: item_8k_overissuance_underissuance_amount < 0
+- name: item_9_claim_appropriate
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: DSS-1682 Item 9 instructions, Section 835 page 3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-835-report-of-erroneous-issuance-dss-1682/page-3
+          excerpt: A claim is appropriate when the total in column 8k is positive.
+  versions:
+  - effective_from: '2017-04-01'
+    formula: item_8k_overissuance_underissuance_amount > 0
+- name: epics_overpayment_amount_after_expunged_benefit_adjustment
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: DSS-1682 Item 9 instructions, Section 835 page 3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nc/manual/dhhs/fns/fns-835-report-of-erroneous-issuance-dss-1682/page-3
+  versions:
+  - effective_from: '2017-04-01'
+    formula: 'if item_9_claim_appropriate: max(0, item_8k_overissuance_underissuance_amount
+      - expunged_benefits_adjustment_amount) else: 0'

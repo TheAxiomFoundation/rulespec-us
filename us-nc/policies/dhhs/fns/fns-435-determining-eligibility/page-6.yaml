@@ -1,0 +1,273 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+  summary: |-
+    435.05 DELAY IN REQUESTING VERIFICATIONS A. If the DSS-8650's 10 calendar days extends beyond the 30th day from the date of applications. Agency delay: "Pend the application, do not deny on the 30th day"; deny on DSS-8650 expiration if verification is not provided; upon receipt, determine eligibility within five calendar days. Household delay: deny on the 30th day if missing verification is not provided; upon receipt determine eligibility within five calendar days and, if eligible, the household loses entitlement to benefits in the month of application. With good cause, regulatory delay is allowable.
+rules:
+  - name: dss8650_response_period_calendar_days
+    kind: parameter
+    dtype: Count
+    source: FNS 435.05 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+              excerpt: "DSS-8650's 10 calendar days"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          10
+
+  - name: application_processing_standard_calendar_days
+    kind: parameter
+    dtype: Count
+    source: FNS 435.05 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+              excerpt: "30th day from the date of applications"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          30
+
+  - name: eligibility_determination_after_verification_calendar_days
+    kind: parameter
+    dtype: Count
+    source: FNS 435.05 A.1.c; FNS 435.05 A.2.a.ii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+              excerpt: "determine eligibility within five calendar days"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          5
+
+  - name: dss8650_extends_beyond_processing_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          dss8650_expiration_calendar_day_from_application > application_processing_standard_calendar_days
+
+  - name: application_processing_standard_deadline_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.1; FNS 435.05 A.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          current_calendar_day_from_application == application_processing_standard_calendar_days
+
+  - name: agency_delay_verification_response_days_allowed
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: FNS 435.05 A.1.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          if dss8650_extends_beyond_processing_standard and application_processing_delay_caused_by_agency: dss8650_response_period_calendar_days else: 0
+
+  - name: application_must_remain_pending_for_agency_delay
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.1.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          dss8650_extends_beyond_processing_standard
+          and application_processing_standard_deadline_day
+          and application_processing_delay_caused_by_agency
+
+  - name: agency_delay_denial_for_verification_failure_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.1.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          dss8650_extends_beyond_processing_standard
+          and application_processing_delay_caused_by_agency
+          and dss8650_period_has_expired
+          and not missing_required_and_mandatory_verification_provided_from_dss8650
+
+  - name: agency_delay_eligibility_determination_deadline_days
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: FNS 435.05 A.1.c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          if dss8650_extends_beyond_processing_standard and application_processing_delay_caused_by_agency and missing_required_and_mandatory_verification_received: eligibility_determination_after_verification_calendar_days else: 0
+
+  - name: household_delay_denial_for_verification_failure_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.2.a.i; FNS 435.05 A.2.a.iii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          dss8650_extends_beyond_processing_standard
+          and application_processing_standard_deadline_day
+          and application_processing_delay_caused_by_household
+          and not household_has_good_cause_reason
+          and not missing_required_and_mandatory_verification_provided_from_dss8650
+
+  - name: household_delay_eligibility_determination_deadline_days
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Day
+    source: FNS 435.05 A.2.a.ii; FNS 435.05 A.2.a.iii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          if dss8650_extends_beyond_processing_standard and application_processing_delay_caused_by_household and not household_has_good_cause_reason and missing_required_and_mandatory_verification_received: eligibility_determination_after_verification_calendar_days else: 0
+
+  - name: application_month_benefit_entitlement_lost_for_household_delay
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.2.a.ii; FNS 435.05 A.2.a.iii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          dss8650_extends_beyond_processing_standard
+          and application_processing_delay_caused_by_household
+          and not household_has_good_cause_reason
+          and missing_required_and_mandatory_verification_received
+          and household_determined_eligible
+
+  - name: regulatory_delay_allowable_for_household_good_cause
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.2.a.iii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          dss8650_extends_beyond_processing_standard
+          and application_processing_delay_caused_by_household
+          and household_has_good_cause_reason
+
+  - name: regulatory_delay_entry_prevents_overdue_counting
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 435.05 A.2.a.iii
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-435-determining-eligibility/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          regulatory_delay_allowable_for_household_good_cause
+          and regulatory_delay_entry_used

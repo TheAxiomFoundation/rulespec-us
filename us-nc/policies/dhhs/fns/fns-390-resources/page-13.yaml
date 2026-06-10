@@ -1,0 +1,166 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+  summary: |-
+    Non-recurring lump-sum payments are payments received in one payment rather than recurring payments ... Count the amount that is still available as a resource.
+rules:
+  - name: lottery_gambling_winnings_lump_sum_resource_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 390.13(K)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+              excerpt: Lottery / Gambling Winnings less than $4,500.
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          4500
+
+  - name: payment_is_non_recurring_lump_sum_payment
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 390.13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          payment_received_in_one_payment
+          and not payment_is_recurring_payment
+
+  - name: payment_is_source_listed_non_recurring_lump_sum_category
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 390.13(A)-(K)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+              excerpt: Lottery / Gambling Winnings less than $4,500.
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          (payment_is_income_tax_refund
+          and not payment_is_earned_income_tax_credit)
+          or payment_is_rebate_or_credit
+          or payment_is_gift_award_or_prize
+          or payment_is_retroactive_social_security_payment
+          or (payment_is_retroactive_ssi_payment
+          and not recipient_is_current_ssi_recipient)
+          or payment_is_retroactive_unemployment_insurance_benefit
+          or payment_is_retroactive_tanf_payment
+          or payment_is_retroactive_railroad_retirement_benefit
+          or payment_is_stimulus_payment
+          or payment_is_lump_sum_insurance_settlement
+          or (payment_is_lottery_or_gambling_winnings
+          and payment_amount < lottery_gambling_winnings_lump_sum_resource_threshold)
+
+  - name: retroactive_ssi_payment_excluded_for_current_ssi_recipient
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 390.13(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          payment_is_retroactive_ssi_payment
+          and recipient_is_current_ssi_recipient
+
+  - name: countable_non_recurring_lump_sum_payment_resource_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 390.13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+              excerpt: Lottery / Gambling Winnings less than $4,500.
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          (payment_is_non_recurring_lump_sum_payment
+          or payment_is_source_listed_non_recurring_lump_sum_category)
+          and not payment_is_earned_income_tax_credit
+          and not retroactive_ssi_payment_excluded_for_current_ssi_recipient
+          and (not payment_is_lottery_or_gambling_winnings
+          or payment_amount < lottery_gambling_winnings_lump_sum_resource_threshold)
+
+  - name: non_recurring_lump_sum_available_resource_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          if countable_non_recurring_lump_sum_payment_resource_applies: payment_amount_still_available_to_fns_unit else: 0
+
+  - name: online_fundraising_account_accessible_resource_amount
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 390.13(L)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-13
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          if asset_is_online_fundraising_account: actual_value_of_funds_accessible_to_household_at_interview else: 0

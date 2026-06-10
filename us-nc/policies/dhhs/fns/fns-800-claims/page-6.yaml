@@ -1,0 +1,239 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+  summary: |-
+    All types of claims are required to be paid in full within 36 months from the date of establishment. In cases of hardship, the 36 months may be extended up to 60 months by the State Office. If a claim is $4,000.00 or more, considered this to be a hardship and allow the claim to be paid off within 60 months. Once the 60 Day Notice period has expired and the debtor failed to sign a Voluntary Repayment Agreement and make the minimum monthly payment timely, the debtor is considered delinquent. Once a debtor becomes delinquent, the debtor will be considered delinquent until the entire claim is paid.
+rules:
+  - name: standard_claim_repayment_month_limit
+    kind: parameter
+    dtype: Count
+    source: FNS 800 Claims, Section F repayment agreement information
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "paid in full within 36 months"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          36
+
+  - name: hardship_claim_repayment_month_limit
+    kind: parameter
+    dtype: Count
+    source: FNS 800 Claims, Section F hardship repayment extension
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "extended up to 60 months"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          60
+
+  - name: claim_amount_hardship_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 800 Claims, Section F hardship threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "If a claim is $4,000.00 or more"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          4000
+
+  - name: large_claim_hardship_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 800 Claims, Section F hardship threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "If a claim is $4,000.00 or more, considered this to be a hardship"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-800-claims/page-6#claim_amount_hardship_threshold
+              output: claim_amount_hardship_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          claim_amount >= claim_amount_hardship_threshold
+
+  - name: claim_repayment_month_limit
+    kind: derived
+    entity: Person
+    dtype: Count
+    period: Month
+    source: FNS 800 Claims, Section F repayment period limits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "36 months may be extended up to 60 months by the State Office"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-800-claims/page-6#standard_claim_repayment_month_limit
+              output: standard_claim_repayment_month_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-800-claims/page-6#hardship_claim_repayment_month_limit
+              output: hardship_claim_repayment_month_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-800-claims/page-6#large_claim_hardship_applies
+              output: large_claim_hardship_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          if large_claim_hardship_applies or state_office_approved_hardship_extension: hardship_claim_repayment_month_limit else: standard_claim_repayment_month_limit
+
+  - name: voluntary_repayment_agreement_can_be_accepted_after_active_fns_case_ends
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 800 Claims, Section F note on active FNS case during 60 Day Notice period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "If a debtor begins to have an active FNS case during the 60 Day Notice period, a Voluntary Repayment Agreement can be accepted within 30 days after the month the debtor stops receiving FNS benefits."
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          debtor_began_active_fns_case_during_sixty_day_notice_period
+          and within_thirty_days_after_month_debtor_stopped_receiving_fns_benefits
+
+  - name: debtor_delinquent
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 800 Claims, Section F delinquency rule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "Once the 60 Day Notice period has expired and the debtor failed to sign a Voluntary Repayment Agreement and make the minimum monthly payment timely, the debtor is considered delinquent."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "until the entire claim is paid"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          claim_not_paid_in_full
+          and (
+            debtor_was_already_delinquent
+            or (
+              sixty_day_notice_period_expired
+              and debtor_failed_to_sign_voluntary_repayment_agreement
+              and debtor_failed_to_make_minimum_monthly_payment_timely
+            )
+          )
+
+  - name: delinquent_claim_subject_to_interception
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 800 Claims, Section F EPICS interception procedures
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "EPICS automatically begins procedures for TOP, DOR, and NC Education Lottery (NCEL) interception on delinquent claims unless the debtor(s) is blocked."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-800-claims/page-6#debtor_delinquent
+              output: debtor_delinquent
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          debtor_delinquent
+          and not debtor_blocked_from_interception
+
+  - name: debtor_inactive_for_interception_due_to_active_fns_case
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 800 Claims, Section F active FNS recipient interception status
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "If the debtor has an active FNS case or becomes an active FNS recipient, a debtor is made inactive in the TOP, DOR, and NC Education Lottery (NCEL) systems."
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          debtor_has_active_fns_case
+          or debtor_becomes_active_fns_recipient
+
+  - name: intentional_program_violation_evidence_standard_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 800 Claims, Section G establishment of IPV claim and disqualification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-800-claims/page-6
+              excerpt: "Evidence to prove a person committed an IPV must be clear and convincing."
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          evidence_is_clear_and_convincing_that_person_committed_ipv

@@ -1,0 +1,81 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-26
+  summary: |-
+    If WFFA/TANF assistance payments are made for retroactive months, do not count that portion as current-month income; when a payment includes retroactive and current-month amounts, count only the current-month portion as unearned income. If WFFA/TANF is reduced due to an overpayment other than a client responsible overpayment, subtract the recoupment and count the net payment. Benefit Diversion is not countable income.
+rules:
+  - name: retroactive_wffa_tanf_portion_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.36(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-26
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          0
+  - name: current_month_wffa_tanf_portion_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.36(B), 315.36(D) note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-26
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if payment_is_wffa_or_tanf_assistance and not payment_is_benefit_diversion: current_month_portion_amount else: 0
+  - name: wffa_tanf_net_payment_after_non_client_overpayment_recoupment
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.36(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-26
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if payment_is_wffa_or_tanf_assistance and payment_reduced_due_to_overpayment_other_than_client_responsible: max(0, gross_payment_amount - overpayment_recoupment_amount) else: 0
+  - name: wffa_tanf_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.36(A)-(D) note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-26
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if payment_is_benefit_diversion: 0 else: if payment_is_wffa_or_tanf_assistance and payment_reduced_due_to_overpayment_other_than_client_responsible: wffa_tanf_net_payment_after_non_client_overpayment_recoupment else: current_month_wffa_tanf_portion_countable_unearned_income

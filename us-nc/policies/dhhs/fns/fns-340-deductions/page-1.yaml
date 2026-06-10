@@ -1,0 +1,131 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+  summary: |-
+    340.01: The deductions listed in this section are the only deductions allowed when calculating a household's net monthly income. 340.02: Twenty percent of monthly gross earned income, or adjusted gross income for self-employed households, is deducted; do not allow this deduction for excluded earnings. 340.03: Allow every FNS unit with earned and/or unearned income a monthly standard deduction according to household size, counting only eligible FNS unit members. 340.04(A): Establish eligibility for dependent care deduction when the FNS unit incurs dependent care expense for a dependent in the unit, for employment/training/school purposes, and the provider is not in the FNS unit; allow the amount payable including additional transportation expenses.
+rules:
+  - name: earned_income_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 340.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+              excerpt: "Twenty percent of the monthly gross earned income"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          0.20
+
+  - name: earned_income_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-340-deductions/page-1#earned_income_deduction_rate
+              output: earned_income_deduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          earned_income_deduction_rate * (if household_is_self_employed: max(0, adjusted_gross_self_employment_income_not_excluded) else: max(0, monthly_gross_earned_income_not_excluded))
+
+  - name: standard_deduction_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 340.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          household_has_earned_income or household_has_unearned_income
+
+  - name: standard_deduction_household_size
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: FNS 340.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          eligible_fns_unit_member_count
+
+  - name: dependent_care_deduction_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 340.04(A)(1)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          dependent_care_expense_incurred_for_dependent_in_fns_unit
+          and dependent_care_expense_incurred_for_employment_training_or_school
+          and dependent_care_provider_not_in_fns_unit
+
+  - name: dependent_care_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 340.04(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-340-deductions/page-1#dependent_care_deduction_eligible
+              output: dependent_care_deduction_eligible
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          if dependent_care_deduction_eligible: max(0, dependent_care_amount_payable_by_fns_unit + additional_transportation_expenses_for_dependent_care) else: 0

@@ -1,0 +1,184 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+  summary: |-
+    NC Education Lottery Interception is a process by which lottery winnings repay IPV and IHE claims. Selection requires Collection or Terminated status, IHE or IPV claim type, $50.00 or more in total eligible claims, no recoupment in the past 60 days, no NC Debt Setoff Indicator of H, L, S, or X, and delinquency based on claim age and recent cash payments.
+rules:
+  - name: ncel_minimum_total_eligible_claims
+    kind: parameter
+    dtype: Money
+    period: Day
+    unit: USD
+    source: FS 865.02 A.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "Debtor must owe $50.00 or more in total eligible claims."
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          50
+
+  - name: ncel_recent_recoupment_lookback_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FS 865.02 A.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "past 60 days"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          60
+
+  - name: ncel_claim_establishment_minimum_age_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FS 865.02 A.6.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "at least 60 days prior to the current date"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          60
+
+  - name: ncel_cash_payment_lookback_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: FS 865.02 A.6.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "within 60 days of the current date"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          60
+
+  - name: ncel_cash_payment_balance_rate
+    kind: parameter
+    dtype: Rate
+    period: Day
+    source: FS 865.02 A.6.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "10% of the balance of NCEL eligible claims"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          0.10
+
+  - name: ncel_cash_payment_minimum_amount
+    kind: parameter
+    dtype: Money
+    period: Day
+    unit: USD
+    source: FS 865.02 A.6.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "$25.00, whichever is greater"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          25
+
+  - name: ncel_required_cash_payment_to_avoid_delinquency
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Day
+    unit: USD
+    source: FS 865.02 A.6.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+              excerpt: "10% of the balance of NCEL eligible claims, or $25.00, whichever is greater"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          max(ncel_cash_payment_balance_rate * debtor_balance_of_ncel_eligible_claims, ncel_cash_payment_minimum_amount)
+
+  - name: debtor_delinquent_on_ncel_eligible_claims
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 865.02 A.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          claim_establishment_date_at_least_ncel_minimum_age
+          and cash_payments_c_within_past_ncel_cash_payment_lookback_days < ncel_required_cash_payment_to_avoid_delinquency
+          and not debtor_recouped_in_past_ncel_recent_recoupment_lookback_days
+
+  - name: debtor_selected_for_ncel_interception
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: FS 865.02 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-1
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          (claim_status_is_collection or claim_status_is_terminated)
+          and (claim_type_is_ihe or claim_type_is_ipv)
+          and debtor_total_eligible_claims >= ncel_minimum_total_eligible_claims
+          and not debtor_recouped_in_past_ncel_recent_recoupment_lookback_days
+          and not debtor_nc_debt_setoff_indicator_is_h
+          and not debtor_nc_debt_setoff_indicator_is_l
+          and not debtor_nc_debt_setoff_indicator_is_s
+          and not debtor_nc_debt_setoff_indicator_is_x
+          and debtor_delinquent_on_ncel_eligible_claims

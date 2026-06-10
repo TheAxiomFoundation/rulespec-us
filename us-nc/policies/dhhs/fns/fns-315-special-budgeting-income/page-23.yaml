@@ -1,0 +1,134 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+  summary: |-
+    Non-allowable costs of doing business include duplicate residence costs already deducted as shelter or utility expenses, losses from previous periods, current or anticipated losses except for self-employed farmers, depreciation, retirement deposits and life or health insurance payments, work-related expenses accounted for by the earned income deduction, other personal expenses, capital assets or equipment, last year's crop production expenses, and wages, salaries, or advances paid to the business owner. A farm loss occurs when business costs exceed income received; when annual gross receipts of a farmer are expected to be at least $1000, offset losses against other FNS unit income.
+rules:
+  - name: farm_gross_receipts_loss_offset_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FNS 315 Special Budgeting, Section F.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+              excerpt: "annual gross receipts of a farmer are expected to be at least $1000"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          1000
+
+  - name: non_allowable_business_cost_amount
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FNS 315 Special Budgeting, Section E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+              excerpt: "Costs of maintaining a business in the individuals place of residence"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+              excerpt: "except for self-employed farmers"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          (if business_in_individuals_place_of_residence and client_receives_shelter_or_utility_deduction_for_same_residence_costs: residence_business_cost_amount else: 0)
+          + losses_from_previous_periods_amount
+          + (if self_employed_farmer: 0 else: current_or_anticipated_losses_amount)
+          + depreciation_claimed_for_tax_purposes_amount
+          + self_employed_retirement_life_health_insurance_amount
+          + work_related_expenses_accounted_for_by_earned_income_deduction_amount
+          + personal_expenses_not_related_to_business_amount
+          + capital_assets_or_equipment_amount
+          + last_year_crop_production_expenses_amount
+          + wages_salaries_or_advances_paid_to_business_owner_amount
+
+  - name: farm_loss_occurs
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Year
+    source: FNS 315 Special Budgeting, Section F.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+              excerpt: "A loss from farming occurs when the cost of doing business is greater than the income received."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          farm_cost_of_doing_business > farm_income_received
+
+  - name: farm_loss_offset_against_other_fns_unit_income_applies
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Year
+    source: FNS 315 Special Budgeting, Section F.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-315-special-budgeting-income/page-23#farm_gross_receipts_loss_offset_threshold
+              output: farm_gross_receipts_loss_offset_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          farm_loss_occurs
+          and farmer_annual_gross_receipts_expected >= farm_gross_receipts_loss_offset_threshold
+
+  - name: farm_loss_offset_against_other_fns_unit_income_amount
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Year
+    unit: USD
+    source: FNS 315 Special Budgeting, Section F.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-23
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-315-special-budgeting-income/page-23#farm_loss_offset_against_other_fns_unit_income_applies
+              output: farm_loss_offset_against_other_fns_unit_income_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if farm_loss_offset_against_other_fns_unit_income_applies: farm_cost_of_doing_business - farm_income_received else: 0

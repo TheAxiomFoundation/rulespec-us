@@ -1,0 +1,105 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3
+  summary: |-
+    County departments of social services must explain client rights and responsibilities to all applicants, including application, authorized representative, non-discrimination, fair hearing, and deductions rights; change reporting, work registration, ABAWD, and enumeration responsibilities; and penalties for intentional program violations, including ten-year ineligibility for false residence information convictions and lifetime FNS ineligibility for certain weapons or benefit-selling convictions.
+rules:
+  - name: false_residence_conviction_disqualification_years
+    kind: parameter
+    dtype: Count
+    period: Year
+    source: FNS 115.5.c, Change #1-2021
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3
+              excerpt: "ineligible ... for ten years from the date of conviction"
+    versions:
+      - effective_from: '2021-05-01'
+        formula: |-
+          10
+
+  - name: fns_benefit_selling_lifetime_disqualification_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 115.5.c, Change #1-2021
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3
+              excerpt: "selling FNS benefits of $500 or more"
+    versions:
+      - effective_from: '2021-05-01'
+        formula: |-
+          500
+
+  - name: false_residence_conviction_cash_and_fns_ineligibility_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 115.5.c, Change #1-2021
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3
+              excerpt: "convicted by a court of giving false information regarding residence"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3#false_residence_conviction_disqualification_years
+              output: false_residence_conviction_disqualification_years
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-05-01'
+        formula: |-
+          person_convicted_by_court_of_false_residence_information_to_receive_duplicate_assistance
+          and years_since_false_residence_conviction < false_residence_conviction_disqualification_years
+
+  - name: lifetime_fns_ineligibility_for_weapons_or_large_benefit_sale_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 115.5.c, Change #1-2021
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3
+              excerpt: "convicted of buying guns, explosives, or ammunition with FNS benefits"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3
+              excerpt: "selling FNS benefits of $500 or more"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-115-administration-of-the-food-and-nutrition-services-program/page-3#fns_benefit_selling_lifetime_disqualification_threshold
+              output: fns_benefit_selling_lifetime_disqualification_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-05-01'
+        formula: |-
+          person_convicted_of_buying_guns_explosives_or_ammunition_with_fns_benefits
+          or (
+            person_convicted_of_selling_fns_benefits
+            and fns_benefits_sold_amount >= fns_benefit_selling_lifetime_disqualification_threshold
+          )

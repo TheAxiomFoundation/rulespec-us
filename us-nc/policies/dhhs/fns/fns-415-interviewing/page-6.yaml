@@ -1,0 +1,167 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+  summary: |-
+    Determine good cause when a household is responsible for interview delay. If good cause cannot be established and the first interview is postponed at the household's request until after the 20th day but before the 30th day, require interview completion, needed verification, and work registration by the 30th day; if not met, deny on the 30th day or first workday after a weekend or holiday. If the household failed to appear, failed to schedule a second interview, postponed a subsequent interview until after the 30th day, or missed both scheduled interviews and requests another interview, the delay is the household's fault and the application is denied on the 30th day.
+rules:
+  - name: rescheduling_after_day_threshold
+    kind: parameter
+    dtype: Count
+    source: FNS 415 Interviewing, Section 415.D.1.a.i
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+              excerpt: "after the 20th day"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          20
+
+  - name: application_denial_day
+    kind: parameter
+    dtype: Count
+    source: FNS 415 Interviewing, Section 415.D.1.a.iv-v, E.1, F.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+              excerpt: "by the 30th day"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          30
+
+  - name: minimum_verification_period_days
+    kind: parameter
+    dtype: Count
+    source: FNS 415 Interviewing, Section 415.D.1.a.v
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+              excerpt: "minimum ten days to provide verification"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          10
+
+  - name: household_fault_delay_after_postponed_subsequent_interview
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section 415.E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          household_failed_to_appear_for_first_interview
+          and household_failed_to_schedule_second_interview
+          and subsequent_interview_postponed_at_household_request
+          and days_after_application_filed > application_denial_day
+
+  - name: household_fault_after_missed_both_scheduled_interviews
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section 415.F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          household_missed_both_scheduled_interviews
+          and household_requests_another_interview
+
+  - name: household_must_complete_interview_verification_and_work_registration_by_denial_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section 415.D.1.a.i-iv
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          good_cause_cannot_be_established
+          and first_interview_postponed_at_household_request
+          and days_after_application_filed > rescheduling_after_day_threshold
+          and days_after_application_filed < application_denial_day
+
+  - name: household_not_entitled_to_minimum_verification_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section 415.D.1.a.v
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+              excerpt: "not entitled to the minimum ten days"
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          household_must_complete_interview_verification_and_work_registration_by_denial_day
+
+  - name: deny_application_for_household_interview_delay
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 415 Interviewing, Section 415.D.1.a.v, E.1, F.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-415-interviewing/page-6
+    versions:
+      - effective_from: '2021-11-15'
+        formula: |-
+          day_is_application_denial_day_or_first_workday_after_weekend_or_holiday
+          and (
+            (household_must_complete_interview_verification_and_work_registration_by_denial_day
+             and not household_completed_interview_by_denial_day)
+            or (household_must_complete_interview_verification_and_work_registration_by_denial_day
+                and not household_brought_all_needed_verification_by_denial_day)
+            or (household_must_complete_interview_verification_and_work_registration_by_denial_day
+                and not household_registered_members_for_work_by_denial_day)
+            or household_fault_delay_after_postponed_subsequent_interview
+            or household_fault_after_missed_both_scheduled_interviews
+          )

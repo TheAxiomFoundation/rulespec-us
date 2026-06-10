@@ -1,0 +1,238 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+  summary: |-
+    315.07: cash received infrequently or irregularly is cash "not expected to exceed $30 per calendar quarter" and not reasonably anticipated to recur; do not count it, but count other reasonably anticipated payments as unearned income. 315.08: child support includes direct or indirect, current or arrearage payments from a child's absent parent available for basic needs; for budgeting, a child is under 18 or age 18 & 19 attending high school full time.
+rules:
+  - name: infrequent_irregular_cash_calendar_quarter_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 315.07
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+              excerpt: "not expected to exceed $30 per calendar quarter"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          30
+
+  - name: ongoing_child_support_received_months_threshold
+    kind: parameter
+    dtype: Count
+    source: FNS 315.08(E)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+              excerpt: "Received 3 months or more"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          3
+
+  - name: ongoing_child_support_base_period_prior_months
+    kind: parameter
+    dtype: Count
+    source: FNS 315.08(E)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+              excerpt: "Three months prior to the month of application or recertification"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          3
+
+  - name: infrequent_or_irregular_cash
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.07
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          expected_cash_received_per_calendar_quarter <= infrequent_irregular_cash_calendar_quarter_limit
+          and
+          not cash_can_be_reasonably_anticipated_to_recur
+
+  - name: cash_payment_counted_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.07(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          not infrequent_or_irregular_cash
+          and cash_payment_can_be_reasonably_anticipated_during_certification_period
+
+  - name: countable_unearned_cash_contribution_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.07(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if cash_payment_counted_as_unearned_income: max(0, cash_payment_amount) else: 0
+
+  - name: child_for_child_support_budgeting
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 315.08(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+              excerpt: "under the age of 18 or ... age 18 & 19, if attending High school full time"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          person_is_under_age_18
+          or (person_is_age_18_or_19 and person_attending_high_school_full_time)
+
+  - name: payment_is_child_support_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.08(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_made_by_childs_absent_parent
+          and payment_available_to_meet_childs_basic_needs
+          and (payment_paid_voluntarily or payment_paid_under_court_order or payment_enforced_under_title_iv_d_state_agreement)
+          and (payment_is_direct or payment_is_indirect)
+          and (payment_is_current_child_support or payment_is_child_support_arrearage)
+
+  - name: child_support_payment_budgeted_for_child_in_fns_unit
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.08(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_child_support_income
+          and payment_for_child_meets_child_support_budgeting_definition
+          and child_for_whom_payment_is_received_is_in_fns_unit
+
+  - name: child_support_payment_income_to_receiver_or_beneficiary
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.08(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_child_support_income
+          and individual_for_whom_payment_received_no_longer_meets_child_support_child_definition
+          and payment_receiver_or_beneficiary_receives_or_benefits_from_income
+
+  - name: ongoing_child_support_uses_three_month_prior_base_period
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.08(E)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_child_support_income
+          and ongoing_child_support_income_months_received >= ongoing_child_support_received_months_threshold
+          and budgeting_occurs_for_application_or_recertification
+
+  - name: ongoing_child_support_base_period_prior_month_count
+    kind: derived
+    entity: Payment
+    dtype: Count
+    period: Month
+    source: FNS 315.08(E)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-5
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if ongoing_child_support_uses_three_month_prior_base_period: ongoing_child_support_base_period_prior_months else: 0
