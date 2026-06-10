@@ -1,0 +1,274 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+  summary: |-
+    An individual who refused to accept a bona fide offer of suitable
+    employment shall be disqualified. Employment is unsuitable if: wage is
+    less than the highest of applicable federal minimum wage, applicable
+    state minimum wage, or 80% of federal minimum wage if neither applies;
+    piece-rate average hourly yield is less than that wage; the member must
+    join/resign from/refrain from joining a labor organization; the site is
+    subject to a strike or lockout (unless enjoined under Taft-Hartley or
+    Railway Labor Act); risk to health and safety is unreasonable; member
+    is physically or mentally unfit; employment offered within first 30
+    days of registration is not in member's major field of experience;
+    distance is unreasonable, daily commuting time exceeds two hours per
+    day (excluding child care transport), or walking is prohibited and no
+    transportation is available; or working hours/nature interferes with
+    religious observances.
+imports:
+  - us-al:policies/dhr/poe/chapter-07-work-requirements/700
+rules:
+  - name: federal_minimum_wage_fallback_rate
+    kind: parameter
+    dtype: Rate
+    source: POE 705(1) "Eighty percent (80%) of the federal minimum wage"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "Eighty percent (80%) of the federal minimum wage"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.80
+  - name: training_wage_age_limit
+    kind: parameter
+    dtype: Integer
+    source: POE 705(1) "Limited to a 90 day period and under age 20"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "under age 20"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          20
+  - name: training_wage_period_days
+    kind: parameter
+    dtype: Integer
+    source: POE 705(1) "Limited to a 90 day period"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "Limited to a 90 day period"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          90
+  - name: major_field_protection_days
+    kind: parameter
+    dtype: Integer
+    source: POE 705(5)(c) "within the first 30 days of registration"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "within the first 30 days of registration"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          30
+  - name: max_commuting_hours_per_day
+    kind: parameter
+    dtype: Decimal
+    source: POE 705(5)(d) "daily commuting time exceeds two hours per day"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "daily commuting time exceeds two hours per day"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          2
+  - name: applicable_minimum_wage
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: POE 705(1) wage floor selection
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "The wage offered is less than the highest of"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if person_qualifies_for_training_wage: training_wage_rate else:
+          if federal_minimum_wage_applies: max(federal_minimum_wage_rate, applicable_state_minimum_wage_rate) else:
+          if applicable_state_minimum_wage_applies: applicable_state_minimum_wage_rate else:
+          federal_minimum_wage_fallback_rate * federal_minimum_wage_rate
+  - name: offered_wage_meets_minimum
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "The wage offered is less than the highest of"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          offered_hourly_wage >= applicable_minimum_wage
+  - name: piece_rate_yield_meets_minimum
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "The employment offered is on a piece-rate basis, and the average hourly yield the employee can reasonably be expected to earn is less than the applicable hourly wages specified above"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          (not employment_is_piece_rate) or (piece_rate_expected_hourly_yield >= applicable_minimum_wage)
+  - name: labor_organization_condition_imposed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "required to join, resign from, or refrain from joining any legitimate labor organization"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          employment_requires_joining_labor_organization
+          or employment_requires_resigning_from_labor_organization
+          or employment_requires_refraining_from_joining_labor_organization
+  - name: strike_or_lockout_disqualifies_site
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "work offered is at a site subject to a strike or lockout at the time of the offer, unless the strike has been enjoined under Section 208 of the Labor-Management Relations Act ... or unless an injunction has been issued under Section 10 of the Railway Labor Act"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          work_site_subject_to_strike_or_lockout
+          and not strike_enjoined_under_taft_hartley_section_208
+          and not injunction_issued_under_railway_labor_act_section_10
+  - name: commuting_unsuitable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705(5)(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "daily commuting time exceeds two hours per day not including the transporting of a child to and from a child care facility. Nor shall employment be considered suitable if the distance to the place of employment prohibits walking and neither public nor private transportation is available"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          daily_commuting_hours_excluding_child_care_transport > max_commuting_hours_per_day
+          or (distance_prohibits_walking_to_job_site
+              and not public_transportation_available_to_job_site
+              and not private_transportation_available_to_job_site)
+          or distance_to_employment_is_unreasonable_given_wage_and_cost
+  - name: major_field_protection_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705(5)(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "The employment offered within the first 30 days of registration is not in the member's major field of experience"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          days_since_work_registration <= major_field_protection_days
+          and not employment_is_in_members_major_field_of_experience
+  - name: employment_is_suitable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: POE 705 overall suitability determination
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "Any employment shall be considered unsuitable if"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-07-work-requirements/705
+              excerpt: "employment shall be considered suitable unless the household member involved can demonstrate or the county department otherwise becomes aware that"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          offered_wage_meets_minimum
+          and piece_rate_yield_meets_minimum
+          and not labor_organization_condition_imposed
+          and not strike_or_lockout_disqualifies_site
+          and not health_and_safety_risk_is_unreasonable
+          and not member_is_physically_or_mentally_unfit_for_employment
+          and not major_field_protection_applies
+          and not commuting_unsuitable
+          and not employment_interferes_with_religious_observances
