@@ -1,0 +1,119 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual averages self-employment income over the
+    period the income is intended to cover. Primary annual support is averaged
+    over 12 months; partial annual support is averaged over the
+    self-employment months; a new business is averaged over the period the
+    business has been in operation and projected for the coming year. For
+    self-employed farmers with at least 1000 in expected annual gross farm
+    income, prorated farm losses first offset other self-employment income,
+    then other earned income, and the resulting earned-income figure is used
+    before other income is added for the gross income standard.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+rules:
+  - name: snap_self_employment_averaging_months
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 10 CCR 2506-1 section 4.403.12(A)-(D)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if self_employment_income_is_primary_annual_support:
+              12
+          elif self_employment_income_is_partial_annual_support:
+              self_employment_months
+          elif self_employment_income_is_from_new_source:
+              self_employment_business_months_in_operation
+          else: self_employment_income_period_months
+  - name: snap_self_employment_income_should_use_anticipated_earnings
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.403.12(A), (C), and (D)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: substantial_increase_or_decrease_in_business or self_employment_income_is_from_new_source
+  - name: snap_averaged_monthly_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403.12(A)-(D)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_self_employment_income_should_use_anticipated_earnings:
+              anticipated_self_employment_income_for_projection_period / snap_self_employment_averaging_months
+          else:
+              historical_self_employment_income_for_averaging_period / snap_self_employment_averaging_months
+  - name: snap_self_employed_farmer
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.403.12(E)(2)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: expected_gross_annual_farm_income >= 1000
+  - name: snap_monthly_prorated_farm_loss
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403.12(E)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_self_employed_farmer and farm_income_production_costs_for_period > farm_gross_income_for_period:
+              (farm_income_production_costs_for_period - farm_gross_income_for_period) / farm_loss_period_months
+          else: 0
+  - name: snap_self_employment_income_after_farm_loss
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403.12(E)(2)(a)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, other_self_employment_income - snap_monthly_prorated_farm_loss)
+  - name: snap_remaining_farm_loss_after_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403.12(E)(2)(b)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, snap_monthly_prorated_farm_loss - other_self_employment_income)
+  - name: snap_earned_income_after_farm_loss
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403.12(E)(2)(b)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, earned_income_excluding_farm_and_self_employment - snap_remaining_farm_loss_after_self_employment_income)
+  - name: snap_income_for_gross_standard_after_farm_loss
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403.12(E)(2)(c)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_self_employment_income_after_farm_loss
+          + snap_earned_income_after_farm_loss
+          + other_unearned_income

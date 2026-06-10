@@ -1,0 +1,221 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual counts disqualified and sanctioned members
+    differently by disqualification category. IPV or fraud, work requirement
+    sanctions, and fleeing-felon classifications count the disqualified
+    member's income and resources in full, while the member is excluded from
+    household size for benefit level and eligibility standards. Ineligible
+    non-citizens, SSN refusals, and sanctioned ABAWDs who received 3 months of
+    benefits in a 36-month period have resources counted in full, but income
+    and certain billed or paid expenses are prorated across all household
+    members including the disqualified person and all but the disqualified
+    person's share is counted. Other non-household members' income and
+    resources are not available to the household, except cash payments to the
+    household and identifiable or prorated household shares of combined wages
+    and shared expenses.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411
+rules:
+  - name: snap_abawd_three_month_sanction_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: sanctioned_abawd and abawd_snap_benefit_months_in_36_month_period >= 3
+  - name: snap_full_count_disqualified_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(B)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: disqualified_for_ipv_or_fraud or work_requirement_sanctioned or fleeing_felon
+  - name: snap_prorated_count_disqualified_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(B)(2)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: ineligible_noncitizen or failed_or_refused_ssn or snap_abawd_three_month_sanction_applies
+  - name: snap_disqualified_member_income_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.1(B)(1)(a)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_contains_full_count_disqualified_member:
+              full_count_disqualified_member_income
+          else: 0
+  - name: snap_disqualified_member_resources_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.1(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_required_to_meet_resource_standard
+             and (household_contains_full_count_disqualified_member or household_contains_prorated_count_disqualified_member):
+              disqualified_or_sanctioned_member_resources
+          else: 0
+  - name: snap_prorated_disqualified_member_income_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.1(B)(2)(b)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_contains_prorated_count_disqualified_member:
+              disqualified_member_nonexempt_income
+              * remaining_household_member_count
+              / household_size_including_disqualified_members
+          else: 0
+  - name: snap_prorated_disqualified_member_earned_income_for_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.1(B)(2)(c)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_contains_prorated_count_disqualified_member:
+              disqualified_member_earned_income
+              * remaining_household_member_count
+              / household_size_including_disqualified_members
+          else: 0
+  - name: snap_prorated_disqualified_member_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.1(B)(2)(c)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_contains_prorated_count_disqualified_member:
+              disqualified_member_paid_or_billed_shelter_and_dependent_care_expenses
+              * remaining_household_member_count
+              / household_size_including_disqualified_members
+          else: 0
+  - name: snap_prorated_disqualified_member_deductible_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.1(B)(2)(c)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          prorated_member_earned_income_deduction
+          + snap_prorated_disqualified_member_expenses
+          + standard_utility_allowance_if_household_qualifies
+  - name: snap_disqualified_member_excluded_from_household_size
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(B)(1)(b) and (B)(2)(d)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_full_count_disqualified_member or snap_prorated_count_disqualified_member
+  - name: snap_household_size_for_benefit_level_after_disqualifications
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(B)(1)(b) and (B)(2)(d)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, household_size_including_disqualified_members - disqualified_or_sanctioned_member_count)
+  - name: snap_non_household_member_income_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.2(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: non_household_member_cash_payments_to_household
+  - name: snap_non_household_member_resources_counted
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.2(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: 0
+  - name: snap_household_share_of_expenses_with_non_household_member
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.2(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if shared_expense_payments_or_contributions_can_be_differentiated:
+              household_paid_or_contributed_shared_expenses
+          else:
+              shared_deductible_expenses
+              * household_expense_contributor_count
+              / total_people_paying_or_contributing_to_shared_expenses
+  - name: snap_household_earned_income_from_combined_wage
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.2(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_share_of_combined_wage_can_be_identified:
+              identified_household_share_of_combined_wage
+          else:
+              combined_wage
+              * household_members_covered_by_combined_wage_count
+              / total_people_covered_by_combined_wage_count
+  - name: snap_ineligible_student_income_counted
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.2(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: 0
+  - name: snap_ineligible_student_resources_counted
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.411.2(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: 0

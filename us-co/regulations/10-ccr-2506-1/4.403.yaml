@@ -1,0 +1,170 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual counts wages, salaries, certain training
+    allowances, countable VISTA or Title I volunteer payments, pay received
+    while still employed, actively managed rental income, and LLC or
+    S-corporation owner income as earned income. WIOA on-the-job training
+    earnings count unless the participant is under 19 years of age and under
+    adult household control. Rental property is earned income only when a
+    household member or disqualified person actively manages it at least 20
+    hours per week. For a striker, eligibility uses the higher of the
+    striking member's pre-strike and current income plus current income of
+    non-striking household members.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+rules:
+  - name: snap_countable_employee_wage_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if higher_education_state_work_study_or_work_requirement_fellowship_income:
+              0
+          else:
+              employee_wages_received
+              + garnished_or_diverted_wages_for_household_expenses
+              + wages_held_at_employee_request_that_would_have_been_paid
+              + wages_previously_withheld_by_employer_general_practice_received
+              + reasonably_anticipated_wage_advances_received
+  - name: snap_countable_vista_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 sections 4.403(A)(2), 4.403(C), and 4.405.2(A)(3)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, vista_or_title_i_domestic_volunteer_payment_amount - snap_vista_income_exclusion)
+  - name: snap_countable_training_allowance_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(B)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if vocational_rehabilitation_training_allowance_from_government_program
+             and not training_allowance_is_reimbursement
+             and not training_allowance_paid_under_wioa:
+              training_allowance_amount
+          else: 0
+  - name: snap_countable_wioa_ojt_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 sections 4.403(B)(2) and 4.405.2(A)(6)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, wioa_on_the_job_training_earnings_amount - snap_wioa_payment_exclusion)
+  - name: snap_sick_vacation_bonus_earned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(A)(4)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if person_still_employed_when_sick_vacation_or_bonus_pay_received:
+              sick_vacation_or_bonus_pay_received
+          else: 0
+  - name: snap_striker_income_for_eligibility
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(D)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_has_striking_member:
+              max(striking_member_pre_strike_income, striking_member_current_income)
+              + non_striking_household_members_current_income
+          else: current_household_income
+  - name: snap_rental_income_is_earned
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.403(E)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: average_rental_property_management_hours_per_week >= 20
+  - name: snap_countable_rental_earned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(E)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_rental_income_is_earned:
+              max(0, rental_property_gross_income - rental_property_business_costs)
+          else: 0
+  - name: snap_capital_goods_sale_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(E)(2)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: capital_goods_services_or_property_sale_proceeds_connected_to_self_employment
+  - name: snap_llc_s_corporation_owner_draw_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(F)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if llc_s_corporation_owner_receives_draw:
+              max(0, llc_s_corporation_business_income - llc_s_corporation_business_expenses)
+          else: 0
+  - name: snap_llc_s_corporation_owner_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403(F)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: llc_s_corporation_owner_salary + snap_llc_s_corporation_owner_draw_earned_income
+  - name: snap_countable_earned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.403
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_countable_employee_wage_income
+          + household_vista_or_title_i_domestic_volunteer_earned_income
+          + household_training_allowance_earned_income
+          + household_wioa_ojt_earned_income
+          + snap_sick_vacation_bonus_earned_income
+          + snap_countable_rental_earned_income
+          + household_llc_s_corporation_owner_earned_income
+          + snap_boarder_net_self_employment_income
+          + other_countable_self_employment_earned_income

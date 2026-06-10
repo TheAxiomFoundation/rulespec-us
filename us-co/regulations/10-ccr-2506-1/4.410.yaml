@@ -1,0 +1,300 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual excludes specified resources from household
+    resource eligibility. Vehicles, the home and surrounding property, prorated
+    income still being counted as income, household goods, personal effects,
+    tax-preferred retirement accounts, and tax-deferred education accounts are
+    exempt. One bona fide pre-purchased funeral agreement per household member
+    is exempt up to 1500 dollars in equity. Income-producing property is exempt
+    when it produces annual income consistent with fair market value; farm
+    self-employment property remains exempt for 1 year after farming
+    self-employment terminates. Inaccessible resources include non-liquid
+    resources with net return of 1500 dollars or less, qualifying trusts,
+    resources with no significant return of 1500 dollars or less, and resources
+    inaccessible to battered women in shelters. Certain government payments,
+    EITC payments for up to 12 months, and federal income tax refunds received
+    beginning January 1, 2010 for 12 months are also excluded.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.410
+rules:
+  - name: snap_vehicle_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: household_vehicle_resource_value
+  - name: snap_home_and_surrounding_property_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if home_and_surrounding_property_owned_or_purchased
+             and (
+                 household_occupies_home
+                 or temporary_absence_for_allowed_reason_with_intent_to_return
+                 or household_intends_to_build_permanent_home_on_property
+             ):
+              home_and_surrounding_property_value
+          else: 0
+  - name: snap_prorated_income_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if prorated_income_still_being_counted_as_income:
+              prorated_income_resource_value
+          else: 0
+  - name: snap_personal_property_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(D)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: household_goods_personal_effects_life_insurance_and_exempt_livestock_value
+  - name: snap_retirement_account_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(D)(2)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: federal_tax_preferred_retirement_account_value
+  - name: snap_education_account_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(D)(3)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: tax_deferred_education_account_value
+  - name: snap_prepaid_funeral_agreement_exempt_equity
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(D)(4)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if bona_fide_prepaid_funeral_agreement:
+              min(prepaid_funeral_agreement_equity_value_excluding_burial_plot, 1500)
+          else: 0
+  - name: snap_prepaid_funeral_agreement_countable_equity
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(D)(4)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, prepaid_funeral_agreement_equity_value_excluding_burial_plot - snap_prepaid_funeral_agreement_exempt_equity)
+  - name: snap_income_producing_property_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(E)(1)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if property_produces_annual_income_consistent_with_fair_market_value:
+              income_producing_property_value
+          else: 0
+  - name: snap_installment_contract_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(E)(2)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if installment_contract_produces_income_consistent_with_fair_market_value:
+              installment_contract_and_secured_property_value
+          else: 0
+  - name: snap_farm_self_employment_property_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(E)(4)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if farm_self_employment_terminated and months_since_farm_self_employment_terminated <= 12:
+              farm_self_employment_property_value
+          else: 0
+  - name: snap_trust_resource_inaccessible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.410(F)(3)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          trust_arrangement_will_not_likely_cease_during_certification_period
+          and household_member_cannot_revoke_trust_or_change_beneficiary
+          and trustee_is_independent_or_court_limited
+          and trust_investments_do_not_assist_household_controlled_business
+          and trust_funds_are_for_allowed_investment_education_or_medical_purpose_or_from_nonhousehold_member
+  - name: snap_inaccessible_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(F)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if resource_cash_value_not_accessible_to_household
+             or resource_in_probate_or_sale_barred_by_lien
+             or real_property_good_faith_sale_effort
+             or non_liquid_resource_net_return_if_sold <= 1500
+             or snap_trust_resource_inaccessible:
+              inaccessible_resource_value
+          else: 0
+  - name: snap_no_significant_return_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(G)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if not resource_is_negotiable_financial_instrument and estimated_return_after_sale_costs_and_ownership_share <= 1500:
+              no_significant_return_resource_value
+          else: 0
+  - name: snap_battered_shelter_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(H)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if battered_shelter_resident and resource_access_depends_on_abusive_former_household_member:
+              inaccessible_former_household_resource_value
+          else: 0
+  - name: snap_household_member_use_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(I)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if resource_exclusion_applies_because_used_by_or_for_household_member_or_counted_disqualified_person:
+              household_member_use_resource_value
+          else: 0
+  - name: snap_specific_purpose_government_payment_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(J)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: specific_purpose_or_federally_excluded_government_payment_resource_value
+  - name: snap_eitc_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(J)(12)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if federal_eitc_received_in_current_or_following_month:
+              federal_eitc_resource_value
+          elif eitc_recipient_was_participating_in_snap_when_eitc_received
+               and snap_participation_continues_or_temporary_nonparticipation_is_administrative
+               and months_since_eitc_received <= 12:
+              earned_income_tax_credit_resource_value
+          else: 0
+  - name: snap_federal_tax_refund_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410(J)(17)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if federal_income_tax_refund_received_on_or_after_2010_01_01 and months_since_federal_income_tax_refund_received <= 12:
+              federal_income_tax_refund_resource_value
+          else: 0
+  - name: snap_exempt_resources
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.410
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_vehicle_resource_exemption
+          + snap_home_and_surrounding_property_resource_exemption
+          + snap_prorated_income_resource_exemption
+          + snap_personal_property_resource_exemption
+          + snap_retirement_account_resource_exemption
+          + snap_education_account_resource_exemption
+          + snap_prepaid_funeral_agreement_exempt_equity
+          + snap_income_producing_property_resource_exemption
+          + snap_installment_contract_resource_exemption
+          + snap_farm_self_employment_property_resource_exemption
+          + snap_inaccessible_resource_exemption
+          + snap_no_significant_return_resource_exemption
+          + snap_battered_shelter_resource_exemption
+          + snap_household_member_use_resource_exemption
+          + snap_specific_purpose_government_payment_resource_exemption
+          + snap_eitc_resource_exemption
+          + snap_federal_tax_refund_resource_exemption
+  - name: snap_countable_resources_after_exemptions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 sections 4.409 and 4.410
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, total_household_resources_before_exclusions - snap_exempt_resources)

@@ -1,0 +1,91 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual calculates destitute households' application
+    month eligibility and benefit level by considering only income received
+    between the first of the month and the application date. If the
+    application is an initial month application or the first application after
+    the prior certification expired, the initial month allotment is prorated
+    from the application date to the end of the month. Income of more than 25
+    dollars from a new source is disregarded when it has not been received or
+    anticipated within 10 calendar days. Employer travel advances reimbursing
+    relocation travel costs are exempt; wage advances under written contract
+    count as income but do not affect whether later employer payments are from
+    a new source or whether the household is destitute.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406.1
+rules:
+  - name: snap_destitute_new_source_income_disregard
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.406.1(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if new_source_income_amount > 25 and not new_source_income_received_or_anticipated_within_10_days:
+              new_source_income_amount
+          else: 0
+  - name: snap_destitute_application_month_countable_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.406.1(A)-(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_destitute_income_household:
+              max(
+                  0,
+                  income_received_from_first_of_month_through_application_date
+                  - snap_destitute_new_source_income_disregard
+              )
+          else: normal_application_month_countable_income
+  - name: snap_destitute_initial_month_proration_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.406.1(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_destitute_income_household and initial_month_application_or_after_certification_expired
+  - name: snap_destitute_travel_advance_exempt_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.406.1(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if employer_travel_advance_reimburses_new_employee_relocation_travel_costs:
+              employer_travel_advance_amount
+          else: 0
+  - name: snap_destitute_wage_advance_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.406.1(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if travel_advance_is_written_contract_wage_advance_subtracted_from_later_wages:
+              employer_travel_advance_amount
+          else: 0
+  - name: snap_destitute_wage_advance_affects_new_source_status
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.406.1(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: false

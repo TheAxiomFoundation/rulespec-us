@@ -1,0 +1,144 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-104
+  summary: |-
+    Subsection (3)(p.7) applies for income tax years commencing on or after January 1, 2026, to taxpayers claiming itemized or standard deductions and with federal adjusted gross income equal to or exceeding three hundred thousand dollars. The addition is the excess over one thousand dollars for a single return or two thousand dollars for a joint return, and does not apply after repeal of the healthy school meals for all program or successor program.
+rules:
+  - name: ongoing_federal_adjusted_gross_income_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Colo. Rev. Stat. § 39-22-104(3)(p.7)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "federal adjusted gross income in the income tax year equal to or exceeding three hundred thousand dollars"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          300000
+
+  - name: ongoing_single_return_deduction_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Colo. Rev. Stat. § 39-22-104(3)(p.7)(I)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "For a taxpayer who files a single return ... exceeds one thousand dollars"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          1000
+
+  - name: ongoing_joint_return_deduction_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Colo. Rev. Stat. § 39-22-104(3)(p.7)(I)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "For taxpayers who file a joint return ... exceeds two thousand dollars"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          2000
+
+  - name: ongoing_return_deduction_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Colo. Rev. Stat. § 39-22-104(3)(p.7)(I)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "single return ... one thousand dollars; ... joint return ... two thousand dollars"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if taxpayer_files_single_return: ongoing_single_return_deduction_threshold else: if taxpayers_file_joint_return: ongoing_joint_return_deduction_threshold else: 0
+
+  - name: ongoing_itemized_or_standard_deduction_addition_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Colo. Rev. Stat. § 39-22-104(3)(p.7)(I), (II)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "For income tax years commencing on or after January 1, 2026"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "taxpayers who claim itemized deductions ... or the standard deduction"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "federal adjusted gross income ... equal to or exceeding three hundred thousand dollars"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "does not apply for an income tax year that commences after the healthy school meals for all program, or any successor program, is repealed"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          taxpayer_claims_itemized_deductions_or_standard_deduction
+          and federal_adjusted_gross_income >= ongoing_federal_adjusted_gross_income_threshold
+          and (taxpayer_files_single_return or taxpayers_file_joint_return)
+          and not healthy_school_meals_for_all_program_or_successor_program_repealed_before_income_tax_year
+
+  - name: ongoing_itemized_or_standard_deduction_addition_to_federal_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Colo. Rev. Stat. § 39-22-104(3)(p.7)(I)(A)-(B), (II)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "amount by which the itemized deductions ... exceed, or the standard deduction ... exceeds"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "The addition to federal taxable income described in this subsection (3)(p.7) does not apply"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if ongoing_itemized_or_standard_deduction_addition_applies: max(0, federal_return_itemized_or_standard_deduction_amount - ongoing_return_deduction_threshold) else: 0

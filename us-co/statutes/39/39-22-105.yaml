@@ -1,0 +1,164 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-105
+  summary: |-
+    Colorado alternative minimum tax uses 3.75% before 2000 and 3.47% beginning in 2000, offset by the tax imposed in section 39-22-104. The minimum-tax credit is 18% before 2000 and 12% beginning in 2000 of the IRC section 53 credit. Nonresident tax and credit are apportioned by Colorado-source modified federal AMTI over total modified federal AMTI.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-105#colorado_alternative_minimum_taxable_income
+      reason: Subsection (2)(a) defines Colorado alternative minimum taxable income by reference to federal AMTI and federal exemptions under IRC section 55 and modifications in section 39-22-104; those cited executable RuleSpec sources are not copied into this workspace.
+    - output: us-co:statutes/39/39-22-105#alternative_minimum_tax
+      reason: Subsections (1) and (1.5) require Colorado alternative minimum taxable income and the tax imposed in section 39-22-104, and subsection (2)(b) requires a transition-year comparison to this section as it existed on June 22, 1987; the needed upstream computations are unavailable.
+      source_values:
+        - us-co:statutes/39/39-22-105#alternative_minimum_tax_rate
+rules:
+  - name: alternative_minimum_tax_rate
+    kind: parameter
+    dtype: Rate
+    source: C.R.S. 39-22-105(1)(a), (1.5)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "January 1, 1987"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "Three and seventy-five one-hundredths percent"
+          - path: versions[1].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "January 1, 2000"
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "Three and forty-seven one-hundredths percent"
+    versions:
+      - effective_from: '1987-01-01'
+        formula: |-
+          0.0375
+      - effective_from: '2000-01-01'
+        formula: |-
+          0.0347
+
+  - name: minimum_tax_credit_percentage
+    kind: parameter
+    dtype: Rate
+    source: C.R.S. 39-22-105(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "January 1, 1988"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "eighteen percent"
+          - path: versions[1].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "January 1, 2000"
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "twelve percent"
+    versions:
+      - effective_from: '1988-01-01'
+        formula: |-
+          0.18
+      - effective_from: '2000-01-01'
+        formula: |-
+          0.12
+
+  - name: individual_alternative_minimum_tax_amount_before_regular_tax_offset
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: C.R.S. 39-22-105(1)(a), (1.5)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "percent of the Colorado alternative minimum taxable income"
+    versions:
+      - effective_from: '1987-01-01'
+        formula: |-
+          alternative_minimum_tax_rate * max(0, colorado_alternative_minimum_taxable_income)
+
+  - name: individual_minimum_tax_credit_before_nonresident_apportionment
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: C.R.S. 39-22-105(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "credit allowed for the same tax year by section 53"
+    versions:
+      - effective_from: '1988-01-01'
+        formula: |-
+          minimum_tax_credit_percentage * max(0, federal_minimum_tax_credit_allowed_for_same_tax_year)
+
+  - name: nonresident_apportionment_ratio
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Year
+    source: C.R.S. 39-22-105(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "Colorado sources over the total modified federal alternative minimum taxable income"
+    versions:
+      - effective_from: '1987-01-01'
+        formula: |-
+          modified_federal_alternative_minimum_taxable_income_from_colorado_sources / total_modified_federal_alternative_minimum_taxable_income
+
+  - name: individual_minimum_tax_credit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: C.R.S. 39-22-105(3), (4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-105
+              excerpt: "the credit allowed by subsection (3) of this section shall be apportioned"
+    versions:
+      - effective_from: '1988-01-01'
+        formula: |-
+          if taxpayer_is_nonresident: max(0, individual_minimum_tax_credit_before_nonresident_apportionment * nonresident_apportionment_ratio) else: individual_minimum_tax_credit_before_nonresident_apportionment

@@ -1,0 +1,80 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual sets income eligibility standards by household
+    category. Basic Categorical Eligibility (BCE) households are deemed to meet
+    gross and net income limits. Expanded Categorical Eligibility (ECE)
+    households must have gross income below 200 percent of the federal poverty
+    level. Other households apply the federal 7 CFR 273.9(a) gross and net
+    income standards. An aged or disabled person unable to purchase and prepare
+    meals may be a separate household when co-resident income does not exceed
+    165 percent of the poverty level.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.401
+imports:
+  - us:statutes/7/2012/j
+  - us:regulations/7-cfr/273/9
+  - us:regulations/7-cfr/273/10
+  - us:policies/usda/snap/fy-2026-cola/income-eligibility-standards
+rules:
+  - name: passes_gross_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.401(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_basic_categorical_eligible
+          or (snap_expanded_categorical_eligible and snap_gross_monthly_income < co_snap_expanded_categorical_gross_income_limit)
+          or (
+              (not snap_expanded_categorical_eligible)
+              and (not snap_basic_categorical_eligible)
+              and snap_standard_gross_income_eligible
+          )
+  - name: passes_net_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.401(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_basic_categorical_eligible
+          or snap_expanded_categorical_eligible
+          or snap_standard_net_income_eligible
+  - name: snap_income_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.401(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: passes_gross_income_test and passes_net_income_test
+
+  - name: co_resident_gross_income_limit_165_percent_fpl_48_states_dc
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.401(A)(4)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_gross_income_limit_165_percent_fpl_48_states_dc_table[max(min(co_resident_group_size, 8), 1)]
+          + (max(co_resident_group_size - 8, 0) * snap_gross_income_limit_165_percent_fpl_48_states_dc_additional_member)
+  - name: snap_elderly_disabled_separate_household_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.401(A)(4)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          elderly_disabled_person_unable_to_purchase_and_prepare_meals
+          and co_resident_gross_income <= co_resident_gross_income_limit_165_percent_fpl_48_states_dc

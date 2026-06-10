@@ -1,0 +1,197 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+  summary: |-
+    "Households that receive SNAP and Colorado Works (CW) basic cash assistance that become ineligible" because of household income changes "are eligible to receive T-SNAP." "CW diversion payments are not considered basic cash assistance." Eligible households have the "SNAP allotment continued for five (5) months"; "Only the following four (4) changes will be acted upon." The existing certification period ends, a new five-month period is assigned, recertification is postponed, and listed sanctioned or all-member-disqualified households are not eligible.
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.609.1#snap_continued_eligibility_and_benefit_level_after_t_snap_denial
+      reason: Section 4.609.1(D) requires households denied or not eligible for T-SNAP to have continued eligibility and benefit level determined in accordance with Section 4.604, but no RuleSpec context for Section 4.604 is available.
+rules:
+  - name: t_snap_transitional_period_months
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1, 4.609.1(B), (C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+              excerpt: "continued for five (5) months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          5
+
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+    source: 10 CCR 2506-1, 4.609.1(B)(2), (E)(2)
+
+  - name: t_snap_member_snap_ineligibility_criterion
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(E)(2)(a)-(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_disqualified_for_intentional_program_violation
+          or person_ineligible_for_failure_to_comply_with_snap_work_requirement
+          or person_is_ineligible_student
+          or person_is_ineligible_non_citizen
+          or person_disqualified_for_failure_to_provide_information_needed_for_snap_eligibility_or_review
+          or person_disqualified_for_receiving_snap_benefits_in_more_than_one_household_in_same_month
+          or person_disqualified_for_being_fleeing_felon
+          or person_is_abawd_failing_to_comply_with_section_4_310_requirements
+
+  - name: household_members_all_snap_ineligible_for_t_snap
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(E)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          len(member_of_household) > 0
+          and count_where(member_of_household, t_snap_member_snap_ineligibility_criterion) == len(member_of_household)
+
+  - name: t_snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(A), (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_receives_snap
+          and household_receives_colorado_works_basic_cash_assistance_excluding_diversion_payments
+          and household_becomes_ineligible_for_continued_colorado_works_basic_cash_assistance_because_of_household_income_changes
+          and not household_leaves_colorado_works_due_to_colorado_works_sanction
+          and not household_members_all_snap_ineligible_for_t_snap
+
+  - name: t_snap_continued_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1, 4.609.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if t_snap_eligible: max(0, snap_allotment_received_before_income_caused_colorado_works_basic_cash_ineligibility + t_snap_allotment_adjustment_for_loss_of_colorado_works_cash_grant + t_snap_allotment_adjustment_for_household_member_leaving_and_applying_for_snap_in_another_household + t_snap_allotment_adjustment_for_october_first_snap_eligibility_standard_cost_of_living_update + t_snap_allotment_adjustment_for_intentional_program_violation_disqualification) else: 0
+
+  - name: t_snap_allotment_continuation_months
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+              excerpt: "continued for five (5) months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if t_snap_eligible: t_snap_transitional_period_months else: 0
+
+  - name: t_snap_new_certification_period_months
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+              excerpt: "new five (5) month certification period"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if t_snap_eligible: t_snap_transitional_period_months else: 0
+
+  - name: t_snap_existing_certification_period_ends
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          t_snap_eligible
+
+  - name: t_snap_recertification_requirements_postponed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.609.1(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          t_snap_eligible
