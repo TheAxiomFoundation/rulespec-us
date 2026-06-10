@@ -1,0 +1,207 @@
+# California SNAP (CalFresh) — FY 2026
+#
+# Federal scope mirrors us-co/snap (federal SNAP law applies the same to all
+# states). State scope pulls in the CA-encoded CalFresh sections from MPP
+# 63-xxx; the structure tracks CDSS Manual of Policies and Procedures.
+#
+# Composition is declarative — the transformations block names generic
+# patterns (all_of, any_related, sum_terms, conditional_value) that axiom-compose
+# resolves into runnable RuleSpec rules. None of these patterns are
+# program-specific; the same shape works for any state's SNAP and other
+# benefit programs.
+
+program: us-ca/snap
+period: 2026-01
+
+outputs:
+  - snap_eligible
+  - snap_benefit
+
+# AND-gate snap_eligible with any uncovered eligibility-shaped rules in
+# scope. axiom-compose renames the existing snap_eligible (per-member
+# any_related) to snap_eligible_core and synthesizes a wrapper:
+#   snap_eligible = all_of(snap_eligible_core, snap_resource_eligible,
+#                          snap_standard_income_eligible, ...)
+# Closes the over-permissive gap where the original spec only checked
+# per-person eligibility and ignored household income/resource/residency
+# tests that were already encoded in scope.
+auto_gate_outputs:
+  - snap_eligible
+
+scope:
+  federal:
+    - regulations/7-cfr/273/3
+    - regulations/7-cfr/273/4
+    - regulations/7-cfr/273/5
+    - regulations/7-cfr/273/6
+    - regulations/7-cfr/273/7
+    - regulations/7-cfr/273/8
+    - regulations/7-cfr/273/9/d/6/iii
+    - regulations/7-cfr/273/10
+    - statutes/7/2012/j
+    - statutes/7/2014/a
+    - statutes/7/2014/d
+    - statutes/7/2014/e/2
+    - statutes/7/2014/e/6/A
+    - statutes/7/2014/g
+    - statutes/7/2017/a
+    - regulations/7-cfr/273/24
+
+  state:
+    # 63-300/400-series: definitions, household composition, residency,
+    # citizenship/alien status, students, work registration, ABAWD
+    - regulations/mpp/63-300/1
+    - regulations/mpp/63-300/3
+    - regulations/mpp/63-300/5
+    - regulations/mpp/63-300/6
+    - regulations/mpp/63-401/1
+    - regulations/mpp/63-402/1
+    - regulations/mpp/63-402/11
+    - regulations/mpp/63-402/13
+    - regulations/mpp/63-402/15
+    - regulations/mpp/63-402/16
+    - regulations/mpp/63-402/17
+    - regulations/mpp/63-402/21
+    - regulations/mpp/63-403/1
+    - regulations/mpp/63-403/2
+    - regulations/mpp/63-403/4
+    - regulations/mpp/63-404/1
+    - regulations/mpp/63-405/1
+    - regulations/mpp/63-405/3
+    - regulations/mpp/63-405/4
+    - regulations/mpp/63-405/51
+    - regulations/mpp/63-405/52
+    - regulations/mpp/63-405/53
+    - regulations/mpp/63-405/71
+    - regulations/mpp/63-405/72
+    - regulations/mpp/63-406/1
+    - regulations/mpp/63-406/3
+    - regulations/mpp/63-407/1
+    - regulations/mpp/63-407/41
+    - regulations/mpp/63-407/42
+    - regulations/mpp/63-407/51
+    - regulations/mpp/63-407/61
+    - regulations/mpp/63-407/62
+    - regulations/mpp/63-408/1
+    - regulations/mpp/63-408/4
+    - regulations/mpp/63-408/5
+    - regulations/mpp/63-409/1
+    - regulations/mpp/63-410/1
+    - regulations/mpp/63-410/6
+    - regulations/mpp/63-411/1
+    - policies/cdss/snap/standard-utility-allowance
+
+transformations:
+  # 1. snap_member_eligible — Person-scoped AND of federal eligibility tests.
+  #    Generic `all_of` pattern; CA-specific predicates would extend the
+  #    conditions list when encoded.
+  - pattern: all_of
+    name: snap_member_eligible
+    effective_from: '2026-01-01'
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: us:statutes/7/2014
+    conditions:
+      - snap_member_citizenship_or_alien_status_eligible
+      - snap_member_ssn_requirement_eligible
+      - snap_member_work_requirement_eligible
+      - snap_member_student_eligible
+
+  # 2. snap_eligible — household-level eligibility: at least one household
+  #    member passes the per-person SNAP eligibility predicate. Queries
+  #    member_of_household directly rather than the derived `members`
+  #    relation produced by snap_unit — engine doesn't currently bridge
+  #    derived-relation membership back to count_related calls in the
+  #    same program, so the indirection through snap_unit returns 0.
+  #    Functionally equivalent: a SNAP unit exists iff someone passes
+  #    the same predicate that builds the unit.
+  - pattern: any_related
+    name: snap_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    period: Month
+    source: us:statutes/7/2014
+    relation: member_of_household
+    condition: snap_member_eligible
+
+  - pattern: sum_terms
+    name: snap_countable_earned_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 income composition
+    terms:
+      - snap_gross_monthly_earned_income
+
+  - pattern: sum_terms
+    name: snap_countable_unearned_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 income composition
+    terms:
+      - snap_total_monthly_unearned_income
+
+  - pattern: sum_terms
+    name: snap_gross_monthly_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 income composition
+    terms:
+      - snap_countable_earned_income
+      - snap_countable_unearned_income
+
+  - pattern: sum_terms
+    name: snap_monthly_household_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 income composition
+    terms:
+      - snap_countable_earned_income
+      - snap_countable_unearned_income
+
+  - pattern: sum_terms
+    name: snap_total_allowable_shelter_expenses
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 shelter-cost composition
+    terms:
+      - household_shelter_costs_incurred
+      - snap_standard_utility_allowance
+
+  - pattern: sum_terms
+    name: snap_excess_shelter_deduction
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 shelter deduction composition
+    terms:
+      - snap_excess_shelter_deduction_for_net_income
+
+  - pattern: conditional_value
+    name: snap_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ca/snap/fy-2026 benefit composition
+    condition: snap_eligible
+    when_true: snap_monthly_allotment
+    when_false: 0

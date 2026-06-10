@@ -1,0 +1,172 @@
+# New York SNAP eligibility — FY 2026
+#
+# Federal scope mirrors us-ca/snap (federal SNAP law applies the same to all
+# states). State scope pulls in NY-encoded SNAP sections from
+# rulespec-us-ny (18 NYCRR 385/387 and OTDA policies). NY's encoded
+# content to date is largely restatement of federal rules, so the
+# eligibility logic is dominated by the federal predicates while NY's
+# scope is included so that state-specific options (e.g. categorical
+# eligibility, expanded resource tests) can be layered in as they get
+# encoded.
+
+program: us-ny/snap
+period: 2026-01
+
+outputs:
+  - snap_eligible
+  - snap_benefit
+
+auto_gate_outputs:
+  - snap_eligible
+
+scope:
+  federal:
+    - regulations/7-cfr/273/3
+    - regulations/7-cfr/273/4
+    - regulations/7-cfr/273/5
+    - regulations/7-cfr/273/6
+    - regulations/7-cfr/273/7
+    - regulations/7-cfr/273/8
+    - regulations/7-cfr/273/9/d/6/iii
+    - regulations/7-cfr/273/10
+    - statutes/7/2012/j
+    - statutes/7/2014/a
+    - statutes/7/2014/d
+    - statutes/7/2014/e/2
+    - statutes/7/2014/e/6/A
+    - statutes/7/2014/g
+    - statutes/7/2017/a
+    - regulations/7-cfr/273/24
+
+  state:
+    # 18 NYCRR 385 — work requirements (general + ABAWD restatements)
+    - regulations/18-nycrr/385/3
+    # 18 NYCRR 387 — SNAP eligibility (income limits, deductions, residency)
+    - regulations/18-nycrr/387/9/a/1
+    - regulations/18-nycrr/387/9/a/2
+    - regulations/18-nycrr/387/10
+    - regulations/18-nycrr/387/12/a
+    - regulations/18-nycrr/387/12/b
+    - regulations/18-nycrr/387/12/f/3/v/a
+    - regulations/18-nycrr/387/12/f/3/v/b
+    - regulations/18-nycrr/387/12/f/3/v/c
+    - regulations/18-nycrr/387/12/f/3/vi
+    - regulations/18-nycrr/387/14/a/1
+    - regulations/18-nycrr/387/14/a/5
+
+transformations:
+  - pattern: all_of
+    name: snap_member_eligible
+    effective_from: '2026-01-01'
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: us:statutes/7/2014
+    conditions:
+      - snap_member_citizenship_or_alien_status_eligible
+      - snap_member_ssn_requirement_eligible
+      - snap_member_work_requirement_eligible
+      - snap_member_student_eligible
+
+  - pattern: any_related
+    name: snap_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    period: Month
+    source: us:statutes/7/2014
+    relation: member_of_household
+    condition: snap_member_eligible
+
+  - pattern: any_of
+    name: snap_income_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny:regulations/18-nycrr/387/14/a/5
+    conditions:
+      - snap_income_limit_exemption_for_categorically_eligible_household
+      - snap_standard_income_eligible
+
+  - pattern: sum_terms
+    name: snap_countable_earned_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 income composition
+    terms:
+      - snap_gross_monthly_earned_income
+
+  - pattern: sum_terms
+    name: snap_countable_unearned_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 income composition
+    terms:
+      - snap_total_monthly_unearned_income
+
+  - pattern: sum_terms
+    name: snap_gross_monthly_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 income composition
+    terms:
+      - snap_countable_earned_income
+      - snap_countable_unearned_income
+
+  - pattern: sum_terms
+    name: snap_monthly_household_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 income composition
+    terms:
+      - snap_countable_earned_income
+      - snap_countable_unearned_income
+
+  - pattern: sum_terms
+    name: snap_total_allowable_shelter_expenses
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 shelter-cost composition
+    terms:
+      - household_shelter_costs_incurred
+      - snap_standard_utility_allowance
+      - snap_limited_utility_allowance
+      - snap_individual_utility_allowance
+
+  - pattern: sum_terms
+    name: snap_excess_shelter_deduction
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 shelter deduction composition
+    terms:
+      - snap_excess_shelter_deduction_for_net_income
+
+  - pattern: conditional_value
+    name: snap_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ny/snap/fy-2026 benefit composition
+    condition: snap_eligible
+    when_true: snap_monthly_allotment
+    when_false: 0
