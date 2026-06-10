@@ -1,0 +1,156 @@
+name: PolicyEngine Oracle
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      full_run:
+        description: Run the full New York eCPS SNAP comparison.
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "43 9 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_RULESPEC_REPO_ROOTS: ${{ github.workspace }}/_axiom/rulespec-us:${{ github.workspace }}
+
+jobs:
+  ny-snap-smoke:
+    name: NY SNAP PE smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout rulespec-us-ny
+        uses: actions/checkout@v6.0.2
+
+      - name: Checkout axiom-rules-engine
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          path: _axiom/axiom-rules-engine
+
+      - name: Checkout rulespec-us canonical targets
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/rulespec-us
+          path: _axiom/rulespec-us
+
+      - name: Checkout axiom-encode
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          path: _axiom/axiom-encode
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache axiom-rules-engine build
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          workspaces: _axiom/axiom-rules-engine
+
+      - name: Build axiom-rules-engine
+        working-directory: _axiom/axiom-rules-engine
+        run: cargo build --verbose
+
+      - name: Compare NY SNAP smoke sample to PolicyEngine
+        run: |
+          uv run \
+            --project _axiom/axiom-encode \
+            --python 3.13 \
+            --with policyengine-us \
+            --with numpy \
+            axiom-encode snap-ecps-compare \
+              --jurisdiction us-ny \
+              --workspace-root "${{ github.workspace }}" \
+              --utility-projection policyengine-type \
+              --positive-snap-only \
+              --sample-size 20 \
+              --max-differences 20 \
+              --fail-on-mismatch
+
+  ny-snap-full:
+    name: NY SNAP PE full
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_run) }}
+
+    steps:
+      - name: Checkout rulespec-us-ny
+        uses: actions/checkout@v6.0.2
+
+      - name: Checkout axiom-rules-engine
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          path: _axiom/axiom-rules-engine
+
+      - name: Checkout rulespec-us canonical targets
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/rulespec-us
+          path: _axiom/rulespec-us
+
+      - name: Checkout axiom-encode
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          path: _axiom/axiom-encode
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache axiom-rules-engine build
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          workspaces: _axiom/axiom-rules-engine
+
+      - name: Build axiom-rules-engine
+        working-directory: _axiom/axiom-rules-engine
+        run: cargo build --verbose
+
+      - name: Compare all NY SNAP eCPS records to PolicyEngine
+        run: |
+          uv run \
+            --project _axiom/axiom-encode \
+            --python 3.13 \
+            --with policyengine-us \
+            --with numpy \
+            axiom-encode snap-ecps-compare \
+              --jurisdiction us-ny \
+              --workspace-root "${{ github.workspace }}" \
+              --utility-projection policyengine-type \
+              --max-differences 40 \
+              --min-match-rate 0.95 \
+              --write-csv ny-snap-policyengine-full.csv
+
+      - name: Upload comparison CSV
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ny-snap-policyengine-full
+          path: ny-snap-policyengine-full.csv
+          if-no-files-found: ignore
