@@ -1,0 +1,150 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-410.521
+  summary: |-
+    HANDBOOK BEGINS HERE Example - A nonexempt individual fails to comply with the 20-hour work requirement during months two, three and four of the 36-month period and so is ineligible for food stamps. In month seven, the client obtains employment and works more than 80 hours during that month. At the beginning of month eight, the client loses the job. The client can receive food stamps for months eight, nine, and ten, regardless of whether the ABAWD work requirement is satisfied. Beginning with month eleven and for the remaining months of the 36-month period, the client can only receive food stamps for those months during which he is exempt from or in compliance with the ABAWD work requirement. HANDBOOK ENDS HERE
+rules:
+  - name: abawd_work_requirement_hours
+    kind: parameter
+    dtype: Integer
+    source: MPP 63-410.521, handbook example, 20-hour work requirement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "fails to comply with the 20-hour work requirement"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+
+  - name: abawd_period_month_count
+    kind: parameter
+    dtype: Count
+    source: MPP 63-410.521, handbook example, 36-month period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "months two, three and four of the 36-month period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          36
+
+  - name: abawd_requalification_monthly_work_hours_threshold
+    kind: parameter
+    dtype: Integer
+    source: MPP 63-410.521, handbook example, more than 80 hours
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "works more than 80 hours during that month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          80
+
+  - name: post_requalification_unconditional_food_stamp_month_count
+    kind: parameter
+    dtype: Count
+    source: MPP 63-410.521, handbook example, months eight through ten
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "The client can receive food stamps for months eight, nine, and ten"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: nonexempt_abawd_work_requirement_noncompliance_food_stamp_ineligibility
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: MPP 63-410.521, handbook example, sentence 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "A nonexempt individual fails to comply with the 20-hour work requirement during months two, three and four of the 36-month period and so is ineligible for food stamps."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          nonexempt_individual
+          and month_number_in_abawd_period <= abawd_period_month_count
+          and hours_worked_toward_abawd_work_requirement < abawd_work_requirement_hours
+
+  - name: post_requalification_three_month_abawd_work_requirement_exception_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: MPP 63-410.521, handbook example, months eight through ten
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "In month seven, the client obtains employment and works more than 80 hours during that month. At the beginning of month eight, the client loses the job."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "The client can receive food stamps for months eight, nine, and ten, regardless of whether the ABAWD work requirement is satisfied."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_previously_ineligible_for_abawd_work_requirement_noncompliance
+          and person_obtained_employment_in_requalification_month
+          and requalification_month_work_hours > abawd_requalification_monthly_work_hours_threshold
+          and person_lost_job_at_beginning_of_following_month
+          and current_month_is_after_requalification_job_loss_began
+          and months_since_requalification_job_loss_began <= post_requalification_unconditional_food_stamp_month_count
+
+  - name: remaining_abawd_period_exemption_or_compliance_required_for_food_stamp_eligibility
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: MPP 63-410.521, handbook example, month eleven onward
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-410.521
+              excerpt: "Beginning with month eleven and for the remaining months of the 36-month period, the client can only receive food stamps for those months during which he is exempt from or in compliance with the ABAWD work requirement."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          current_month_is_after_post_requalification_unconditional_food_stamp_period
+          and month_number_in_abawd_period <= abawd_period_month_count
+          and (
+            person_exempt_from_abawd_work_requirement
+            or person_in_compliance_with_abawd_work_requirement
+          )

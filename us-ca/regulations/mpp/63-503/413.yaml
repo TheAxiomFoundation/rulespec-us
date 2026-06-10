@@ -1,0 +1,191 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-503.413
+  summary: |-
+    To determine the net gross income of the applicant or recipient, the individual shall choose either actual costs of producing self-employment income or a standard deduction of 40 percent of gross earned income. The amount of actual costs of producing self-employment or the standard 40 percent of gross earned income is deducted from total gross earned income to arrive at the net gross earned income amount. Recipients shall be allowed to change the method of deduction only at recertification or every six months, whichever occurs first. FOOD STAMP REGULATIONS Regulations ELIGIBILITY DETERMINATIONS 63-503 (Cont.) (Continued) (a) Actual allowable costs of producing self-employment income include, but are not limited to, the identifiable costs of labor, stock, raw material, seed and fertilizer; payments on the principal of the purchase price of income-producing real estate and capital assets, equipment, machinery, and other durable goods; interest paid to purchase income-producing property, insurance premiums, and taxes paid on income-producing property. (b) If actual costs are chosen, the following items shall not be allowed as a cost of doing business: (1) Net losses from previous periods; and (2) Federal, state and local income taxes, money set aside for retirement purposes, and other work-related personal expenses (such as transportation to and from work), as these expenses are accounted for by the earned income deduction, specified in Section 63-502.32. (3) Depreciation; and (4) Any amount that exceeds the payment a household receives from a boarder for lodging and meals.
+rules:
+  - name: self_employment_standard_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 63-503.413, first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "standard deduction of 40 percent of gross earned income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.40
+
+  - name: self_employment_deduction_method_change_interval_months
+    kind: parameter
+    dtype: Count
+    source: 63-503.413, third sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "Recipients shall be allowed to change the method of deduction only at recertification or every six months, whichever occurs first."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          6
+
+  - name: standard_self_employment_income_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.413, first two sentences
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "standard deduction of 40 percent of gross earned income"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "The amount of actual costs of producing self-employment or the standard 40 percent of gross earned income is deducted from total gross earned income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          total_gross_earned_income * self_employment_standard_deduction_rate
+
+  - name: disallowed_actual_self_employment_costs
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.413(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "If actual costs are chosen, the following items shall not be allowed as a cost of doing business: (1) Net losses from previous periods"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "Federal, state and local income taxes, money set aside for retirement purposes, and other work-related personal expenses"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "Depreciation"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "Any amount that exceeds the payment a household receives from a boarder for lodging and meals."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if individual_chooses_actual_costs_method and not individual_chooses_standard_deduction_method: max(0, net_losses_from_previous_periods_claimed_as_actual_cost + federal_state_local_income_taxes_claimed_as_actual_cost + money_set_aside_for_retirement_claimed_as_actual_cost + work_related_personal_expenses_claimed_as_actual_cost + depreciation_claimed_as_actual_cost + max(0, boarder_lodging_and_meals_cost_claimed_as_actual_cost - boarder_lodging_and_meals_payment_received)) else: 0
+
+  - name: allowable_actual_self_employment_income_costs
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.413(a), (b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "Actual allowable costs of producing self-employment income include, but are not limited to, the identifiable costs of labor, stock, raw material, seed and fertilizer"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "If actual costs are chosen, the following items shall not be allowed as a cost of doing business"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if individual_chooses_actual_costs_method and not individual_chooses_standard_deduction_method: max(0, claimed_actual_self_employment_costs - disallowed_actual_self_employment_costs) else: 0
+
+  - name: self_employment_income_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.413, first two sentences
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "the individual shall choose either actual costs of producing self-employment income or a standard deduction of 40 percent of gross earned income"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "The amount of actual costs of producing self-employment or the standard 40 percent of gross earned income is deducted"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if individual_chooses_actual_costs_method and not individual_chooses_standard_deduction_method: allowable_actual_self_employment_income_costs else: if individual_chooses_standard_deduction_method and not individual_chooses_actual_costs_method: standard_self_employment_income_deduction else: 0
+
+  - name: net_gross_self_employment_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.413, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "is deducted from total gross earned income to arrive at the net gross earned income amount"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_gross_earned_income - self_employment_income_deduction)
+
+  - name: recipient_self_employment_deduction_method_change_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 63-503.413, third sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.413
+              excerpt: "Recipients shall be allowed to change the method of deduction only at recertification or every six months, whichever occurs first."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_recipient and (recipient_at_recertification or months_since_recipient_last_changed_self_employment_deduction_method >= self_employment_deduction_method_change_interval_months)
