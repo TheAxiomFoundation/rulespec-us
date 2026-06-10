@@ -1,0 +1,264 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+  summary: |-
+    Shelter residents whose former HHs were not certified before entering the shelter may be certified as a separate HH if otherwise eligible, and such residents can receive only one allotment per month. Shelter applications may use expedited or normal processing; only individual HH participants are processed under expedited provisions, and non-expedited residents are processed under normal procedures. Separate HH certification is based solely on the residents' income and resources; only expenses they are responsible for count, and jointly held former-HH resources are inaccessible. Former HH benefits must be reduced promptly for HH composition changes, changes must be reported, and the facility may act as point of sale while the participant is in the facility.
+rules:
+  - name: shelter_resident_one_allotment_monthly_limit
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: Policy 24.06(4)(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+              excerpt: "can receive only one allotment per month"
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          1
+
+  - name: shelter_resident_separate_household_certification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(4)(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          resident_is_in_shelter_for_battered_persons_and_children
+          and former_household_was_not_certified_before_member_entered_shelter
+          and resident_is_otherwise_eligible
+
+  - name: shelter_resident_monthly_allotment_cap
+    kind: derived
+    entity: Person
+    dtype: Count
+    period: Month
+    source: Policy 24.06(4)(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+              excerpt: "Such residents can receive only one allotment per month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-06/page-10#shelter_resident_one_allotment_monthly_limit
+              output: shelter_resident_one_allotment_monthly_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-06/page-10#shelter_resident_separate_household_certification
+              output: shelter_resident_separate_household_certification
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          if shelter_resident_separate_household_certification: shelter_resident_one_allotment_monthly_limit else: 0
+
+  - name: expedited_processing_for_shelter_resident_application
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(5)(a)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          household_resides_in_shelter_for_battered_persons_and_children
+          and household_participates_as_individual_household
+          and expedited_service_criteria_met
+
+  - name: normal_processing_for_shelter_resident_application
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          household_resides_in_shelter_for_battered_persons_and_children
+          and not expedited_service_criteria_met
+
+  - name: shelter_resident_group_participation_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(5)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          household_resides_in_shelter_for_battered_persons_and_children
+          and shelter_does_not_meet_program_definition
+          and shelter_does_not_provide_meals
+
+  - name: separate_shelter_household_certified_on_own_income_resources
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(5)(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          household_resides_in_shelter_for_battered_persons_and_children
+          and household_applies_as_separate_household
+
+  - name: shelter_household_expense_deduction_considered
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Policy 24.06(5)(f)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          if household_applies_as_separate_household: expenses_for_which_household_is_responsible else: 0
+
+  - name: former_household_joint_resources_inaccessible
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(5)(f)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          resource_held_jointly_with_members_of_former_household
+
+  - name: former_household_change_must_be_acted_on
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          former_household_has_change_in_household_composition_due_to_shelter_resident_departure
+
+  - name: household_responsible_for_reporting_own_application_changes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(7)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          resident_made_application_on_own_behalf
+
+  - name: shelter_representative_must_report_changes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(7)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          shelter_is_acting_as_authorized_representative
+
+  - name: facility_may_act_as_point_of_sale
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.06(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-06/page-10
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          participant_is_in_facility

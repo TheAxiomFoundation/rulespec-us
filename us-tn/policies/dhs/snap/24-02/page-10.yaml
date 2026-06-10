@@ -1,0 +1,154 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+  summary: |-
+    Expedited SNAP processing timing rules. Applicants applying through the 15th of the month receive benefits for the month of application with a normal recertification period. Applicants applying after the 15th receive prorated application month and first recurring month benefits together. For households entitled to expedited service, the county office determines eligibility timely enough for the household to receive benefits on or before the seventh (7th) calendar day following the application date.
+rules:
+  - name: mid_month_cutoff_day
+    kind: parameter
+    dtype: Integer
+    source: SNAP Policy 24.02, paragraphs 3-5 ("fifteenth (15th) of the month")
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "applying through the fifteenth (15th) of the month"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          15
+  - name: expedited_issuance_deadline_days
+    kind: parameter
+    dtype: Integer
+    source: SNAP Policy 24.02, paragraph 6 ("seventh (7th) calendar day following the application date")
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "receive the benefits on or before the seventh (7th) calendar day following the application date"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          7
+  - name: applied_through_mid_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.02, paragraphs 3-4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "applying through the fifteenth (15th) of the month"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          application_day_of_month <= mid_month_cutoff_day
+  - name: applied_after_mid_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.02, paragraph 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "applying after the fifteenth (15th) of the month"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          application_day_of_month > mid_month_cutoff_day
+  - name: expedited_application_month_issuance_authorized
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.02, paragraphs 3, 4, 5 (expedited applicants receive benefits for the month of application)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "issued benefits for the month of application"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          household_entitled_to_expedited_service
+          and (applied_through_mid_month or applied_after_mid_month)
+  - name: future_issuance_withheld_pending_verification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.02, paragraph 4 ("Future issuances are withheld pending required verification.")
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "Future issuances are withheld pending required verification."
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          household_entitled_to_expedited_service
+          and applied_through_mid_month
+          and not ongoing_verifications_provided
+  - name: prorated_and_first_recurring_issued_together
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.02, paragraph 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "issued benefits for the prorated application month and the first recurring month at the same time"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          household_entitled_to_expedited_service
+          and applied_after_mid_month
+  - name: expedited_issuance_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.02, paragraph 6 ("receive the benefits on or before the seventh (7th) calendar day following the application date")
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-02/page-10
+              excerpt: "the county office will determine eligibility timely enough for the household to receive the benefits on or before the seventh (7th) calendar day following the application date"
+    versions:
+      - effective_from: '2022-12-01'
+        formula: |-
+          household_entitled_to_expedited_service
+          and days_from_application_to_benefit_receipt <= expedited_issuance_deadline_days

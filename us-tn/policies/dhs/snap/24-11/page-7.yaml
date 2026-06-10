@@ -1,0 +1,150 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+  summary: |-
+    Employment may be unsuitable when health and safety risk is unreasonable; the household member is physically or mentally unfit; within the first thirty (30) days of registration the offer is outside the registrant's major field of experience; distance is unreasonable, including daily commuting over two (2) hours, unavailable transportation and too far to walk, or excessive transportation cost; work interferes with religious observance, convictions, or beliefs; or other good reasons justify unsuitability. Individuals should be deregistered when the person was registered but the application was denied, has a work program sanction or noncompliance, obtains a job working thirty (30) hours per week or earnings equal to federal minimum wage times thirty (30), no longer receives SNAP, is ABAWD non-compliant, or becomes otherwise exempt.
+rules:
+  - name: initial_registration_major_field_days
+    kind: parameter
+    dtype: Count
+    source: Policy 24.11, Page 7, unsuitable employment criterion 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+              excerpt: "within the first thirty (30) days of registration"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          30
+
+  - name: excessive_daily_commute_hours
+    kind: parameter
+    dtype: Count
+    source: Policy 24.11, Page 7, unsuitable employment criterion 9(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+              excerpt: "daily commuting exceeds two (2) hours per day"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          2
+
+  - name: deregistration_work_hours_per_week
+    kind: parameter
+    dtype: Count
+    source: Policy 24.11, Page 7, Deregistration from Employment & Training item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+              excerpt: "working thirty (30) hours per week"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          30
+
+  - name: deregistration_earnings_minimum_wage_multiplier
+    kind: parameter
+    dtype: Count
+    source: Policy 24.11, Page 7, Deregistration from Employment & Training item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+              excerpt: "earnings equal to federal minimum wage times thirty (30)"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          30
+
+  - name: employment_unsuitable_for_registrant
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: Policy 24.11, Page 7, unsuitable employment criteria 6-12
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-7#initial_registration_major_field_days
+              output: initial_registration_major_field_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-7#excessive_daily_commute_hours
+              output: excessive_daily_commute_hours
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          employment_risk_to_health_and_safety_is_unreasonable
+          or household_member_physically_or_mentally_unfit_for_employment
+          or (days_since_registration <= initial_registration_major_field_days and employment_not_in_registrants_major_field_of_experience)
+          or daily_commuting_hours > excessive_daily_commute_hours
+          or (public_and_private_transportation_unavailable and distance_to_employment_too_far_to_walk)
+          or transportation_cost_to_job_site_excessive_based_on_expected_wage
+          or working_hours_or_nature_interferes_with_religious_observance_convictions_or_beliefs
+          or other_good_reasons_justify_unsuitable_employment
+          or snap_et_program_additional_criteria_make_employment_unsuitable
+
+  - name: employment_and_training_deregistration_required
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: Policy 24.11, Page 7, Deregistration from Employment & Training items 1-6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-7#deregistration_work_hours_per_week
+              output: deregistration_work_hours_per_week
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-7#deregistration_earnings_minimum_wage_multiplier
+              output: deregistration_earnings_minimum_wage_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          registered_but_application_actually_denied
+          or has_work_program_sanction_or_fails_to_comply_with_work_program_requirement
+          or job_hours_per_week >= deregistration_work_hours_per_week
+          or earnings >= federal_minimum_wage * deregistration_earnings_minimum_wage_multiplier
+          or no_longer_snap_recipient
+          or abawd_non_compliant
+          or otherwise_exempt_from_employment_and_training

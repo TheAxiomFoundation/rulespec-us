@@ -1,0 +1,116 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+  summary: |-
+    SNAP Net Monthly Income Standard is used to determine whether a household is eligible. If available income after exclusions and deductions exceeds the standard, the household is not eligible; if it equals or is less, the household may be eligible. Earned and unearned income received or expected during a certification period is considered available except excluded/disregarded income or income so infrequent or irregular that it cannot be reasonably anticipated and does not exceed $30 per quarter. Earned income is income received in exchange for physical or mental labor, including listed compensation, odd jobs, self-employment, certain allowances, and leave/bonus payments while still employed.
+rules:
+  - name: infrequent_irregular_income_quarterly_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Policy 24.14(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+              excerpt: "does not exceed $30 per quarter"
+    versions:
+      - effective_from: '2022-01-04'
+        formula: |-
+          30
+
+  - name: household_net_monthly_income_requirement_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.14(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+    versions:
+      - effective_from: '2022-01-04'
+        formula: |-
+          available_income_after_exclusions_and_deductions <= snap_net_monthly_income_standard_for_household_size
+
+  - name: household_exceeds_net_monthly_income_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Policy 24.14(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+    versions:
+      - effective_from: '2022-01-04'
+        formula: |-
+          available_income_after_exclusions_and_deductions > snap_net_monthly_income_standard_for_household_size
+
+  - name: income_payment_available_during_snap_certification_period
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Policy 24.14(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+              excerpt: "does not exceed $30 per quarter"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-14/page-2#infrequent_irregular_income_quarterly_limit
+              output: infrequent_irregular_income_quarterly_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-01-04'
+        formula: |-
+          income_received_or_expected_during_snap_certification_period
+          and not income_excluded_or_disregarded
+          and not (income_is_so_infrequent_or_irregular_that_it_cannot_be_reasonably_anticipated and income_amount_per_quarter <= infrequent_irregular_income_quarterly_limit)
+
+  - name: earned_income_payment
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Policy 24.14(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-14/page-2
+    versions:
+      - effective_from: '2022-01-04'
+        formula: |-
+          income_received_in_exchange_for_physical_or_mental_labor
+          or compensation_for_services_performed
+          or payment_received_from_odd_job
+          or income_from_self_employment_enterprise
+          or vocational_or_rehabilitative_allowance_not_excluded_as_reimbursement
+          or leave_short_term_disability_or_bonus_payment_to_individual_still_employed
