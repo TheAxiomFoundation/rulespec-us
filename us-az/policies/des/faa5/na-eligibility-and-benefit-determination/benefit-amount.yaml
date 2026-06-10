@@ -1,0 +1,171 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+  summary: |-
+    AZTECS subtracts 30% of NA net income from the Thrifty Food Plan amount. One- and two-participant eligible units are rounded up to the minimum NA allotment. When initial-month proration leaves the unit eligible for less than the minimum allotment, benefits below $10 are eligible no-pay and benefits of $10 or more are paid as the actual benefit.
+rules:
+  - name: net_income_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+              excerpt: "subtracts 30% of the NA net income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.30
+
+  - name: initial_month_no_pay_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+              excerpt: "benefit is less than $10"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: maximum_participant_count_for_minimum_allotment_round_up
+    kind: parameter
+    dtype: Count
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+              excerpt: "one or two participant budgetary unit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2
+
+  - name: eligible_benefit_amount_before_recoupment_or_proration
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount#net_income_reduction_rate
+              output: net_income_reduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if not na_budgetary_unit_is_eligible: 0 else: max(0, thrifty_food_plan_amount_for_budgetary_unit_size - (net_income_reduction_rate * na_net_income))
+
+  - name: benefit_amount_after_allotment_test
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+              excerpt: "one or two participant budgetary unit is less than the minimum NA allotment"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount#eligible_benefit_amount_before_recoupment_or_proration
+              output: eligible_benefit_amount_before_recoupment_or_proration
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount#maximum_participant_count_for_minimum_allotment_round_up
+              output: maximum_participant_count_for_minimum_allotment_round_up
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if not na_budgetary_unit_is_eligible: 0 else: if budgetary_unit_participant_count <= maximum_participant_count_for_minimum_allotment_round_up and eligible_benefit_amount_before_recoupment_or_proration < minimum_na_allotment: minimum_na_allotment else: eligible_benefit_amount_before_recoupment_or_proration
+
+  - name: eligible_no_pay_status_for_initial_month_proration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+              excerpt: "eligible for less than the minimum NA allotment, in an initial month due to proration"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount#initial_month_no_pay_threshold
+              output: initial_month_no_pay_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          na_budgetary_unit_is_eligible
+          and initial_month_proration_applies
+          and prorated_initial_month_na_benefit < minimum_na_allotment
+          and prorated_initial_month_na_benefit < initial_month_no_pay_threshold
+
+  - name: below_minimum_initial_month_prorated_actual_benefit_paid
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FAA5 NA Eligibility and Benefit Determination, block 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
+              excerpt: "eligible for less than the minimum NA allotment, in an initial month due to proration"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount#initial_month_no_pay_threshold
+              output: initial_month_no_pay_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if na_budgetary_unit_is_eligible and initial_month_proration_applies and prorated_initial_month_na_benefit < minimum_na_allotment and prorated_initial_month_na_benefit >= initial_month_no_pay_threshold: prorated_initial_month_na_benefit else: 0
