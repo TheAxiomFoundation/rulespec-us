@@ -1,0 +1,143 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+  summary: |-
+    "The maximum allowable resources, including both liquid and non-liquid assets, of all members of the non-categorically eligible Food and Nutrition Services (FNS) unit shall not exceed: $3,000 for the regular FNS household; $4,500 for the FNS units including a member or members age 60 or over, or a Specified Person." Excluded resources include those belonging to SSI recipients, those included in a Bankruptcy Order while part of the order, those belonging to categorically eligible FNS units, and those belonging to an ineligible student. Include 100% of countable resources for non-categorically eligible FNS unit members and ineligible aliens.
+rules:
+  - name: regular_fns_unit_resource_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 390.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+              excerpt: "$3,000 for the regular FNS household"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          3000
+
+  - name: elderly_or_specified_person_fns_unit_resource_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 390.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+              excerpt: "$4,500 for the FNS units including a member or members age 60 or over, or a Specified Person"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          4500
+
+  - name: countable_resource_inclusion_rate
+    kind: parameter
+    dtype: Rate
+    period: Month
+    source: FNS 390.01(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+              excerpt: "Include 100% of countable resources"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          1
+
+  - name: resource_excluded_from_fns_resource_test
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 390.01(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          resource_belongs_to_ssi_recipient
+          or resource_is_in_bankruptcy_order_and_inaccessible_during_order
+          or resource_belongs_to_categorically_eligible_fns_unit
+          or resource_belongs_to_ineligible_student
+
+  - name: fns_unit_resource_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 390.01(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          if fns_unit_includes_member_age_60_or_over_or_specified_person: elderly_or_specified_person_fns_unit_resource_limit else: regular_fns_unit_resource_limit
+
+  - name: counted_resources_for_fns_resource_test
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 390.01(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          countable_resources_of_non_categorically_eligible_fns_unit_members_and_ineligible_aliens * countable_resource_inclusion_rate
+
+  - name: fns_unit_passes_resource_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 390.01(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-390-resources/page-1
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          fns_unit_is_categorically_eligible
+          or (not fns_unit_is_categorically_eligible
+          and counted_resources_for_fns_resource_test <= fns_unit_resource_limit)

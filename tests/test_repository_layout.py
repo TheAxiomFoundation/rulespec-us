@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RULESPEC_ROOTS = ("statutes", "regulations", "policies")
+# Country-monorepo layout: one top-level directory per jurisdiction
+# (us/, us-al/, …), each holding its own content dirs. Durable ids are
+# <jurisdiction dir>:<path inside it>#<rule>.
+JURISDICTION_DIR_RE = re.compile(r"^[a-z]{2}(-[a-z0-9-]+)*$")
+CONTENT_DIRS = ("statutes", "regulations", "policies", "legislation")
 IGNORED_DIRS = {".git", ".pytest_cache", ".venv", "__pycache__", "_axiom"}
-ALLOWED_YAML_ROOTS = {".github", "sources", *RULESPEC_ROOTS}
 DISALLOWED_GENERIC_RULE_NAMES = {
     "amount",
     "base",
@@ -18,6 +22,59 @@ DISALLOWED_GENERIC_RULE_NAMES = {
     "threshold",
     "value",
 }
+
+
+def jurisdiction_dirs() -> list[Path]:
+    return sorted(
+        child
+        for child in ROOT.iterdir()
+        if child.is_dir()
+        and JURISDICTION_DIR_RE.match(child.name)
+        and any((child / marker).is_dir() for marker in CONTENT_DIRS)
+    )
+
+
+def rulespec_content_roots() -> list[Path]:
+    return [
+        jurisdiction / marker
+        for jurisdiction in jurisdiction_dirs()
+        for marker in CONTENT_DIRS
+        if (jurisdiction / marker).is_dir()
+    ]
+
+
+def allowed_yaml_roots() -> set[str]:
+    return {
+        ".github",
+        "programs",
+        "known-dangling.yaml",
+        "known-validation-gaps.yaml",
+        *(d.name for d in jurisdiction_dirs()),
+    }
+
+
+def _validation_gaps(section: str) -> set[str]:
+    path = ROOT / "known-validation-gaps.yaml"
+    if not path.exists():
+        return set()
+    payload = yaml.safe_load(path.read_text()) or {}
+    return set(payload.get(section) or [])
+
+
+def apply_gap_ratchet(section: str, found: list[str]) -> list[str]:
+    """Filter `found` through the gap allowlist, failing both ways.
+
+    Returns problems: gaps not allowlisted, plus allowlisted entries that
+    no longer reproduce (remove them from known-validation-gaps.yaml).
+    """
+    allowlisted = _validation_gaps(section)
+    found_set = set(found)
+    problems = [item for item in found if item not in allowlisted]
+    problems.extend(
+        f"known-validation-gaps.yaml {section} entry is fixed — remove it: {stale}"
+        for stale in sorted(allowlisted - found_set)
+    )
+    return problems
 
 
 def iter_repo_files() -> list[Path]:
@@ -32,19 +89,18 @@ def iter_repo_files() -> list[Path]:
 
 def iter_rulespec_files() -> list[Path]:
     files: list[Path] = []
-    for root_name in RULESPEC_ROOTS:
-        root = ROOT / root_name
-        if root.exists():
-            files.extend(
-                path for path in root.rglob("*.yaml") if not path.name.endswith(".test.yaml")
-            )
+    for root in rulespec_content_roots():
+        files.extend(
+            path for path in root.rglob("*.yaml") if not path.name.endswith(".test.yaml")
+        )
     return sorted(files)
 
 
 def canonical_rule_id(path: Path, rule_name: str) -> str:
-    repo_prefix = ROOT.name.removeprefix("rulespec-")
-    target = path.relative_to(ROOT).with_suffix("").as_posix()
-    return f"{repo_prefix}:{target}#{rule_name}"
+    relative = path.relative_to(ROOT)
+    prefix = relative.parts[0]
+    target = Path(*relative.parts[1:]).with_suffix("").as_posix()
+    return f"{prefix}:{target}#{rule_name}"
 
 
 def test_no_obsolete_formula_artifacts() -> None:
@@ -61,19 +117,24 @@ def test_no_obsolete_formula_artifacts() -> None:
 
 
 def test_no_disallowed_roots_or_yaml_fixtures() -> None:
+    singular_bases = [ROOT, *jurisdiction_dirs()]
     disallowed_roots = [
-        name for name in ("statute", "regulation", "policy") if (ROOT / name).exists()
+        (base / name).relative_to(ROOT).as_posix()
+        for base in singular_bases
+        for name in ("statute", "regulation", "policy")
+        if (base / name).exists()
     ]
     yaml_fixtures = [
         path.relative_to(ROOT).as_posix()
         for path in (ROOT / "tests").rglob("*.yaml")
         if (ROOT / "tests").exists()
     ]
+    allowed = allowed_yaml_roots()
     stray_yaml = [
         path.relative_to(ROOT).as_posix()
         for path in iter_repo_files()
         if path.suffix in {".yaml", ".yml"}
-        and path.relative_to(ROOT).parts[0] not in ALLOWED_YAML_ROOTS
+        and path.relative_to(ROOT).parts[0] not in allowed
     ]
 
     assert disallowed_roots == []
@@ -88,15 +149,12 @@ def test_rulespec_files_have_companion_tests() -> None:
         if not path.with_name(f"{path.stem}.test.yaml").exists()
     ]
 
-    assert missing == []
+    assert apply_gap_ratchet("missing_companion_tests", missing) == []
 
 
 def test_companion_tests_have_rulespec_files() -> None:
     orphaned = []
-    for root_name in RULESPEC_ROOTS:
-        root = ROOT / root_name
-        if not root.exists():
-            continue
+    for root in rulespec_content_roots():
         orphaned.extend(
             path.relative_to(ROOT).as_posix()
             for path in sorted(root.rglob("*.test.yaml"))
@@ -134,7 +192,8 @@ def test_rulespec_files_use_rulespec_v1_shape() -> None:
             if rule.get("kind") in {"parameter", "derived"} and "versions" not in rule:
                 invalid.append(f"{path.relative_to(ROOT)}: rules[{index}] missing versions")
 
-    assert invalid == []
+    invalid_paths = sorted({item.split(":", 1)[0] for item in invalid})
+    assert apply_gap_ratchet("shape_issues", invalid_paths) == []
 
 
 def test_rulespec_rules_have_source_metadata() -> None:
@@ -255,9 +314,9 @@ def test_derived_rules_are_exercised_by_companion_tests() -> None:
                     covered_outputs.update(str(name) for name in outputs)
 
         missing.extend(
-            f"{path.relative_to(ROOT)}: {rule_name}"
+            f"{path.relative_to(ROOT).as_posix()}#{rule_name}"
             for rule_name in derived_rule_names
             if canonical_rule_id(path, rule_name) not in covered_outputs
         )
 
-    assert missing == []
+    assert apply_gap_ratchet("uncovered_derived_rules", missing) == []

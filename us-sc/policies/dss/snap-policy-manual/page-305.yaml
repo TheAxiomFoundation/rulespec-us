@@ -1,0 +1,163 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+  summary: |-
+    "Non-citizen U.S. nationals," "Cuban and Haitian Entrants (CHE)," and "Compacts of Free Association (COFA) citizens" are eligible immediately with no waiting period if all other SNAP financial and non-financial requirements are met. LPRs are eligible after a 5-year waiting period, but without a waiting period if under 18, with 40 qualifying work quarters, blind or disabled, lawfully residing and 65 or older on August 22, 1996, with a U.S. military connection, Amerasian immigrant status, American Indian born abroad status, or certain Hmong or Highland Laotian tribal membership.
+rules:
+  - name: lpr_waiting_period_years
+    kind: parameter
+    dtype: Integer
+    source: SNAP Manual 305, LPR waiting period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+              excerpt: "Eligible after a 5-year waiting period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          5
+
+  - name: lpr_work_quarters_without_waiting_period_minimum
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 305, LPR no-waiting-period conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+              excerpt: "Have 40 qualifying work quarters"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          40
+
+  - name: person_meets_other_snap_requirements
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 305, other SNAP requirements condition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          meets_all_other_snap_financial_and_non_financial_eligibility_requirements
+
+  - name: lpr_has_no_waiting_period_condition
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 305, LPR no-waiting-period conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-305#lpr_work_quarters_without_waiting_period_minimum
+              output: lpr_work_quarters_without_waiting_period_minimum
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_under_18_years_old
+          or qualifying_work_quarters >= lpr_work_quarters_without_waiting_period_minimum
+          or person_is_blind_or_disabled
+          or (person_was_lawfully_residing_in_us_on_august_22_1996 and person_was_65_or_older_on_august_22_1996)
+          or person_has_us_military_connection
+          or person_admitted_as_amerasian_immigrant
+          or person_is_american_indian_born_abroad
+          or person_is_certain_hmong_or_highland_laotian_tribal_member
+
+  - name: eligible_non_citizen_without_waiting_period_category
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 305, immediately eligible non-citizen categories
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_non_citizen_us_national
+          or person_is_cuban_or_haitian_entrant
+          or person_is_cofa_citizen
+
+  - name: snap_eligible_non_citizen_under_obbb
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 305, eligible non-citizen categories and eligibility timing
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-305
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-305#person_meets_other_snap_requirements
+              output: person_meets_other_snap_requirements
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-305#eligible_non_citizen_without_waiting_period_category
+              output: eligible_non_citizen_without_waiting_period_category
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-305#lpr_has_no_waiting_period_condition
+              output: lpr_has_no_waiting_period_condition
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-305#lpr_waiting_period_years
+              output: lpr_waiting_period_years
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_meets_other_snap_requirements
+          and (
+            eligible_non_citizen_without_waiting_period_category
+            or (
+              person_is_lawful_permanent_resident
+              and (
+                lpr_has_no_waiting_period_condition
+                or lpr_years_after_becoming_lawful_permanent_resident >= lpr_waiting_period_years
+              )
+            )
+          )

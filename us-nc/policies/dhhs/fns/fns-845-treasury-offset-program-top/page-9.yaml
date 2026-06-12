@@ -1,0 +1,106 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+  summary: |-
+    Active debtors on the TOP file with a current balance greater than $25.00 are offset. EPICS applies intercept payments to eligible claims. A refund is issued to the claim debtor for the amount of any overcollection; the State Controller’s Office refunds the amount overcollected, plus the IRS collection fee if the debt is submitted to TOP in error. Any overcollection cannot be applied to another program claim or to a FNS claim not submitted to TOP.
+rules:
+  - name: top_active_debtor_minimum_balance_for_offset
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 845.09, page 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+              excerpt: "current balance greater than $25.00"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          25.00
+
+  - name: active_top_debtor_subject_to_offset
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 845, page 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+              excerpt: "current balance greater than $25.00"
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          debtor_is_active_on_top_file
+          and debtor_current_balance > top_active_debtor_minimum_balance_for_offset
+
+  - name: top_overcollection_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Day
+    unit: USD
+    source: FNS 845.10(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          max(0, top_intercept_amount - total_amount_owed_by_debtor)
+
+  - name: top_refund_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Day
+    unit: USD
+    source: FNS 845.10(A), FNS 845.09(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          top_overcollection_amount + (if debt_submitted_to_top_in_error: irs_collection_fee else: 0)
+
+  - name: top_overcollection_may_be_applied_to_other_claim
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: FNS 845.10(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-845-treasury-offset-program-top/page-9
+    versions:
+      - effective_from: '2017-04-01'
+        formula: |-
+          not payment_is_top_overcollection

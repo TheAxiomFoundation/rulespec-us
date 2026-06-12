@@ -1,0 +1,363 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+  summary: |-
+    If the household contacts the Agency within the 30-day processing period, the Agency must schedule a second interview. If by the 30th day the Agency cannot take action due to household fault, the household loses entitlement from the date of application, receives an additional 30 days to act, and may have the case reopened without a new application if it acts within 60 days. Agency-caused delays require corrective action and, if eligible during the second 30-day period, benefits retroactive to the application date. Beyond 60 days, Agency fault requires determination on the original application; household fault requires a new application.
+rules:
+  - name: initial_processing_period_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual p. 72, delayed processing periods
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+              excerpt: "30-day processing period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: additional_household_action_period_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+              excerpt: "additional 30 days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: reopening_window_days_from_application
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+              excerpt: "within 60 days following the date the application was filed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          60
+
+  - name: agency_must_schedule_second_interview
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, second interview
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#initial_processing_period_days
+              output: initial_processing_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_contacted_agency_within_initial_processing_period
+          and days_since_application <= initial_processing_period_days
+
+  - name: household_loses_entitlement_from_application_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#initial_processing_period_days
+              output: initial_processing_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          days_since_application >= initial_processing_period_days
+          and agency_cannot_take_action_due_to_household_fault
+
+  - name: agency_must_give_additional_household_action_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#additional_household_action_period_days
+              output: additional_household_action_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_cannot_take_action_due_to_household_fault
+          and additional_household_action_period_days == 30
+
+  - name: agency_must_send_notice_of_denial_on_initial_deadline
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#initial_processing_period_days
+              output: initial_processing_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          days_since_application == initial_processing_period_days
+          and not household_has_taken_required_action
+
+  - name: agency_must_reopen_case_without_new_application
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#reopening_window_days_from_application
+              output: reopening_window_days_from_application
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          notice_of_denial_was_sent
+          and household_has_taken_required_action
+          and days_since_application <= reopening_window_days_from_application
+
+  - name: no_further_agency_action_required_after_denial_notice
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#reopening_window_days_from_application
+              output: reopening_window_days_from_application
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          notice_of_denial_was_sent
+          and not household_has_taken_required_action
+          and days_since_application > reopening_window_days_from_application
+
+  - name: benefits_begin_from_date_household_took_required_action
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by household
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_fault_delayed_processing_in_first_processing_period
+          and household_found_eligible_during_second_processing_period
+          and day_is_date_household_took_required_action
+
+  - name: benefits_retroactive_to_application_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by Agency
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_fault_delayed_processing_in_initial_processing_period
+          and household_found_eligible_during_second_processing_period
+          and day_is_date_application_was_filed
+
+  - name: agency_must_take_immediate_corrective_action
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by Agency
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_fault_delayed_processing_in_initial_processing_period
+
+  - name: agency_must_deny_application_after_agency_delay_if_ineligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays caused by Agency
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_fault_delayed_processing_in_initial_processing_period
+          and household_found_ineligible
+
+  - name: agency_must_use_original_application_after_second_period_agency_fault
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays beyond 60 days
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#reopening_window_days_from_application
+              output: reopening_window_days_from_application
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_at_fault_for_not_completing_application_process
+          and days_since_application > reopening_window_days_from_application
+
+  - name: agency_must_not_require_new_application_after_second_period_agency_fault
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays beyond 60 days
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#reopening_window_days_from_application
+              output: reopening_window_days_from_application
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          agency_at_fault_for_not_completing_application_process
+          and days_since_application > reopening_window_days_from_application
+
+  - name: household_must_file_new_application_after_second_period_household_fault
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual p. 72, delays beyond 60 days
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-72
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-72#reopening_window_days_from_application
+              output: reopening_window_days_from_application
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_at_fault_for_not_completing_application_process
+          and days_since_application > reopening_window_days_from_application

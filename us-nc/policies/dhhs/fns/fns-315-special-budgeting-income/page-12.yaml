@@ -1,0 +1,180 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+  summary: |-
+    Section 315 Change #01-2022 January 11, 2022. Foster care payments continuing past age 18 are countable as unearned income. 315.18 gaming proceeds of the Eastern Band of Cherokee Indians are received semi-annually and prorated over the six-month period; waived distributions are not counted; qualifying tribe-administered trust fund payments for minors and incompetent adults are excluded. 315.19 GI Bill income is not counted except the Post 9/11 GI Bill monthly housing allowance, effective August 1, 2009. 315.20 lump-sum inheritance or insurance settlement payments are not income and are treated as resources. 315.21 installment payments for sale of a resource are budgeted as unearned income after subtracting costs of doing business; annual contract income is prorated over 12 months.
+rules:
+  - name: gaming_proceeds_proration_months
+    kind: parameter
+    dtype: Integer
+    source: FNS 315.18(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+              excerpt: "prorated over the six-month period covered"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          6
+
+  - name: sale_of_resource_installment_proration_months
+    kind: parameter
+    dtype: Integer
+    source: FNS 315.21(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+              excerpt: "Prorate the contract income over 12 months"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          12
+
+  - name: foster_care_payment_after_age_18_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315, page 12 foster care sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if foster_care_payment_continues_past_age_18: foster_care_payment_amount else: 0
+
+  - name: gaming_proceeds_trust_fund_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.18(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          gaming_proceeds_payment_made_directly_into_tribe_administered_trust_for_minor_or_incompetent_adult
+          and trust_fund_accessible_only_upon_petition_to_tribe
+          and trust_fund_withdrawals_allowed_only_for_medical_and_educational_purposes
+
+  - name: gaming_proceeds_countable_income_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 315.18(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          payment_is_eastern_band_cherokee_gaming_proceeds_distribution
+          and (not tribal_member_signed_waiver_refusing_per_capita_distribution)
+          and (not gaming_proceeds_trust_fund_exclusion_applies)
+
+  - name: eastern_band_cherokee_gaming_proceeds_countable_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.18(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+              excerpt: "received semi-annually ... prorated over the six-month period covered"
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if gaming_proceeds_countable_income_applies: eastern_band_cherokee_gaming_proceeds_semiannual_payment_amount / gaming_proceeds_proration_months else: 0
+
+  - name: gi_bill_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.19
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+              excerpt: "monthly housing allowance (MHA) issued through the Post 9/11 GI bill which is effective August 1, 2009"
+    versions:
+      - effective_from: '2009-08-01'
+        formula: |-
+          if payment_is_post_9_11_gi_bill_monthly_housing_allowance: gi_bill_payment_amount else: 0
+
+  - name: inheritance_or_insurance_settlement_lump_sum_excluded_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.20
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if payment_is_inheritance_or_insurance_settlement_paid_as_lump_sum: inheritance_or_insurance_settlement_payment_amount else: 0
+
+  - name: sale_of_resource_installment_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 315.21
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-315-special-budgeting-income/page-12
+              excerpt: "Subtract the cost of doing business ... Prorate the contract income over 12 months if the FNS unit receives an annual payment."
+    versions:
+      - effective_from: '2022-01-11'
+        formula: |-
+          if payment_is_installment_payment_for_sale_of_resource_under_contract: (if fns_unit_receives_annual_sale_of_resource_contract_payment: max(0, sale_of_resource_contract_gross_payment_amount - sale_of_resource_contract_cost_of_doing_business_amount) / sale_of_resource_installment_proration_months else: max(0, sale_of_resource_contract_gross_payment_amount - sale_of_resource_contract_cost_of_doing_business_amount)) else: 0

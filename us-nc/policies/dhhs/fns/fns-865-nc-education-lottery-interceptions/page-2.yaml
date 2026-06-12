@@ -1,0 +1,298 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+  summary: |-
+    EPICS considers the methods of collections (payments) and adjustments for the past 60 days; the only value that offsets a payment for delinquency determination is ADJ-Adjustment. NC Debt Setoff must be blank for NCEL intercept, with H, L, S, or X used to block DOR Setoff and NCEL interception. Enter H when a debtor negotiates a repayment agreement to pay less than 10% of the balance or $25.00, whichever is greater, and pays accordingly. A Claim Debtor is submitted for NCEL interception if all requirements are met and eligible-claim balances total $50.00 or more; a debtor is not forwarded if he has neither a CCID Name nor an SSN. EPICS may receive up to three NCEL intercepts for a debtor.
+rules:
+  - name: collection_lookback_days
+    kind: parameter
+    dtype: Count
+    source: FNS 865 page 2, introductory paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "past 60 days"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          60
+
+  - name: repayment_agreement_minimum_payment_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 865 page 2, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "less than 10% of the balance"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          0.10
+
+  - name: repayment_agreement_minimum_payment_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 865 page 2, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "$25.00; whichever is greater"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          25.00
+
+  - name: ncel_submission_minimum_total_eligible_claim_balance
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 865 page 2, paragraph F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "totals $50.00 or more"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          50.00
+
+  - name: maximum_ncel_intercepts_per_debtor
+    kind: parameter
+    dtype: Count
+    source: FNS 865.03(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "up to three separate intercepts"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          3
+
+  - name: collection_method_or_adjustment_in_lookback
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, introductory paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "past 60 days"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          collection_method_or_adjustment_age_days <= collection_lookback_days
+
+  - name: adj_adjustment_offset_for_delinquency_determination
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 865 page 2, introductory paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "only value that offsets a payment ... ADJ-Adjustment"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          if collection_method_or_adjustment_in_lookback and collection_method_code_is_adj_adjustment: collection_adjustment_amount else: 0
+
+  - name: repayment_agreement_payment_threshold
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 865 page 2, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "10% of the balance or $25.00; whichever is greater"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          max(repayment_agreement_minimum_payment_rate * current_claim_balance, repayment_agreement_minimum_payment_floor)
+
+  - name: repayment_agreement_blocks_dor_and_ncel_interception
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "negotiates a repayment agreement ... and the debtor is paying accordingly. This blocks DOR and NCEL intercept."
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          debtor_negotiated_repayment_agreement
+          and repayment_agreement_payment_amount < repayment_agreement_payment_threshold
+          and debtor_paying_according_to_repayment_agreement
+
+  - name: nc_debt_setoff_code_blocks_dor_and_ncel_interception
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, paragraphs D-E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "H = Hearing ... L = Litigation ... S = State controller waived ... X = Permanently excluded"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          nc_debt_setoff_field_contains_h_code
+          or nc_debt_setoff_field_contains_l_code
+          or nc_debt_setoff_field_contains_s_code
+          or nc_debt_setoff_field_contains_x_code
+
+  - name: nc_debt_setoff_field_allows_ncel_interception
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, paragraph D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "NC Debt Setoff field ... must be blank for NCEL intercept to occur"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          nc_debt_setoff_field_is_blank
+          and not nc_debt_setoff_code_blocks_dor_and_ncel_interception
+
+  - name: debtor_identifier_available_for_ncel_forwarding
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, paragraph H
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "not forwarded to NCEL if he has neither a Common Client ID (CCID) Name nor a SSN"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          debtor_has_common_client_id_name
+          or debtor_has_ssn
+
+  - name: claim_debtor_meets_ncel_balance_threshold
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, paragraph F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "current balance for all eligible claims ... totals $50.00 or more"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          total_current_balance_for_all_eligible_claims_in_which_person_is_debtor >= ncel_submission_minimum_total_eligible_claim_balance
+
+  - name: ncel_intercept_count_within_possible_limit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865.03(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "up to three separate intercepts for a debtor"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          ncel_intercepts_received_for_debtor <= maximum_ncel_intercepts_per_debtor
+
+  - name: claim_debtor_submitted_for_ncel_interception
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 865 page 2, paragraphs D-F and H
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-865-nc-education-lottery-interceptions/page-2
+              excerpt: "submitted for NCEL interception if he meets all requirements ... $50.00 or more"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          debtor_meets_all_other_ncel_interception_requirements
+          and claim_debtor_meets_ncel_balance_threshold
+          and nc_debt_setoff_field_allows_ncel_interception
+          and debtor_identifier_available_for_ncel_forwarding
+          and not repayment_agreement_blocks_dor_and_ncel_interception

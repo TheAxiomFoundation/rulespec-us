@@ -1,0 +1,176 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-408.11
+  summary: |-
+    Voluntary quit means resigning a job that is 30 hours or more per week or provides weekly earnings at least equivalent to the federal minimum wage multiplied by 30 hours. If the voluntary quit occurs within 60 days to the date of application for food stamps without good cause in accordance with Section 63-408.4, the application shall be denied for one, three, or six months as specified in Section 63-407.53.
+rules:
+  - name: voluntary_quit_weekly_hours_threshold
+    kind: parameter
+    dtype: Decimal
+    source: 63-408.11, first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "Voluntary quit means resigning a job that is 30 hours or more per week"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: voluntary_quit_federal_minimum_wage_multiplier_hours
+    kind: parameter
+    dtype: Decimal
+    source: 63-408.11, first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "weekly earnings at least equivalent to the federal minimum wage multiplied by 30 hours"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: voluntary_quit_application_lookback_days
+    kind: parameter
+    dtype: Count
+    source: 63-408.11, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "If the voluntary quit occurs within 60 days to the date of application for food stamps"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          60
+
+  - name: voluntary_quit_denial_duration_short_months
+    kind: parameter
+    dtype: Count
+    source: 63-408.11, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "the application shall be denied for one, three, or six months as specified in Section 63-407.53"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: voluntary_quit_denial_duration_intermediate_months
+    kind: parameter
+    dtype: Count
+    source: 63-408.11, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "the application shall be denied for one, three, or six months as specified in Section 63-407.53"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: voluntary_quit_denial_duration_long_months
+    kind: parameter
+    dtype: Count
+    source: 63-408.11, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "the application shall be denied for one, three, or six months as specified in Section 63-407.53"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          6
+
+  - name: voluntary_quit
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-408.11, first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "Voluntary quit means resigning a job that is 30 hours or more per week or provides weekly earnings at least equivalent to the federal minimum wage multiplied by 30 hours."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_resigned_job and (
+            resigned_job_weekly_hours >= voluntary_quit_weekly_hours_threshold
+            or resigned_job_weekly_earnings >= federal_minimum_wage * voluntary_quit_federal_minimum_wage_multiplier_hours
+          )
+
+  - name: food_stamp_application_denied_due_to_voluntary_quit
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-408.11, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "If the voluntary quit occurs within 60 days to the date of application for food stamps without good cause in accordance with Section 63-408.4, the application shall be denied"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          voluntary_quit and
+          days_before_food_stamp_application_voluntary_quit_occurred <= voluntary_quit_application_lookback_days and
+          not good_cause_for_voluntary_quit_under_section_63_408_4
+
+  - name: food_stamp_application_denial_duration_months_due_to_voluntary_quit
+    kind: derived
+    entity: SnapUnit
+    dtype: Count
+    period: Month
+    source: 63-408.11, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-408.11
+              excerpt: "the application shall be denied for one, three, or six months as specified in Section 63-407.53"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if food_stamp_application_denied_due_to_voluntary_quit and (
+            denial_duration_months_specified_under_section_63_407_53 == voluntary_quit_denial_duration_short_months
+            or denial_duration_months_specified_under_section_63_407_53 == voluntary_quit_denial_duration_intermediate_months
+            or denial_duration_months_specified_under_section_63_407_53 == voluntary_quit_denial_duration_long_months
+          ): denial_duration_months_specified_under_section_63_407_53 else: 0

@@ -1,0 +1,298 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+  summary: |-
+    "The local agency may choose to seek civil court action to collect the claim if restitution is prohibited by the criminal court." "Pursue collection against any financially responsible individual if the court does not address restitution." For allotment reduction, "divide the original overpayment amount by 36" and the "DUE DATE will be the 15th of the following month." If the court orders reduced restitution, the claim is limited to that amount and the remaining overissuance is not pursued. The DSS-8554 requires return "within ten days"; if not returned, further collection may include civil court, tax intercept, or wage garnishment. IPV claim records may be electronic but "must be maintained permanently."
+rules:
+  - name: vra_installment_divisor
+    kind: parameter
+    dtype: Integer
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "divide the original overpayment amount by 36"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          36
+
+  - name: vra_following_month_due_day_number
+    kind: parameter
+    dtype: Integer
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "DUE DATE will be the 15th of the following month"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          15
+
+  - name: dss_8554_return_deadline_days
+    kind: parameter
+    dtype: Count
+    source: FNS 820.11.B.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "return the signed notice within ten days"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: monthly_vra_payment_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "divide the original overpayment amount by 36"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if court_does_not_address_restitution: max(0, original_overpayment_amount) / vra_installment_divisor else: 0
+
+  - name: vra_due_day_of_following_month
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "DUE DATE will be the 15th of the following month"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if court_does_not_address_restitution: vra_following_month_due_day_number else: 0
+
+  - name: court_reduced_restitution_claim_established_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "If the court orders a reduced amount of restitution, the claim can only be established for the reduced amount."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if court_orders_reduced_amount_of_restitution: max(0, court_order_reduced_restitution_amount) else: 0
+
+  - name: dss_8554_return_deadline_day_count
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: FNS 820.11.B.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "return the signed notice within ten days"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if dss_8554_sent_to_nonparticipating_household: dss_8554_return_deadline_days else: 0
+
+  - name: further_collection_action_after_dss_8554_deadline
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Initiate further collection action as appropriate ... if the notice is not returned by the deadline."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          nonparticipating_household
+          and dss_8554_sent_to_nonparticipating_household
+          and dss_8554_notice_not_returned_by_deadline
+
+  - name: civil_court_action_to_collect_claim_may_be_sought
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.A.8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "seek civil court action to collect the claim if restitution is prohibited by the criminal court"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          claim_exists
+          and restitution_prohibited_by_criminal_court
+
+  - name: allotment_reduction_for_participating_household_after_not_guilty_finding
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Invoke allotment reduction on a participating household if the individual is found not guilty."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          participating_household
+          and individual_found_not_guilty
+
+  - name: other_collection_methods_for_nonparticipating_household_after_not_guilty_finding
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Pursue other collection methods, including civil action, if a non-participating household is found not guilty."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          nonparticipating_household
+          and individual_found_not_guilty
+
+  - name: collection_against_financially_responsible_individual_when_court_silent
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Pursue collection against any financially responsible individual if the court does not address restitution."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          person_is_financially_responsible
+          and court_does_not_address_restitution
+
+  - name: collection_against_financially_responsible_individual_prohibited_by_no_restitution_order
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Do not pursue collection against any financially responsible individual if the court orders no restitution"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          person_is_financially_responsible
+          and court_orders_no_restitution_or_zero
+
+  - name: collection_against_remaining_overissuance_after_reduced_restitution_prohibited
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Do not pursue collection against the remaining amount of the overissuance."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          person_is_financially_responsible
+          and court_orders_reduced_amount_of_restitution
+
+  - name: repayment_agreement_negotiation_with_dss_8604
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 820.11.B.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-26
+              excerpt: "Negotiate a repayment agreement using a DSS-8604 with the client if he/she contacts the local agency"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          person_is_client
+          and client_contacts_local_agency_requesting_repayment_arrangement

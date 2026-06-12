@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+  summary: |-
+    "Methods of Payment": A household may pay an AE claim in one lump sum if financially able, but must not be required to use all resources. If unable to pay in one lump sum, negotiate and document a Voluntary Repayment Agreement. "Allotment Reduction – The allotment is reduced by 10% or $10, whichever is greater. NC FAST recoups the entire allotment if the allotment is $10 or less." Do not initiate allotment reduction on initial allotments. A FNS unit may choose voluntary EBT account payment toward an outstanding FNS claim in addition to allotment reduction.
+rules:
+  - name: allotment_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: FNS 810, page 10, D.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+              excerpt: "The allotment is reduced by 10% or $10, whichever is greater."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          0.10
+
+  - name: minimum_allotment_reduction_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 810, page 10, D.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+              excerpt: "The allotment is reduced by 10% or $10, whichever is greater."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: full_allotment_recoupment_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 810, page 10, D.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+              excerpt: "NC FAST recoups the entire allotment if the allotment is $10 or less."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: allotment_reduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 810, page 10, D.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+              excerpt: "The allotment is reduced by 10% or $10, whichever is greater. NC FAST recoups the entire allotment if the allotment is $10 or less."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+              excerpt: "Do not initiate allotment reduction on initial allotments."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if allotment_is_initial_allotment: 0 else: if monthly_allotment_amount <= full_allotment_recoupment_threshold: max(0, monthly_allotment_amount) else: max(minimum_allotment_reduction_amount, monthly_allotment_amount * allotment_reduction_rate)
+
+  - name: voluntary_ebt_claim_payment_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 10, D.4.a-b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          fns_unit_chooses_voluntary_ebt_payment
+          and has_outstanding_fns_claim
+          and ebt_account_is_active_or_reactivated
+
+  - name: one_time_ebt_debit_documented_by_dss_8217
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 10, D.4.a-b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          one_time_ebt_reduction_has_oral_permission
+          and reduction_documented_on_dss_8217
+
+  - name: recurring_ebt_debit_authorized
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 10, D.4.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          recurring_ebt_reduction_has_written_authorization
+          and dss_8217_signed_by_head_of_household
+          and dss_8217_signed_by_caseworker
+
+  - name: voluntary_repayment_agreement_binding
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 810, page 10, D.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-810-administrative-error-ae-claims/page-10
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          dss_8604_signed_by_debtor
+          and dss_8604_signed_by_local_agency_representative
+          and not debtor_defaults_on_vra

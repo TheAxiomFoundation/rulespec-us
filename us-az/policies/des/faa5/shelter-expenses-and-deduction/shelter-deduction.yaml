@@ -1,0 +1,163 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+  summary: |-
+    The shelter deduction is total shelter costs plus the utility allowance that exceeds 50% of the budgetary unit's net income after all other deductions and allowances. For units without an elderly or disabled participant, the deduction cannot exceed the higher of the maximum shelter deduction amount or, when homeless and incurring shelter expense, the NA homeless shelter deduction. Vendor payments, reimbursements, rental discounts, and in-kind payments are not allowable shelter expenses.
+rules:
+  - name: shelter_deduction_net_income_share
+    kind: parameter
+    dtype: Rate
+    source: DES FAA5 shelter expenses and deduction, shelter deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+              excerpt: exceeds 50% of the budgetary unit’s net income
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.50
+
+  - name: allowable_shelter_expense
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 shelter expenses and deduction, shelter deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+              excerpt: Any portion of the shelter expense that is paid by ... Vendor payment ... Reimbursement ... Rental discount ... In-kind payment ... is not an allowable expense
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(0, actual_shelter_cost_obligation - shelter_expense_portion_paid_by_vendor_payment - shelter_expense_portion_paid_by_reimbursement - shelter_expense_portion_paid_by_rental_discount - shelter_expense_portion_paid_by_in_kind_payment)
+
+  - name: shelter_costs_with_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 shelter expenses and deduction, shelter deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+              excerpt: the total shelter costs added with the utility allowance
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/shelter-expenses-and-deduction/shelter-deduction#allowable_shelter_expense
+              output: allowable_shelter_expense
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          allowable_shelter_expense + utility_allowance
+
+  - name: uncapped_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 shelter expenses and deduction, shelter deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+              excerpt: exceeds 50% of the budgetary unit’s net income after all other deductions and allowances have been applied
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/shelter-expenses-and-deduction/shelter-deduction#shelter_costs_with_utility_allowance
+              output: shelter_costs_with_utility_allowance
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/shelter-expenses-and-deduction/shelter-deduction#shelter_deduction_net_income_share
+              output: shelter_deduction_net_income_share
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(0, shelter_costs_with_utility_allowance - (shelter_deduction_net_income_share * net_income_after_all_other_deductions_and_allowances))
+
+  - name: shelter_deduction_limit_for_budgetary_unit_without_elderly_or_disabled_participant
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 shelter expenses and deduction, shelter deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+              excerpt: cannot exceed the higher of ... The maximum shelter deduction amount ... The NA homeless shelter deduction when the budgetary unit is homeless and incurs a shelter expense
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(maximum_shelter_deduction_amount, (if budgetary_unit_is_homeless and budgetary_unit_incurs_shelter_expense: na_homeless_shelter_deduction else: 0))
+
+  - name: shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 shelter expenses and deduction, shelter deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-3
+              excerpt: The shelter deduction does not have a maximum limit when the budgetary unit includes a participant that is elderly or has a disability.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/shelter-expenses-and-deduction/shelter-deduction#uncapped_shelter_deduction
+              output: uncapped_shelter_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/shelter-expenses-and-deduction/shelter-deduction#shelter_deduction_limit_for_budgetary_unit_without_elderly_or_disabled_participant
+              output: shelter_deduction_limit_for_budgetary_unit_without_elderly_or_disabled_participant
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if budgetary_unit_includes_elderly_or_disabled_participant: uncapped_shelter_deduction else: min(uncapped_shelter_deduction, shelter_deduction_limit_for_budgetary_unit_without_elderly_or_disabled_participant)

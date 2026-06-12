@@ -1,0 +1,213 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+  summary: |-
+    "The period to request a fair hearing is 90 days from the date of the first notification. The recipient may request continued benefits within 10 days of notification that benefits will be reduced." If a claim exists after hearing, the household must be re-notified and delinquency is based on the subsequent notice due date. If no claim exists, the claim must be discharged as a balance adjustment. Restoration benefits must offset an outstanding recipient claim, except an automated offset will not occur for the current month.
+rules:
+  - name: fair_hearing_request_period_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 23.5, recipient claim fair hearing request period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+              excerpt: "90 days from the date of the first notification"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+
+  - name: continued_benefits_request_period_days
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 23.5, continued benefits request period after reduction notice
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+              excerpt: "within 10 days of notification that benefits will be reduced"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: fair_hearing_on_recipient_claim_available
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 23.5, right to fair hearing on recipient claim
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-270#fair_hearing_request_period_days
+              output: fair_hearing_request_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          recipient_disagrees_with_claim_amount_basis_or_classification
+          and days_from_first_notification_to_fair_hearing_request <= fair_hearing_request_period_days
+
+  - name: continued_benefits_request_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 23.5, continued benefits request after benefit reduction notice
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-270#continued_benefits_request_period_days
+              output: continued_benefits_request_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          benefits_will_be_reduced_by_notification
+          and days_from_reduction_notification_to_continued_benefits_request <= continued_benefits_request_period_days
+
+  - name: claim_must_be_renotified_after_hearing
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 23.5, claim exists after hearing decision
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          hearing_official_determines_claim_exists_against_household
+
+  - name: delinquency_based_on_subsequent_notice_due_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 23.5, delinquency after post-hearing claim notice
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          hearing_official_determines_claim_exists_against_household
+          and subsequent_notice_due_date_is_basis_for_delinquency
+          and not initial_pre_hearing_demand_letter_due_date_is_basis_for_delinquency
+
+  - name: claim_discharged_as_balance_adjustment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 23.5, no claim after hearing decision
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          hearing_official_determines_claim_does_not_exist
+          and claim_event_reflected_as_balance_adjustment
+          and not claim_event_reflected_as_termination
+
+  - name: restoration_applied_to_outstanding_recipient_claim
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual 23.6, offset of recipient claims
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_entitled_to_restoration_of_lost_benefits and outstanding_recipient_claim_amount > 0 and not current_month_restoration: min(restoration_of_lost_benefits_amount, outstanding_recipient_claim_amount) else: 0
+
+  - name: restoration_balance_after_claim_paid
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual 23.6, household receives balance after claim paid in full
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-270#restoration_applied_to_outstanding_recipient_claim
+              output: restoration_applied_to_outstanding_recipient_claim
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, restoration_of_lost_benefits_amount - restoration_applied_to_outstanding_recipient_claim)
+
+  - name: repayment_agreement_required_contents_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: SNAP Manual 23.7, collection of recipient claims repayment agreement contents
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-270
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          repayment_agreement_contains_due_dates_or_time_frames
+          and repayment_agreement_specifies_involuntary_collection_if_payment_not_received_by_due_date_and_claim_delinquent

@@ -1,0 +1,327 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+  summary: |-
+    Deductions allowed for household expenses include: standard deduction;
+    earned income deduction (percentage of gross earned income from section
+    901A, excluding earnings in section 902); medical deduction for elderly
+    or disabled household members (standard medical deduction of $185 for
+    expenses in excess of $35/month; actual costs above $185 deductible);
+    dependent care deduction (actual costs for care of child under 18 or
+    incapacitated persons); legally obligated child support deduction;
+    shelter costs in excess of 50% of household income after other
+    deductions (capped except for elderly/disabled households); Standard
+    Utility Allowance (SUA) for households with heating/cooling costs;
+    Basic Utility Allowance (BUA) for households with two or more utility
+    expenses not including heating/cooling; telephone standard for
+    telephone-only expense; actual utility expense for one non-telephone,
+    non-heating/cooling utility; Homeless Shelter Deduction (HSD) for
+    homeless households with shelter costs.
+rules:
+  - name: medical_expense_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 903 C - "That portion of medical expenses in excess of $35 per month"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "That portion of medical expenses in excess of $35 per month per household"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35
+  - name: standard_medical_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 903 C - "entitled to a standard medical deduction of $185"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "These households are entitled to a standard medical deduction of $185"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          185
+  - name: shelter_income_share_threshold
+    kind: parameter
+    dtype: Rate
+    source: 903 F - "in excess of 50% of the household's income"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "Monthly shelter costs in excess of 50% of the household's income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+  - name: liheaa_minimum_payment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 903 G.1.b - "This payment must be more than $20"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "This payment must be more than $20 and must be received in the current month or preceding 12 months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+  - name: dependent_care_child_age_limit
+    kind: parameter
+    dtype: Integer
+    source: 903 D - "child under the age of 18"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "for the care of a child under the age of 18"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          18
+  - name: homeless_temporary_residence_day_limit
+    kind: parameter
+    dtype: Integer
+    source: 903 K - "no longer than 90 days"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "A temporary accommodation in the residence of another individual for no longer than 90 days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+  - name: medical_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 903 C - medical deduction for elderly or disabled household members
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "These households are entitled to a standard medical deduction of $185. Households that incur out- of-pocket medical expenses of more than $185 monthly are entitled to a medical deduction for the actual amount of medical expenses in excess of $185."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_has_elderly_or_disabled_member and household_monthly_medical_expenses > medical_expense_threshold: max(standard_medical_deduction, household_monthly_medical_expenses - medical_expense_threshold) else: 0
+  - name: dependent_care_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 903 D - dependent care deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "The dependent care deduction will be the actual amount that households incur for this expense, including transportation and activity fees."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if dependent_care_needed_for_employment_or_training: max(0, household_dependent_care_expenses) else: 0
+  - name: child_support_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 903 E - child support deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "Legally obligated child support payments paid by a household member to a non-household member shall be allowed as a deduction. The deduction shall be only for the amount the household member actually pays, and shall not exceed the legally obligated amount."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "A deduction shall not be allowed for amounts collected through income tax intercepts."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, min(child_support_paid_to_non_household_member, legally_obligated_child_support_amount) + arrearage_child_support_paid - child_support_collected_through_income_tax_intercept)
+  - name: shelter_deduction_excess
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 903 F - shelter costs in excess of 50% of household income after other deductions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "Monthly shelter costs in excess of 50% of the household's income after all other deductions have been allowed up a maximum limit are the household's shelter deduction except for households that contain an elderly or disabled person"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, household_monthly_shelter_costs - shelter_income_share_threshold * max(0, household_monthly_income_after_other_deductions))
+  - name: household_qualifies_for_uncapped_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 903 F - uncapped shelter deduction for households with elderly or disabled person
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "If the elderly or disabled member is either hospitalized or institutionalized and is no longer a household member, the household would not qualify for an uncapped shelter deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_has_elderly_or_disabled_member
+          and not elderly_or_disabled_member_is_hospitalized_or_institutionalized_and_no_longer_household_member
+  - name: household_entitled_to_sua
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 903 G - Standard Utility Allowance entitlement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "The SUA shall be made available only to households who incur heating and cooling costs separately and apart from their rent or mortgage."
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "Recipients of direct or indirect energy assistance made under the Low Income Home Energy Assistance Act of 1981 even if these households incur no heating or cooling charges. This payment must be more than $20 and must be received in the current month or preceding 12 months."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_incurs_separate_heating_or_cooling_costs
+          or (household_received_liheaa_payment_in_current_or_preceding_12_months and household_liheaa_payment_amount > liheaa_minimum_payment)
+  - name: household_entitled_to_bua
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 903 H - Basic Utility Allowance entitlement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "To qualify for the BUA a household must be billed for at least two utility expenses separate and apart from their rent or mortgage."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_billed_for_at_least_two_qualifying_utility_expenses
+          and not household_entitled_to_sua
+  - name: household_entitled_to_telephone_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 903 I - Telephone Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "If a household only incurs the cost of a telephone (may be a cell phone), they will only be entitled to the telephone standard not the Basic Utility Allowance (BUA)."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_incurs_only_telephone_utility_cost
+          and not household_entitled_to_sua
+          and not household_entitled_to_bua
+  - name: homeless_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 903 K - Homeless definition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "A homeless individual is one who: 1. Lacks a fixed and regular nighttime address; or 2. Has a primary nighttime address that is: a. A supervised publicly or privately operated shelter ... ; or b. An institution that provides a temporary residence ... ; or c. A temporary accommodation in the residence of another individual for no longer than 90 days; or d. A public or private place not designed for, or ordinarily used as, a regular sleeping accommodation"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_lacks_fixed_and_regular_nighttime_address
+          or person_primary_nighttime_address_is_supervised_temporary_shelter
+          or person_primary_nighttime_address_is_institution_for_temporary_residence
+          or (person_primary_nighttime_address_is_temporary_accommodation_in_residence_of_another and person_days_in_temporary_accommodation <= homeless_temporary_residence_day_limit)
+          or person_primary_nighttime_address_is_place_not_designed_for_sleeping
+  - name: household_eligible_for_homeless_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 903 K - Homeless Shelter Deduction eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-09-income-and-deductions/903
+              excerpt: "Households in which all members are homeless are entitled to the Homeless Shelter Deduction (HSD). ... Homeless households receiving free housing and utilities throughout the month are not eligible for the HSD."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          all_household_members_are_homeless
+          and household_incurs_or_expects_shelter_cost_during_month
+          and not household_receives_free_housing_and_utilities_throughout_month

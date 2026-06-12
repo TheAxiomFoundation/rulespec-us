@@ -1,0 +1,188 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-503.312
+  summary: |-
+    (MR) To determine the net monthly income of a household that includes a member who is elderly or disabled as defined in Section 63-102(e) the CWD shall: (QR) To determine the net monthly income of a change reporting household that includes a member who is elderly or disabled as defined in Section 63-102(e), the CWD shall follow the steps listed below. For QR/PB households, the steps listed below shall be followed after income is averaged over the QR/PB Payment Quarter as specified in Section 63-509(a)(4). (a) Add the gross monthly income earned by all household members minus earned income exclusions, to determine the household's total gross earned income. (b) Apply the earned income deduction to the total gross earned income. (c) Add to net monthly earned income, the total monthly unearned income to all household members, minus income exclusions. (d) Subtract the standard deduction. (e) Subtract the monthly dependent care up to the current maximum. (f) Subtract the medical expenses in excess of the amount specified in Section 63-1101 (see Section 63-502.33 for allowable medical expenses). (g) Subtract the homeless shelter deduction. (h) Total the allowable shelter expenses to determine the shelter costs. Subtract from the total shelter costs 50 percent of the household's monthly income after all of the above deductions have been subtracted. The remaining amount, if any, is the excess shelter cost. (i) Subtract the excess shelter cost from the household's monthly income after all other deductions. The household's net monthly income has been determined.
+rules:
+  - name: shelter_cost_income_share_rate
+    kind: parameter
+    dtype: Rate
+    source: 63-503.312(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Subtract from the total shelter costs 50 percent of the household's monthly income after all of the above deductions have been subtracted."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: income_basis_ready_for_elderly_or_disabled_net_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-503.312 QR/PB lead-in
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "For QR/PB households, the steps listed below shall be followed after income is averaged over the QR/PB Payment Quarter as specified in Section 63-509(a)(4)."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (not household_is_qr_pb) or income_averaged_over_qr_pb_payment_quarter_as_specified_in_section_63_509_a_4
+
+  - name: household_elderly_or_disabled_net_monthly_income_calculation_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 63-503.312 MR and QR lead-ins
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "To determine the net monthly income of a household that includes a member who is elderly or disabled as defined in Section 63-102(e)"
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "For QR/PB households, the steps listed below shall be followed after income is averaged over the QR/PB Payment Quarter as specified in Section 63-509(a)(4)."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_includes_elderly_or_disabled_member_under_section_63_102_e and income_basis_ready_for_elderly_or_disabled_net_monthly_income
+
+  - name: household_total_gross_earned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.312(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Add the gross monthly income earned by all household members minus earned income exclusions, to determine the household's total gross earned income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, gross_monthly_income_earned_by_all_household_members - earned_income_exclusions)
+
+  - name: net_monthly_earned_income_after_earned_income_deduction__per_312
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.312(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Apply the earned income deduction to the total gross earned income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, household_total_gross_earned_income - earned_income_deduction)
+
+  - name: monthly_income_after_earned_and_unearned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.312(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Add to net monthly earned income, the total monthly unearned income to all household members, minus income exclusions."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          net_monthly_earned_income_after_earned_income_deduction__per_312 + max(0, total_monthly_unearned_income_to_all_household_members - unearned_income_exclusions)
+
+  - name: monthly_income_after_standard_dependent_care_medical_and_homeless_deductions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.312(d)-(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Subtract the standard deduction. Subtract the monthly dependent care up to the current maximum. Subtract the medical expenses in excess of the amount specified in Section 63-1101 ... Subtract the homeless shelter deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, monthly_income_after_earned_and_unearned_income - standard_deduction - monthly_dependent_care_up_to_current_maximum - medical_expenses_in_excess_of_section_63_1101_amount - homeless_shelter_deduction)
+
+  - name: excess_shelter_cost_for_elderly_or_disabled_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.312(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Total the allowable shelter expenses to determine the shelter costs. Subtract from the total shelter costs 50 percent of the household's monthly income after all of the above deductions have been subtracted. The remaining amount, if any, is the excess shelter cost."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_allowable_shelter_expenses - (shelter_cost_income_share_rate * monthly_income_after_standard_dependent_care_medical_and_homeless_deductions))
+
+  - name: elderly_or_disabled_household_net_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.312(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.312
+              excerpt: "Subtract the excess shelter cost from the household's monthly income after all other deductions. The household's net monthly income has been determined."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_elderly_or_disabled_net_monthly_income_calculation_applies: max(0, monthly_income_after_standard_dependent_care_medical_and_homeless_deductions - excess_shelter_cost_for_elderly_or_disabled_household) else: 0

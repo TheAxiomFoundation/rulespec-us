@@ -1,0 +1,479 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+  summary: |-
+    Categorically eligible households are exempted from gross and net income limits and presumed to meet resource limits. Clause (a) covers households in which all members are recipients of family assistance, nonemergency safety net assistance and/or SSI benefits, including authorized-but-unpaid, suspended or recouped, and under-$10 grant cases. Clauses (b)-(e) cover elderly or disabled member households at 200 percent FPL, dependent-care households at 200 percent FPL, earned-income households at 150 percent FPL, and residual households at 130 percent FPL, subject to disqualification and ineligible-individual exclusions.
+imports:
+  - us:statutes/7/2012/j
+  - us:regulations/7-cfr/273/10#snap_total_gross_income
+  - us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_net_income_limit_100_percent_fpl_48_states_dc
+rules:
+  - name: ny_snap_categorical_member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: ny_snap_categorical_member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+
+  - name: family_assistance_or_safety_net_minimum_payable_grant_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: us-ny/regulation/18-nycrr/387/14/a/5(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: grant is less than $10
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: ny_snap_categorical_eligibility_200_percent_fpl_ratio
+    kind: parameter
+    dtype: Rate
+    source: us-ny/regulation/18-nycrr/387/14/a/5(b)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: gross income at or below 200 percent of the Federal poverty limit
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2.00
+
+  - name: ny_snap_categorical_eligibility_150_percent_fpl_ratio
+    kind: parameter
+    dtype: Rate
+    source: us-ny/regulation/18-nycrr/387/14/a/5(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: total gross income at or below 150 percent of the Federal poverty limit
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1.50
+
+  - name: ny_snap_categorical_eligibility_130_percent_fpl_ratio
+    kind: parameter
+    dtype: Rate
+    source: us-ny/regulation/18-nycrr/387/14/a/5(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: gross household income at or below 130 percent of the Federal poverty limit
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1.30
+
+  - name: member_has_family_assistance_nonemergency_safety_net_or_ssi_categorical_status
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#family_assistance_or_safety_net_minimum_payable_grant_amount
+              output: family_assistance_or_safety_net_minimum_payable_grant_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          member_receives_family_assistance_nonemergency_safety_net_or_ssi_benefits
+          or member_authorized_to_receive_family_assistance_nonemergency_safety_net_or_ssi_benefits_but_not_yet_paid
+          or member_family_assistance_nonemergency_safety_net_or_ssi_benefits_suspended_or_being_recouped
+          or (
+            member_determined_eligible_for_family_assistance_or_nonemergency_safety_net_benefits
+            and not member_paid_family_assistance_or_nonemergency_safety_net_benefits
+            and member_family_assistance_or_nonemergency_safety_net_grant_amount < family_assistance_or_safety_net_minimum_payable_grant_amount
+          )
+
+  - name: ny_snap_all_members_public_assistance_categorical_path_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#member_has_family_assistance_nonemergency_safety_net_or_ssi_categorical_status
+              output: member_has_family_assistance_nonemergency_safety_net_or_ssi_categorical_status
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          len(ny_snap_categorical_member_of_household) > 0
+          and count_where(ny_snap_categorical_member_of_household, member_has_family_assistance_nonemergency_safety_net_or_ssi_categorical_status) == len(ny_snap_categorical_member_of_household)
+
+  - name: relates_all_member_pa_ssi_status_to_federal_regular_categorical_eligibility
+    kind: source_relation
+    source: us-ny/regulation/18-nycrr/387/14/a/5(a)
+    source_relation:
+      type: restates
+      target: us:regulations/7-cfr/273/2/j#snap_regular_categorical_pa_or_ssi_status
+      authority: state
+
+  - name: ny_snap_categorical_gross_income_limit_200_percent_fpl
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: us-ny/regulation/18-nycrr/387/14/a/5(b)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: gross income at or below 200 percent of the Federal poverty limit
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_net_income_limit_100_percent_fpl_48_states_dc
+              output: snap_net_income_limit_100_percent_fpl_48_states_dc
+              hash: sha256:94d8f5eaefa63fd65fc5f4d19ee1ff5c4dd07d26189e29007bc914218bd5c3a4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_eligibility_200_percent_fpl_ratio
+              output: ny_snap_categorical_eligibility_200_percent_fpl_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_net_income_limit_100_percent_fpl_48_states_dc * ny_snap_categorical_eligibility_200_percent_fpl_ratio
+
+  - name: ny_snap_categorical_gross_income_limit_150_percent_fpl
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: us-ny/regulation/18-nycrr/387/14/a/5(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: total gross income at or below 150 percent of the Federal poverty limit
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_net_income_limit_100_percent_fpl_48_states_dc
+              output: snap_net_income_limit_100_percent_fpl_48_states_dc
+              hash: sha256:94d8f5eaefa63fd65fc5f4d19ee1ff5c4dd07d26189e29007bc914218bd5c3a4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_eligibility_150_percent_fpl_ratio
+              output: ny_snap_categorical_eligibility_150_percent_fpl_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_net_income_limit_100_percent_fpl_48_states_dc * ny_snap_categorical_eligibility_150_percent_fpl_ratio
+
+  - name: ny_snap_categorical_gross_income_limit_130_percent_fpl
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: us-ny/regulation/18-nycrr/387/14/a/5(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: gross household income at or below 130 percent of the Federal poverty limit
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_net_income_limit_100_percent_fpl_48_states_dc
+              output: snap_net_income_limit_100_percent_fpl_48_states_dc
+              hash: sha256:94d8f5eaefa63fd65fc5f4d19ee1ff5c4dd07d26189e29007bc914218bd5c3a4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_eligibility_130_percent_fpl_ratio
+              output: ny_snap_categorical_eligibility_130_percent_fpl_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_net_income_limit_100_percent_fpl_48_states_dc * ny_snap_categorical_eligibility_130_percent_fpl_ratio
+
+  - name: ny_snap_elderly_disabled_200_percent_categorical_path_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/7/2012/j#snap_household_has_elderly_or_disabled_member
+              output: snap_household_has_elderly_or_disabled_member
+              hash: sha256:008f221da22fd95306625126232ca22ff7a4c8b622216bc7e8c092532e4e1bb9
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_total_gross_income
+              output: snap_total_gross_income
+              hash: sha256:c9e1bdf6564cb58f9830192830d7c5a97c362b644dadebd63e2edcd8a456f15f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_gross_income_limit_200_percent_fpl
+              output: ny_snap_categorical_gross_income_limit_200_percent_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_has_elderly_or_disabled_member
+          and snap_total_gross_income <= ny_snap_categorical_gross_income_limit_200_percent_fpl
+
+  - name: ny_snap_dependent_care_200_percent_categorical_path_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_total_gross_income
+              output: snap_total_gross_income
+              hash: sha256:c9e1bdf6564cb58f9830192830d7c5a97c362b644dadebd63e2edcd8a456f15f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_gross_income_limit_200_percent_fpl
+              output: ny_snap_categorical_gross_income_limit_200_percent_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_has_out_of_pocket_dependent_care_expenses
+          and snap_total_gross_income <= ny_snap_categorical_gross_income_limit_200_percent_fpl
+
+  - name: ny_snap_earned_income_150_percent_categorical_path_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_total_gross_income
+              output: snap_total_gross_income
+              hash: sha256:c9e1bdf6564cb58f9830192830d7c5a97c362b644dadebd63e2edcd8a456f15f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_gross_income_limit_150_percent_fpl
+              output: ny_snap_categorical_gross_income_limit_150_percent_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_has_earned_income_budgeted_for_snap
+          and snap_total_gross_income <= ny_snap_categorical_gross_income_limit_150_percent_fpl
+
+  - name: ny_snap_residual_130_percent_categorical_path_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_total_gross_income
+              output: snap_total_gross_income
+              hash: sha256:c9e1bdf6564cb58f9830192830d7c5a97c362b644dadebd63e2edcd8a456f15f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_categorical_gross_income_limit_130_percent_fpl
+              output: ny_snap_categorical_gross_income_limit_130_percent_fpl
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_all_members_public_assistance_categorical_path_satisfied
+              output: ny_snap_all_members_public_assistance_categorical_path_satisfied
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_elderly_disabled_200_percent_categorical_path_satisfied
+              output: ny_snap_elderly_disabled_200_percent_categorical_path_satisfied
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_dependent_care_200_percent_categorical_path_satisfied
+              output: ny_snap_dependent_care_200_percent_categorical_path_satisfied
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:regulations/18-nycrr/387/14/a/5#ny_snap_earned_income_150_percent_categorical_path_satisfied
+              output: ny_snap_earned_income_150_percent_categorical_path_satisfied
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_total_gross_income <= ny_snap_categorical_gross_income_limit_130_percent_fpl
+          and not ny_snap_all_members_public_assistance_categorical_path_satisfied
+          and not ny_snap_elderly_disabled_200_percent_categorical_path_satisfied
+          and not ny_snap_dependent_care_200_percent_categorical_path_satisfied
+          and not ny_snap_earned_income_150_percent_categorical_path_satisfied
+
+  - name: ny_snap_categorically_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(i)-(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: Under no circumstances can any household be considered categorically eligible for SNAP if any member of that household is disqualified
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+            ny_snap_all_members_public_assistance_categorical_path_satisfied
+            or ny_snap_elderly_disabled_200_percent_categorical_path_satisfied
+            or ny_snap_dependent_care_200_percent_categorical_path_satisfied
+            or ny_snap_earned_income_150_percent_categorical_path_satisfied
+            or ny_snap_residual_130_percent_categorical_path_satisfied
+          )
+          and not household_member_disqualified_for_intentional_program_violation
+          and not household_member_disqualified_for_failure_to_comply_with_periodic_reporting_requirements
+          and not household_member_disqualified_for_failure_to_comply_with_work_requirements
+          and not household_member_ineligible_to_participate_in_snap
+
+  - name: snap_categorically_eligible_for_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: Categorically eligible households are presumed, without further investigation or verification, to meet the resource limits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ny_snap_categorically_eligible
+
+  - name: snap_income_limit_exemption_for_categorically_eligible_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: us-ny/regulation/18-nycrr/387/14/a/5(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/14/a/5
+              excerpt: Categorically eligible households are exempted from the gross and net income limits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ny_snap_categorically_eligible
+

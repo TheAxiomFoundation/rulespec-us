@@ -1,0 +1,187 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+  summary: |-
+    Any FNS unit that loses eligibility due to receiving lottery/gambling winnings of $4,500 or more cannot be considered categorical eligible if they reapply. With the exception of lottery or gambling winnings, loss of categorical eligibility is not a required reportable change. A household is no longer categorically eligible if specified assistance benefits terminate and income exceeds the 200% maximum allowable gross income limit, or a household member becomes disqualified due to one of the reasons listed in 220.03.
+rules:
+  - name: lottery_gambling_winnings_categorical_eligibility_loss_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FNS 220.03.D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "$4,500 or more"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          4500
+
+  - name: maximum_allowable_gross_income_limit_percentage
+    kind: parameter
+    dtype: Rate
+    source: FNS 220.04.B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "200% maximum allowable gross income limit"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          2.00
+
+  - name: fns_unit_cannot_be_considered_categorically_eligible_after_lottery_gambling_reapplication
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 220.03.D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "loses eligibility due to receiving lottery/gambling winnings of $4,500 or more cannot be considered categorical eligible if they reapply"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-220-categorical-eligibility/page-3#lottery_gambling_winnings_categorical_eligibility_loss_threshold
+              output: lottery_gambling_winnings_categorical_eligibility_loss_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          fns_unit_reapplies_for_benefits
+          and lottery_or_gambling_winnings_amount >= lottery_gambling_winnings_categorical_eligibility_loss_threshold
+
+  - name: loss_of_categorical_eligibility_is_reportable_change
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 220.04.A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "With the exception of lottery or gambling winnings, loss of categorical eligibility is not a required reportable change."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          household_loses_categorical_eligibility
+          and loss_is_due_to_lottery_or_gambling_winnings
+
+  - name: known_resources_exceed_limit_requires_termination
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 220.04.A.2-.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "known and documented in the file that exceed the resource limit"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "terminate assistance following notice requirements"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          household_loses_categorical_eligibility_as_result_of_change
+          and resources_known_and_documented_in_file
+          and known_resources_exceed_resource_limit
+
+  - name: questionable_resources_addressed_at_next_certification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 220.04.A.4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "If the resources are questionable, address at the next certification."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          household_loses_categorical_eligibility_as_result_of_change
+          and resources_are_questionable
+
+  - name: household_no_longer_categorically_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 220.04.B.1-.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "benefits, Benefit Diversion terminates; AND the income of the household exceeds the 200% maximum allowable gross income limit"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "A household member becomes disqualified due to one of the reasons listed in 220.03"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-220-categorical-eligibility/page-3#maximum_allowable_gross_income_limit_percentage
+              output: maximum_allowable_gross_income_limit_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          (wffa_work_first_services_non_custodial_parent_employment_services_ssi_or_benefit_diversion_terminates
+          and household_gross_income_percentage_of_poverty > maximum_allowable_gross_income_limit_percentage)
+          or household_member_disqualified_due_to_reason_listed_in_220_03
+
+  - name: advise_fns_unit_of_work_requirements
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 220.04.B.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-3
+              excerpt: "If WFFA, SSI, or Work First Employment Services benefits are terminated but the household is still eligible for FNS benefits, advise the FNS unit of the appropriate work requirements."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          wffa_ssi_or_work_first_employment_services_benefits_are_terminated
+          and household_is_still_eligible_for_fns_benefits

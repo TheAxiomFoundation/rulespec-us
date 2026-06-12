@@ -1,0 +1,128 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+  summary: |-
+    "Applicants are required at application and recertification to sign a statement declaring whether any FNS unit member has been convicted of a drug-related felony committed on or after August 23, 1996." "Impose disqualification based on client's statement of ineligibility or upon verification through Department of Correction OVS or other reliable sources." "An individual convicted of a Class H or I felony that involved possession, use, or distribution of a controlled substance committed on or after August 23, 1996, in North Carolina may reestablish eligibility for FNS benefits if they meet both conditions listed in 1 and 2 below: 1. Met the Minimum Disqualification Period."
+rules:
+  - name: minimum_disqualification_period_months
+    kind: parameter
+    dtype: Count
+    source: FNS 270.02(A)(1)(a)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+              excerpt: "six months after release from custody"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+              excerpt: "six months after the date of conviction"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          6
+
+  - name: fns_drug_felony_disqualification_imposed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 270(D)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          client_statement_shows_person_ineligible
+          or controlled_substance_felony_verified_by_department_of_correction_ovs
+          or controlled_substance_felony_verified_by_other_reliable_source
+
+  - name: class_h_or_i_controlled_substance_felony_exception_category
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 270.02(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+              excerpt: "Class H or I felony that involved possession, use, or distribution of a controlled substance committed on or after August 23, 1996, in North Carolina"
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          person_was_convicted_of_class_h_or_i_felony
+          and felony_involved_possession_use_or_distribution_of_controlled_substance
+          and felony_was_committed_on_or_after_controlled_substance_felony_cutoff_date
+          and felony_was_committed_in_north_carolina
+
+  - name: minimum_disqualification_period_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 270.02(A)(1)(a)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          (person_was_committed_to_custody
+          and at_least_minimum_disqualification_period_months_after_release_from_custody)
+          or (not person_was_committed_to_custody
+          and at_least_minimum_disqualification_period_months_after_conviction
+          and not additional_controlled_substance_felony_conviction_within_minimum_disqualification_period)
+          or (person_has_multiple_class_h_or_i_controlled_substance_felony_convictions
+          and at_least_minimum_disqualification_period_months_after_most_recent_conviction)
+
+  - name: may_reestablish_fns_eligibility_under_page_2_conditions
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FNS 270.02(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-270-controlled-substance-felons/page-2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-270-controlled-substance-felons/page-2#class_h_or_i_controlled_substance_felony_exception_category
+              output: class_h_or_i_controlled_substance_felony_exception_category
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-270-controlled-substance-felons/page-2#minimum_disqualification_period_met
+              output: minimum_disqualification_period_met
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-09-20'
+        formula: |-
+          class_h_or_i_controlled_substance_felony_exception_category
+          and minimum_disqualification_period_met
+          and all_other_fns_requirements_are_met

@@ -1,0 +1,256 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+  summary: |-
+    If a household is ineligible based on FNS eligibility criteria and the WFFA, Work First Employment Services, or SSI eligibility decision is still pending on the 30th day, deny the FNS application on the 30th day using regular FNS rules and monitor the pending SSI application for 90 days or WFFA/Work First Employment Services applications for 45 days. If the household becomes categorically eligible after denial, reevaluate and reopen the application upon request or awareness of approval; benefits are authorized back to the FNS application date when the FNS unit is determined eligible for WFFA, SSI, or Work First Employment Services within the 30-day FNS processing time.
+rules:
+  - name: fns_processing_time_days
+    kind: parameter
+    dtype: Count
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "on the 30th day"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          30
+
+  - name: ssi_monitoring_period_days
+    kind: parameter
+    dtype: Count
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "monitoring SSI applications for a period of 90 days"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          90
+
+  - name: wffa_or_work_first_employment_services_monitoring_period_days
+    kind: parameter
+    dtype: Count
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "monitoring WFFA or Work First Employment Services applications for 45 days"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          45
+
+  - name: fns_application_must_be_denied_on_processing_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "ineligible based on FNS eligibility criteria and ... still pending on the 30th day"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "Deny the FNS application on the 30th day using regular FNS rules."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-220-categorical-eligibility/page-6#fns_processing_time_days
+              output: fns_processing_time_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          household_ineligible_under_regular_fns_rules
+          and (wffa_eligibility_decision_pending or work_first_employment_services_eligibility_decision_pending or ssi_eligibility_decision_pending)
+          and days_since_fns_application == fns_processing_time_days
+
+  - name: household_notification_responsibility_must_be_explained
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "If the SSI, WFFA, or Work First Employment Services application pends longer than the allowable time frames"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "inform the household of their responsibility to provide notification"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-220-categorical-eligibility/page-6#ssi_monitoring_period_days
+              output: ssi_monitoring_period_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-220-categorical-eligibility/page-6#wffa_or_work_first_employment_services_monitoring_period_days
+              output: wffa_or_work_first_employment_services_monitoring_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          (ssi_eligibility_decision_pending and days_since_ssi_application > ssi_monitoring_period_days)
+          or (wffa_eligibility_decision_pending and days_since_wffa_application > wffa_or_work_first_employment_services_monitoring_period_days)
+          or (work_first_employment_services_eligibility_decision_pending and days_since_work_first_employment_services_application > wffa_or_work_first_employment_services_monitoring_period_days)
+
+  - name: denied_fns_application_must_be_reopened
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "If the household becomes categorically eligible after the FNS application is denied"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "Reopen the application."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          fns_application_previously_denied
+          and household_became_categorically_eligible_after_denial
+          and (household_requested_reevaluation or agency_became_aware_of_wffa_work_first_employment_services_or_ssi_approval)
+
+  - name: household_must_not_be_reinterviewed_for_reopened_application
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "If the household becomes categorically eligible after the FNS application is denied"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "Do not reinterview the household."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          denied_fns_application_must_be_reopened
+
+  - name: updated_application_must_be_signed_and_verified_after_changes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "If information obtained from the household differs from original information or changes have occurred"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "must initial all changes, re-sign and date the updated application, and provide necessary verification"
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          denied_fns_application_must_be_reopened
+          and (information_obtained_differs_from_original_information or changes_have_occurred)
+
+  - name: specified_person_deductions_allowed_from_later_start_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "Allow deductions for specified persons beginning with the date of the FNS application or the effective date of the SSI payment, whichever is later."
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          denied_fns_application_must_be_reopened
+          and day_is_later_of_fns_application_date_or_effective_ssi_payment_date
+
+  - name: fns_benefits_authorized_back_to_application_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 220 Categorical Eligibility, Section 220 Change #02-2024, page 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "determined eligible for WFFA, SSI, or Work First Employment Services for a period of time within the 30-day FNS processing time"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-220-categorical-eligibility/page-6
+              excerpt: "Authorize FNS benefits back to the date of the FNS application"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-220-categorical-eligibility/page-6#fns_processing_time_days
+              output: fns_processing_time_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-10-01'
+        formula: |-
+          (fns_unit_determined_eligible_for_wffa or fns_unit_determined_eligible_for_ssi or fns_unit_determined_eligible_for_work_first_employment_services)
+          and eligibility_period_within_fns_processing_time
+          and days_since_fns_application <= fns_processing_time_days

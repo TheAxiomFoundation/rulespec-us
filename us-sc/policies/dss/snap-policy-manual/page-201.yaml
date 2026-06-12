@@ -1,0 +1,94 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-201
+  summary: |-
+    The SNAP benefits will be calculated using the benefit amount the household would have received if the TANF benefit had not been decreased due to the noncompliance with TANF requirements. The TANF benefit amount prior to the sanction minus the TANF benefit amount after the sanction is the amount that will be entered in CHIP (TANF penalty amount). The amount by which the TANF benefit is reduced continues to be budgeted in the SNAP benefit calculation until specified cure, exemption/deferral, or TANF ineligibility events occur. For cases where the household is no longer receiving TANF, the prohibition on the increase in SNAP benefits cannot exceed a one-year time period.
+rules:
+  - name: tanf_penalty_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual 201, Budgeting note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-201
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, tanf_benefit_amount_prior_to_sanction - tanf_benefit_amount_after_sanction)
+
+  - name: tanf_penalty_budgeting_continues
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 201, Length of the SNAP failure to comply penalty
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-201
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tanf_benefit_reduced_due_to_noncompliance
+          and not tanf_sanction_is_cured
+          and not sanctioned_individual_meets_tanf_work_exemption_or_deferral
+          and not household_no_longer_eligible_for_tanf_due_to_excess_income
+          and not household_no_longer_eligible_for_tanf_due_to_resources
+          and not household_no_longer_eligible_for_tanf_due_to_no_eligible_children
+          and not household_no_longer_eligible_for_tanf_due_to_time_limits
+          and not household_no_longer_eligible_for_tanf_due_to_ssi_receipt
+          and not household_no_longer_eligible_for_tanf_due_to_disqualification_status
+
+  - name: snap_budgeted_tanf_penalty_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual 201, Budgeting and length of penalty
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-201
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if tanf_penalty_budgeting_continues: tanf_penalty_amount else: 0
+
+  - name: snap_increase_prohibition_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 201, Budgeting and one-year limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-201
+              excerpt: "For cases where the household is no longer receiving TANF, the prohibition on the increase in SNAP benefits cannot exceed a one-year time period."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tanf_benefit_reduced_due_to_noncompliance
+          and (household_receiving_tanf or household_no_longer_receiving_tanf_for_not_more_than_one_year)
+          and not tanf_sanction_is_cured
+          and not sanctioned_individual_meets_tanf_work_exemption_or_deferral

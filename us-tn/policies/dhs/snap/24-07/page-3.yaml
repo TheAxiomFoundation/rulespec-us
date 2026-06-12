@@ -1,0 +1,124 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-07/page-3
+  summary: |-
+    "Children under age eighteen (18) who are under the parental control of an adult household member; and ... A spouse of a member of the household." Excluded household members include ineligible aliens or questionable citizenship, SSN failures, IPV, work-requirement disqualification including voluntary quit, SNAP trafficking of $500 or more, controlled-substance/firearms/ammunition/explosives trading violations, multiple-benefit fraud based on identity or residence, specified post-February 7, 2014 convictions while not complying with sentence or parole, and fleeing felons or probation/parole violators.
+rules:
+  - name: parental_control_child_age_limit
+    kind: parameter
+    dtype: Integer
+    source: SNAP Policy 24.07, page 3, non-household member list item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-07/page-3
+              excerpt: "Children under age eighteen (18)"
+    versions:
+      - effective_from: '2022-09-01'
+        formula: |-
+          18
+
+  - name: snap_trafficking_exclusion_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: SNAP Policy 24.07, page 3, excluded household member list item 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-07/page-3
+              excerpt: "trafficking in SNAP benefits in the amount of $500 or more"
+    versions:
+      - effective_from: '2022-09-01'
+        formula: |-
+          500
+
+  - name: child_under_parental_control_required_household_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.07, page 3, non-household member list item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-07/page-3
+              excerpt: "Children under age eighteen (18) who are under the parental control of an adult household member"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-07/page-3#parental_control_child_age_limit
+              output: parental_control_child_age_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-09-01'
+        formula: |-
+          person_age < parental_control_child_age_limit
+          and person_under_parental_control_of_adult_household_member
+
+  - name: spouse_required_household_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.07, page 3, non-household member list item 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-07/page-3
+              excerpt: "A spouse of a member of the household."
+    versions:
+      - effective_from: '2022-09-01'
+        formula: |-
+          person_is_spouse_of_household_member
+
+  - name: excluded_household_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.07, page 3, excluded household members list
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-07/page-3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-07/page-3#snap_trafficking_exclusion_threshold
+              output: snap_trafficking_exclusion_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-09-01'
+        formula: |-
+          person_is_ineligible_alien
+          or person_has_questionable_citizenship
+          or person_disqualified_for_failure_to_provide_or_apply_for_ssn
+          or person_disqualified_for_intentional_program_violation
+          or person_disqualified_for_noncompliance_with_work_requirements
+          or person_disqualified_for_voluntary_quit
+          or (person_convicted_of_trafficking_snap_benefits and snap_trafficking_benefits_amount >= snap_trafficking_exclusion_threshold)
+          or person_convicted_by_court_of_trading_snap_benefits_for_controlled_substance
+          or person_has_court_finding_of_trading_firearms_ammunition_or_explosives_for_snap_benefits
+          or person_disqualified_for_multiple_benefits_identity_or_residence_fraud
+          or (person_convicted_of_specified_serious_offense and conviction_occurred_after_specified_effective_date and not person_in_compliance_with_terms_of_sentence_or_parole)
+          or person_is_fleeing_felon
+          or person_is_probation_or_parole_violator

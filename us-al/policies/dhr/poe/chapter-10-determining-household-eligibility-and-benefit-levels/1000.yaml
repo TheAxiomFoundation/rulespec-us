@@ -1,0 +1,115 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+  summary: |-
+    Eligibility is determined for the month of application by considering the household's circumstances for the entire calendar month. Benefits for an initial month of certification shall be prorated based on the day of the month the household applies through the end of the month. If proration results in an allotment of less than $10, no issuance shall be made for an initial or beginning month. Migrant and seasonal farm workers shall receive the full allotment for the month of application when the household has participated in the food stamp program within 30 days prior to the date of application.
+rules:
+  - name: minimum_prorated_initial_month_issuance
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Section 1000A - "If proration results in an allotment of less than $10, no issuance shall be made for an initial or beginning month"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+              excerpt: "If proration results in an allotment of less than $10, no issuance shall be made for an initial or beginning month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+  - name: migrant_prior_participation_lookback_days
+    kind: parameter
+    dtype: Integer
+    source: Section 1000A - "when the household has participated in the food stamp program within 30 days prior to the date of application"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+              excerpt: "within 30 days prior to the date of application"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+  - name: days_in_application_month
+    kind: parameter
+    dtype: Integer
+    source: Section 1000A - proration based on day of month through end of month (calendar month basis)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+              excerpt: "Benefits for an initial month of certification shall be prorated based on the day of the month the household applies through the end of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+  - name: prorated_initial_month_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 1000A - "Benefits for an initial month of certification shall be prorated based on the day of the month the household applies through the end of the month."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+              excerpt: "Benefits for an initial month of certification shall be prorated based on the day of the month the household applies through the end of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, full_month_allotment * (days_in_application_month - day_of_month_application_filed + 1) / days_in_application_month)
+  - name: household_qualifies_for_full_month_allotment_as_migrant
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Section 1000A - "Migrant and seasonal farm workers shall receive the full allotment for the month of application when the household has participated in the food stamp program within 30 days prior to the date of application."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+              excerpt: "Migrant and seasonal farm workers shall receive the full allotment for the month of application when the household has participated in the food stamp program within 30 days prior to the date of application."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_is_migrant_or_seasonal_farm_worker
+          and household_participated_in_food_stamp_program_within_lookback
+  - name: initial_month_allotment_issued
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Section 1000A - initial month allotment combining proration, migrant full-allotment, and $10 minimum issuance rule.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-10-determining-household-eligibility-and-benefit-levels/1000
+              excerpt: "If proration results in an allotment of less than $10, no issuance shall be made for an initial or beginning month to any household, including one and two person households and categorically eligible households."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_qualifies_for_full_month_allotment_as_migrant: full_month_allotment else: if prorated_initial_month_allotment < minimum_prorated_initial_month_issuance: 0 else: prorated_initial_month_allotment

@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Colorado's SNAP rule manual prorates the initial month allotment from the
+    application date through the end of the month, using the exact number of
+    days in the calendar month. Residents of a public institution who apply
+    jointly for SSI and SNAP before release use the release date instead of
+    the application date. Migrant and seasonal farm worker households in the
+    job stream receive the full month allotment when the break in
+    participation does not exceed 30 days.
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.207.2
+imports:
+  - us:policies/usda/snap/fy-2026-cola/maximum-allotments
+  - us:regulations/7-cfr/273/10
+  - us:statutes/7/2014/e/6/A
+  - us:statutes/7/2017/a
+rules:
+  - name: snap_initial_month_proration_start_date
+    kind: derived
+    entity: Household
+    dtype: Date
+    period: Month
+    source: 10 CCR 2506-1 section 4.207.2(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if public_institution_joint_ssi_snap_application_before_release:
+              public_institution_release_date
+          else: application_date
+  - name: snap_initial_month_proration_exception
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.207.2(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          migrant_or_seasonal_farmworker_household_in_job_stream
+          and break_in_participation_days <= 30
+  - name: snap_initial_month_proration_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.207.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: initial_application_month and not snap_initial_month_proration_exception
+  - name: snap_days_in_application_month
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 10 CCR 2506-1 section 4.207.2(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: days_between(period_start, date_add_days(period_end, 1))
+  - name: snap_initial_month_proration_days
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 10 CCR 2506-1 section 4.207.2(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          days_between(
+              snap_initial_month_proration_start_date,
+              date_add_days(period_end, 1)
+          )
+  - name: snap_initial_month_proration_factor
+    kind: derived
+    entity: Household
+    dtype: Rate
+    period: Month
+    source: 10 CCR 2506-1 section 4.207.2(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_initial_month_proration_days / snap_days_in_application_month
+  - name: snap_initial_month_prorated_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.207.2(C)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          min(
+              snap_calculated_monthly_allotment_before_minimums,
+              floor(snap_calculated_monthly_allotment_before_minimums * snap_initial_month_proration_factor)
+          )
+  - name: snap_initial_month_allotment_after_minimum_issuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.207.2 and 7 CFR 273.10(e)(2)(ii)(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_initial_month_prorated_allotment < snap_initial_month_minimum_issuance: 0 else: snap_initial_month_prorated_allotment
+
+  - name: snap_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 sections 4.207.2 and 4.207.3(B)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_eligible:
+              if snap_initial_month_proration_applies:
+                  snap_initial_month_allotment_after_minimum_issuance
+              else:
+                  snap_monthly_allotment
+          else: 0
+  - name: snap_maximum_allotment_for_household_size
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_maximum_allotment
+  - name: snap_maximum_allotment_for_one_person_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_one_person_thrifty_food_plan_cost
+  - name: household_initial_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          initial_application_month
+  - name: state_agency_rounds_thirty_percent_net_income_up
+    kind: parameter
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Colorado SNAP federal surface bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          false

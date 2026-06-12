@@ -1,0 +1,141 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+  summary: |-
+    "When there has been no debit activity on an EBT account for six (6) months or more, the stale EBT benefits may be used to repay an outstanding claim balance." The FNS Unit must receive written notice and ten calendar days to object; if it objects, do not process the debit. Expunged benefits within the previous three years reduce the claim, but no amount exceeding the claim balance is applied. Delinquent debts are automatically submitted to TOP and NC DOR setoff through EPICS.
+rules:
+  - name: stale_ebt_benefits_may_be_applied_to_claim
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 19, stale EBT benefits paragraphs a-c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "no debit activity on an EBT account for six (6) months or more"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "Give the FNS Unit ten calendar days to object"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "If the FNS Unit objects to the EBT account debit, do not process the debit."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          ebt_account_has_no_debit_activity_for_required_stale_period and
+          fns_unit_was_given_written_notification_and_required_objection_period_elapsed and
+          not fns_unit_objected_to_ebt_account_debit
+
+  - name: ebt_benefits_payment_to_claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820, page 19, stale EBT benefits paragraphs a-c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "apply the EBT benefits to the outstanding Food and Nutrition Services claim balance"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if stale_ebt_benefits_may_be_applied_to_claim: min(max(0, stale_ebt_benefits_amount), max(0, outstanding_food_and_nutrition_services_claim_balance)) else: 0
+
+  - name: expungement_reduces_claim
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 19, Expungement paragraph 7(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "benefits have been expunged within the previous three years"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          household_benefits_were_expunged_within_previous_three_years
+
+  - name: expungement_payment_to_claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FNS 820, page 19, Expungement paragraph 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "reduce the claim by the amount of expunged benefits"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "Do not apply any amount which exceeds the claim balance."
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          if expungement_reduces_claim: min(max(0, expunged_benefits_amount), max(0, outstanding_food_and_nutrition_services_claim_balance)) else: 0
+
+  - name: delinquent_debt_submitted_to_treasury_offset_program
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 19, Treasury Offset Program paragraph 8(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "Delinquent debts are automatically submitted to TOP"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          food_and_nutrition_services_claim_debt_is_delinquent
+
+  - name: delinquent_debt_submitted_to_nc_department_of_revenue_setoff
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 820, page 19, Department of Revenue setoff paragraph 9(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-820-intentional-program-violation-ipv-claims/page-19
+              excerpt: "Delinquent debts are automatically submitted to the NC Department of Revenue"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          food_and_nutrition_services_claim_debt_is_delinquent

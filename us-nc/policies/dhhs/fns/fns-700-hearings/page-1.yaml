@@ -1,0 +1,157 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+  summary: |-
+    "An opportunity for a fair hearing must be provided to any household 'aggrieved' by any action of the county department of social services (DSS) or coupon-issuing agency which affects the participation of the household in Food and Nutrition Services (FNS)." "The hearing must be conducted, the decision rendered, and the household and the county department notified of the decision within 60 days of receipt of a request for a fair hearing." "If the decision results in an increase in the FNS unit's benefits, make the change in the allotment within ten calendar days of the date of receipt of the hearing decision." "The postponement cannot exceed 30 days, and the time limit for action on the decision may be extended for as many days as the hearing is postponed."
+rules:
+  - name: fair_hearing_action_deadline_days
+    kind: parameter
+    dtype: Count
+    source: FNS 700.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+              excerpt: "within 60 days of receipt of a request for a fair hearing"
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          60
+
+  - name: increased_benefit_change_deadline_days
+    kind: parameter
+    dtype: Count
+    source: FNS 700.02.C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+              excerpt: "within ten calendar days of the date of receipt of the hearing decision"
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          10
+
+  - name: postponement_maximum_days
+    kind: parameter
+    dtype: Count
+    source: FNS 700.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+              excerpt: "The postponement cannot exceed 30 days"
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          30
+
+  - name: fair_hearing_opportunity_must_be_provided
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 700.01
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          household_aggrieved_by_action_affecting_fns_participation
+
+  - name: hearing_action_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 700.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-700-hearings/page-1#fair_hearing_action_deadline_days
+              output: fair_hearing_action_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          hearing_conducted
+          and decision_rendered
+          and household_and_county_notified
+          and days_since_hearing_request_received <= fair_hearing_action_deadline_days
+
+  - name: increased_benefit_change_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 700.02.C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-700-hearings/page-1#increased_benefit_change_deadline_days
+              output: increased_benefit_change_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          hearing_decision_results_in_increase
+          and (
+            days_since_hearing_decision_received <= increased_benefit_change_deadline_days
+            or normal_issuance_cycle_will_occur_within_fair_hearing_action_deadline
+          )
+
+  - name: postponement_within_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: FNS 700.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-700-hearings/page-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-700-hearings/page-1#postponement_maximum_days
+              output: postponement_maximum_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          household_requested_postponement
+          and postponement_days <= postponement_maximum_days

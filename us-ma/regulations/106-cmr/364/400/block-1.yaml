@@ -1,0 +1,292 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+  summary: |-
+    There are seven deductions from income. No other deductions are allowed.
+    Earned income deduction not allowed in determining an overissuance if the
+    household fails to report earned income in a timely manner and the failure
+    to report is the basis for the claim. Medical expense deduction: $35/month
+    or under = $0; over $35.00 to $190/month = $155; over $190/month = actual
+    amount over $35. Child support deduction includes legally obligated
+    payments to third parties, health insurance for children, and arrearages;
+    excludes alimony to non-household members. Shelter deduction includes
+    vacated home if household intends to return, current occupants are not
+    claiming a SNAP shelter deduction, and home is not leased or rented.
+    Only one SUA applies per household. Public housing central meter charges
+    for excess heating/cooling permitted. Electric blower for oil/gas furnace
+    not permitted. LIHEAA recipients entitled to heating/cooling SUA. Non-
+    LIHEAA energy assistance recipients with continuing out-of-pocket heating
+    expenses still eligible; payments prorated over heating season.
+rules:
+  - name: medical_expense_lower_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 106 CMR 364.400 medical expense table, "$35/month or under $0"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "$35/month or under $0"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35
+
+  - name: medical_expense_standard_upper_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 106 CMR 364.400 medical expense table, "Over $35.00 to $190/month $155"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Over $35.00 to $190/month $155"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          190
+
+  - name: medical_expense_standard_deduction_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 106 CMR 364.400 medical expense table, "Over $35.00 to $190/month $155"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Over $35.00 to $190/month $155"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          155
+
+  - name: medical_expense_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 364.400 medical expense deduction table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Medical Expense Verified Amount of Deduction $35/month or under $0 Over $35.00 to $190/month $155 Over $190/month Actual amount over $35"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if verified_medical_expense_amount <= medical_expense_lower_threshold: 0 else: if verified_medical_expense_amount <= medical_expense_standard_upper_threshold: medical_expense_standard_deduction_amount else: max(0, verified_medical_expense_amount - medical_expense_lower_threshold)
+
+  - name: earned_income_deduction_allowed_for_overissuance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400, "This deduction shall not be allowed in determining an overissuance if the household fails to report earned income in a timely manner and the failure to report the income is the basis for the claim."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "This deduction shall not be allowed in determining an overissuance if the household fails to report earned income in a timely manner and the failure to report the income is the basis for the claim."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not (household_failed_to_timely_report_earned_income and failure_to_report_is_basis_for_overissuance_claim)
+
+  - name: vacated_home_shelter_deduction_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400, vacated home shelter deduction conditions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Shelter expenses for a vacated home shall be included in the shelter deduction if the household intends to return to the home, the current occupants of the home, if any, are not claiming a shelter deduction for SNAP purposes, and the home is not leased or rented during the absence of the household"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_intends_to_return_to_vacated_home
+          and not current_occupants_claim_snap_shelter_deduction
+          and not vacated_home_is_leased_or_rented_during_absence
+
+  - name: child_support_deduction_includes_third_party_payment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400, child support deduction inclusion of third-party payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Legally obligated child support payments paid by a household member to a third party (e.g., a landlord or utility company) on behalf of the non-household member in accordance with the support order shall be included as part of the child support deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_legally_obligated_child_support
+          and payment_is_to_third_party_on_behalf_of_non_household_member
+          and payment_is_in_accordance_with_support_order
+
+  - name: child_support_deduction_includes_children_health_insurance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400, "Payments that are made by the household to obtain health insurance for their children shall also be included as part of the child support deduction."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Payments that are made by the household to obtain health insurance for their children shall also be included as part of the child support deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_pays_for_childrens_health_insurance
+
+  - name: arrearage_payments_allowed_in_child_support_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400, "The Department shall allow a deduction for amounts paid toward arrearages, even for households without a payment history."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "The Department shall allow a deduction for amounts paid toward arrearages, even for households without a payment history."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_pays_child_support_arrearages
+
+  - name: alimony_excluded_from_child_support_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400, "Alimony payments made to or for a non-household member shall not be included in the child support deduction."
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Alimony payments made to or for a non-household member shall not be included in the child support deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_alimony_to_or_for_non_household_member
+
+  - name: public_housing_central_meter_sua_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400(G), public housing central meter SUA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "A household living in a public housing unit that has central meters and that charges the household for excess heating or cooling costs shall be permitted to use this allowance."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_lives_in_public_housing_with_central_meters
+          and household_charged_for_excess_heating_or_cooling_costs
+
+  - name: electric_blower_sua_not_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400(G), electric blower exclusion
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "A household that incurs electricity costs to power an electric blower that distributes heat or cooling from an oil or gas furnace shall not be permitted to use this allowance."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_incurs_electricity_cost_for_blower_on_oil_or_gas_furnace
+
+  - name: liheaa_recipient_entitled_to_heating_cooling_sua
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400(G), LIHEAA recipients
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "Recipients of energy assistance payments made under the LIHEAA of 1981 are entitled to use the heating/cooling SUA because they are deemed to have incurred out-of-pocket energy expenses."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_receives_liheaa_energy_assistance_payments
+
+  - name: non_liheaa_household_eligible_for_heating_sua
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.400(G), non-LIHEAA indirect energy assistance with continuing out-of-pocket heating expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/400/block-1
+              excerpt: "A household that receives indirect energy assistance payments, made under a program other than LIHEAA, but continues to incur out-of-pocket heating expenses during any month covered by the certification period, is still eligible to use the heating standard utility allowance."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_receives_non_liheaa_indirect_energy_assistance
+          and household_incurs_out_of_pocket_heating_expenses_during_certification_period

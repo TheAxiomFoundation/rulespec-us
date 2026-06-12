@@ -1,0 +1,294 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-503.311
+  summary: |-
+    (MR) To determine a household's net monthly income, unless the household contains a member who is elderly or disabled as defined in Section 63-102(e), the CWD shall: (QR) To determine a change reporting household’s net monthly income, unless the household contains a member who is elderly or disabled as defined in Section 63-102(c), the CWD shall follow the steps listed below. For QR/PB households the steps listed below shall be followed after income is averaged over the QR/PB Payment Quarter as specified in Section 63-509(a)(4). (a) Add the gross monthly income earned by all household members minus earned income exclusions, to determine the household's total gross earned income. (b) Apply the earned income deduction to the total gross earned income. (c) Add to net monthly earned income the total monthly unearned income of all household members, minus income exclusions. (d) Subtract the standard deduction. (e) Subtract monthly dependent care expenses, if any, up to the current maximum. (f) Subtract the homeless shelter deduction. (g) Total the allowable shelter expenses to determine shelter costs, unless a homeless shelter deduction has been subtracted as in Section 63-503.311(f). Subtract from the total shelter costs 50 percent of the household's monthly income after all the above deductions have been subtracted. The remaining amount, if any, is the excess shelter cost. If there is no excess shelter cost, the net monthly income has been determined. If there is excess shelter cost, compute the shelter deduction according to subparagraph (G) of this section. (h) Subtract the excess shelter cost (up to the current maximum) from the household's monthly income after all other deductions. The household's net monthly income has been determined. FOOD STAMP REGULATIONS (Continued)
+rules:
+  - name: excess_shelter_income_share
+    kind: parameter
+    dtype: Rate
+    source: 63-503.311(g), shelter-cost offset percentage
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract from the total shelter costs 50 percent of the household's monthly income after all the above deductions have been subtracted."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: net_monthly_income_determination_steps_apply
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-503.311 introductory clauses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "unless the household contains a member who is elderly or disabled as defined in Section 63-102(e)"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "unless the household contains a member who is elderly or disabled as defined in Section 63-102(c)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not household_contains_elderly_or_disabled_member_under_section_63_102
+
+  - name: total_gross_earned_income_after_exclusions
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Add the gross monthly income earned by all household members minus earned income exclusions, to determine the household's total gross earned income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_gross_monthly_income_earned_by_household_members - earned_income_exclusions)
+
+  - name: net_monthly_earned_income_after_earned_income_deduction
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Apply the earned income deduction to the total gross earned income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_gross_earned_income_after_exclusions - earned_income_deduction)
+
+  - name: monthly_unearned_income_after_exclusions
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Add to net monthly earned income the total monthly unearned income of all household members, minus income exclusions."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_monthly_unearned_income_of_household_members - unearned_income_exclusions)
+
+  - name: monthly_income_after_unearned_income
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Add to net monthly earned income the total monthly unearned income of all household members, minus income exclusions."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          net_monthly_earned_income_after_earned_income_deduction + monthly_unearned_income_after_exclusions
+
+  - name: monthly_income_after_standard_deduction
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract the standard deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, monthly_income_after_unearned_income - standard_deduction)
+
+  - name: monthly_dependent_care_deduction
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract monthly dependent care expenses, if any, up to the current maximum."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(max(0, monthly_dependent_care_expenses), current_dependent_care_expense_maximum)
+
+  - name: monthly_income_after_dependent_care_deduction
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract monthly dependent care expenses, if any, up to the current maximum."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, monthly_income_after_standard_deduction - monthly_dependent_care_deduction)
+
+  - name: monthly_income_after_homeless_shelter_deduction
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract the homeless shelter deduction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, monthly_income_after_dependent_care_deduction - homeless_shelter_deduction)
+
+  - name: allowable_shelter_expenses_for_excess_shelter_calculation
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(g), first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Total the allowable shelter expenses to determine shelter costs, unless a homeless shelter deduction has been subtracted as in Section 63-503.311(f)."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if homeless_shelter_deduction_has_been_subtracted: 0 else: total_allowable_shelter_expenses
+
+  - name: excess_shelter_cost_before_maximum
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract from the total shelter costs 50 percent of the household's monthly income after all the above deductions have been subtracted. The remaining amount, if any, is the excess shelter cost."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, allowable_shelter_expenses_for_excess_shelter_calculation - excess_shelter_income_share * monthly_income_after_homeless_shelter_deduction)
+
+  - name: excess_shelter_deduction
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "Subtract the excess shelter cost (up to the current maximum) from the household's monthly income after all other deductions."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(excess_shelter_cost_before_maximum, current_excess_shelter_deduction_maximum)
+
+  - name: net_monthly_income_for_non_elderly_non_disabled_household
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-503.311, full calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "The household's net monthly income has been determined."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-503.311
+              excerpt: "unless the household contains a member who is elderly or disabled"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if net_monthly_income_determination_steps_apply: max(0, monthly_income_after_homeless_shelter_deduction - excess_shelter_deduction) else: 0

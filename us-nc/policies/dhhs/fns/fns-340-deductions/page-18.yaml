@@ -1,0 +1,119 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-18
+  summary: |-
+    Excluded medical expenses include premiums for lump-sum death or dismemberment benefits, set daily or weekly non-medical benefits, mortgage or loan continuation policies, county-paid transportation or lodging, credit-card late fees and interest, reimbursed expenses, senior citizen pharmacy discounts, and expenses written off by the provider. Collection-agency referrals are not written off. Verify medical expenses the FNS unit is responsible for paying at initial application. At recertification, verify if the type or source changed, total medical expenses changed by more than $25, or information is incomplete, inaccurate, inconsistent, or outdated.
+rules:
+  - name: medical_expense_recertification_change_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 340 Deductions, page 18, D.2.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-18
+              excerpt: "changed by more than $25"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          25
+
+  - name: expense_written_off_by_provider
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340 Deductions, page 18, C.9 note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-18
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          provider_wrote_off_expense
+          and not expense_referred_to_collection_agency
+
+  - name: medical_expense_excluded_from_deduction
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340 Deductions, page 18, C.2-C.9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-18
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          premium_for_policy_with_lump_sum_death_or_dismemberment_benefits
+          or premium_for_policy_payable_to_individual_in_set_daily_or_weekly_amount_without_specifying_medical_expenses
+          or premium_for_policy_that_continues_payments_on_mortgages_or_loans
+          or transportation_or_lodging_cost_for_medicaid_recipient_or_other_person_paid_by_county
+          or late_fee_or_interest_on_credit_card_used_to_pay_expense
+          or reimbursed_medical_expense
+          or senior_citizen_discount_given_by_pharmacy
+          or expense_written_off_by_provider
+
+  - name: medical_expense_must_be_verified_at_initial_application
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: FNS 340 Deductions, page 18, D.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-18
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          initial_application
+          and fns_unit_responsible_for_paying_medical_expense
+
+  - name: medical_expense_must_be_verified_at_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 340 Deductions, page 18, D.2.a-D.2.c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-340-deductions/page-18
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-340-deductions/page-18#medical_expense_recertification_change_verification_threshold
+              output: medical_expense_recertification_change_verification_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          recertification
+          and (
+            medical_expense_type_or_source_changed
+            or total_medical_expenses_change_amount > medical_expense_recertification_change_verification_threshold
+            or medical_expense_information_incomplete_inaccurate_inconsistent_or_outdated
+          )

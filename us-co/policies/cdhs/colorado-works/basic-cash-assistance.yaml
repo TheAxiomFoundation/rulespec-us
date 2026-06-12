@@ -1,0 +1,130 @@
+format: rulespec/v1
+module:
+  kind: composition
+  summary: |-
+    Colorado Works basic cash assistance calculation composition. This module
+    imports the encoded 9 CCR 2503-6 Section 3.606.1 standards, eligibility,
+    grant-calculation, and pregnancy-allowance provisions, plus Section 3.606.2
+    earned-income disregard parameters, so callers can derive the monthly basic
+    cash assistance grant from raw assistance-unit income and household-size
+    facts for the encoded benefit-calculation slice.
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-6/3.606.1
+imports:
+  - us-co:regulations/9-ccr-2503-6/3.606.1/E
+  - us-co:regulations/9-ccr-2503-6/3.606.1/F
+  - us-co:regulations/9-ccr-2503-6/3.606.1/G
+  - us-co:regulations/9-ccr-2503-6/3.606.1/H
+  - us-co:regulations/9-ccr-2503-6/3.606.1/I
+  - us-co:regulations/9-ccr-2503-6/3.606.1/J
+  - us-co:regulations/9-ccr-2503-6/3.606.1/K
+  - us-co:regulations/9-ccr-2503-6/3.606.2
+rules:
+  - name: colorado_works_application_income_after_initial_disregard
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, colorado_works_gross_earned_income - application_earned_income_disregard)
+          + colorado_works_countable_unearned_income
+
+  - name: colorado_works_application_income_within_need_standard
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          colorado_works_application_income_after_initial_disregard <= basic_cash_assistance_need_standard
+
+  - name: colorado_works_earned_income_disregard_rate
+    kind: derived
+    entity: TanfUnit
+    dtype: Rate
+    period: Month
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if colorado_works_is_application_month and colorado_works_application_income_within_need_standard and colorado_works_is_first_certification_period:
+            first_certification_period_earned_income_disregard_rate
+          else: if colorado_works_currently_receiving_basic_cash_assistance and colorado_works_earned_income_is_new_source and colorado_works_is_first_certification_period_income_impacts:
+            first_certification_period_earned_income_disregard_rate
+          else:
+            later_or_current_source_earned_income_disregard_rate
+
+  - name: colorado_works_earned_income_disregard_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, colorado_works_gross_earned_income) * colorado_works_earned_income_disregard_rate
+
+  - name: colorado_works_earned_income_after_disregards
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, colorado_works_gross_earned_income - colorado_works_earned_income_disregard_amount)
+
+  - name: colorado_works_countable_income_for_basic_cash_assistance
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          colorado_works_earned_income_after_disregards + colorado_works_countable_unearned_income
+
+  - name: colorado_works_basic_cash_assistance_income_requirement_met
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          (
+            colorado_works_assistance_unit_reports_earned_income
+            and colorado_works_countable_income_for_basic_cash_assistance < basic_cash_assistance_need_standard
+          )
+          or (
+            not colorado_works_assistance_unit_reports_earned_income
+            and colorado_works_countable_income_for_basic_cash_assistance <= basic_cash_assistance_need_standard
+          )
+
+  - name: colorado_works_basic_cash_assistance_grant_before_pregnancy_allowance
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Colorado Works basic cash assistance calculation composition
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if basic_cash_assistance_standard_chart_row_supported and colorado_works_basic_cash_assistance_income_requirement_met:
+            max(0, floor(basic_cash_assistance_grant_standard - colorado_works_countable_income_for_basic_cash_assistance))
+          else:
+            0

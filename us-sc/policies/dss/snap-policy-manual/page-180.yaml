@@ -1,0 +1,298 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+  summary: |-
+    To determine net monthly income, the Agency adds household earned and unearned income minus exclusions, counts 80 percent of earned income with unearned income, subtracts the standard deduction, medical expenses above $35 when entitled, allowable dependent care, allowable child support, homeless shelter deduction up to $198.99, and excess shelter costs above 50 percent of income after prior deductions, subject to the maximum excess shelter amount unless the household is not subject to a capped shelter expense.
+rules:
+  - name: earned_income_countable_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual Section 13.6(1)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+              excerpt: "Multiply the total gross monthly earned income by 80 percent"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.80
+
+  - name: medical_expense_disregard_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+              excerpt: "determine if total medical expenses exceed $35"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35
+
+  - name: homeless_shelter_deduction_cap
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+              excerpt: "up to the maximum of $198.99"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          198.99
+
+  - name: shelter_income_share_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Manual Section 13.6(1)(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+              excerpt: "50 percent of the household's monthly income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: gross_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, gross_monthly_earned_income + total_monthly_unearned_income - income_exclusions)
+
+  - name: income_after_earned_income_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#earned_income_countable_rate
+              output: earned_income_countable_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, (gross_monthly_earned_income * earned_income_countable_rate) + total_monthly_unearned_income - income_exclusions)
+
+  - name: medical_deduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#medical_expense_disregard_threshold
+              output: medical_expense_disregard_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_entitled_to_medical_deduction: max(0, total_medical_expenses - medical_expense_disregard_threshold) else: 0
+
+  - name: capped_homeless_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#homeless_shelter_deduction_cap
+              output: homeless_shelter_deduction_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(max(0, homeless_shelter_deduction), homeless_shelter_deduction_cap)
+
+  - name: income_before_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(C)-(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#income_after_earned_income_deduction
+              output: income_after_earned_income_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#medical_deduction_amount
+              output: medical_deduction_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#capped_homeless_shelter_deduction
+              output: capped_homeless_shelter_deduction
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, income_after_earned_income_deduction - standard_deduction - medical_deduction_amount - allowable_monthly_dependent_care_expenses - allowable_monthly_child_support_payments - capped_homeless_shelter_deduction)
+
+  - name: excess_shelter_cost
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#income_before_shelter_deduction
+              output: income_before_shelter_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#shelter_income_share_rate
+              output: shelter_income_share_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, allowable_monthly_shelter_expenses - (income_before_shelter_deduction * shelter_income_share_rate))
+
+  - name: shelter_deduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#excess_shelter_cost
+              output: excess_shelter_cost
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_not_subject_to_capped_shelter_expense: excess_shelter_cost else: min(excess_shelter_cost, maximum_excess_shelter_amount)
+
+  - name: net_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual Section 13.6(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-180
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#income_before_shelter_deduction
+              output: income_before_shelter_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-180#shelter_deduction_amount
+              output: shelter_deduction_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, income_before_shelter_deduction - shelter_deduction_amount)

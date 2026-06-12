@@ -1,0 +1,125 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+  summary: |-
+    SNAP benefits for a household's initial month shall be prorated. Households which apply for initial benefits after the 15th day of the month and are determined eligible for expedited SNAP benefits in accordance with 106 CMR 365.800 must be issued a combined allotment that includes the initial month's prorated benefits plus the second month's full allotment, issued within the seven-day expedited service time frame. Proration is the issuance of that portion of a household's monthly SNAP benefit, as calculated in accordance with 106 CMR 364.600, which corresponds to the period of time from the date of application to the end of the month. For a household with a monthly allotment of $400 or less, the initial month's allotment is determined in accordance with 106 CMR 364.990. For a household with a monthly allotment greater than $400, the initial month's allotment is calculated by multiplying the household's monthly allotment by the period from application to end of month and dividing by 30.
+rules:
+  - name: monthly_allotment_proration_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 106 CMR 364.650
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "For a household with a monthly allotment of $400 or less"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          400
+  - name: proration_denominator
+    kind: parameter
+    dtype: Integer
+    source: 106 CMR 364.650
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "Divide the result of this by 30"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+  - name: mid_month_application_day_threshold
+    kind: parameter
+    dtype: Integer
+    source: 106 CMR 364.650
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "Households which apply for initial benefits after the 15th day of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          15
+  - name: initial_month_prorated_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 364.650
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "For a household with a monthly allotment greater than $400, the initial month's allotment is calculated as follows: Multiply the result by the household's monthly allotment. Divide the result of this by 30"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "For a household with a monthly allotment of $400 or less, the initial month's allotment is determined in accordance with 106 CMR 364.990"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "Proration is the issuance of that portion of a household's monthly SNAP benefit, as calculated in accordance with 106 CMR 364.600, which corresponds to the period of time from the date of application to the end of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if monthly_allotment <= monthly_allotment_proration_threshold: initial_month_allotment_under_106_cmr_364_990 else: monthly_allotment * days_from_application_date_to_end_of_month / proration_denominator
+  - name: combined_allotment_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 364.650
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "Households which apply for initial benefits after the 15 th day of the month and are determined eligible for expedited SNAP benefits in accordance with 106 CMR 365.800 : Expedited Service, must be issued a combined allotment"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          application_day_of_month > mid_month_application_day_threshold
+          and household_eligible_for_expedited_snap_under_106_cmr_365_800
+  - name: combined_allotment_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 364.650
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/106-cmr/364/650/block-1
+              excerpt: "A combined allotment includes the initial month's prorated benefits plus the second month's full allotment"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if combined_allotment_applies: initial_month_prorated_allotment + monthly_allotment else: 0

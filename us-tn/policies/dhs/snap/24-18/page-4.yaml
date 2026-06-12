@@ -1,0 +1,131 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-4
+  summary: |-
+    Shelter costs include continuing shelter charges, secured homestead loans, property taxes and assessments, structure insurance, specified utilities and installation fees, natural-disaster home repairs, certain unoccupied-home costs, and verified incurred expenses regardless of ability to pay. Payments not included include one-time utility deposits, separate personal-property insurance, wear-and-tear repairs or appliance/well/septic replacement, most unoccupied-housing costs, down payments and closing costs, well drilling or septic installation, and mobile-home site preparation. Excess shelter costs are those exceeding fifty percent (50%) of household monthly income after other applicable deductions.
+rules:
+  - name: excess_shelter_income_share_threshold
+    kind: parameter
+    dtype: Rate
+    source: SNAP Policy 24.18, page 4, item 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-4
+              excerpt: "exceeds fifty percent (50%) of the HH's monthly income after all other applicable deductions"
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          0.50
+
+  - name: excess_shelter_costs_before_maximum
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Policy 24.18, page 4, item 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-4
+              excerpt: "exceeds fifty percent (50%) of the HH's monthly income after all other applicable deductions"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-18/page-4#excess_shelter_income_share_threshold
+              output: excess_shelter_income_share_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          max(0, monthly_shelter_costs - (excess_shelter_income_share_threshold * monthly_income_after_other_applicable_deductions))
+
+  - name: payment_not_included_in_shelter_costs
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.18, page 4, item 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-4
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          payment_is_one_time_utility_deposit
+          or payment_is_separate_cost_for_insuring_furniture_or_personal_belongings
+          or payment_is_repair_or_replacement_due_to_wear_and_tear_or_mechanical_problem
+          or (payment_related_to_housing_not_occupied_by_household and not unoccupied_home_shelter_costs_can_be_claimed_under_household_circumstance)
+          or payment_is_down_payment_closing_cost_discount_point_or_other_purchase_or_mortgage_closing_cost
+          or payment_is_cost_of_drilling_well_or_installing_septic_tank
+          or payment_is_site_preparation_to_locate_mobile_home
+
+  - name: payment_included_in_shelter_costs
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.18, page 4, item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-18/page-4#payment_not_included_in_shelter_costs
+              output: payment_not_included_in_shelter_costs
+              hash: sha256:local
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          (payment_is_continuing_charge_for_occupied_shelter
+          or payment_is_secured_homestead_second_mortgage_or_loan
+          or payment_is_property_tax_state_or_local_assessment_or_structure_insurance
+          or payment_is_charge_for_heating_cooling_cooking_fuel_electricity_water_sewer_garbage_trash_telephone_allowance_or_initial_utility_installation
+          or payment_is_cost_to_repair_home_substantially_damaged_or_destroyed_by_natural_disaster
+          or unoccupied_home_shelter_costs_can_be_claimed_under_household_circumstance)
+          and not payment_not_included_in_shelter_costs
+
+  - name: verified_incurred_shelter_expense_allowed
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Policy 24.18, page 4, item 3(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-18/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-18/page-4#payment_included_in_shelter_costs
+              output: payment_included_in_shelter_costs
+              hash: sha256:local
+    versions:
+      - effective_from: '2018-09-17'
+        formula: |-
+          payment_included_in_shelter_costs
+          and shelter_expense_is_incurred
+          and shelter_expense_is_verified

@@ -1,0 +1,139 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+  summary: |-
+    The Agency requires a SNAP household to provide the SSN of each household member or apply for one before certification; refusal or failure without good cause to provide an SSN results in disqualification of the individual for whom an SSN is not obtained. Individuals must apply at SSA if they do not have, do not know if they have, or cannot find an SSN. For a newborn whose household cannot provide proof of SSN application, the household must provide the SSN or proof at the next recertification or within 6 months following the birth month, whichever is later. Documentary evidence that the member applied for an SSN or made every effort to supply SSA necessary information is good cause; illness, lack of transportation, or temporary absence delays are not good cause.
+rules:
+  - name: newborn_ssn_followup_month_limit
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual 7.2(2), newborn SSN proof timing
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+              excerpt: "within 6 months following the month the baby is born"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          6
+
+  - name: person_must_apply_for_ssn_at_ssa
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 7.2(2), individuals who must apply at SSA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_does_not_have_ssn
+          or person_does_not_know_if_has_ssn
+          or person_is_unable_to_find_ssn
+
+  - name: ssn_good_cause_for_not_complying_timely
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 7.2(3), determining good cause
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (documentary_evidence_member_applied_for_ssn
+          or documentary_evidence_member_made_every_effort_to_supply_ssa_information)
+          and not delay_due_to_illness
+          and not delay_due_to_lack_of_transportation
+          and not delay_due_to_temporary_absence
+
+  - name: ssn_or_application_requirement_satisfied_before_certification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 7.2(1)-(2), SSN or application before certification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_provided_ssn_before_certification
+          or person_applied_for_ssn_before_certification
+
+  - name: individual_disqualified_for_ssn_failure
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 7.2(1), disqualification for refusal or failure without good cause
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-78#ssn_good_cause_for_not_complying_timely
+              output: ssn_good_cause_for_not_complying_timely
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          ssn_not_obtained_for_individual
+          and (individual_refused_to_provide_ssn
+          or individual_failed_to_provide_ssn)
+          and not ssn_good_cause_for_not_complying_timely
+
+  - name: newborn_ssn_followup_requirement_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual 7.2(2), newborn SSN or proof due by next recertification or six months after birth month
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-78
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-78#newborn_ssn_followup_month_limit
+              output: newborn_ssn_followup_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          newborn_provided_ssn_by_later_followup_deadline
+          or newborn_provided_proof_of_ssn_application_by_later_followup_deadline
+          or months_following_month_baby_was_born < newborn_ssn_followup_month_limit

@@ -1,0 +1,132 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/mpp/63-407.855
+  summary: |-
+    (a) Assignment at workfare may occur at food stamp application. When an applicant completes a workfare or work experience assignment during the 30-day application period and is otherwise eligible for food stamps, he/she must be issued benefits back to the date of application (the monthly food stamp allotment being compensation for the hours worked). (1) When determining hours of participation for applicants assigned to workfare, counties shall either use the household’s prospective allotment or a range of typical food stamp allotments. FOOD STAMP REGULATIONS (2) The level of effort for persons assigned to workfare job search identified in Section 63-407.841(b)(1)(A) shall be comparable to spending at least 12 hours a month making job contacts.
+rules:
+  - name: food_stamp_application_period_days
+    kind: parameter
+    dtype: Count
+    source: 63-407.855(a), sentence 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "during the 30-day application period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: workfare_job_search_minimum_job_contact_hours_per_month
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: 63-407.855(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "shall be comparable to spending at least 12 hours a month making job contacts"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: retroactive_food_stamp_benefits_from_application_date_required
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-407.855(a), sentence 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "When an applicant completes a workfare or work experience assignment during the 30-day application period and is otherwise eligible for food stamps, he/she must be issued benefits back to the date of application"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_completed_workfare_or_work_experience_assignment
+          and days_from_food_stamp_application_to_workfare_or_work_experience_assignment_completion <= food_stamp_application_period_days
+          and applicant_otherwise_eligible_for_food_stamps
+
+  - name: applicant_workfare_monthly_allotment_compensation_amount
+    kind: derived
+    entity: SnapUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 63-407.855(a), parenthetical
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "the monthly food stamp allotment being compensation for the hours worked"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "When an applicant completes a workfare or work experience assignment during the 30-day application period and is otherwise eligible for food stamps"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if retroactive_food_stamp_benefits_from_application_date_required: max(0, monthly_food_stamp_allotment) else: 0
+
+  - name: county_workfare_hours_determination_uses_authorized_basis
+    kind: derived
+    entity: SnapUnit
+    dtype: Judgment
+    period: Month
+    source: 63-407.855(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "When determining hours of participation for applicants assigned to workfare, counties shall either use the household’s prospective allotment or a range of typical food stamp allotments."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_assigned_to_workfare
+          and (
+            county_uses_household_prospective_allotment_to_determine_workfare_hours
+            or county_uses_range_of_typical_food_stamp_allotments_to_determine_workfare_hours
+          )
+
+  - name: workfare_job_search_level_of_effort_requirement_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 63-407.855(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/regulation/mpp/63-407.855
+              excerpt: "The level of effort for persons assigned to workfare job search identified in Section 63-407.841(b)(1)(A) shall be comparable to spending at least 12 hours a month making job contacts."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_assigned_to_workfare_job_search_under_section_63_407_841_b_1_A
+          and monthly_job_contact_hours_spent_making_job_contacts >= workfare_job_search_minimum_job_contact_hours_per_month

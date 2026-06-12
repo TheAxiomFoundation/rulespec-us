@@ -1,0 +1,188 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+  summary: |-
+    Migrant and seasonal farm workers are exempt if under contract or similar agreement with an employer to begin employment within thirty (30) days. Employed/self-employed individuals are exempt if they work a minimum of thirty (30) hours weekly, receive weekly earnings at least equal to the federal minimum wage multiplied by thirty (30) hours, qualify as a youth under age twenty (20) receiving a training wage for a limited ninety (90) day period, or have fluctuating hours averaging thirty (30) hours or equivalent average weekly earnings. Eligible students enrolled at least half-time in a recognized school, training program, or institution of higher education are exempt.
+rules:
+  - name: migrant_employment_start_window_days
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: Policy 24.11, page 4, item 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+              excerpt: "begin employment within thirty (30) days"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          30
+
+  - name: minimum_weekly_work_hours_for_employment_exemption
+    kind: parameter
+    dtype: Integer
+    period: Week
+    source: Policy 24.11, page 4, item 9(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+              excerpt: "work a minimum of thirty (30) hours weekly"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          30
+
+  - name: youth_training_wage_age_limit
+    kind: parameter
+    dtype: Integer
+    source: Policy 24.11, page 4, item 9(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+              excerpt: "youth under age twenty (20)"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          20
+
+  - name: youth_training_wage_period_limit_days
+    kind: parameter
+    dtype: Integer
+    period: Day
+    source: Policy 24.11, page 4, item 9(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+              excerpt: "Limited to ninety (90) day period"
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          90
+
+  - name: migrant_or_seasonal_farm_worker_work_registration_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Policy 24.11, page 4, item 8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-4#migrant_employment_start_window_days
+              output: migrant_employment_start_window_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          person_is_migrant_or_seasonal_farm_worker
+          and person_under_contract_or_similar_agreement_with_employer
+          and days_until_employment_begins <= migrant_employment_start_window_days
+
+  - name: employment_work_registration_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Week
+    source: Policy 24.11, page 4, item 9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-4#minimum_weekly_work_hours_for_employment_exemption
+              output: minimum_weekly_work_hours_for_employment_exemption
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-4#youth_training_wage_age_limit
+              output: youth_training_wage_age_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tn:policies/dhs/snap/24-11/page-4#youth_training_wage_period_limit_days
+              output: youth_training_wage_period_limit_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          person_is_employed_or_self_employed
+          and (weekly_hours_worked >= minimum_weekly_work_hours_for_employment_exemption
+          or weekly_earnings >= federal_minimum_wage * minimum_weekly_work_hours_for_employment_exemption
+          or (person_age < youth_training_wage_age_limit
+          and person_receives_flsa_training_wage
+          and days_receiving_training_wage <= youth_training_wage_period_limit_days)
+          or average_weekly_hours_worked >= minimum_weekly_work_hours_for_employment_exemption
+          or average_weekly_earnings >= federal_minimum_wage * minimum_weekly_work_hours_for_employment_exemption)
+
+  - name: self_employment_verification_supports_full_time_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Week
+    source: Policy 24.11, page 4, Verification of Self-Employment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          self_employment_income_is_consistent_with_wages_for_minimum_weekly_work_hours
+          and self_employment_volume_justifies_full_time_job
+          and household_cooperates_with_self_employment_documentation
+
+  - name: student_work_registration_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Policy 24.11, page 4, item 10(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tn/manual/dhs/snap/24-11/page-4
+    versions:
+      - effective_from: '2023-03-01'
+        formula: |-
+          person_is_eligible_student
+          and person_enrolled_at_least_half_time
+          and person_enrolled_in_recognized_school_training_program_or_higher_education

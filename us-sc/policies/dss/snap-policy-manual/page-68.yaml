@@ -1,0 +1,235 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+  summary: |-
+    Households already receiving the SM deduction remain eligible at subsequent recertification if they declare medical expenses continue to exceed $35.00 per month. At annual recertification, verified monthly medical expenses of $35.00 or less allow no medical deduction; more than $35.00 but not more than $210.00 requires the SM deduction; more than $210.00 requires the EM deduction. If new medical expenses are reported without verification at six-month or tri-annual recertification, the case cannot be registered incomplete and is processed without optional verification.
+rules:
+  - name: medical_expense_monthly_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 68, annual recertification medical expense thresholds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "$35.00 or less per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35
+
+  - name: sm_deduction_verified_monthly_minimum
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 68, annual recertification SM verification minimum
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "at least $35.01"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35.01
+
+  - name: em_deduction_monthly_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 68, annual recertification EM threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "does not exceed $210.00 per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          210
+
+  - name: no_medical_deduction_allowed_at_annual_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 68, annual recertification medical deduction amount rules
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "If the amount of medical expenses incurred and verified is $35.00 or less per month, no medical deduction will be allowed."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-68#medical_expense_monthly_threshold
+              output: medical_expense_monthly_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          annual_recertification
+          and household_not_receiving_medical_deduction
+          and reports_medical_expenses_incurred
+          and verified_monthly_medical_expenses <= medical_expense_monthly_threshold
+
+  - name: sm_deduction_allowed_at_annual_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 68, annual recertification SM deduction rule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "more than $35.00 but does not exceed $210.00 per month, the SM deduction must be allowed"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-68#medical_expense_monthly_threshold
+              output: medical_expense_monthly_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-68#em_deduction_monthly_threshold
+              output: em_deduction_monthly_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          annual_recertification
+          and household_not_receiving_medical_deduction
+          and reports_medical_expenses_incurred
+          and verified_monthly_medical_expenses > medical_expense_monthly_threshold
+          and verified_monthly_medical_expenses <= em_deduction_monthly_threshold
+
+  - name: em_deduction_allowed_at_annual_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 68, annual recertification EM deduction rule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "If the amount of medical expenses incurred and verified exceeds $210.00 monthly, the EM deduction must be allowed."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-68#em_deduction_monthly_threshold
+              output: em_deduction_monthly_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          annual_recertification
+          and household_not_receiving_medical_deduction
+          and reports_medical_expenses_incurred
+          and verified_monthly_medical_expenses > em_deduction_monthly_threshold
+
+  - name: sm_deduction_continues_at_subsequent_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 68, continuing SM deduction at subsequent recertification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "already receiving the SM deduction will remain eligible"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "continue to exceed $35.00 per month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          subsequent_recertification
+          and household_already_receiving_sm_deduction
+          and household_declares_medical_expenses_continue_to_exceed_monthly_threshold
+          and not declaration_is_questionable
+
+  - name: recertification_may_be_processed_without_optional_medical_verification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 68, optional verification note at six-month or tri-annual recertification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "six-month or tri-annual recertification should be processed without the non-mandatory (optional) verification"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "does not provide verification"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          six_month_or_tri_annual_recertification
+          and (household_reports_new_medical_expenses or household_becomes_eligible_to_receive_medical_expense_deduction)
+          and not household_provides_verification_of_medical_expenses_with_form
+
+  - name: case_cannot_be_registered_incomplete_for_missing_optional_medical_verification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 68, optional verification note at six-month or tri-annual recertification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "the case cannot be registered as incomplete"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-68
+              excerpt: "does not provide verification"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          six_month_or_tri_annual_recertification
+          and (household_reports_new_medical_expenses or household_becomes_eligible_to_receive_medical_expense_deduction)
+          and not household_provides_verification_of_medical_expenses_with_form

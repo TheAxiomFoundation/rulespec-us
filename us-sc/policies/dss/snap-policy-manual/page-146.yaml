@@ -1,0 +1,161 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+  summary: |-
+    Recoupment/Repayment from means tested programs: For TANF, count recoupment/repayment due to IPV, fraud, or client error. For SSI, count recoupment/repayment due to IPV or fraud. Exceptions: For SSI, exclude recoupment/repayment due to client error. For TANF and SSI, exclude recoupment/repayment due to agency error. Recoupment/Repayment from non-means tested source: Exclude the recoupment/repayment amount. Count the gross amount minus the recoupment/repayment amount. RCA is limited to eight months beginning with the first month of the date of entry in the U.S. Exclude reimbursements for past or future expenses to the extent they do not exceed actual expenses, and do not represent a gain or benefit to the household.
+rules:
+  - name: refugee_cash_assistance_month_limit
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual page 146 (BB)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+              excerpt: "RCA is limited to eight months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          8
+
+  - name: tanf_means_tested_recoupment_countable
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 146 (Z)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_tanf_means_tested_recoupment
+          and (recoupment_due_to_intentional_program_violation or recoupment_due_to_fraud or recoupment_due_to_client_error)
+          and not recoupment_due_to_agency_error
+
+  - name: ssi_means_tested_recoupment_countable
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 146 (Z)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_ssi_means_tested_recoupment
+          and (recoupment_due_to_intentional_program_violation or recoupment_due_to_fraud)
+          and not recoupment_due_to_client_error
+          and not recoupment_due_to_agency_error
+
+  - name: countable_non_means_tested_recoupment_source_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 146 (AA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_non_means_tested_recoupment_source: max(0, gross_income_amount - recoupment_repayment_amount) else: gross_income_amount
+
+  - name: refugee_cash_assistance_within_entry_month_limit
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 146 (BB)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+              excerpt: "limited to eight months beginning with the first month of the date of entry in the U.S."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          cash_assistance_provided_to_refugee
+          and refugee_ineligible_for_tanf_funds
+          and refugee_ineligible_for_other_cash_assistance_programs
+          and months_since_entry_first_month <= refugee_cash_assistance_month_limit
+
+  - name: reimbursement_excluded
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 146 (CC) Notes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_reimbursement_for_past_or_future_expense
+          and reimbursement_amount_does_not_exceed_actual_expense
+          and not reimbursement_represents_gain_or_benefit_to_household
+
+  - name: job_or_training_expense_allowance_not_gain_or_benefit
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 146 (CC) Notes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-146
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_reimbursement_or_flat_allowance_for_job_or_training_related_expense

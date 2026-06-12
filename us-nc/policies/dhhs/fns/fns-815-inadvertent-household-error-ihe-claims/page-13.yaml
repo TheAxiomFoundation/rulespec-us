@@ -1,0 +1,185 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+  summary: |-
+    "The DSS-8217 must contain" payment amount, payment frequency, and agreement period. Within 10 calendar days of written or oral permission for an EBT debit, the recipient must be given or mailed a copy noting the debit amount/date and claim balance. Stale EBT benefits may repay an outstanding claim when there has been no debit activity for six months or more; the FNS unit must receive written notice and ten days to object, and if it objects, the debit must not be processed.
+rules:
+  - name: stale_ebt_account_minimum_inactive_months
+    kind: parameter
+    dtype: Integer
+    source: FNS 815, page 13, item 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+              excerpt: "accounts not accessed for six (6) months or more"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          6
+
+  - name: debit_copy_delivery_deadline_days
+    kind: parameter
+    dtype: Integer
+    source: FNS 815, page 13, item 4.f
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+              excerpt: "Within 10 calendar days"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: stale_ebt_objection_period_days
+    kind: parameter
+    dtype: Integer
+    source: FNS 815, page 13, item 5.b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+              excerpt: "Give the FNS unit ten days to object"
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          10
+
+  - name: dss_8217_contains_required_debit_agreement_information
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 13, item 4.c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          dss_8217_contains_amount_of_payment
+          and dss_8217_contains_frequency_of_payment
+          and dss_8217_contains_period_agreement_covers
+
+  - name: debit_copy_delivery_requirement_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 13, item 4.f
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13#debit_copy_delivery_deadline_days
+              output: debit_copy_delivery_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          not fns_unit_written_or_oral_permission_obtained_for_ebt_debit
+          or (
+            dss_8217_copy_given_or_mailed_to_recipient
+            and dss_8217_copy_notes_debit_amount
+            and dss_8217_copy_notes_debit_date
+            and dss_8217_copy_notes_claim_balance
+            and days_after_permission_when_copy_given_or_mailed <= debit_copy_delivery_deadline_days
+          )
+
+  - name: ebt_account_is_stale
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 13, item 5.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13#stale_ebt_account_minimum_inactive_months
+              output: stale_ebt_account_minimum_inactive_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          months_since_last_ebt_account_debit_activity >= stale_ebt_account_minimum_inactive_months
+
+  - name: stale_ebt_benefits_may_repay_outstanding_claim
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 13, item 5.a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13#ebt_account_is_stale
+              output: ebt_account_is_stale
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          ebt_account_is_stale
+          and outstanding_fns_claim_balance_exists
+
+  - name: stale_ebt_debit_may_be_processed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 815, page 13, item 5.b-d
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:policies/dhhs/fns/fns-815-inadvertent-household-error-ihe-claims/page-13#stale_ebt_objection_period_days
+              output: stale_ebt_objection_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-09-20'
+        formula: |-
+          written_notification_of_intent_to_apply_stale_ebt_benefits_given_or_mailed
+          and days_given_to_object_to_stale_ebt_debit >= stale_ebt_objection_period_days
+          and not fns_unit_objected_to_stale_ebt_account_debit

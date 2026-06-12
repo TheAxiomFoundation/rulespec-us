@@ -1,0 +1,181 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+  summary: |-
+    Once the resident leaves the GLA, the GLA may no longer act as authorized representative and will inform the household to report changes within 10 days. For residents who apply through the GLA authorized representative, if the household leaves before using any allotment, the GLA must provide the allotment; if the household leaves before the 16th day and benefits were issued and partly used, the GLA provides 1/2 of monthly benefits; if the household leaves on or after the 16th and issued benefits were used, the household receives no benefits; if benefits have not been issued or used, the GLA provides a prorated amount.
+rules:
+  - name: gla_departure_change_reporting_deadline_days
+    kind: parameter
+    dtype: Integer
+    source: SNAP Manual page 197, paragraph (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+              excerpt: "within 10 days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: gla_mid_month_departure_day
+    kind: parameter
+    dtype: Integer
+    source: SNAP Manual page 197, SNAP benefits on leaving the GLA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+              excerpt: "prior to the 16th day of the month"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          16
+
+  - name: gla_early_departure_benefit_fraction_numerator
+    kind: parameter
+    dtype: Integer
+    source: SNAP Manual page 197, SNAP benefits on leaving the GLA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+              excerpt: "1/2 of its monthly benefits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: gla_early_departure_benefit_fraction_denominator
+    kind: parameter
+    dtype: Integer
+    source: SNAP Manual page 197, SNAP benefits on leaving the GLA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+              excerpt: "1/2 of its monthly benefits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2
+
+  - name: gla_authorized_representative_status_ends_after_departure
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 197, paragraph (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          resident_recipient_left_gla
+
+  - name: gla_must_notify_household_to_report_new_address_and_changes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 197, paragraph (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+              excerpt: "after leaving the GLA within 10 days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          resident_recipient_left_gla
+
+  - name: gla_benefits_to_provide_to_departing_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual page 197, SNAP benefits on leaving the GLA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-197#gla_mid_month_departure_day
+              output: gla_mid_month_departure_day
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-197#gla_early_departure_benefit_fraction_numerator
+              output: gla_early_departure_benefit_fraction_numerator
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-197#gla_early_departure_benefit_fraction_denominator
+              output: gla_early_departure_benefit_fraction_denominator
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_left_gla_before_using_any_allotment:
+            max(0, monthly_allotment)
+          else:
+            if household_departure_day_of_month < gla_mid_month_departure_day and benefits_have_been_issued and any_benefits_used_on_behalf_of_household:
+              max(0, monthly_benefits * gla_early_departure_benefit_fraction_numerator / gla_early_departure_benefit_fraction_denominator)
+            else:
+              if household_departure_day_of_month >= gla_mid_month_departure_day and benefits_have_been_issued and benefits_have_already_been_used:
+                0
+              else:
+                if household_departure_day_of_month >= gla_mid_month_departure_day and not benefits_have_been_issued and not benefits_have_already_been_used:
+                  max(0, prorated_benefit_amount_based_on_departure_day_and_allotment)
+                else:
+                  0
+
+  - name: gla_ebt_card_or_benefits_must_be_returned_to_dss
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual page 197, paragraphs (D) and SNAP benefits on leaving the GLA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-197
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          ebt_card_not_provided_before_household_left_gla_treatment_center
+          or benefits_not_provided_to_departing_resident_at_end_of_month
