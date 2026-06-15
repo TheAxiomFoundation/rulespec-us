@@ -1,0 +1,389 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/snap/3614
+  summary: The excess medical deduction is given to an AU with at least one eligible
+    member who is elderly (60 or older) or disabled. Medical expenses in excess of
+    $35 per month incurred by elderly or disabled members are considered; the $35
+    applies to total monthly expenses for all elderly or disabled household members.
+    Georgia allows one Standard Medical Deduction if verified recurring qualifying
+    expenses exceed $35 per month; effective October 1, 2023, the approved SMD is
+    $161 ($196 - $35 = $161). Households with recurring expenses more than $196 may
+    opt to claim actual medical expenses and must verify all medical expenses.
+rules:
+- name: medical_deduction_elderly_member_age_threshold
+  kind: parameter
+  dtype: Count
+  source: 3614 Requirements
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: elderly (60 years of age or older)
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: 'Effective Date: July 2025'
+  versions:
+  - effective_from: '2025-07-01'
+    formula: '60'
+- name: medical_expense_disregard
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 3614 Excess Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Medical expenses in excess of $35 per month
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: 'Effective Date: July 2025'
+  versions:
+  - effective_from: '2025-07-01'
+    formula: '35'
+- name: standard_medical_deduction_gross_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: $196 - $35 = $161
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Effective October 1, 2023
+  versions:
+  - effective_from: '2023-10-01'
+    formula: '196'
+- name: standard_medical_deduction_net_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: the approved SMD is $161 ($196 - $35 = $161) per month
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Effective October 1, 2023
+  versions:
+  - effective_from: '2023-10-01'
+    formula: '161'
+- name: medical_expense_member_is_deduction_eligible
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 3614 Requirements; Excess Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: given to an assistance unit (AU) that has at least one eligible
+            member who is elderly ... or disabled
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: expenses ... incurred by an AU member who is elderly or disabled
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'assistance_unit_has_member_age_at_least_medical_deduction_elderly_member_age_threshold
+
+      or assistance_unit_has_snap_disabled_member'
+- name: current_nonreimbursable_medical_expense_verification_met
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 3614 Verification
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Verify current, non-reimbursable expenses ... If the total expenses
+            do not exceed $35 monthly, then verification is not required.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#medical_expense_disregard
+          output: medical_expense_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'monthly_qualifying_nonreimbursable_medical_expenses <= medical_expense_disregard
+
+      or current_nonreimbursable_medical_expenses_verified'
+- name: standard_medical_deduction_verification_met
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: To be eligible for the Standard Medical Deduction, households must
+            verify that they incur more than $35 per month
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: remain eligible ... at recertification ... if they state that their
+            medical expenses continue to exceed $35 per month
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#medical_expense_disregard
+          output: medical_expense_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: "(\n    recurring_qualifying_medical_expenses_verified\n    and monthly_qualifying_nonreimbursable_medical_expenses\
+      \ > medical_expense_disregard\n)\nor (\n    recertification_renewal\n    and\
+      \ household_states_medical_expenses_continue_to_exceed_disregard\n    and not\
+      \ client_statement_questionable\n)"
+- name: actual_medical_expense_verification_met
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: To be eligible for a deduction using actual expenses, the household
+            must verify all medical expenses
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'household_opts_for_actual_medical_expenses
+
+      and all_medical_expenses_verified'
+- name: standard_medical_deduction_eligible
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: allow households to claim a standard medical deduction (SMD) if
+            there is an elderly or disabled household member with recurring medical
+            expenses of more than $35 per month
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#medical_expense_member_is_deduction_eligible
+          output: medical_expense_member_is_deduction_eligible
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#standard_medical_deduction_verification_met
+          output: standard_medical_deduction_verification_met
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#medical_expense_disregard
+          output: medical_expense_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'medical_expense_member_is_deduction_eligible
+
+      and monthly_qualifying_nonreimbursable_medical_expenses > medical_expense_disregard
+
+      and standard_medical_deduction_verification_met'
+- name: actual_medical_expense_deduction_eligible
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Households with recurring medical expenses that are more than $196
+            per month may opt to claim Actual Medical Expenses and verify all medical
+            expenses.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#medical_expense_member_is_deduction_eligible
+          output: medical_expense_member_is_deduction_eligible
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#actual_medical_expense_verification_met
+          output: actual_medical_expense_verification_met
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#standard_medical_deduction_gross_amount
+          output: standard_medical_deduction_gross_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'medical_expense_member_is_deduction_eligible
+
+      and household_opts_for_actual_medical_expenses
+
+      and monthly_qualifying_nonreimbursable_medical_expenses > standard_medical_deduction_gross_amount
+
+      and actual_medical_expense_verification_met'
+- name: actual_medical_expense_deduction_amount
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 3614 Excess Medical Deduction; Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Medical expenses in excess of $35 per month
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#actual_medical_expense_deduction_eligible
+          output: actual_medical_expense_deduction_eligible
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#medical_expense_disregard
+          output: medical_expense_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'if actual_medical_expense_deduction_eligible: max(0, monthly_qualifying_nonreimbursable_medical_expenses
+      - medical_expense_disregard) else: 0'
+- name: standard_medical_deduction_amount
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: Only one standard medical deduction can be given per AU.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#standard_medical_deduction_eligible
+          output: standard_medical_deduction_eligible
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#standard_medical_deduction_net_amount
+          output: standard_medical_deduction_net_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: 'if standard_medical_deduction_eligible: standard_medical_deduction_net_amount
+      else: 0'
+- name: medical_deduction
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 3614 Standard Medical Deduction
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: ordering
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: There are two types of medical deductions ... Standard Medical
+            Deduction OR ... Actual Medical Expenses incurred.
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ga/manual/dfcs/snap/3614
+          excerpt: The household should receive $224.90 per month as a medical deduction
+            since it is more than what would be received under the standard medical
+            deduction.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#actual_medical_expense_deduction_amount
+          output: actual_medical_expense_deduction_amount
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ga:policies/dfcs/snap/3614#standard_medical_deduction_amount
+          output: standard_medical_deduction_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-07-01'
+    formula: max(standard_medical_deduction_amount, actual_medical_expense_deduction_amount)
