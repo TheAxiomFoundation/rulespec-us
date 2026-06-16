@@ -1,0 +1,321 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+  summary: |-
+    1620.0541.02 provides that the TCA exclusion period is nine months or until the property is sold, whichever is sooner; proceeds remaining after repayment of excess TCA benefits are included as assets; and the case must be closed if excluded property is not sold during the period or the individual becomes ineligible for another reason. 1620.0541.04 provides when sale creates no overpayment, when cancellation is required, and when benefits are overpayment. 1620.0542 states required home verification information and additional evidence steps.
+rules:
+  - name: tca_property_sale_exclusion_period_months
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 1620.0541.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "The period of exclusion is nine months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          9
+
+  - name: property_remains_within_tca_sale_exclusion_period
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "nine months, or until the property is sold, whichever is sooner"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29#tca_property_sale_exclusion_period_months
+              output: tca_property_sale_exclusion_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          property_is_excluded_pending_sale
+          and property_has_not_been_sold
+          and months_since_property_sale_exclusion_began < tca_property_sale_exclusion_period_months
+
+  - name: sale_proceeds_remaining_after_excess_tca_repayment_asset_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "Any proceeds from the sale remaining after repayment of excess TCA benefits are included as assets."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if property_has_been_sold: max(0, property_sale_proceeds - excess_tca_benefits_repaid_from_sale_proceeds) else: 0
+
+  - name: tca_case_must_be_closed_after_unsold_excluded_property
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "case must be closed if the excluded property is not sold during the nine month period"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29#tca_property_sale_exclusion_period_months
+              output: tca_property_sale_exclusion_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_has_excluded_property_pending_sale
+          and property_has_not_been_sold
+          and months_since_property_sale_exclusion_began >= tca_property_sale_exclusion_period_months
+
+  - name: tca_case_must_be_closed_for_other_ineligibility_during_exclusion
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "or the individual becomes ineligible for any other reason during the exclusion period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_becomes_ineligible_for_other_reason
+          and individual_is_within_property_sale_exclusion_period
+
+  - name: tca_case_closing_effective_month_after_exclusion_period
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "The effective date of the case closing is the month after the end of the exclusion period."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tca_case_closing_required
+          and current_month_is_month_after_end_of_exclusion_period
+
+  - name: tca_good_faith_effort_to_sell_verification_provided
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "Sources of verification of the good faith effort to sell include documents such as a written statement from a real estate dealer, clippings of advertisements less than 30 days old, or copies of conditional sales contracts."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          written_statement_from_real_estate_dealer_provided
+          or advertisement_clipping_less_than_30_days_old_provided
+          or conditional_sales_contract_copy_provided
+
+  - name: no_overpayment_from_property_sale_due_to_assets_under_limit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.04
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "Overpayment does not occur if the property is sold, and the net profit plus the value of other SFU assets at the beginning of the exclusion period are under the asset limit."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          property_has_been_sold
+          and property_net_profit_plus_other_sfu_assets_at_exclusion_start < tca_asset_limit
+
+  - name: tca_case_must_be_canceled_after_property_sale_assets_exceed_limit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.04
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "If the individual’s assets exceed allowable limits after the sale, the case must be canceled effective the first possible payment month."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          property_has_been_sold
+          and individual_assets_exceed_allowable_limits_after_sale
+
+  - name: property_sale_cancellation_requires_ten_days_advance_notice
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.04
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "A notice of the cancellation must be sent to the individual allowing 10 days advance notice."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tca_case_cancellation_after_property_sale_required
+          and cancellation_notice_allows_at_least_10_days_advance_notice
+
+  - name: tca_benefits_overpayment_due_to_delayed_disposal
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.04
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "Any TCA benefits received that would not have been received had disposal occurred at the beginning of the exclusion period must be considered overpayment and recouped."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tca_benefits_received
+          and benefits_would_not_have_been_received_if_disposal_occurred_at_exclusion_start
+
+  - name: complete_ongoing_eligibility_review_required_after_sale_assets_ok
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0541.04
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "If the individual remains eligible on the factor of assets after the property is sold, the eligibility specialist must make a complete review of ongoing eligibility."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          property_has_been_sold
+          and individual_remains_eligible_on_asset_factor_after_sale
+
+  - name: home_verification_required_information_provided
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0542
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "the name of property owner, property included as the home, the legal description of home property, and affirmation that home is currently occupied or the reason why it is not occupied"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          property_owner_name_provided
+          and property_included_as_home_provided
+          and legal_description_of_home_property_provided
+          and home_occupancy_affirmation_or_nonoccupancy_reason_provided
+
+  - name: additional_home_plot_ownership_evidence_required
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0542
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "If there is any indication that a portion of the individual’s property is not physically located in the home plot, the individual must provide evidence of the property’s ownership status and that the property is part of the home property."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          indication_property_portion_not_physically_located_in_home_plot
+
+  - name: local_property_tax_source_contact_required_for_home_boundaries
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0542
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-29
+              excerpt: "If the individual cannot provide this evidence or the evidence is insufficient, contact the local source of property tax information regarding the property boundaries"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_cannot_provide_home_plot_evidence
+          or home_plot_evidence_is_insufficient

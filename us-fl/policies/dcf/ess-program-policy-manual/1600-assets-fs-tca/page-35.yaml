@@ -1,0 +1,320 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+  summary: |-
+    A vehicle is any automobile, truck, motorcycle, etc., used to provide transportation, including unregistered, inoperable, or repair-needed vehicles. For TCA licensed vehicles, a standard filing unit may exclude any vehicle necessary for transportation of a physically disabled member; may exclude one licensed vehicle when no individual is subject to work participation requirements if equity does not exceed $8,500; and may exclude vehicles needed for training, employment or education when the combined value does not exceed $8,500. Any remaining vehicle equity after the $8,500 deduction counts toward the $2,000 asset limit. Equity value is NADA value minus amount owed.
+rules:
+  - name: tca_vehicle_equity_deduction_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: does not exceed $8,500
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          8500
+
+  - name: tca_asset_limit_for_remaining_vehicle_equity
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: counted toward the $2,000 asset limit
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2000
+
+  - name: no_work_participation_unit_vehicle_exclusion_count_limit
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: may exclude one licensed vehicle
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: vehicle_wholesale_fair_market_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: fair market value is determined by using the wholesale value of the vehicle listed in the NADA book
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if asset_is_vehicle_for_tca: vehicle_nada_trade_in_value else: 0
+
+  - name: vehicle_equity_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: Equity value is calculated by taking the NADA value of a vehicle and subtracting the amount owed.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#vehicle_wholesale_fair_market_value
+              output: vehicle_wholesale_fair_market_value
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if asset_is_vehicle_for_tca: max(0, vehicle_wholesale_fair_market_value - amount_owed_on_vehicle) else: 0
+
+  - name: vehicle_necessary_for_disabled_member_transportation_excluded_as_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA), item 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: may exclude as an asset any vehicle necessary for the transportation of a physically disabled (including blind) member
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle_for_tca
+          and vehicle_necessary_for_transportation_of_physically_disabled_or_blind_member
+
+  - name: licensed_vehicle_no_work_participation_unit_excluded_as_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA), item 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: may exclude one licensed vehicle, regardless of use, as long as the equity value of the vehicle does not exceed $8,500
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#vehicle_equity_value
+              output: vehicle_equity_value
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#tca_vehicle_equity_deduction_limit
+              output: tca_vehicle_equity_deduction_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#no_work_participation_unit_vehicle_exclusion_count_limit
+              output: no_work_participation_unit_vehicle_exclusion_count_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle_for_tca
+          and asset_is_licensed_vehicle
+          and standard_filing_unit_contains_no_individual_subject_to_work_participation_requirements
+          and number_of_other_licensed_vehicles_excluded_under_no_work_participation_vehicle_rule < no_work_participation_unit_vehicle_exclusion_count_limit
+          and vehicle_equity_value <= tca_vehicle_equity_deduction_limit
+
+  - name: licensed_employment_training_education_vehicle_excluded_within_combined_limit
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA), item 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: exclude vehicles needed for training, employment or education purposes as long as the combined value of these vehicles does not exceed a total of $8,500
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#tca_vehicle_equity_deduction_limit
+              output: tca_vehicle_equity_deduction_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle_for_tca
+          and asset_is_licensed_vehicle
+          and standard_filing_unit_has_individual_employed_or_subject_to_work_participation_requirements
+          and vehicle_needed_for_training_employment_or_education
+          and combined_equity_value_of_training_employment_education_vehicles <= tca_vehicle_equity_deduction_limit
+
+  - name: non_employment_training_vehicle_receives_deduction_first
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA), item 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: the non-employment and training use vehicle with the highest equity value has the deduction applied first
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle_for_tca
+          and asset_is_licensed_vehicle
+          and standard_filing_unit_has_individual_employed_or_subject_to_work_participation_requirements
+          and standard_filing_unit_owns_multiple_vehicles
+          and not vehicle_needed_for_training_employment_or_education
+          and vehicle_has_highest_equity_value_among_non_employment_training_use_vehicles
+
+  - name: employment_training_vehicle_receives_first_deduction_among_employment_training_vehicles
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA), item 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: if there is more than one employment and training vehicle, the $8,500 deduction is applied first to the vehicle with the highest equity value
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_vehicle_for_tca
+          and asset_is_licensed_vehicle
+          and standard_filing_unit_has_individual_employed_or_subject_to_work_participation_requirements
+          and standard_filing_unit_has_more_than_one_employment_training_education_vehicle
+          and vehicle_needed_for_training_employment_or_education
+          and vehicle_has_highest_equity_value_among_employment_training_education_vehicles
+
+  - name: vehicle_excluded_as_tca_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#vehicle_necessary_for_disabled_member_transportation_excluded_as_asset
+              output: vehicle_necessary_for_disabled_member_transportation_excluded_as_asset
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#licensed_vehicle_no_work_participation_unit_excluded_as_asset
+              output: licensed_vehicle_no_work_participation_unit_excluded_as_asset
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#licensed_employment_training_education_vehicle_excluded_within_combined_limit
+              output: licensed_employment_training_education_vehicle_excluded_within_combined_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          vehicle_necessary_for_disabled_member_transportation_excluded_as_asset
+          or licensed_vehicle_no_work_participation_unit_excluded_as_asset
+          or licensed_employment_training_education_vehicle_excluded_within_combined_limit
+
+  - name: vehicle_equity_value_counted_toward_tca_asset_limit_after_deduction
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: ESS Program Policy Manual 1620.0588, Vehicle Exclusions (TCA), item 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35
+              excerpt: any vehicle equity value remaining after the $8,500 deduction is applied will be counted toward the $2,000 asset limit
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#vehicle_equity_value
+              output: vehicle_equity_value
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#vehicle_excluded_as_tca_asset
+              output: vehicle_excluded_as_tca_asset
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-35#tca_vehicle_equity_deduction_limit
+              output: tca_vehicle_equity_deduction_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if asset_is_vehicle_for_tca:
+            if vehicle_excluded_as_tca_asset: 0 else: max(0, vehicle_equity_value - min(vehicle_equity_value, min(vehicle_equity_deduction_applied_to_this_vehicle_under_tca_ordering, tca_vehicle_equity_deduction_limit)))
+          else:
+            0

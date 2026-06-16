@@ -1,0 +1,208 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+  summary: |-
+    Each assistance group member can exclude a maximum of $1,500 of equity value in a single funeral agreement. One burial space per AG member is excluded. Cash includes money the individual owns no matter where it is located. A lump sum payment is considered an asset in the month of receipt and is excluded as income, except federal income tax returns, refundable credits, and tax refunds are excluded as income and assets in the month of receipt and as an asset for 12 months from receipt.
+rules:
+  - name: funeral_agreement_excluded_equity_value_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: FS 1610.0508 Funeral Agreement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "exclude a maximum of $1,500"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1500
+
+  - name: burial_space_excluded_count_per_assistance_group_member
+    kind: parameter
+    dtype: Count
+    source: FS 1610.0516 Burial Spaces
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "One burial space per AG member is excluded."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: federal_income_tax_return_asset_exclusion_months
+    kind: parameter
+    dtype: Count
+    source: FS 1610.0520 Lump Sum Payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "excluded as an asset for 12 months from the date of receipt"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: funeral_agreement_excluded_equity_value_for_member
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FS 1610.0508 Funeral Agreement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "Each assistance group member can exclude a maximum of $1,500 of equity value in a single funeral agreement."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if person_is_assistance_group_member and person_has_single_funeral_agreement_with_legitimate_funeral_service_provider: min(max(0, single_funeral_agreement_equity_value), funeral_agreement_excluded_equity_value_limit) else: 0
+
+  - name: funeral_agreement_countable_asset_amount_for_member
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FS 1610.0508 Funeral Agreement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "Any additional funeral agreement amounts are included as an asset."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if person_is_assistance_group_member: max(0, total_funeral_agreement_equity_value - funeral_agreement_excluded_equity_value_for_member) else: 0
+
+  - name: burial_spaces_excluded_for_member
+    kind: derived
+    entity: Person
+    dtype: Count
+    period: Month
+    source: FS 1610.0516 Burial Spaces
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "One burial space per AG member is excluded."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if person_is_assistance_group_member: min(burial_space_count_owned_by_member, burial_space_excluded_count_per_assistance_group_member) else: 0
+
+  - name: cash_on_hand_amount_for_asset_verification
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FS 1610.0518 and 1610.0519 Cash
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          cash_in_personal_possession + cash_at_home + cash_held_for_individual_elsewhere
+
+  - name: non_exception_lump_sum_payment_countable_as_asset_amount_in_month_of_receipt
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FS 1610.0520 Lump Sum Payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "A lump sum payment is considered an asset in the month of receipt"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "Federal income tax returns ... are excluded as income and assets in the month of receipt"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_received_in_month_of_receipt and payment_is_nonrecurring_unearned_lump_sum and not payment_is_federal_income_tax_return_including_refundable_tax_credits_or_tax_refund: lump_sum_payment_amount else: 0
+
+  - name: lump_sum_payment_excluded_as_income_amount_in_month_of_receipt
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FS 1610.0520 Lump Sum Payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "is excluded as income"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "Federal income tax returns ... are excluded as income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_received_in_month_of_receipt and (payment_is_nonrecurring_unearned_lump_sum or payment_is_federal_income_tax_return_including_refundable_tax_credits_or_tax_refund): lump_sum_payment_amount else: 0
+
+  - name: federal_income_tax_return_excluded_as_asset_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FS 1610.0520 Lump Sum Payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-9
+              excerpt: "Federal income tax returns ... are excluded as income and assets in the month of receipt and will continue to be excluded as an asset for 12 months from the date of receipt."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_is_federal_income_tax_return_including_refundable_tax_credits_or_tax_refund and months_since_federal_income_tax_return_receipt >= 0 and months_since_federal_income_tax_return_receipt <= federal_income_tax_return_asset_exclusion_months: federal_income_tax_return_amount else: 0
