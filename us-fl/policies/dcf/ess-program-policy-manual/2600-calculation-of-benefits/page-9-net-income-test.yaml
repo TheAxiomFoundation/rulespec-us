@@ -1,0 +1,338 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+  summary: '"The assistance group must pass the gross income test before being subjected
+    to the net income test." "If net income equals or exceeds the net income limit,
+    the assistance group is ineligible." Net income is determined by applying a 20%
+    earned income disregard, subtracting the standard disregard, allowable medical
+    expenses exceeding $35, verified work-related dependent care expenses, and excess
+    shelter costs computed after subtracting 50% of income following Step 6; non-elderly/disabled
+    assistance groups cap the shelter disregard at $417.'
+rules:
+- name: earned_income_disregard_rate
+  kind: parameter
+  dtype: Rate
+  source: 2610.0105 Determining Net Income (FS), Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+          excerpt: Multiply the total gross earned income by 20%.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.20'
+- name: medical_expense_disregard_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 5
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+          excerpt: exceed $35
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '35'
+- name: shelter_expense_income_share
+  kind: parameter
+  dtype: Rate
+  source: 2610.0105 Determining Net Income (FS), Step 7
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+          excerpt: Subtract 50% of the assistance group's income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.50'
+- name: maximum_shelter_disregard
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), capped shelter disregard paragraph
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+          excerpt: maximum shelter disregard of $417
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '417'
+- name: countable_monthly_earned_income_after_disregard
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Steps 1-2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#earned_income_disregard_rate
+          output: earned_income_disregard_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, total_gross_monthly_earned_income - (total_gross_monthly_earned_income
+      * earned_income_disregard_rate))
+- name: monthly_gross_income_after_earned_income_disregard
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#countable_monthly_earned_income_after_disregard
+          output: countable_monthly_earned_income_after_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: countable_monthly_earned_income_after_disregard + countable_monthly_unearned_income
+- name: income_after_standard_disregard
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 4
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#monthly_gross_income_after_earned_income_disregard
+          output: monthly_gross_income_after_earned_income_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, monthly_gross_income_after_earned_income_disregard - standard_disregard_amount)
+- name: excess_medical_deduction
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 5
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#medical_expense_disregard_threshold
+          output: medical_expense_disregard_threshold
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if assistance_group_entitled_to_excess_medical_deduction: max(0, total_allowable_monthly_medical_expenses
+      - medical_expense_disregard_threshold) else: 0'
+- name: income_after_medical_deduction
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 5
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#income_after_standard_disregard
+          output: income_after_standard_disregard
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#excess_medical_deduction
+          output: excess_medical_deduction
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, income_after_standard_disregard - excess_medical_deduction)
+- name: dependent_care_deduction
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 6
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if assistance_group_entitled_to_dependent_care_deduction and dependent_care_expense_verified:
+      actual_monthly_work_related_dependent_care_expense else: 0'
+- name: income_after_dependent_care_deduction
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 6
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#income_after_medical_deduction
+          output: income_after_medical_deduction
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#dependent_care_deduction
+          output: dependent_care_deduction
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, income_after_medical_deduction - dependent_care_deduction)
+- name: excess_shelter_cost
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Step 7
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#shelter_expense_income_share
+          output: shelter_expense_income_share
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#income_after_dependent_care_deduction
+          output: income_after_dependent_care_deduction
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, total_monthly_shelter_expenses - (income_after_dependent_care_deduction
+      * shelter_expense_income_share))
+- name: adjusted_net_monthly_income
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 2610.0105 Determining Net Income (FS), Steps 8 and capped/uncapped shelter
+    paragraphs
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#income_after_dependent_care_deduction
+          output: income_after_dependent_care_deduction
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#excess_shelter_cost
+          output: excess_shelter_cost
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#maximum_shelter_disregard
+          output: maximum_shelter_disregard
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if assistance_group_subject_to_capped_shelter_disregard: max(0, income_after_dependent_care_deduction
+      - min(excess_shelter_cost, maximum_shelter_disregard)) else: max(0, income_after_dependent_care_deduction
+      - excess_shelter_cost)'
+- name: net_income_test_passed
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 2610.0104.04 Net Income Test (FS)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-fl:policies/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-9-net-income-test#adjusted_net_monthly_income
+          output: adjusted_net_monthly_income
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'assistance_group_passes_gross_income_test
+
+      and adjusted_net_monthly_income < allowable_net_income_limit'
