@@ -1,0 +1,261 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+  summary: |-
+    Cash includes money the individual owns no matter where it is located. A lump sum payment is considered an asset in the month of receipt and is excluded as income unless the federal income tax return exception applies; federal income tax returns, refundable tax credits, and over-withholding are excluded as income and assets in the month of receipt and as assets for 12 months. Earned lump sums are earned income in the month of receipt and any remainder is an asset. Money from excluded income and asset sources deposited in savings is excluded, but unidentifiable balances count as assets the next month. Crops and livestock for the SFU's own use, specified disaster assistance, NFIP payments, and interest on disaster assistance are excluded assets.
+rules:
+  - name: tca_federal_income_tax_return_asset_exclusion_period_months
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 1620.0520, Lump Sum Payments (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+              excerpt: excluded as an asset for 12 months from the date of receipt
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: tca_money_owned_by_individual_is_cash
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0518, Cash (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_money_owned_by_individual
+
+  - name: tca_unearned_lump_sum_payment_considered_asset_in_month_of_receipt
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0520, Lump Sum Payments (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_nonrecurring_unearned_lump_sum_payment
+          and asset_month_is_month_of_receipt
+          and not asset_is_federal_income_tax_return_refund_refundable_tax_credit_or_overwithholding
+
+  - name: tca_federal_income_tax_return_excluded_as_asset_within_twelve_months
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0520, Lump Sum Payments (TCA), exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26#tca_federal_income_tax_return_asset_exclusion_period_months
+              output: tca_federal_income_tax_return_asset_exclusion_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_federal_income_tax_return_refund_refundable_tax_credit_or_overwithholding
+          and months_since_asset_receipt <= tca_federal_income_tax_return_asset_exclusion_period_months
+
+  - name: tca_earned_lump_sum_remainder_after_receipt_month_considered_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0520, Lump Sum Payments (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_earned_lump_sum_payment_funds
+          and funds_remain_after_month_of_receipt
+
+  - name: tca_money_from_excluded_income_and_asset_source_deposited_in_savings_account_excluded_as_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0522, Money from Excluded Asset (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_money_received_from_excluded_income_and_asset_source
+          and asset_deposited_in_savings_account
+
+  - name: tca_unidentifiable_savings_account_balance_counts_as_asset_next_month
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0522, Money from Excluded Asset (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          savings_account_balance_not_identifiable_as_coming_from_excluded_source
+          and current_month_is_month_after_balance_lost_identifiability
+
+  - name: tca_crops_or_livestock_for_sfu_own_use_excluded_as_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0524, Crops and Livestock for Home Use (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_crops_or_livestock
+          and asset_grown_or_retained_solely_for_sfu_own_use
+
+  - name: tca_disaster_relief_act_payment_excluded_from_assets
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0526, Disaster Assistance (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_payment_including_disaster_unemployment_assistance_received_under_disaster_relief_act
+
+  - name: tca_nfip_payment_excluded_from_assets
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0526, Disaster Assistance (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_nfip_payment_made_under_national_flood_insurance_act
+
+  - name: tca_interest_earned_on_disaster_assistance_payment_excluded_from_assets
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0526, Disaster Assistance (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_interest_earned_on_disaster_assistance_payment
+
+  - name: tca_earned_lump_sum_payment_counted_as_earned_income_in_month_of_receipt
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0520, Lump Sum Payments (TCA)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_lump_sum_payment
+          and lump_sum_payment_is_earned_income
+          and payment_month_is_month_of_receipt
+
+  - name: tca_federal_income_tax_return_excluded_as_income_in_month_of_receipt
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1620.0520, Lump Sum Payments (TCA), exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-26
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_federal_income_tax_return_refund_refundable_tax_credit_or_overwithholding
+          and payment_month_is_month_of_receipt

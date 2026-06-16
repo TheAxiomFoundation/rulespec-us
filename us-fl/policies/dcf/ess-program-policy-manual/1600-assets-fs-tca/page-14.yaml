@@ -1,0 +1,212 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+  summary: |-
+    Several series of U.S. Savings Bonds can normally be quickly converted into cash and are liquid assets, but some bonds, including Series E, must be held at least 60 days from issue before conversion. Shared savings bonds require all owners to agree to liquidation. Irrevocable trusts are not included as assets. Real property includes owned real estate and income producing property; non-homestead real estate without life estate is included unless excluded for good faith sale effort or income production consistent with fair market value. Real property value is equity value unless exempt. Vehicles are excluded as food stamp assets.
+imports:
+  - us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-11#property_excluded_as_asset_during_good_faith_sale_effort
+rules:
+  - name: savings_bond_minimum_holding_period_days
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 1610.0572, U.S. Savings Bonds (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+              excerpt: "must be held at least 60 days from the date of issue"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          60
+
+  - name: us_savings_bond_liquid_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1610.0572, U.S. Savings Bonds (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14#savings_bond_minimum_holding_period_days
+              output: savings_bond_minimum_holding_period_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_us_savings_bond
+          and (
+            asset_savings_bond_series_normally_quickly_convertible_at_local_bank
+            or (
+              asset_savings_bond_series_requiring_minimum_holding_before_cash_conversion
+              and savings_bond_days_since_issue >= savings_bond_minimum_holding_period_days
+            )
+          )
+
+  - name: us_savings_bond_redeemable_by_registered_owner
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1610.0572, U.S. Savings Bonds (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_us_savings_bond
+          and owner_completed_redemption_form_on_back_of_bond
+          and (
+            (
+              not savings_bond_ownership_is_shared
+            )
+            or all_savings_bond_owners_agree_to_liquidate
+          )
+
+  - name: series_h_savings_bond_asset_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: ESS Program Policy Manual 1610.0572, U.S. Savings Bonds (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+              excerpt: "The face value of Series H bonds does not change."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if asset_is_series_h_us_savings_bond: savings_bond_face_value else: 0
+
+  - name: irrevocable_trust_excluded_as_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1610.0573, Trusts (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+              excerpt: "Irrevocable trusts are not included as assets."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_trust
+          and trust_is_irrevocable
+
+  - name: real_property_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1610.0577, Real Property (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_has_ownership_interest_in_asset
+          and (
+            asset_is_real_estate_owned_by_individual_or_couple
+            or asset_is_income_producing_property
+          )
+
+  - name: real_estate_included_as_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1610.0578, Real Estate (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-11#property_excluded_as_asset_during_good_faith_sale_effort
+              output: property_excluded_as_asset_during_good_faith_sale_effort
+              hash: sha256:5b064016351f4177db44eaf9f2494faaec308a0488645ac8c0ed1eac0ba264a0
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_real_estate
+          and not asset_is_homestead
+          and not asset_involves_life_estate
+          and not property_excluded_as_asset_during_good_faith_sale_effort
+          and not asset_real_property_produces_income_consistent_with_fair_market_value
+
+  - name: real_property_countable_asset_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: ESS Program Policy Manual 1610.0579, Value of Real Property (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+              excerpt: "Value is determined as equity value unless the property is exempt."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if asset_is_real_property and not real_property_is_exempt: real_property_equity_value else: 0
+
+  - name: vehicle_excluded_as_food_stamp_asset
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1610.0583, Vehicles (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1600-assets-fs-tca/page-14
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_automobile_truck_motorcycle_or_other_transportation_vehicle
+          or asset_is_unregistered_inoperable_or_in_need_of_repair_transportation_vehicle
