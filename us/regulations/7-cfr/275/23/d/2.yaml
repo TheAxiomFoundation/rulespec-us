@@ -1,0 +1,192 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/275/23
+  summary: |-
+    For fiscal year 2003 and subsequent years, liability is established when there is a 95 percent statistical probability that, for the second or subsequent consecutive fiscal year, a State agency's payment error rate exceeds 105 percent of the national performance measure. The liability equals all allotments issued multiplied by the excess over 6 percent and by 10 percent.
+rules:
+  - name: liability_statistical_probability_threshold
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "95 percent statistical probability"
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          0.95
+
+  - name: payment_error_rate_performance_measure_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "exceeds 105 percent of the national performance measure"
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          1.05
+
+  - name: liability_error_rate_baseline
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "payment error rate and 6 percent"
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          0.06
+
+  - name: liability_amount_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "multiplied by 10 percent"
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          0.10
+
+  - name: payment_error_rate_exceeds_liability_threshold
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Year
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "payment error rate exceeds 105 percent of the national performance measure"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/275/23/d/2#payment_error_rate_performance_measure_multiplier
+              output: payment_error_rate_performance_measure_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          payment_error_rate > payment_error_rate_performance_measure_multiplier * national_performance_measure
+
+  - name: payment_liability_established
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Year
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "95 percent statistical probability"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "for the second or subsequent consecutive fiscal year"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "payment error rate exceeds 105 percent of the national performance measure"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/275/23/d/2#liability_statistical_probability_threshold
+              output: liability_statistical_probability_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/275/23/d/2#payment_error_rate_exceeds_liability_threshold
+              output: payment_error_rate_exceeds_liability_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          statistical_probability >= liability_statistical_probability_threshold
+          and is_second_or_subsequent_consecutive_fiscal_year
+          and payment_error_rate_exceeds_liability_threshold
+
+  - name: payment_liability_amount
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 7 CFR 275.23(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "equal to the product of the value of all allotments issued"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "difference between the State agency's payment error rate and 6 percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/275/23
+              excerpt: "multiplied by 10 percent"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/275/23/d/2#payment_liability_established
+              output: payment_liability_established
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/275/23/d/2#liability_error_rate_baseline
+              output: liability_error_rate_baseline
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/275/23/d/2#liability_amount_multiplier
+              output: liability_amount_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          if payment_liability_established: max(0, value_of_all_allotments_issued * (payment_error_rate - liability_error_rate_baseline) * liability_amount_multiplier) else: 0
