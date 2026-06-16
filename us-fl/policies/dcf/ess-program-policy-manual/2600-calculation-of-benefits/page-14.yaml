@@ -1,0 +1,168 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+  summary: |-
+    "When an assistance group is divided, proration will apply" to portions processed as new cases and "will not be applied" to an ongoing-case portion. A moving assistance group avoids proration only with prior entitlement, continuing certification, and unchanged composition; otherwise it is treated as a new applicant. Self-employment annual support "must be averaged over a 12 month period," except substantial business changes use anticipated earnings; part-year income is averaged over the intended period, and a less-than-one-year enterprise over the period in operation.
+rules:
+  - name: annual_self_employment_support_averaging_months
+    kind: parameter
+    dtype: Count
+    source: 2610.0402.01 Assistance Groups with Self-Employment Income; 2610.0402.02 Self-Employment Income Received Monthly
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "must be averaged over a 12 month period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: divided_assistance_group_portion_subject_to_proration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0302 Assistance Group Divided Up
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "proration will apply to any portion(s) of the original assistance group which is processed as a new case(s)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          assistance_group_portion_from_divided_original_group
+          and assistance_group_portion_processed_as_new_case
+          and not assistance_group_portion_considered_ongoing_case
+
+  - name: moving_assistance_group_not_subject_to_proration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0303 Assistance Group Moves
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "should not be subject to proration if it can document that it was entitled in the prior month... and there were no changes in AG composition"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          existing_assistance_group_moving_from_another_project_area_or_state
+          and documentation_establishes_prior_entitlement_certification_period_and_composition
+          and old_certification_period_would_continue_until_day_before_new_application
+          and not assistance_group_membership_changed
+
+  - name: moving_assistance_group_treated_as_new_applicant_and_subject_to_proration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0303 Assistance Group Moves
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "If the membership changed or if documentation of prior entitlement or composition cannot be provided, the AG would be considered as a new applicant and its benefits subject to proration."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          existing_assistance_group_moving_from_another_project_area_or_state
+          and (assistance_group_membership_changed or not documentation_establishes_prior_entitlement_certification_period_and_composition or not old_certification_period_would_continue_until_day_before_new_application)
+
+  - name: monthly_self_employment_income_for_annual_support
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.01 Assistance Groups with Self-Employment Income; 2610.0402.02 Self-Employment Income Received Monthly
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "If the averaged income does not accurately reflect the AG’s actual monthly circumstances because they had experienced a substantial increase or decrease in business, the eligibility specialist will calculate the self-employment income based on anticipated earnings."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if annual_average_inaccurate_due_to_substantial_business_change: anticipated_monthly_self_employment_earnings else: total_annual_self_employment_support / annual_self_employment_support_averaging_months
+
+  - name: monthly_self_employment_income_for_part_year_support
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.03 Income Received Over Short Period of Time
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "Self-employment income which is intended to meet the assistance group's needs for only part of the year will be averaged over the period of time the income is intended to cover."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if self_employment_income_intended_to_meet_needs_for_only_part_of_year: total_part_year_self_employment_income / months_income_intended_to_cover else: 0
+
+  - name: monthly_self_employment_income_for_new_enterprise
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.04 Enterprise in Existence for Less Than a Year
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "the income from that enterprise will be averaged over the period of time the business has been in operation"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if self_employment_enterprise_in_existence_less_than_year: self_employment_income_from_new_enterprise / months_business_has_been_in_operation else: 0
+
+  - name: recognized_transportation_cost_to_see_customers
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.01 Assistance Groups with Self-Employment Income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-14
+              excerpt: "When a vehicle is used, the cost of transportation to see customers is recognized at the allowable state rate for mileage or the individual’s actual expenses."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if vehicle_used_for_transportation_to_see_customers: if mileage_rate_method_used_for_vehicle_expense: business_miles_to_see_customers * allowable_state_mileage_rate else: individual_actual_transportation_expenses_to_see_customers else: 0
