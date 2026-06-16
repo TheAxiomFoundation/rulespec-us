@@ -1,0 +1,297 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+  summary: |-
+    "Assistance groups must meet the gross income standards to be eligible for food stamps" except elderly or disabled non-categorically eligible groups, which "must meet the net income limits," and broad-based categorically eligible SFUs, which "must meet the 200% gross income limits." A person 60 or older unable to purchase and prepare meals due to a permanent disability may be a separate assistance group if the income of others, excluding the elderly or disabled person and spouse, does not exceed "165% of the gross eligibility standard." For the gross income test, if gross income is equal to or exceeds the gross income limit, the assistance group is ineligible.
+rules:
+  - name: separate_assistance_group_minimum_age
+    kind: parameter
+    dtype: Count
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "member who is 60 or older"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          60
+
+  - name: children_required_with_disabled_individual_age_limit
+    kind: parameter
+    dtype: Count
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "children under 18"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          18
+
+  - name: need_standard_income_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "does not exceed 165% of the gross eligibility standard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.65
+
+  - name: broad_based_categorical_gross_income_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: 2610.0103 Budgets and Tests
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "200% gross income limits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2.00
+
+  - name: person_meets_age_requirement_for_elderly_disabled_separate_group
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "member who is 60 or older"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_age >= separate_assistance_group_minimum_age
+
+  - name: child_under_age_limit_may_not_be_separate_from_disabled_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "children under 18 who live with this individual may not be separate"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          child_lives_with_disabled_individual
+          and child_age < children_required_with_disabled_individual_age_limit
+
+  - name: income_of_others_within_165_percent_need_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "income of the elderly or disabled person and their spouse is excluded"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          income_of_others_excluding_individual_and_spouse <= gross_eligibility_standard_for_others * need_standard_income_limit_rate
+
+  - name: elderly_disabled_individual_may_be_separate_assistance_group
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 2610.0104.02 165% Need Standard Eligibility Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          otherwise_eligible_assistance_group_member
+          and person_meets_age_requirement_for_elderly_disabled_separate_group
+          and person_unable_to_purchase_and_prepare_meals
+          and (person_has_permanent_disability_under_social_security_act or person_has_non_disease_related_permanent_disability)
+          and spouse_and_children_under_age_limit_living_with_individual_are_included_with_individual
+          and income_of_others_within_165_percent_need_standard
+
+  - name: assistance_group_must_meet_net_income_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0103 Budgets and Tests
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "assistance groups that contain an elderly or disabled member and are not categorically eligible must meet the net income limits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          assistance_group_contains_elderly_or_disabled_member
+          and not assistance_group_is_categorically_eligible
+
+  - name: assistance_group_must_meet_gross_income_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0103 Budgets and Tests
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "Assistance groups must meet the gross income standards... with the following exceptions"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not assistance_group_must_meet_net_income_limit
+          and not standard_filing_unit_is_broad_based_categorically_eligible
+
+  - name: broad_based_categorical_gross_income_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0103 Budgets and Tests
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "200% gross income limits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          allowable_gross_income_limit * broad_based_categorical_gross_income_limit_rate
+
+  - name: standard_filing_unit_satisfies_200_percent_gross_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0103 Budgets and Tests
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "SFUs that are broad-based categorically eligible must meet the 200% gross income limits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not standard_filing_unit_is_broad_based_categorically_eligible
+          or gross_monthly_income < broad_based_categorical_gross_income_limit
+
+  - name: assistance_group_satisfies_gross_income_test
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0104.03 Gross Income Test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "If the gross income is equal to or exceeds the gross income limit, the assistance group is ineligible."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not assistance_group_must_meet_gross_income_standard
+          or gross_monthly_income < allowable_gross_income_limit
+
+  - name: assistance_group_satisfies_net_income_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0103 Budgets and Tests
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+              excerpt: "must meet the net income limits"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not assistance_group_must_meet_net_income_limit
+          or net_monthly_income < allowable_net_income_limit
+
+  - name: assistance_group_income_test_satisfied_for_food_stamps
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0103 through 2610.0104.03
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-8
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          standard_filing_unit_satisfies_200_percent_gross_income_test
+          and assistance_group_satisfies_gross_income_test
+          and assistance_group_satisfies_net_income_limit

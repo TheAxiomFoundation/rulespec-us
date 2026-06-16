@@ -1,0 +1,252 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+  summary: |-
+    Reporting is necessary only when noncitizens applying for benefits are determined unlawfully present in the United States; when necessary, the report is sent within 15 days following quarter endings in March, June, September, and December and includes identifying information. As a condition of eligibility, the SSN for each assistance-group individual must be obtained, validated, documented, or applied for; a newborn household has six months from birth month or until the next redetermination, whichever is later. Individuals or children without an SSN are excluded if the responsible individual fails without good cause to provide or apply for an SSN; good cause is supported by evidence or collateral information showing application or every effort to complete the application.
+rules:
+  - name: unlawful_presence_quarterly_report_deadline_days
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 1410.0118 Reporting Illegal Noncitizens (FS), quarterly reporting
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: within 15 days following the quarter ending in March, June, September and December
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          15
+
+  - name: newborn_ssn_birth_month_window_months
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 1410.0200 Social Security Number (FS), newborn deadline
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: household has six months from the birth month or until the next redetermination, whichever is later
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          6
+
+  - name: deportation_order_formal_review_completed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0118 Reporting Illegal Noncitizens (FS), formal review
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: the case has had a formal review by USCIS or by the Executive Office of Immigration Review
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_has_order_of_deportation_issued
+          and (case_had_formal_review_by_uscis or case_had_formal_review_by_executive_office_of_immigration_review)
+
+  - name: unlawful_presence_quarterly_report_required_for_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0118 Reporting Illegal Noncitizens (FS), reporting trigger
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: determines there are noncitizen applying for benefits who are unlawfully present in the US
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_noncitizen
+          and person_applies_for_benefits
+          and region_or_circuit_determines_person_is_unlawfully_present_in_us
+
+  - name: unlawful_presence_quarterly_report_sent_by_deadline_for_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0118 Reporting Illegal Noncitizens (FS), report timing
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: When necessary to report, please send the report within 15 days following the quarter ending in March, June, September and December.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17#unlawful_presence_quarterly_report_required_for_person
+              output: unlawful_presence_quarterly_report_required_for_person
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17#unlawful_presence_quarterly_report_deadline_days
+              output: unlawful_presence_quarterly_report_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          unlawful_presence_quarterly_report_required_for_person
+          and report_quarter_ended_in_march_june_september_or_december
+          and unlawful_presence_report_days_after_quarter_end_sent <= unlawful_presence_quarterly_report_deadline_days
+
+  - name: newborn_ssn_provision_deadline_open
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0200 Social Security Number (FS), newborn deadline
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: the household has six months from the birth month or until the next redetermination, whichever is later
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17#newborn_ssn_birth_month_window_months
+              output: newborn_ssn_birth_month_window_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_newborn
+          and (months_since_newborn_birth_month <= newborn_ssn_birth_month_window_months
+          or next_redetermination_is_later_than_birth_month_window_and_has_not_occurred)
+
+  - name: ssn_requirement_met_for_assistance_group_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0200 Social Security Number (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: As a condition of eligibility the Social Security Number (SSN) for each individual included in the assistance group must be obtained.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: A verbal statement providing the SSN is sufficient if the SSN is validated through data exchange.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17#newborn_ssn_provision_deadline_open
+              output: newborn_ssn_provision_deadline_open
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_in_assistance_group
+          and ((individual_ssn_provided_by_verbal_statement and ssn_validated_through_data_exchange)
+          or person_has_social_security_card
+          or person_has_other_ssa_correspondence_containing_name_and_account_number
+          or person_has_ssa_filing_receipt_for_ssn_application
+          or person_has_ssa_2853_indicating_ssn_requested_at_hospital
+          or child_birth_certificate_indicates_ssn_requested_at_birth
+          or bvs_screen_print_has_child_issue_y_indicator
+          or newborn_ssn_provision_deadline_open)
+
+  - name: ssn_good_cause_for_failure_to_provide_or_apply
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0204 When SSN is not Provided/Refusal to Apply (FS), good cause evidence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: documentary evidence or collateral information indicating that the individual has applied for an SSN or made every effort to supply information to complete the application
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          documentary_evidence_indicates_individual_applied_for_ssn
+          or collateral_information_indicates_individual_applied_for_ssn
+          or documentary_evidence_indicates_individual_made_every_effort_to_complete_ssn_application
+          or collateral_information_indicates_individual_made_every_effort_to_complete_ssn_application
+
+  - name: assistance_group_needs_excluded_due_to_ssn_noncompliance
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0204 When SSN is not Provided/Refusal to Apply (FS)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: needs of the individual or child without an SSN must be excluded from the assistance group if an individual fails without good cause to provide or apply for an SSN
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17#ssn_good_cause_for_failure_to_provide_or_apply
+              output: ssn_good_cause_for_failure_to_provide_or_apply
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_or_child_without_ssn
+          and individual_failed_to_provide_or_apply_for_ssn_on_own_or_child_behalf
+          and not ssn_good_cause_for_failure_to_provide_or_apply
+
+  - name: expedited_household_ssn_requirement_satisfied_before_first_full_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 1410.0204 When SSN is not Provided/Refusal to Apply (FS), expedited households
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/1400-technical-requirements-fs-tca/page-17
+              excerpt: Expedited households must apply or provide an SSN prior to the first full month of eligibility unless good cause exists.
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not household_is_expedited
+          or not household_is_before_first_full_month_of_eligibility
+          or household_applied_for_or_provided_ssn_before_first_full_month_of_eligibility
+          or household_has_good_cause_for_not_applying_or_providing_ssn
