@@ -1,0 +1,262 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+  summary: |-
+    "To determine net income from self-employment" add gross self-employment income including capital gains, subtract allowable business expenses, and divide by the averaging months. For anticipated self-employment income, capital gains expected in the next 12 months are divided by 12, added to anticipated monthly self-employment income, and reduced by monthly allowable costs. Farm self-employment losses for a self-employed farmer with annual gross proceeds of $1000 or more are offset first against other self-employment income and then against earned and unearned income after the earned income deduction. Nonrecurring lump sum payments are included as assets in the month received unless specifically excluded.
+rules:
+  - name: anticipated_capital_gain_averaging_months
+    kind: parameter
+    dtype: Count
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "Divide that amount by 12"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: self_employed_farmer_annual_gross_proceeds_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "annual gross proceeds of $1000 or more"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1000
+
+  - name: capital_gain_amount_counted_as_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.05 Determining Net Self-Employment Income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "The full amount of the proceeds must be counted as income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          capital_goods_sale_proceeds
+
+  - name: averaged_net_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.05 Determining Net Self-Employment Income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (gross_self_employment_income_excluding_capital_gains + capital_gain_amount_counted_as_income - allowable_business_expenses) / self_employment_income_averaging_months
+
+  - name: anticipated_monthly_capital_gains
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "Add any capital gains... in the next 12 months... Divide that amount by 12"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          anticipated_capital_gains_next_12_months / anticipated_capital_gain_averaging_months
+
+  - name: anticipated_net_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          anticipated_monthly_self_employment_income + anticipated_monthly_capital_gains - anticipated_monthly_allowable_self_employment_costs
+
+  - name: self_employed_farmer
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "self-employed farmer who receives or anticipates receiving annual gross proceeds of $1000 or more"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          annual_gross_farming_proceeds_received_or_anticipated >= self_employed_farmer_annual_gross_proceeds_threshold
+
+  - name: monthly_farm_self_employment_loss_to_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "If the cost of producing self-employment income exceeds the income derived from self-employment as a farmer... such losses must be prorated on an anticipated basis"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if self_employed_farmer: max(0, anticipated_monthly_allowable_farm_self_employment_costs - anticipated_monthly_farm_self_employment_income) else: 0
+
+  - name: other_self_employment_income_after_farm_loss_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "Offset farm self-employment losses first against other self-employment income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, other_monthly_self_employment_income - monthly_farm_self_employment_loss_to_offset)
+
+  - name: remaining_farm_self_employment_loss_after_other_self_employment_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "Offset any remaining farm self-employment losses"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, monthly_farm_self_employment_loss_to_offset - other_monthly_self_employment_income)
+
+  - name: countable_income_after_remaining_farm_loss_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0402.07 Anticipated Income for Self-Employed Assistance Groups
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "against the total amount of earned and unearned income after the earned income deduction has been applied"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, earned_and_unearned_income_after_earned_income_deduction - remaining_farm_self_employment_loss_after_other_self_employment_offset)
+
+  - name: nonrecurring_lump_sum_payment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 2610.0403.01 Nonrecurring Lump Sum Payment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_is_income_tax_refund
+          or payment_is_credit
+          or payment_is_retroactive_ssa_ssi_or_public_assistance_benefit
+          or payment_is_insurance_settlement
+          or payment_is_utility_or_rental_property_deposit
+
+  - name: nonrecurring_lump_sum_included_asset_amount_in_month_received
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2610.0403.01 Nonrecurring Lump Sum Payment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-15
+              excerpt: "These payments are included assets in the month received unless specifically excluded."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if nonrecurring_lump_sum_payment and payment_received_in_month and not specific_nonrecurring_lump_sum_payment_excluded: nonrecurring_lump_sum_payment_amount else: 0
