@@ -1,0 +1,114 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.208.2
+  summary: |-
+    PA households are SNAP households that contain only persons who receive CW Basic Cash Assistance/TANF payments or services, specified State Grants, or the Colorado Supplement to the SSI Grant; all other households are Non-PA households. County GA, SSI without a Colorado Supplemental payment, and medical-only programs are not PA benefits.
+rules:
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+    source: 10 CCR 2506-1 section 4.208.2(A)
+
+  - name: person_receives_pa_benefit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.208.2(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.208.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_receives_cw_basic_cash_assistance_grant_or_tanf_payment_or_services_under_cw_program
+          or person_receives_state_grant_oap_a_oap_b_or_and_ab
+          or person_receives_colorado_supplement_to_ssi_grant
+
+  - name: person_receives_non_pa_benefit_only_category
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.208.2(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.208.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_receives_county_general_assistance
+          or person_receives_ssi_with_no_colorado_supplemental_payment
+          or person_receives_medical_only_program_benefits
+
+  - name: pa_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.208.2(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.208.2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.208.2#person_receives_pa_benefit
+              output: person_receives_pa_benefit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_snap_household
+          and (
+              (
+                  len(member_of_household) > 0
+                  and count_where(member_of_household, person_receives_pa_benefit) == len(member_of_household)
+              )
+              or household_has_one_member_receiving_cw_cash_assistance_or_services_and_entire_household_benefits
+          )
+
+  - name: non_pa_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.208.2(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.208.2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.208.2#pa_household
+              output: pa_household
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_snap_household
+          and not pa_household

@@ -1,18 +1,159 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual requires applicants to live in the county or
-    district where they apply, bars duplicate participation in more than one
-    household or county/district in a month except for battered-shelter
-    residents, treats non-vacation presence and homelessness as satisfying
-    residency, and forbids durational residency or permanent-intent
-    requirements. This section restates the federal residency and duplicate
-    participation rule in 7 CFR 273.3.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
-imports:
-  - us:regulations/7-cfr/273/3
+  summary: |-
+    Applicants shall live in the county or district where they apply unless arrangements allow filing in a nearby specified office. Duplicate monthly participation is barred except for battered-shelter residents, and Commodity Food Distribution Program participation on Indian reservations bars SNAP for the same period. Non-vacation residence, homelessness, migrant campsites, and homeless shelters satisfy residency; durational residency and intent-to-remain requirements may not be imposed.
 rules:
+  - name: monthly_household_participation_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.303(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
+              excerpt: "more than one (1) household in the same month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1
+
+  - name: monthly_county_or_district_participation_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.303(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
+              excerpt: "more than one (1) county or district in any month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1
+
+  - name: colorado_snap_residency_requirement_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.303(A), 4.303(C), 4.303(D), and 4.303(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              household_lives_in_county_or_district_where_application_is_made
+              or local_office_arranged_for_household_to_apply_in_nearby_specified_county_or_district_office
+              or applicant_maintains_residence_in_county_or_district_for_purpose_other_than_vacation
+              or applicant_resides_in_county_or_district_without_permanent_dwelling_or_fixed_mailing_address
+              or household_resides_at_migrant_campsite_in_county_or_district
+              or household_resides_at_homeless_shelter_in_county_or_district
+              or household_is_homeless_person_residing_in_county_or_district
+          )
+          and not durational_residency_requirement_imposed
+          and not intent_to_permanently_remain_in_state_required_as_condition_of_eligibility
+          and not household_has_dual_participation_in_month_of_eligibility
+
+  - name: colorado_snap_duplicate_participation_barred
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.303(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.303#monthly_household_participation_limit
+              output: monthly_household_participation_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.303#monthly_county_or_district_participation_limit
+              output: monthly_county_or_district_participation_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              individual_household_participation_count_in_month > monthly_household_participation_limit
+              and not individual_is_resident_of_shelter_for_battered_women_and_children
+          )
+          or (
+              household_county_or_district_participation_count_in_month > monthly_county_or_district_participation_limit
+              and not all_household_members_are_residents_of_shelter_for_battered_women_and_children
+          )
+
+  - name: commodity_food_distribution_snap_participation_barred
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.303(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_on_indian_reservation
+          and household_participates_in_commodity_food_distribution_program_for_period
+          and household_participates_in_snap_for_same_period
+
+  - name: physical_location_information_requirement_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.303(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.303
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_resides_in_shelter_for_battered_women_and_children
+          or household_lacks_permanent_dwelling
+          or (
+              household_resides_in_permanent_dwelling
+              and (
+                  household_provided_physical_address
+                  or household_provided_information_identifying_location_of_home
+              )
+              and not household_provided_only_mailing_address
+          )
+
   - name: restates_state_residency
     kind: source_relation
     source: 10 CCR 2506-1 section 4.303(A), 4.303(C), 4.303(D), and 4.303(E)
@@ -20,6 +161,7 @@ rules:
       type: restates
       target: us:regulations/7-cfr/273/3#snap_household_state_resident
       authority: federal
+
   - name: restates_duplicate_participation_bar
     kind: source_relation
     source: 10 CCR 2506-1 section 4.303(B)
@@ -27,6 +169,7 @@ rules:
       type: restates
       target: us:regulations/7-cfr/273/3#snap_household_duplicate_participation_barred
       authority: federal
+
   - name: restates_residency_eligibility
     kind: source_relation
     source: 10 CCR 2506-1 section 4.303

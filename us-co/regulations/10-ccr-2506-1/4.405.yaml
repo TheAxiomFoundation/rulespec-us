@@ -1,20 +1,98 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual excludes specified income from eligibility:
-    irregular income of no more than 30 dollars in three months, payments used
-    for non-household beneficiaries, qualifying child student earnings,
-    qualifying recoupments, non-recurring lump sums, loans, in-kind benefits,
-    vendor payments, reimbursements that do not exceed identified expenses,
-    educational assistance, and income excluded by federal statute. Private
-    nonprofit cash donations based on need are excluded up to 300 dollars per
-    fiscal quarter.
+  proof_validation:
+    required: true
   source_verification:
-    corpus_citation_paths:
-      - us-co/regulation/10-ccr-2506-1/4.405
-      - us-co/regulation/10-ccr-2506-1/4.405.1
-      - us-co/regulation/10-ccr-2506-1/4.405.2
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+  summary: |-
+    Income from certain sources will be excluded for SNAP eligibility purposes. Exclusions include irregular income received too infrequently or irregularly to be reasonably anticipated, but not over $30 in three months; monies intended and used for non-household members; earned income of qualifying children under 18 or through the month they turn 18; recoupments from the same nonexempt income source except intentional means-tested-program noncompliance overpayments; required Title IV-A child-support transfers; non-recurring lump sums; loans; in-kind benefits; vendor payments; and reimbursements for identified non-living expenses to the extent they do not exceed actual expenses.
 rules:
+  - name: irregular_income_three_month_exclusion_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.405(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+              excerpt: "not in excess of thirty dollars ($30) in three (3) months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: irregular_income_measurement_months
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.405(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+              excerpt: "in three (3) months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          3
+
+  - name: child_earnings_exclusion_age_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.405(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+              excerpt: "children who are under eighteen (18) years of age"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          18
+
+  - name: colorado_works_diversion_lump_sum_expense_coverage_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.405(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+              excerpt: "does not cover more than ninety (90) days of expenses"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          90
+
+  - name: colorado_works_diversion_lump_sum_recurrence_month_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.405(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+              excerpt: "not expected to occur again in a twelve (12) month period"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
   - name: snap_irregular_income_exclusion
     kind: derived
     entity: Household
@@ -22,12 +100,26 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.405#irregular_income_three_month_exclusion_limit
+              output: irregular_income_three_month_exclusion_limit
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if irregular_income_received_too_infrequently_or_irregularly_to_anticipate and irregular_income_received_in_three_months <= 30:
+          if irregular_income_received_too_infrequently_or_irregularly_to_anticipate and irregular_income_received_in_three_months <= irregular_income_three_month_exclusion_limit:
               irregular_income_received_in_three_months
           else: 0
+
   - name: snap_countable_irregular_income
     kind: derived
     entity: Household
@@ -35,9 +127,24 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.405#snap_irregular_income_exclusion
+              output: snap_irregular_income_exclusion
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
-        formula: max(0, irregular_income_received_in_three_months - snap_irregular_income_exclusion)
+        formula: |-
+          max(0, irregular_income_received_in_three_months - snap_irregular_income_exclusion)
+
   - name: snap_non_household_beneficiary_payment_exclusion
     kind: derived
     entity: Household
@@ -45,21 +152,23 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if third_party_beneficiary_payment_received:
               if non_household_beneficiary_portion_readily_identified:
-                  min(
-                      identified_non_household_beneficiary_payment_portion,
-                      payment_used_for_non_household_beneficiary
-                  )
+                  min(identified_non_household_beneficiary_payment_portion, payment_used_for_non_household_beneficiary)
               else:
-                  min(
-                      third_party_beneficiary_payment * non_household_beneficiary_count / intended_beneficiary_count,
-                      payment_used_for_non_household_beneficiary
-                  )
+                  min(third_party_beneficiary_payment * non_household_beneficiary_count / intended_beneficiary_count, payment_used_for_non_household_beneficiary)
           else: 0
+
   - name: snap_countable_non_household_beneficiary_payment
     kind: derived
     entity: Household
@@ -67,9 +176,24 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.405#snap_non_household_beneficiary_payment_exclusion
+              output: snap_non_household_beneficiary_payment_exclusion
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
-        formula: max(0, third_party_beneficiary_payment - snap_non_household_beneficiary_payment_exclusion)
+        formula: |-
+          max(0, third_party_beneficiary_payment - snap_non_household_beneficiary_payment_exclusion)
+
   - name: snap_child_student_earnings_exclusion
     kind: derived
     entity: Person
@@ -77,6 +201,13 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -85,6 +216,7 @@ rules:
              and (child_under_18 or child_turns_18_in_current_month):
               child_earned_income
           else: 0
+
   - name: snap_countable_child_student_earnings
     kind: derived
     entity: Person
@@ -92,22 +224,45 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.405#snap_child_student_earnings_exclusion
+              output: snap_child_student_earnings_exclusion
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
-        formula: max(0, child_earned_income - snap_child_student_earnings_exclusion)
+        formula: |-
+          max(0, child_earned_income - snap_child_student_earnings_exclusion)
+
   - name: snap_countable_recouped_income_source_payment
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: 10 CCR 2506-1 section 4.405(D)
+    source: 10 CCR 2506-1 section 4.405(D)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if recoupment_from_same_nonexempt_income_source and not intentional_means_tested_program_noncompliance_overpayment:
               max(0, gross_nonexempt_income_source_payment - recouped_overpayment_amount)
           else: gross_nonexempt_income_source_payment
+
   - name: snap_transferred_title_iv_a_child_support_exclusion
     kind: derived
     entity: Household
@@ -115,12 +270,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(D)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if title_iv_a_participant and child_support_must_be_transferred_to_title_iv_d:
               child_support_payment_received
           else: 0
+
   - name: snap_nonrecurring_lump_sum_income_exclusion
     kind: derived
     entity: Household
@@ -128,12 +291,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if nonrecurring_lump_sum_payment_received:
               nonrecurring_lump_sum_payment
           else: 0
+
   - name: snap_nonrecurring_lump_sum_resource
     kind: derived
     entity: Household
@@ -141,12 +312,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if nonrecurring_lump_sum_payment_received and not lump_sum_excluded_as_resource_by_federal_law:
               nonrecurring_lump_sum_payment_remaining_as_resource
           else: 0
+
   - name: snap_loan_income_exclusion
     kind: derived
     entity: Household
@@ -154,12 +333,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if bona_fide_loan_received or reverse_annuity_mortgage_loan_received:
               loan_amount_received
           else: 0
+
   - name: snap_in_kind_benefit_income_exclusion
     kind: derived
     entity: Household
@@ -167,9 +354,18 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
-        formula: in_kind_benefit_value
+        formula: |-
+          in_kind_benefit_value
+
   - name: snap_vendor_payment_exclusion
     kind: derived
     entity: Household
@@ -177,23 +373,29 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if vendor_payment_is_direct_third_party_payment_using_non_household_funds
-             and not vendor_payment_funds_otherwise_payable_to_household:
-              vendor_payment_amount
-          elif emergency_pa_ga_payment_to_third_party_for_migrant_seasonal_job_stream:
-              vendor_payment_amount
-          elif vendor_payment_is_medical_childcare_emergency_special_or_housing_authority_assistance:
-              vendor_payment_amount
-          elif employer_pays_rent_directly_in_addition_to_regular_wages or employer_provided_housing:
-              vendor_payment_amount
-          elif court_ordered_support_or_alimony_paid_to_third_party:
-              vendor_payment_amount
-          elif federally_authorized_demo_cash_conversion_of_vendor_payment:
-              vendor_payment_amount
-          else: 0
+          if vendor_payment_funds_otherwise_payable_to_household:
+              0
+          else:
+              if vendor_payment_is_direct_third_party_payment_using_non_household_funds
+                 or emergency_pa_ga_payment_to_third_party_for_migrant_seasonal_job_stream
+                 or employer_pays_rent_directly_in_addition_to_regular_wages
+                 or employer_provided_housing
+                 or vendor_payment_is_medical_childcare_emergency_special_or_housing_authority_assistance
+                 or federally_authorized_demo_cash_conversion_of_vendor_payment
+                 or court_ordered_support_or_alimony_paid_to_third_party:
+                  vendor_payment_amount
+              else: 0
+
   - name: snap_countable_vendor_payment
     kind: derived
     entity: Household
@@ -201,9 +403,24 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.405#snap_vendor_payment_exclusion
+              output: snap_vendor_payment_exclusion
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
-        formula: max(0, vendor_payment_amount - snap_vendor_payment_exclusion)
+        formula: |-
+          max(0, vendor_payment_amount - snap_vendor_payment_exclusion)
+
   - name: snap_reimbursement_exclusion
     kind: derived
     entity: Household
@@ -211,12 +428,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if reimbursement_for_identified_non_living_expense and reimbursement_used_for_intended_expense:
               min(reimbursement_amount, actual_reimbursed_non_living_expense)
           else: 0
+
   - name: snap_countable_reimbursement
     kind: derived
     entity: Household
@@ -224,70 +449,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.405(I)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: max(0, reimbursement_amount - snap_reimbursement_exclusion)
-  - name: snap_education_assistance_income_exclusion
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.405.1
-    versions:
-      - effective_from: '2025-10-01'
-        formula: education_assistance_for_educational_expenses
-  - name: snap_vista_income_exclusion
-    kind: derived
-    entity: Person
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.405.2(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.405#snap_reimbursement_exclusion
+              output: snap_reimbursement_exclusion
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if vista_or_title_i_domestic_volunteer_payment and vista_volunteer_was_receiving_snap_or_pa_when_joined:
-              vista_or_title_i_domestic_volunteer_payment_amount
-          else: 0
-  - name: snap_wioa_payment_exclusion
-    kind: derived
-    entity: Person
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.405.2(A)(6)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          if wioa_payment_received
-             and (
-                 not wioa_on_the_job_training_earnings
-                 or wioa_participant_under_19_and_under_parental_control
-             ):
-              wioa_payment_amount
-          else: 0
-  - name: snap_federal_energy_assistance_income_exclusion
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.405.2(A)(7)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          if federal_energy_assistance_not_title_iv_a
-             or one_time_weatherization_or_heating_cooling_repair_payment:
-              energy_assistance_payment
-          else: 0
-  - name: snap_private_nonprofit_cash_donation_exclusion
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.405.2(A)(10)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: min(private_nonprofit_cash_donations_based_on_need_in_fiscal_quarter, 300)
+          max(0, reimbursement_amount - snap_reimbursement_exclusion)

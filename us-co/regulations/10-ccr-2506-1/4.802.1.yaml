@@ -1,0 +1,241 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+  summary: |-
+    A household shall be allowed to request a DRC or state-level fair hearing for a local-office action or loss of benefits in the previous ninety calendar days, including certain restoration denials for benefits lost more than ninety days but less than a year before the request. During a certification period, a household may request a fair hearing to dispute its current benefit level. Use of a DRC is optional and does not delay or replace the state-level fair hearing process; appeals requested only for state-level hearing are forwarded to the SNAP fair hearings unit.
+rules:
+  - name: appeal_recent_action_lookback_calendar_days
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.802.1(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+              excerpt: previous ninety (90) calendar days
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          90
+
+  - name: appeal_recent_loss_lookback_calendar_days
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.802.1(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+              excerpt: previous ninety (90) calendar days
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          90
+
+  - name: restoration_denial_prior_loss_lower_calendar_days
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.802.1(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+              excerpt: benefits lost more than ninety (90) calendar days
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          90
+
+  - name: restoration_denial_prior_loss_upper_years
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.802.1(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+              excerpt: less than a year prior to the request
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1
+
+  - name: household_may_request_appeal_for_recent_local_office_action
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.802.1(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.802.1#appeal_recent_action_lookback_calendar_days
+              output: appeal_recent_action_lookback_calendar_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          local_office_action_occurred
+          and days_since_local_office_action <= appeal_recent_action_lookback_calendar_days
+
+  - name: restoration_denial_included_snap_action
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.802.1(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.802.1#restoration_denial_prior_loss_lower_calendar_days
+              output: restoration_denial_prior_loss_lower_calendar_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.802.1#restoration_denial_prior_loss_upper_years
+              output: restoration_denial_prior_loss_upper_years
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          request_for_restoration_of_benefits_denied
+          and days_since_benefits_were_lost > restoration_denial_prior_loss_lower_calendar_days
+          and years_since_benefits_were_lost < restoration_denial_prior_loss_upper_years
+
+  - name: household_may_request_appeal_for_benefit_loss
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.802.1(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.802.1#appeal_recent_loss_lookback_calendar_days
+              output: appeal_recent_loss_lookback_calendar_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.802.1#restoration_denial_included_snap_action
+              output: restoration_denial_included_snap_action
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              benefit_loss_occurred
+              and days_since_benefit_loss <= appeal_recent_loss_lookback_calendar_days
+          )
+          or restoration_denial_included_snap_action
+
+  - name: household_may_request_fair_hearing_for_current_benefit_level
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.802.1(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_in_certification_period
+          and household_disputes_current_level_of_benefits
+
+  - name: aggrieved_household_must_be_advised_drc_optional
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.802.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_aggrieved
+
+  - name: drc_use_does_not_delay_or_replace_state_fair_hearing
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.802.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_aggrieved
+
+  - name: appeal_request_forwarded_to_snap_fair_hearings_unit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.802.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.802.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_does_not_want_drc
+          and household_desires_disputed_matter_considered_only_at_state_level_hearing

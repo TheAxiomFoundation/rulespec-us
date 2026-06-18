@@ -1,0 +1,157 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+  summary: |-
+    Individual household members may be disqualified for specified SNAP reasons. During disqualification, remaining household eligibility and benefit level are determined under separate rules for IPV/fraud, work sanctions, and fleeing felons versus ineligible non-citizens, SSN failures/refusals, and sanctioned ABAWDs who received three months of benefits within a thirty-six month period.
+rules:
+  - name: abawd_sanction_benefit_month_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.411.1(A), (B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+              excerpt: "received three (3) months of SNAP benefits"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          3
+
+  - name: abawd_sanction_lookback_month_period
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.411.1(A), (B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+              excerpt: "within a thirty-six (36) month period"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          36
+
+  - name: sanctioned_abawd_received_limit_months_within_lookback
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(A), (B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.411.1#abawd_sanction_benefit_month_limit
+              output: abawd_sanction_benefit_month_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.411.1#abawd_sanction_lookback_month_period
+              output: abawd_sanction_lookback_month_period
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_is_sanctioned_abawd
+          and snap_benefit_months_received_by_sanctioned_abawd >= abawd_sanction_benefit_month_limit
+          and abawd_benefit_receipt_period_months == abawd_sanction_lookback_month_period
+
+  - name: individual_may_be_disqualified_for_listed_reason
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.411.1#sanctioned_abawd_received_limit_months_within_lookback
+              output: sanctioned_abawd_received_limit_months_within_lookback
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_is_ineligible_non_citizen
+          or person_failed_or_refused_to_obtain_or_provide_ssn
+          or person_committed_ipv_or_fraud
+          or person_is_fleeing_felon
+          or person_failed_to_comply_with_work_requirement
+          or sanctioned_abawd_received_limit_months_within_lookback
+
+  - name: ipv_fraud_work_sanction_or_fleeing_felon_member_treatment_applied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_contains_member_disqualified_for_ipv_or_fraud_or_work_requirement_sanction_or_fleeing_felon
+          and disqualified_member_income_counted_in_entirety
+          and disqualified_member_resources_counted_in_entirety_if_household_required_to_meet_resource_standard
+          and allowable_earned_income_standard_medical_dependent_care_and_shelter_deductions_allowed_in_entirety
+          and disqualified_member_excluded_from_household_size_for_benefit_level
+          and disqualified_member_excluded_from_household_size_for_gross_income_net_income_and_resource_eligibility_limits
+
+  - name: noncitizen_ssn_or_abawd_member_treatment_applied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.411.1(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.411.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_contains_member_disqualified_for_ineligible_non_citizen_or_ssn_failure_or_sanctioned_abawd_limit
+          and disqualified_or_sanctioned_member_resources_counted_in_entirety_if_household_required_to_meet_resource_standard
+          and pro_rata_share_of_disqualified_or_sanctioned_member_nonexempt_income_counted_to_remaining_members
+          and earned_income_deduction_applied_to_prorated_earned_income_attributed_to_household
+          and child_support_payments_deducted_before_prorating_income
+          and shelter_and_dependent_care_expenses_paid_by_or_billed_to_disqualified_member_prorated_among_household_members
+          and full_standard_utility_allowance_added_to_other_prorated_shelter_components_if_household_qualifies
+          and all_but_disqualified_member_share_counted_as_deductible_expense_for_remaining_members
+          and disqualified_or_sanctioned_member_excluded_from_household_size_for_benefit_level
+          and disqualified_or_sanctioned_member_excluded_from_household_size_for_gross_income_net_income_and_resource_eligibility_limits
+          and (
+              not ineligible_noncitizen_is_also_ineligible_student_and_purchases_and_prepares_food_with_household
+              or ineligible_student_noncitizen_income_prorated_under_ineligible_noncitizen_provisions
+          )

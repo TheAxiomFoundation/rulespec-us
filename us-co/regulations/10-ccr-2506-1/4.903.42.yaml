@@ -1,0 +1,189 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+  summary: |-
+    Households selected for review must cooperate with federal and state QA review processes. Refusal to cooperate results in SNAP disqualification or termination, with local-office action within ten calendar days after QA notification; member ineligibility follows refusing members; reapplication is barred until cooperation and verification, except late reapplications after the state or federal QA review tail periods are not made ineligible for the prior refusal.
+rules:
+  - name: qa_refusal_local_office_action_deadline_days
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.903.42(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+              excerpt: Within ten (10) calendar days from the date of receipt of QA's notification
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: state_qa_refusal_ineligibility_tail_days
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.903.42(A)(1) and 4.903.42(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+              excerpt: state QA review ... plus one hundred twenty-five (125) days
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          125
+
+  - name: federal_qa_refusal_ineligibility_tail_months
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.903.42(A)(2) and 4.903.42(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+              excerpt: federal QA review ... plus nine (9) months
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          9
+
+  - name: qa_refusal_local_office_action_due
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 section 4.903.42(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.903.42#qa_refusal_local_office_action_deadline_days
+              output: qa_refusal_local_office_action_deadline_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          qa_notification_of_household_refusal_received
+          and days_since_receipt_of_qa_refusal_notification <= qa_refusal_local_office_action_deadline_days
+
+  - name: snap_household_qa_refusal_disqualified
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.42 and 4.903.42(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_refused_to_cooperate_with_qa_review
+
+  - name: snap_member_qa_refusal_ineligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.42(A) and 4.903.42(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (member_refused_to_cooperate_with_state_qa_review or member_refused_to_cooperate_with_federal_qa_review)
+          and qa_refusal_ineligibility_period_active
+
+  - name: snap_late_qa_refusal_reapplication_not_ineligible_for_refusal
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.42(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.903.42#state_qa_refusal_ineligibility_tail_days
+              output: state_qa_refusal_ineligibility_tail_days
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.903.42#federal_qa_refusal_ineligibility_tail_months
+              output: federal_qa_refusal_ineligibility_tail_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_reapplied_after_qa_refusal
+          and (
+              (
+                  household_refused_to_cooperate_with_state_qa_review
+                  and days_after_end_of_annual_federal_qa_review_period_at_reapplication > state_qa_refusal_ineligibility_tail_days
+              )
+              or (
+                  household_refused_to_cooperate_with_federal_qa_review
+                  and months_after_end_of_annual_federal_qa_review_period_at_reapplication > federal_qa_refusal_ineligibility_tail_months
+              )
+          )
+
+  - name: snap_household_qa_refusal_reapplication_approval_barred
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.42(B) and 4.903.42(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.42
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.903.42#snap_late_qa_refusal_reapplication_not_ineligible_for_refusal
+              output: snap_late_qa_refusal_reapplication_not_ineligible_for_refusal
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_reapplied_after_qa_refusal
+          and (
+              (not snap_late_qa_refusal_reapplication_not_ineligible_for_refusal and not household_cooperated_with_qa_review_after_refusal)
+              or not household_provided_verification_of_all_eligibility_factors
+          )

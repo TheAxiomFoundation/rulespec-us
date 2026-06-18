@@ -1,0 +1,147 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+  summary: |-
+    Eligibility determinations in the automated system will be processed nightly to make SNAP benefits available the following day for initial certification. Ongoing cases will have benefits posted during a ten (10) calendar day cycle with the Social Security Number (SSN) as the basis; SSN endings 1 through 9 post on the corresponding day, and an SSN ending with zero (0) posts on the tenth (10th) day of the month.
+rules:
+  - name: ongoing_benefit_posting_cycle_calendar_day_count
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.709
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+              excerpt: "during a ten (10) calendar day cycle"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: ssn_zero_ending_digit
+    kind: parameter
+    dtype: Integer
+    source: 10 CCR 2506-1 section 4.709
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+              excerpt: "SSN ending with zero (0)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0
+
+  - name: ssn_zero_ending_posting_calendar_day
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.709
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+              excerpt: "SSN ending with zero (0) will be posted on the tenth (10th) day of the month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: initial_certification_benefits_available_following_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.709
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_initial_certification
+          and eligibility_determination_processed_nightly_in_automated_system
+          and snap_benefits_made_available_following_day
+
+  - name: ongoing_case_scheduled_posting_calendar_day
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 10 CCR 2506-1 section 4.709
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.709#ssn_zero_ending_digit
+              output: ssn_zero_ending_digit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.709#ssn_zero_ending_posting_calendar_day
+              output: ssn_zero_ending_posting_calendar_day
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_ongoing_case:
+            if household_ssn_ending_digit == ssn_zero_ending_digit:
+              ssn_zero_ending_posting_calendar_day
+            else:
+              household_ssn_ending_digit
+          else:
+            0
+
+  - name: ongoing_benefits_posted_on_scheduled_cycle_day
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.709
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.709
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.709#ongoing_benefit_posting_cycle_calendar_day_count
+              output: ongoing_benefit_posting_cycle_calendar_day_count
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.709#ongoing_case_scheduled_posting_calendar_day
+              output: ongoing_case_scheduled_posting_calendar_day
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_ongoing_case
+          and benefits_posted_calendar_day_of_month == ongoing_case_scheduled_posting_calendar_day
+          and benefits_posted_calendar_day_of_month <= ongoing_benefit_posting_cycle_calendar_day_count

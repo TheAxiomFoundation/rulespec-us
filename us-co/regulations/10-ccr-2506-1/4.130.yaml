@@ -1,0 +1,154 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+  summary: |-
+    SNAP benefits may be used by an eligible household or selected persons to purchase eligible food for the household, through EBT cards presented only to USDA/FNS-authorized retailers. Benefits must pay for currently purchased food and not prior or later-secured food or back bills, except regular home-delivery items and advance payments to nonprofit cooperative food ventures for later delivery. Recipients receive written information that unused benefits and inactive-account benefits after nine months (274 days) will be expunged and removed.
+rules:
+  - name: unused_snap_benefits_expungement_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.130(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+              excerpt: "unused after nine (9) months (274 days) will be expunged"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          274
+
+  - name: inactive_ebt_account_expungement_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.130(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+              excerpt: "EBT account goes inactive ... after nine (9) months (274 days)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          274
+
+  - name: snap_benefit_food_purchase_authorized
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.130
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_eligible_for_snap
+          and purchaser_is_household_or_person_selected_by_household
+          and purchase_is_eligible_food_for_household
+          and ebt_card_presented_only_to_usda_fns_authorized_retailer
+          and not snap_benefits_used_to_pay_for_foods_previously_secured
+          and not snap_benefits_used_to_pay_back_bills_owed_grocer
+          and (
+              snap_benefits_used_to_pay_for_food_currently_purchased
+              or snap_benefits_used_for_regular_home_delivery_food_items
+              or snap_benefits_used_for_advance_payment_to_nonprofit_cooperative_food_venture_for_later_delivery
+          )
+
+  - name: unused_snap_benefits_expunged
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.130(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.130#unused_snap_benefits_expungement_day_limit
+              output: unused_snap_benefits_expungement_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_benefits_issued_to_ebt_card_are_unused
+          and days_since_snap_benefits_issued_to_ebt_card >= unused_snap_benefits_expungement_day_limit
+
+  - name: inactive_ebt_account_snap_benefits_expunged
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.130(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.130#inactive_ebt_account_expungement_day_limit
+              output: inactive_ebt_account_expungement_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ebt_account_inactive_with_no_food_purchases_or_returns
+          and days_since_ebt_account_became_inactive >= inactive_ebt_account_expungement_day_limit
+
+  - name: expungement_written_information_provided_upon_approval
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.130(A)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.130
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.130#unused_snap_benefits_expungement_day_limit
+              output: unused_snap_benefits_expungement_day_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.130#inactive_ebt_account_expungement_day_limit
+              output: inactive_ebt_account_expungement_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_benefits_approved
+          and recipient_provided_written_information_upon_approval_that_unused_benefits_after_days_will_be_expunged
+          and written_information_unused_benefits_expungement_days == unused_snap_benefits_expungement_day_limit
+          and recipient_provided_written_information_upon_approval_that_inactive_account_benefits_after_days_will_be_expunged
+          and written_information_inactive_account_expungement_days == inactive_ebt_account_expungement_day_limit

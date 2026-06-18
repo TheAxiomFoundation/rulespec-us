@@ -1,0 +1,142 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+  summary: |-
+    After correcting the loss for future months and excluding months before the twelve-month restriction, restored benefits are calculated for eligible households with incorrect allotments only for participated months; for delay, denial, or termination errors, the initial loss month is identified, and losses are calculated until correction or ineligibility, not exceeding twelve months before discovery.
+rules:
+  - name: restored_benefit_lookback_month_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.703(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+              excerpt: "not to exceed twelve (12) months prior to the date the loss was discovered"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: erroneous_denial_initial_loss_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.703(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_eligible
+          and eligible_household_application_erroneously_denied
+          and (
+              month_is_household_month_of_application
+              or (
+                  eligible_household_filed_timely_reapplication
+                  and month_is_first_month_of_new_certification_period
+              )
+          )
+
+  - name: delayed_application_benefits_lost_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.703(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_eligible
+          and eligible_household_application_delayed
+          and month_is_month_for_which_benefits_may_be_lost_due_to_delay
+
+  - name: erroneous_termination_initial_loss_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.703(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_benefits_erroneously_terminated
+          and month_is_first_month_benefits_not_received_due_to_erroneous_action
+
+  - name: month_within_restored_benefit_loss_calculation_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.703(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.703#restored_benefit_lookback_month_limit
+              output: restored_benefit_lookback_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          month_is_on_or_after_computed_initial_loss_month
+          and month_is_before_first_month_error_is_corrected
+          and month_is_before_first_month_household_found_ineligible
+          and months_before_loss_discovery_date <= restored_benefit_lookback_month_limit
+
+  - name: restored_benefit_loss_amount_for_month
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 10 CCR 2506-1 section 4.703(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.703
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.703#month_within_restored_benefit_loss_calculation_period
+              output: month_within_restored_benefit_loss_calculation_period
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if not month_within_restored_benefit_loss_calculation_period: 0 else: if household_was_eligible_but_received_incorrect_allotment: if household_participated_in_month: max(0, correct_benefit_allotment_for_month - benefit_allotment_received_for_month) else: 0 else: max(0, benefits_household_should_have_received_for_month - benefits_household_received_for_month)

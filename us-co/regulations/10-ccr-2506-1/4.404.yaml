@@ -1,18 +1,29 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual treats public assistance, retirement and
-    disability payments, direct support and alimony, sponsor income, certain
-    gifts, trust withdrawals, and substantial lottery or gambling winnings as
-    unearned income. Rental income is unearned when the household member or
-    disqualified person does not actively manage the property at least 20
-    hours per week. Nonprofit gifts count only to the extent they exceed 300
-    dollars in a fiscal quarter. Vacation, sick, or bonus pay after
-    termination is unearned when paid in installments and is a resource when
-    received as a lump sum.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
+  summary: |-
+    Unearned income includes assistance payments; retirement and disability payments; direct support and alimony; rental income less business costs when the property is not actively managed at least twenty hours a week; sponsor income for sponsored non-citizen households; installment vacation, sick, or bonus pay after termination; anticipated gifts over stated limits; dividends, interest, royalties, trust withdrawals and available trust dividends; and substantial lottery or gambling winnings in the month received.
 rules:
+  - name: snap_countable_rental_unearned_income_active_management_hours_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.404(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
+              excerpt: "actively managing the property an average of at least twenty (20) hours a week"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          20
+
   - name: snap_countable_rental_unearned_income
     kind: derived
     entity: Household
@@ -20,12 +31,26 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_rental_unearned_income_active_management_hours_threshold
+              output: snap_countable_rental_unearned_income_active_management_hours_threshold
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if average_rental_property_management_hours_per_week < 20:
+          if average_rental_property_management_hours_per_week < snap_countable_rental_unearned_income_active_management_hours_threshold:
               max(0, rental_property_gross_income - rental_property_business_costs)
           else: 0
+
   - name: snap_countable_sponsor_unearned_income
     kind: derived
     entity: Household
@@ -33,12 +58,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if sponsored_noncitizen_household:
               sponsor_income_deemed_to_household
           else: 0
+
   - name: snap_countable_terminated_employment_installment_pay
     kind: derived
     entity: Household
@@ -46,12 +79,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if vacation_sick_or_bonus_pay_after_terminated_employment and vacation_sick_or_bonus_pay_received_in_installments:
               vacation_sick_or_bonus_pay
           else: 0
+
   - name: snap_terminated_employment_lump_sum_resource
     kind: derived
     entity: Household
@@ -59,12 +100,38 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if vacation_sick_or_bonus_pay_after_terminated_employment and vacation_sick_or_bonus_pay_received_as_lump_sum:
               vacation_sick_or_bonus_pay
           else: 0
+
+  - name: snap_countable_nonprofit_gift_quarterly_exclusion
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.404(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
+              excerpt: "Gifts from nonprofit organizations that exceed three hundred dollars ($300) in a quarter"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          300
+
   - name: snap_countable_nonprofit_gift_income
     kind: derived
     entity: Household
@@ -72,9 +139,24 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_nonprofit_gift_quarterly_exclusion
+              output: snap_countable_nonprofit_gift_quarterly_exclusion
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
-        formula: max(0, nonprofit_gifts_received_in_fiscal_quarter - 300)
+        formula: |-
+          max(0, nonprofit_gifts_received_in_fiscal_quarter - snap_countable_nonprofit_gift_quarterly_exclusion)
+
   - name: snap_countable_other_gift_income
     kind: derived
     entity: Household
@@ -82,12 +164,20 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if gifts_from_other_sources_can_be_anticipated:
               gifts_from_other_sources
           else: 0
+
   - name: snap_countable_trust_income
     kind: derived
     entity: Household
@@ -95,9 +185,18 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
     versions:
       - effective_from: '2025-10-01'
-        formula: trust_fund_withdrawals + available_trust_dividends
+        formula: |-
+          trust_fund_withdrawals + available_trust_dividends
+
   - name: snap_countable_lottery_gambling_winnings
     kind: derived
     entity: Household
@@ -105,19 +204,76 @@ rules:
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.404(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if substantial_lottery_or_gambling_winnings_received:
               household_member_allocated_lottery_or_gambling_winnings
           else: 0
+
   - name: snap_countable_unearned_income
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: 10 CCR 2506-1 section 4.404
+    source: 10 CCR 2506-1 section 4.404(A)-(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.404
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_rental_unearned_income
+              output: snap_countable_rental_unearned_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_sponsor_unearned_income
+              output: snap_countable_sponsor_unearned_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_terminated_employment_installment_pay
+              output: snap_countable_terminated_employment_installment_pay
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_nonprofit_gift_income
+              output: snap_countable_nonprofit_gift_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_other_gift_income
+              output: snap_countable_other_gift_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_trust_income
+              output: snap_countable_trust_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.404#snap_countable_lottery_gambling_winnings
+              output: snap_countable_lottery_gambling_winnings
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
         formula: |-
