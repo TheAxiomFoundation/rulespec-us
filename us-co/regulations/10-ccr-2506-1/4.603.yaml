@@ -1,0 +1,308 @@
+format: rulespec/v1
+imports:
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+  summary: |-
+    Households shall report SNAP eligibility and benefit changes at certification interviews, recertifications, and periodic reports. ABAWDs as defined in Section 4.100 that do not meet an exemption under Section 4.310.3 must report work-hour changes bringing the individual below twenty hours per week, averaged monthly. Certain households certified above 130% FPL need not report gross-income increases; households certified below 130% FPL must report when combined gross income exceeds 130% FPL, but not further increases after the first report. When no interview follows a recertification or periodic report because one was completed in the previous twelve months, later changes need not be reported unless the change causes the household to exceed 130% FPL. Upon approval at initial application, recertification, and periodic change report, the household must be provided notice of the applicable gross income level. All applicant and ongoing SNAP households must report substantial lottery or gambling winnings.
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.603#nonexempt_abawd_below_twenty_hours_change_reporting_required
+      reason: >-
+        Section 4.603(C) applies to Able-Bodied Adults Without Dependents as defined in Section 4.100; no copied RuleSpec context provides the ABAWD definition in Section 4.100. The source-stated twenty-hour threshold is encoded as a parameter.
+      blocked_by: []
+rules:
+  - name: abawd_work_hours_reporting_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.603(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+              excerpt: "below twenty (20) hours per week, averaged monthly"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          20
+
+  - name: gross_income_reporting_threshold_fpl
+    kind: parameter
+    dtype: Rate
+    source: 10 CCR 2506-1 section 4.603(D)-(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+              excerpt: "one hundred thirty percent (130%) FPL"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1.30
+
+  - name: expanded_gross_income_certification_limit_fpl
+    kind: parameter
+    dtype: Rate
+    source: 10 CCR 2506-1 section 4.603(D)-(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+              excerpt: "up to two hundred percent (200%) of the federal poverty level"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2.00
+
+  - name: recertification_prior_interview_lookback_months
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.603(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+              excerpt: "in the previous twelve month period"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: certification_interview_change_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_has_change_related_to_snap_eligibility_or_benefits_at_certification_interview
+
+  - name: local_office_acts_on_current_initial_month_information
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          change_reported_in_initial_month
+          and application_not_yet_processed
+          and local_office_acted_on_most_current_information
+
+  - name: recertification_or_periodic_report_change_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_filing_recertification_or_periodic_report
+          and household_has_change_in_circumstances
+
+  - name: initially_above_threshold_household_not_required_to_report_gross_income_increases
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.603#gross_income_reporting_threshold_fpl
+              output: gross_income_reporting_threshold_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (household_has_no_gross_income_threshold or household_eligible_to_be_certified_with_gross_income_level_up_to_expanded_gross_income_certification_limit_fpl)
+          and household_initially_certified_income_fpl > gross_income_reporting_threshold_fpl
+
+  - name: initially_below_threshold_household_must_report_first_gross_income_exceedance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.603#gross_income_reporting_threshold_fpl
+              output: gross_income_reporting_threshold_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (household_has_no_gross_income_threshold or household_eligible_to_be_certified_with_gross_income_level_up_to_expanded_gross_income_certification_limit_fpl)
+          and household_initially_certified_income_fpl < gross_income_reporting_threshold_fpl
+          and household_combined_gross_income_fpl > gross_income_reporting_threshold_fpl
+          and not household_already_reported_first_income_increase_above_threshold_during_certification_period
+
+  - name: further_gross_income_increases_after_first_exceedance_not_required_to_report
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.603#gross_income_reporting_threshold_fpl
+              output: gross_income_reporting_threshold_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_already_reported_first_income_increase_above_threshold_during_certification_period
+          and remainder_of_certification_period
+          and household_combined_gross_income_fpl > gross_income_reporting_threshold_fpl
+
+  - name: post_form_change_reporting_required_without_interview_only_if_income_exceeds_threshold
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.603#gross_income_reporting_threshold_fpl
+              output: gross_income_reporting_threshold_fpl
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.603#recertification_prior_interview_lookback_months
+              output: recertification_prior_interview_lookback_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_submitted_recertification_or_periodic_report_form
+          and not interview_conducted_for_current_recertification_or_periodic_report
+          and prior_interview_completed_within_months <= recertification_prior_interview_lookback_months
+          and change_occurred_after_form_submitted
+          and household_combined_gross_income_fpl > gross_income_reporting_threshold_fpl
+
+  - name: scheduled_interview_between_form_and_interview_change_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          interview_scheduled_with_household
+          and change_occurred_between_form_submission_and_interview_date
+
+  - name: gross_income_level_notice_provided_upon_benefit_approval
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          benefit_approved_at_initial_application_recertification_or_periodic_change_report
+          and household_provided_notice_of_gross_income_level_applicable_to_household_size
+
+  - name: substantial_lottery_or_gambling_winnings_reporting_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.603(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.603
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_is_applicant_or_ongoing_snap_household
+          and member_of_snap_household_wins_substantial_lottery_or_gambling_winnings

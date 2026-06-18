@@ -1,0 +1,221 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+  summary: |-
+    Local offices must provide a means for applicants to immediately begin the SNAP application process, advise households that an incomplete signed application with a name and address may be filed, accept SNAP applications during normal business hours without restricting filing to a certain day or time, make and mail application forms as required, record receipt dates, treat valid paper, fax, and electronic applications as acceptable, record outside-business-hours filings as filed on the next business day, treat applications as valid for sixty calendar days or until eligibility is determined, require a new application after specified ineligibility or missed-interview circumstances, and collect racial and ethnic data without affecting eligibility or benefit levels or changing self-declarations.
+rules:
+  - name: snap_incomplete_application_minimum_content_met
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          application_form_contains_name
+          and application_form_contains_address
+          and (
+              application_form_signed_by_responsible_household_member
+              or application_form_signed_by_household_authorized_representative
+          )
+
+  - name: snap_application_signature_valid
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          handwritten_signature_provided
+          or electronic_signature_technique_used
+          or recorded_telephonic_signature_provided
+          or documented_gestured_signature_provided
+          or handwritten_signature_designates_x
+
+  - name: same_day_mail_application_form_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              household_requested_application_by_telephone_and_prefers_mail
+              or written_request_for_snap_received
+          )
+          and application_form_mailed_same_day_request_received
+
+  - name: outside_business_hours_filing_date_next_business_day_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          application_submitted_outside_business_hours
+          and application_submitted_by_paper_fax_or_other_electronic_transmission
+          and application_filing_date_recorded_as_next_business_day
+
+  - name: snap_application_valid_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.202(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+              excerpt: "sixty (60) calendar days"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          60
+
+  - name: missed_interview_new_application_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.202(F)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+              excerpt: "first thirty (30) days"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: snap_application_within_validity_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.202#snap_application_valid_calendar_day_limit
+              output: snap_application_valid_calendar_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          days_since_application_filed <= snap_application_valid_calendar_day_limit
+          and not snap_eligibility_has_been_determined
+
+  - name: new_snap_application_required_after_determination
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(F)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.202#missed_interview_new_application_calendar_day_limit
+              output: missed_interview_new_application_calendar_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_eligibility_has_been_determined
+          and (
+              (
+                  household_failed_to_attend_interview
+                  and interview_failure_occurred_days_after_application <= missed_interview_new_application_calendar_day_limit
+              )
+              or household_determined_ineligible_due_to_household_circumstances
+          )
+
+  - name: racial_ethnic_data_use_for_snap_benefit_determination_prohibited
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          racial_or_ethnic_data_used_to_affect_snap_eligibility_or_level_of_benefits
+
+  - name: racial_ethnic_self_declaration_change_prohibited
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.202(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.202
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          eligibility_technician_challenged_or_changed_household_member_race_or_ethnicity_self_declaration

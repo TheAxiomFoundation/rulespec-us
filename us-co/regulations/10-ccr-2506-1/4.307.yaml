@@ -1,0 +1,99 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.307
+  summary: |-
+    Households containing a striking member shall not be eligible for SNAP unless the household was eligible the day before the strike and is otherwise eligible at the time of the strike. A household whose striking member was exempt from work registration the day before the strike is not subject to these provisions and shall be certified if otherwise eligible unless the exemption was based on the employment. Pre-strike eligibility treats the day before the strike as the application day and assumes no strike; benefits use the higher of the striking member's pre-strike or current income plus current non-striking member income.
+rules:
+  - name: striking_member_household_snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.307(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.307
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (not household_contains_striking_member)
+          or (
+              striking_member_exempt_from_work_registration_day_before_strike
+              and not striking_member_work_registration_exemption_based_on_employment
+              and household_otherwise_eligible
+          )
+          or (
+              household_eligible_for_snap_day_before_strike
+              and household_otherwise_eligible_at_time_of_strike
+          )
+
+  - name: pre_strike_eligibility_determined_under_strike_assumptions
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.307(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.307
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          pre_strike_eligibility_considers_day_prior_to_strike_as_application_day
+          and pre_strike_eligibility_assumes_strike_was_not_occurring
+
+  - name: striking_member_income_used_for_application_month
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 10 CCR 2506-1 section 4.307(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.307
+              excerpt: "comparing the striking member's income as of the day before the strike to the striking member's current income and adding the higher of the two"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(striking_member_income_day_before_strike, striking_member_current_income)
+
+  - name: striking_household_income_used_for_benefits
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 10 CCR 2506-1 section 4.307(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.307
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.307#striking_member_income_used_for_application_month
+              output: striking_member_income_used_for_application_month
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          striking_member_income_used_for_application_month + current_income_of_non_striking_household_members_during_application_month

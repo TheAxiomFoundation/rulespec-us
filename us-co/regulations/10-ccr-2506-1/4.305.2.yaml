@@ -1,0 +1,309 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+  summary: |-
+    Section 4.305.2 applies sponsor-deeming rules only to non-citizens with legally binding affidavits of support executed on or after December 19, 1997. For an eligible sponsored non-citizen, sponsor and spouse income and resources are deemed as the non-citizen's unearned income and resources until citizenship, forty work quarters, or sponsor death, subject to stated exclusions, a 20% earned-income reduction, the SNAP gross income limit for the sponsor household, proration among sponsored non-citizens, and a $1,500 resource reduction. Verification must be provided at application and recertification; pending verification, the sponsored non-citizen is ineligible and remaining members are determined under disqualified-member treatment.
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.305.2#local_office_acts_on_sponsor_change_as_reported_change
+      reason: >-
+        Sections 4.305.2(G) and (H) require the local office to act on information as a reported change in household circumstances under Section 4.604, but no copied RuleSpec context provides Section 4.604.
+imports:
+  - us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_gross_income_limit_130_percent_fpl_48_states_dc
+rules:
+  - name: sponsor_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 10 CCR 2506-1 section 4.305.2(D)(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+              excerpt: "Reduced by an amount equal to twenty percent (20%) of the earned income"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.20
+
+  - name: sponsor_resource_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.305.2(D)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+              excerpt: "reduced by one thousand five hundred dollars ($1,500)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1500
+
+  - name: qualifying_work_quarter_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.305.2(D)(1), (E)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+              excerpt: "forty (40) work quarters under Title II of the Social Security Act"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          40
+
+  - name: indigent_non_citizen_fpl_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: 10 CCR 2506-1 section 4.305.2(E)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+              excerpt: "one hundred thirty percent (130%) of the federal poverty level"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1.30
+
+  - name: indigent_determination_month_period
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.305.2(E)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+              excerpt: "ending twelve (12) months after such date"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: sponsor_deeming_exception_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          non_citizen_is_member_of_sponsor_snap_household
+          or sponsored_by_organization_or_group
+          or non_citizen_not_required_to_have_sponsor_under_ina
+          or indigent_non_citizen
+          or battered_non_citizen_sponsorship_exemption_applies
+          or sponsored_non_citizen_has_obtained_citizenship
+          or sponsor_has_died
+          or credited_work_quarters_under_title_ii >= qualifying_work_quarter_threshold
+
+  - name: indigent_non_citizen
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(E)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_gross_income_limit_130_percent_fpl_48_states_dc
+              output: snap_gross_income_limit_130_percent_fpl_48_states_dc
+              hash: sha256:94d8f5eaefa63fd65fc5f4d19ee1ff5c4dd07d26189e29007bc914218bd5c3a4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          eligible_sponsored_non_citizen_household_own_income_plus_cash_and_in_kind_assistance <= snap_gross_income_limit_130_percent_fpl_48_states_dc
+          and not receiving_in_kind_benefits_exceeding_gross_income_level_for_household_size
+
+  - name: sponsor_deeming_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(A), (C), (D), (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sponsor_executed_legally_binding_affidavit_of_support_on_or_after_required_date
+          and non_citizen_lawfully_admitted_for_permanent_residence
+          and non_citizen_is_eligible_non_citizen
+          and not sponsor_deeming_exception_applies
+
+  - name: sponsor_deemed_unearned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.305.2(C), (D)(2), (D)(3), (D)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_gross_income_limit_130_percent_fpl_48_states_dc
+              output: snap_gross_income_limit_130_percent_fpl_48_states_dc
+              hash: sha256:94d8f5eaefa63fd65fc5f4d19ee1ff5c4dd07d26189e29007bc914218bd5c3a4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if sponsor_deeming_applies:
+              max(0, (
+                  sponsor_and_spouse_monthly_earned_income
+                  + sponsor_and_spouse_monthly_unearned_income
+                  - (sponsor_earned_income_disregard_rate * sponsor_and_spouse_monthly_earned_income)
+                  - snap_gross_income_limit_130_percent_fpl_48_states_dc
+              ) / max(number_of_non_citizens_sponsored_by_same_sponsor, 1))
+              + max(0, actual_money_paid_by_sponsor_and_spouse_to_non_citizen - max(0, (
+                  sponsor_and_spouse_monthly_earned_income
+                  + sponsor_and_spouse_monthly_unearned_income
+                  - (sponsor_earned_income_disregard_rate * sponsor_and_spouse_monthly_earned_income)
+                  - snap_gross_income_limit_130_percent_fpl_48_states_dc
+              ) / max(number_of_non_citizens_sponsored_by_same_sponsor, 1)))
+          else: 0
+
+  - name: sponsor_deemed_resources
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.305.2(C), (D)(1), (D)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if sponsor_deeming_applies:
+              max(0, (sponsor_and_spouse_total_resources - sponsor_resource_disregard_amount) / max(number_of_non_citizens_sponsored_by_same_sponsor, 1))
+          else: 0
+
+  - name: sponsored_non_citizen_ineligible_while_verification_missing
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(G)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sponsored_non_citizen_subject_to_deeming
+          and not information_or_verification_needed_to_determine_eligibility_provided
+
+  - name: remaining_household_members_determined_with_sponsored_non_citizen_as_disqualified_member
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(G)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sponsored_non_citizen_in_household_ineligible_while_verification_missing
+          and remaining_household_members_eligibility_determined
+          and sponsored_non_citizen_own_income_and_resources_excluding_sponsor_attributed_amounts_treated_as_disqualified_member_available_to_remaining_members
+
+  - name: household_ineligible_when_same_sponsor_covers_entire_household_and_verification_missing
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(G)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          same_sponsor_responsible_for_entire_household
+          and not needed_sponsor_information_provided_and_verified
+
+  - name: local_office_required_verification_items_complete
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.305.2(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.305.2
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sponsor_and_spouse_income_and_resources_verified
+          and other_sponsored_non_citizen_names_and_alien_registration_numbers_verified
+          and sponsor_and_spouse_federal_tax_dependent_count_verified
+          and sponsor_name_address_and_phone_number_verified

@@ -1,48 +1,95 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual averages income for teachers and other school
-    employees who receive non-hourly and non-piecework income from renewable
-    annual contracts. The income is treated as compensation for an entire year
-    even if there are predictable non-work periods, and annual contract income
-    is averaged over 12 months. Other monthly household income is added to the
-    school employee's average monthly contract income to determine household
-    eligibility.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.3
+  summary: |-
+    Households with teacher or other school-employee members receiving non-hourly, non-piecework income from employment under a contract renewable on an annual basis have that income averaged over a twelve-month period; such members are considered compensated for the entire year despite predetermined non-work periods, and other monthly household income is added to the averaged monthly contract income.
 rules:
-  - name: snap_school_employee_contract_income_subject_to_annual_averaging
+  - name: school_employee_contract_income_subject_to_annual_averaging
     kind: derived
     entity: Person
     dtype: Judgment
     period: Month
     source: 10 CCR 2506-1 section 4.403.3(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.3
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           school_employee
           and employment_contract_renewable_on_annual_basis
           and not school_contract_income_hourly_or_piecework
-  - name: snap_school_employee_average_monthly_contract_income
+
+  - name: school_employee_contract_income_averaging_month_count
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.403.3(A), (D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.3
+              excerpt: averaged over a twelve (12) month period
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: school_employee_average_monthly_contract_income
     kind: derived
     entity: Person
     dtype: Money
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.403.3(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403.3#school_employee_contract_income_averaging_month_count
+              output: school_employee_contract_income_averaging_month_count
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403.3#school_employee_contract_income_subject_to_annual_averaging
+              output: school_employee_contract_income_subject_to_annual_averaging
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if snap_school_employee_contract_income_subject_to_annual_averaging:
-              school_employee_annual_contract_income / 12
-          else: 0
-  - name: snap_household_income_with_school_employee_contract_income
+          if school_employee_contract_income_subject_to_annual_averaging: school_employee_annual_contract_income / school_employee_contract_income_averaging_month_count else: 0
+
+  - name: household_income_with_school_employee_contract_income
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
     source: 10 CCR 2506-1 section 4.403.3(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.3
     versions:
       - effective_from: '2025-10-01'
-        formula: household_other_monthly_income + household_school_employee_average_monthly_contract_income
+        formula: |-
+          household_other_monthly_income + household_school_employee_average_monthly_contract_income

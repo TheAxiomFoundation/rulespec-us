@@ -1,0 +1,364 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+  summary: |-
+    Verification requirements: expedited service requires only identity verification for the head of household, and when an authorized representative applies, both identities; prior to certification, specified identity, income, IEVS/SSN, non-citizen status, and residency information must be verified; certain unverified expenses are excluded if not verified within thirty calendar days. At recertification, changed income of $50 or more per member and changed expenses over $25 must be verified. At periodic report, specified changes including more than $100 unearned income, income source, resources/vehicles if resource limits apply, child support obligation, substantial lottery or gambling winnings, and medical expense increases/additions must be verified.
+rules:
+  - name: application_expense_verification_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.502(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+              excerpt: "within thirty (30) calendar days of the date of application"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: recertification_total_monthly_income_change_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.502(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+              excerpt: "A change in total monthly income of fifty ($50) or more for each member"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          50
+
+  - name: recertification_expense_change_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.502(B)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+              excerpt: "the amount has changed by more than twenty-five dollars ($25)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          25
+
+  - name: periodic_report_unearned_income_change_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.502(C)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+              excerpt: "A change of more than $100 in the amount of unearned income."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          100
+
+  - name: expedited_service_application_verification_limited_to_required_identities
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_applies_for_expedited_service
+          and head_of_household_identity_verified
+          and (
+              not authorized_representative_applies_on_behalf_of_household
+              or authorized_representative_identity_verified
+          )
+          and not local_office_imposed_specific_document_requirement
+          and client_declaration_of_ssns_accepted
+          and client_declaration_of_residency_accepted
+          and client_declaration_of_other_household_circumstances_accepted_for_expedited_service
+          and verification_of_client_declared_information_postponed_until_prior_to_certification
+
+  - name: application_prior_to_certification_verification_completed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          head_of_household_identity_verified
+          and household_gross_nonexempt_income_verified
+          and ievs_information_including_ssns_for_all_household_members_verified
+          and non_citizen_status_verified_for_persons_identified_as_non_citizens_on_application
+          and (
+              household_is_homeless
+              or household_newly_arrived_in_state_or_county_and_third_party_residency_verification_cannot_reasonably_be_obtained
+              or residency_verified
+          )
+
+  - name: application_unverified_expense_deduction_excluded_after_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.502#application_expense_verification_calendar_day_limit
+              output: application_expense_verification_calendar_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          claimed_expense_is_allowable_medical_less_reimbursement
+          or claimed_expense_is_legally_obligated_child_support
+          or claimed_expense_is_dependent_care
+          or claimed_expense_is_questionable_shelter_and_verification_requested
+          and deductible_expense_must_be_verified
+          and expense_verification_not_obtained
+          and calendar_days_since_application > application_expense_verification_calendar_day_limit
+          and eligibility_and_benefit_level_determined_without_deduction_or_exclusion_for_unverified_expense
+
+  - name: categorical_eligibility_application_verification_limited
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_eligible_under_basic_or_expanded_categorical_eligibility_rules
+          and local_office_verified_each_member_receives_benefits_or_services_from_program_conferring_categorical_eligibility
+          and not local_office_required_additional_verification_of_resources_income_ssn_sponsored_non_citizen_or_residency_beyond_conferring_pa_program
+          and not eligibility_factors_uncollected_unverified_questionable_or_unavailable_to_snap
+
+  - name: asset_test_over_limit_written_resource_declaration_acceptable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 sections 4.502(A)(5), 4.502(B)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_subject_to_asset_test
+          and household_written_resource_declaration_declares_more_than_resource_limit
+
+  - name: recertification_income_change_verification_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.502#recertification_total_monthly_income_change_verification_threshold
+              output: recertification_total_monthly_income_change_verification_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_at_recertification
+          and total_monthly_income_change_for_each_member >= recertification_total_monthly_income_change_verification_threshold
+          and income_change_verified_at_recertification
+
+  - name: recertification_expense_change_verification_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(B)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.502#recertification_expense_change_verification_threshold
+              output: recertification_expense_change_verification_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_at_recertification
+          and (
+              dependent_care_expense_source_changed
+              or dependent_care_expense_amount_changed > recertification_expense_change_verification_threshold
+              or allowable_medical_expense_source_changed
+              or allowable_medical_expense_amount_changed > recertification_expense_change_verification_threshold
+              or legally_obligated_child_support_source_changed
+              or legally_obligated_child_support_amount_changed > recertification_expense_change_verification_threshold
+          )
+          and recertification_changed_expense_verified
+
+  - name: recertification_ssn_verification_required_through_ievs_or_solqi
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(B)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_at_recertification
+          and (
+              reported_ssn_not_verified_at_initial_certification
+              or newly_obtained_ssn
+          )
+          and ssn_verified_through_ievs_or_solqi
+
+  - name: recertification_unverified_deductible_expense_processed_without_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(B)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_at_recertification
+          and deductible_expense_changed
+          and deductible_expense_must_be_verified
+          and obtaining_verification_delays_redetermination_processing
+          and local_office_advised_household_determination_without_unverified_expense_deduction
+
+  - name: periodic_report_change_verification_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(C)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.502#periodic_report_unearned_income_change_verification_threshold
+              output: periodic_report_unearned_income_change_verification_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_at_periodic_report
+          and (
+              unearned_income_amount_change > periodic_report_unearned_income_change_verification_threshold
+              or income_source_changed_including_starting_job
+              or licensed_vehicle_acquired_not_fully_excludable_and_resource_limits_apply
+              or liquid_resources_changed_unless_excluded_and_resource_limits_apply
+              or legal_obligation_to_pay_child_support_changed
+              or household_member_won_substantial_lottery_or_gambling_winnings
+              or allowable_medical_expense_increase_or_addition_reported_to_receive_increase
+          )
+          and periodic_report_change_verified
+
+  - name: twenty_four_month_certification_medical_and_shelter_expenses_continue
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.502(C)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.502
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_in_twenty_four_month_certification_period
+          and previously_reported_medical_and_shelter_expenses_used_to_establish_twenty_four_month_certification
+          and not increase_in_medical_expenses_verified
+          and not increase_in_shelter_expenses_reported
+          and medical_and_shelter_expenses_continued_through_end_of_twenty_four_month_certification_period

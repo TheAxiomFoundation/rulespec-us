@@ -1,0 +1,127 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.804
+  summary: |-
+    Individuals suspected of fraud may be referred for prosecution. A disqualification penalty requires criminal-court fraud guilt, except that deferred adjudication or plea-bargaining may support a penalty if the individual signs a consent agreement. Referrals must be forwarded to the state department. Local offices must disqualify an individual found guilty for the court-specified time; if the court fails to impose a period, the office imposes a disqualification under Section 4.803.3 unless contrary to the court order. If no initiation date is specified, the disqualification begins within forty-five (45) calendar days. An imposed disqualification continues uninterrupted, and the county must mail household notice when the court finds fraud.
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.804#appropriate_disqualification_when_court_fails_to_impose_period
+      reason: The source requires the local office to impose an appropriate disqualification in accordance with Section 4.803.3 when the court fails to impose a disqualification period, unless contrary to the court order. Section 4.803.3 is cited but not available in copied context, so the appropriate disqualification period cannot be computed faithfully here.
+rules:
+  - name: disqualification_initiation_deadline_calendar_days
+    kind: parameter
+    dtype: Integer
+    source: 10 CCR 2506-1 4.804(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.804
+              excerpt: "within forty-five (45) calendar days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          45
+
+  - name: disqualification_penalty_may_be_imposed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.804(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.804
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_found_guilty_of_fraud_through_criminal_court
+          or (
+            determination_of_guilt_not_obtained_because_of_court_deferred_adjudication_or_plea_bargaining
+            and individual_signed_consent_agreement
+          )
+
+  - name: disqualification_initiation_is_timely
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: 10 CCR 2506-1 4.804(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.804
+              excerpt: "If disqualification is ordered but a date for initiating the disqualification period is not specified ... within forty-five (45) calendar days ... Any other court-imposed disqualification shall begin within forty-five (45) calendar days"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.804#disqualification_initiation_deadline_calendar_days
+              output: disqualification_initiation_deadline_calendar_days
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (
+            disqualification_ordered_but_initiation_date_not_specified
+            and disqualification_initiation_days_from_date_ordered <= disqualification_initiation_deadline_calendar_days
+          )
+          or (
+            other_court_imposed_disqualification
+            and disqualification_initiation_days_from_date_found_guilty <= disqualification_initiation_deadline_calendar_days
+          )
+
+  - name: disqualification_period_continues_uninterrupted
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.804(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.804
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          disqualification_period_imposed_against_currently_participating_household_member
+          and not disqualification_period_completed
+
+  - name: county_disqualification_notice_requirement_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.804(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.804
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not court_finds_individual_committed_fraud
+          or (
+            county_mailed_notice_to_household_prior_to_disqualification_whenever_possible
+            and notice_informs_household_of_disqualification_and_effective_date
+            and (
+              notice_advises_remaining_household_members_of_allotment_during_disqualification
+              or notice_advises_household_must_reapply_because_certification_period_expired
+            )
+          )

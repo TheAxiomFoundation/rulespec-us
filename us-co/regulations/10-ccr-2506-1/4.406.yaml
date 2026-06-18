@@ -1,121 +1,191 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual treats migrant or seasonal farm worker
+  summary: 'Colorado''s SNAP rule manual treats migrant or seasonal farm worker
+
     households as destitute of income only in the first month of a
-    certification period. The rule applies when the household's only income is
+
+    certification period. The rule applies when the household''s only income is
+
     from a terminated source before application, from a new source of more
+
     than 25 dollars that will not be received by the tenth calendar day after
+
     filing or the normal issuance cycle, or from a combination of those
+
     sources. A monthly or more frequent new source generally requires no
-    receipt from that source within 30 days before filing.
+
+    receipt from that source within 30 days before filing.'
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+  proof_validation:
+    required: true
 rules:
-  - name: snap_income_source_terminated
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(A)(1)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          (
-              income_source_normally_received_monthly_or_more_frequently
-              and not income_expected_again_from_same_source_during_application_or_following_month
-          )
-          or (
-              not income_source_normally_received_monthly_or_more_frequently
-              and not income_anticipated_in_month_normally_received
-          )
-  - name: snap_income_source_new
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(A)(2)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          new_source_income_amount > 25
-          and (
-              (
-                  new_source_income_normally_received_monthly_or_more_frequently
-                  and not income_received_from_new_source_within_30_days_before_filing
-              )
-              or (
-                  not new_source_income_normally_received_monthly_or_more_frequently
-                  and not income_received_within_last_normal_interval_between_payments
-              )
-          )
-  - name: snap_new_source_income_not_timely_available
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(A)(2)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: snap_income_source_new and not new_source_income_received_by_tenth_calendar_day
-  - name: snap_destitute_due_to_terminated_source
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(A)(1)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: household_only_income_from_terminated_source_before_application and snap_income_source_terminated
-  - name: snap_destitute_due_to_new_source
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(A)(2)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: household_only_income_from_new_source and snap_new_source_income_not_timely_available
-  - name: snap_destitute_due_to_terminated_and_new_sources
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(A)(3)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          household_only_income_combines_terminated_source_before_application_and_new_source
-          and snap_income_source_terminated
-          and snap_new_source_income_not_timely_available
-  - name: snap_destitute_income_household
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          migrant_or_seasonal_farmworker_household
-          and first_month_of_certification_period
-          and (
-              snap_destitute_due_to_terminated_source
-              or snap_destitute_due_to_new_source
-              or snap_destitute_due_to_terminated_and_new_sources
-          )
-  - name: snap_destitute_expedited_processing_allowed
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.406(C)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          snap_destitute_income_household
-          and (
-              not prior_expedited_certification
-              or postponed_verification_completed_since_last_expedited_certification
-              or certified_under_normal_processing_since_last_expedited_certification
-          )
+- name: snap_income_source_terminated
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(A)(1)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: "(\n    income_source_normally_received_monthly_or_more_frequently\n\
+      \    and not income_expected_again_from_same_source_during_application_or_following_month\n\
+      )\nor (\n    not income_source_normally_received_monthly_or_more_frequently\n\
+      \    and not income_anticipated_in_month_normally_received\n)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(A)(1)
+- name: snap_income_source_new_scalar_limit
+  kind: parameter
+  dtype: Count
+  source: 10 CCR 2506-1 section 4.406(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(A)(2)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: '25'
+- name: snap_income_source_new
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(A)(2)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: "new_source_income_amount > snap_income_source_new_scalar_limit\nand\
+      \ (\n    (\n        new_source_income_normally_received_monthly_or_more_frequently\n\
+      \        and not income_received_from_new_source_within_30_days_before_filing\n\
+      \    )\n    or (\n        not new_source_income_normally_received_monthly_or_more_frequently\n\
+      \        and not income_received_within_last_normal_interval_between_payments\n\
+      \    )\n)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-co:regulations/10-ccr-2506-1/4.406#snap_income_source_new_scalar_limit
+          output: snap_income_source_new_scalar_limit
+          hash: sha256:local
+- name: snap_new_source_income_not_timely_available
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(A)(2)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: snap_income_source_new and not new_source_income_received_by_tenth_calendar_day
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(A)(2)
+- name: snap_destitute_due_to_terminated_source
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(A)(1)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: household_only_income_from_terminated_source_before_application and snap_income_source_terminated
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(A)(1)
+- name: snap_destitute_due_to_new_source
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(A)(2)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: household_only_income_from_new_source and snap_new_source_income_not_timely_available
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(A)(2)
+- name: snap_destitute_due_to_terminated_and_new_sources
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(A)(3)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: 'household_only_income_combines_terminated_source_before_application_and_new_source
+
+      and snap_income_source_terminated
+
+      and snap_new_source_income_not_timely_available'
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(A)(3)
+- name: snap_destitute_income_household
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406
+  versions:
+  - effective_from: '2025-10-01'
+    formula: "migrant_or_seasonal_farmworker_household\nand first_month_of_certification_period\n\
+      and (\n    snap_destitute_due_to_terminated_source\n    or snap_destitute_due_to_new_source\n\
+      \    or snap_destitute_due_to_terminated_and_new_sources\n)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406
+- name: snap_destitute_expedited_processing_allowed
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.406(C)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: "snap_destitute_income_household\nand (\n    not prior_expedited_certification\n\
+      \    or postponed_verification_completed_since_last_expedited_certification\n\
+      \    or certified_under_normal_processing_since_last_expedited_certification\n\
+      )"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.406
+          span: 10 CCR 2506-1 section 4.406(C)

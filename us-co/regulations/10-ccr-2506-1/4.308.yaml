@@ -1,0 +1,293 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+  summary: |-
+    No individual who quit the most recent job, reduced work effort below thirty hours each week, or earned less than the federal minimum wage multiplied by thirty hours, without good cause, is eligible for SNAP. Sanctions apply for quits or reductions within sixty calendar days before application or thereafter; federal, state, or local government strikers dismissed for striking are treated as voluntary quits without good cause; a prior quit is not a disqualification basis after comparable new employment is lost through no fault. Participating households receive a Notice of Adverse Action within ten calendar days, and fair-hearing-upheld disqualifications begin the first month after the hearing decision.
+rules:
+  - name: work_hours_weekly_standard
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.308(A), (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+              excerpt: "thirty (30) hours each week"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: voluntary_quit_or_reduction_lookback_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.308(B), (C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+              excerpt: "within sixty (60) calendar days prior to the date of application"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          60
+
+  - name: voluntary_quit_adverse_action_notice_calendar_day_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.308(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+              excerpt: "within ten (10) calendar days after the determination"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          10
+
+  - name: weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(A), (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+              excerpt: "earning less than the federal minimum wage multiplied by thirty (30) hours"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#work_hours_weekly_standard
+              output: work_hours_weekly_standard
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          weekly_earnings < federal_minimum_wage * work_hours_weekly_standard
+
+  - name: government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          employee_of_federal_state_or_local_government
+          and participated_in_strike_against_that_government
+          and dismissed_from_job_because_of_participation_in_strike
+
+  - name: earlier_quit_not_basis_after_comparable_new_job_loss
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          individual_quit_job
+          and individual_secured_new_employment_at_comparable_wages_or_hours
+          and individual_lost_new_job_through_no_fault_of_own
+
+  - name: snap_participation_ineligible_due_to_voluntary_quit_or_reduction
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(A), (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#work_hours_weekly_standard
+              output: work_hours_weekly_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+              output: weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+              output: government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#earlier_quit_not_basis_after_comparable_new_job_loss
+              output: earlier_quit_not_basis_after_comparable_new_job_loss
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          individual_is_nonexempt_from_work_requirements
+          and (
+              individual_quit_most_recent_job_without_good_cause
+              or government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+              or (
+                  individual_reduced_work_hours_without_good_cause
+                  and weekly_work_hours_after_reduction < work_hours_weekly_standard
+              )
+              or (
+                  individual_reduced_wages_without_good_cause
+                  and weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+              )
+          )
+          and not earlier_quit_not_basis_after_comparable_new_job_loss
+
+  - name: voluntary_quit_or_reduction_sanction_imposed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(B), (C), (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#voluntary_quit_or_reduction_lookback_calendar_day_limit
+              output: voluntary_quit_or_reduction_lookback_calendar_day_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#work_hours_weekly_standard
+              output: work_hours_weekly_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+              output: weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+              output: government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#earlier_quit_not_basis_after_comparable_new_job_loss
+              output: earlier_quit_not_basis_after_comparable_new_job_loss
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              quit_or_reduction_occurred_after_application
+              or quit_or_reduction_occurred_calendar_days_before_application <= voluntary_quit_or_reduction_lookback_calendar_day_limit
+          )
+          and not earlier_quit_not_basis_after_comparable_new_job_loss
+          and (
+              individual_quit_most_recent_job_without_good_cause
+              or government_striker_dismissal_treated_as_voluntary_quit_without_good_cause
+              or (
+                  individual_reduced_work_hours_without_good_cause
+                  and weekly_work_hours_after_reduction < work_hours_weekly_standard
+              )
+              or (
+                  individual_reduced_wages_without_good_cause
+                  and weekly_earnings_below_federal_minimum_wage_thirty_hour_standard
+              )
+          )
+
+  - name: participating_household_voluntary_quit_adverse_action_notice_complete_and_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.308#voluntary_quit_adverse_action_notice_calendar_day_limit
+              output: voluntary_quit_adverse_action_notice_calendar_day_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          local_office_determined_individual_voluntarily_quit_or_reduced_work_hours_without_good_cause_while_participating
+          and notice_of_adverse_action_provided_to_household
+          and notice_of_adverse_action_calendar_days_after_determination <= voluntary_quit_adverse_action_notice_calendar_day_limit
+          and notice_contains_act_of_noncompliance
+          and notice_contains_proposed_period_of_disqualification
+          and notice_contains_action_to_be_taken_at_end_of_disqualification
+          and notice_specifies_individual_may_be_included_after_disqualification_if_other_work_requirements_met
+
+  - name: fair_hearing_upheld_disqualification_begins_month_after_decision
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.308(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.308
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          participating_household_requested_fair_hearing_on_voluntary_quit_or_reduction_disqualification
+          and local_office_determination_upheld_at_fair_hearing
+          and disqualification_period_began_first_of_month_after_hearing_decision

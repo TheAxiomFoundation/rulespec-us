@@ -1,0 +1,366 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+  summary: |-
+    Monthly gross nonexempt income shall be verified before initial certification, except for expedited service with postponed verification for one month; income is verified at recertification when the amount changes more than $50 or the source changes. Clients are primarily responsible for furnishing income verification, acceptable means include award letters, stubs, employer letters, and collateral contacts, and a cooperating client shall not be denied solely because a third party refuses verification. Continuing employment generally uses previous-month income unless future income will differ substantially. Self-employment statements are accepted unless questionable. Educational income and financial aid are exempt and do not require verification. Questionable terminated employment requires verification, with local-office assistance when needed. No-income statements are acceptable unless questionable.
+rules:
+  - name: recertification_income_change_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1 section 4.506
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+              excerpt: "changed more than fifty dollars ($50)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          50
+
+  - name: expedited_postponed_income_verification_month_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.506
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+              excerpt: "postponed verification for one month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1
+
+  - name: monthly_gross_nonexempt_income_verified_for_initial_certification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.506#expedited_postponed_income_verification_month_limit
+              output: expedited_postponed_income_verification_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_initial_certification
+          and (
+              monthly_gross_nonexempt_income_verified_before_initial_certification
+              or (
+                  household_entitled_to_expedited_service
+                  and income_verification_postponed_months <= expedited_postponed_income_verification_month_limit
+              )
+          )
+
+  - name: income_verified_at_recertification_when_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.506#recertification_income_change_verification_threshold
+              output: recertification_income_change_verification_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_at_recertification
+          and (
+              not (
+                  reported_income_amount_changed
+                  and income_amount_change > recertification_income_change_verification_threshold
+              )
+          )
+          and (
+              not reported_income_source_changed
+          )
+          or (
+              household_at_recertification
+              and (
+                  (
+                      reported_income_amount_changed
+                      and income_amount_change > recertification_income_change_verification_threshold
+                  )
+                  or reported_income_source_changed
+              )
+              and income_verified_at_recertification
+          )
+
+  - name: income_verification_responsibility_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(A)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          client_furnished_income_verification_documents
+          or client_furnished_collateral_contact
+          or client_furnished_authorization_to_secure_income_verification
+          or (
+              household_receives_pa
+              and pa_case_record_used_as_source_of_income_verification
+          )
+
+  - name: unacceptable_collateral_contact_alternative_sought
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          collateral_contact_designated_by_household_cannot_be_expected_to_provide_accurate_third_party_verification
+          and (
+              local_office_asked_household_to_designate_acceptable_collateral_contact
+              or local_office_asked_household_to_provide_alternative_verification
+              or local_office_substituted_home_visit
+          )
+
+  - name: cooperating_client_not_denied_for_third_party_refusal
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          client_cooperated_with_income_verification
+          and third_party_refused_to_provide_income_verification
+          and not household_denied_solely_because_third_party_refused_income_verification
+
+  - name: unsuccessful_income_verification_certification_figure_documented
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          all_attempts_to_verify_income_unsuccessful_because_person_or_organization_failed_to_cooperate
+          and eligibility_technician_arrived_at_income_figure_for_certification_purposes
+          and eligibility_technician_consulted_with_client_or_other_sources
+          and household_case_record_annotated_with_information_used_for_eligibility_determination
+
+  - name: continuing_employment_income_projection_documented
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          client_has_continuing_employment
+          and (
+              (
+                  not information_reveals_future_income_will_differ_substantially_from_previous_month_income
+                  and previous_month_income_used_as_best_indication_and_source_of_verification
+              )
+              or (
+                  information_reveals_future_income_will_differ_substantially_from_previous_month_income
+                  and reasonable_estimate_of_income_made_from_household_or_collateral_information
+              )
+          )
+          and income_determination_and_computation_method_fully_annotated_in_case_record
+
+  - name: self_employment_income_statement_accepted_when_not_questionable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_statement_of_self_employment_income_provided
+          and not self_employment_income_statement_questionable
+
+  - name: self_employment_income_best_information_used_when_new_or_undocumented
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_initial_certification
+          and (
+              household_recently_self_employed
+              or household_lacks_adequate_self_employment_income_and_expense_documentation
+          )
+          and eligibility_technician_used_best_available_information_to_determine_monthly_income
+          and household_encouraged_to_keep_self_employment_income_and_expense_records_for_subsequent_certifications
+
+  - name: educational_income_verification_not_required_for_monthly_income
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_has_educational_income_or_financial_aid
+          and educational_income_or_financial_aid_treated_as_exempt_income
+          and not educational_income_or_financial_aid_verification_required_to_determine_monthly_income
+
+  - name: questionable_terminated_employment_verification_supported
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(E)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          terminated_employment_information_questionable
+          and terminated_employment_verification_provided_by_household
+          or (
+              terminated_employment_information_questionable
+              and household_difficult_or_impossible_to_obtain_documentary_evidence_timely
+              and local_office_offered_assistance_obtaining_terminated_employment_verification
+          )
+          or (
+              terminated_employment_information_questionable
+              and documentary_evidence_not_available
+              and collateral_contact_used_for_terminated_employment_verification
+          )
+
+  - name: questionable_resignation_claim_not_denied_when_employer_unavailable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(E)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          questionable_claim_of_resignation_due_to_discrimination_practices_or_unreasonable_employer_demands
+          and household_and_local_office_unable_to_obtain_verification_because_employer_cannot_be_located
+          and not household_denied_for_unverified_questionable_resignation_claim
+
+  - name: no_reported_income_statement_accepted_when_not_questionable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.506(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.506
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          client_statement_of_no_income_provided
+          and not no_income_statement_questionable

@@ -1,15 +1,380 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual lists exemptions from SNAP student
-    ineligibility, including employment, work study, dependent-care, TANF,
-    employment and training, and on-the-job training exemptions. This section
-    restates the federal student exemptions in 7 CFR 273.5(b).
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+  summary: |-
+    "To be eligible to participate in SNAP, a student must meet at least one (1) of the following exemptions:" including physical or mental unfitness, paid employment or self-employment averaging twenty hours, work-study, specified dependent-care responsibilities, Title IV-A TANF cash grant receipt, qualifying employment and training placement, and on-the-job training.
 imports:
-  - us:regulations/7-cfr/273/5
 rules:
+  - name: paid_student_employment_weekly_hours_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.306.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+              excerpt: "average of twenty (20) hours per week"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          20
+
+  - name: paid_student_employment_monthly_hours_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.306.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+              excerpt: "employed for eighty (80) hours per month"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          80
+
+  - name: dependent_care_younger_child_age_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.306.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+              excerpt: "under the age of six (6)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          6
+
+  - name: dependent_care_older_child_lower_age_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.306.1(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+              excerpt: "has reached the age of six (6)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          6
+
+  - name: dependent_care_older_child_upper_age_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.306.1(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+              excerpt: "under the age of twelve (12)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: single_parent_child_age_threshold
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.306.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+              excerpt: "dependent child under age twelve (12)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: student_unfit_for_employment_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_physically_or_mentally_unfit_for_employment
+
+  - name: student_paid_employment_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.306.1#paid_student_employment_weekly_hours_threshold
+              output: paid_student_employment_weekly_hours_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.306.1#paid_student_employment_monthly_hours_threshold
+              output: paid_student_employment_monthly_hours_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              student_is_employed_and_paid
+              and (
+                  student_paid_employment_average_hours_per_week >= paid_student_employment_weekly_hours_threshold
+                  or student_paid_employment_average_hours_per_month >= paid_student_employment_monthly_hours_threshold
+              )
+          )
+          or (
+              student_is_self_employed
+              and student_self_employment_average_hours_per_week >= paid_student_employment_weekly_hours_threshold
+              and student_self_employment_earnings_after_allowable_business_expenses >= federal_minimum_wage * paid_student_employment_weekly_hours_threshold
+          )
+
+  - name: student_work_study_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_participating_in_state_or_federally_financed_work_study_program
+          and student_approved_for_work_study_program_at_snap_application
+          and work_study_approved_for_school_term
+          and student_anticipates_working_during_work_study_term
+          and work_study_exemption_period_is_active
+          and not local_office_knows_student_refused_work_study_assignment
+          and not work_study_between_terms_break_of_one_full_month_or_longer_without_break_participation
+
+  - name: student_dependent_under_six_care_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.306.1#dependent_care_younger_child_age_threshold
+              output: dependent_care_younger_child_age_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_responsible_for_more_than_half_physical_care_of_dependent_household_member
+          and dependent_household_member_age < dependent_care_younger_child_age_threshold
+
+  - name: student_single_parent_full_time_care_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.306.1#single_parent_child_age_threshold
+              output: single_parent_child_age_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_is_full_time_student
+          and student_is_single_parent_under_snap_household_single_parent_provision
+          and student_responsible_for_care_of_dependent_child
+          and dependent_child_age < single_parent_child_age_threshold
+
+  - name: student_dependent_six_to_under_twelve_care_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.306.1#dependent_care_older_child_lower_age_threshold
+              output: dependent_care_older_child_lower_age_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.306.1#dependent_care_older_child_upper_age_threshold
+              output: dependent_care_older_child_upper_age_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_responsible_for_more_than_half_physical_care_of_dependent_household_member
+          and dependent_household_member_age >= dependent_care_older_child_lower_age_threshold
+          and dependent_household_member_age < dependent_care_older_child_upper_age_threshold
+          and local_office_determined_adequate_childcare_not_available_to_attend_class_and_meet_student_work_or_work_study_requirement
+
+  - name: student_tanf_cash_grant_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_receiving_title_iv_a_tanf_cash_grant
+          and student_needs_included_in_tanf_cash_grant
+          and not grant_is_family_preservation
+
+  - name: student_employment_training_program_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_assigned_or_placed_in_higher_education_through_wioa_program
+          or student_assigned_or_placed_in_higher_education_through_employment_first
+          or student_assigned_or_placed_in_higher_education_through_trade_act_section_236_program
+          or student_assigned_or_placed_in_higher_education_through_state_or_local_employment_training_program_with_snap_ef_equivalent_component
+          or student_assigned_or_placed_in_higher_education_as_result_of_jobs_program_participation
+          or (
+              student_self_initiated_higher_education_placement_while_enrolled_in_employment_training_program
+              and self_initiated_placement_complies_with_employment_training_program_requirements
+              and employment_training_program_has_higher_education_enrollment_component
+              and employment_training_program_accepts_self_initiated_placement
+          )
+          or (
+              student_voluntarily_participates_in_qualifying_employment_training_program
+              and student_placed_in_higher_education_through_or_in_compliance_with_employment_training_program_requirements
+          )
+
+  - name: student_on_the_job_training_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1(H)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_participating_in_on_the_job_training_program
+          and student_currently_being_trained_by_employer
+
+  - name: snap_student_participation_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.306.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.306.1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          student_unfit_for_employment_exemption
+          or student_paid_employment_exemption
+          or student_work_study_exemption
+          or student_dependent_under_six_care_exemption
+          or student_single_parent_full_time_care_exemption
+          or student_dependent_six_to_under_twelve_care_exemption
+          or student_tanf_cash_grant_exemption
+          or student_employment_training_program_exemption
+          or student_on_the_job_training_exemption
+
   - name: restates_student_exemptions
     kind: source_relation
     source: 10 CCR 2506-1 section 4.306.1

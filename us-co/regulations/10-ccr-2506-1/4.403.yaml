@@ -1,170 +1,192 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual counts wages, salaries, certain training
-    allowances, countable VISTA or Title I volunteer payments, pay received
-    while still employed, actively managed rental income, and LLC or
-    S-corporation owner income as earned income. WIOA on-the-job training
-    earnings count unless the participant is under 19 years of age and under
-    adult household control. Rental property is earned income only when a
-    household member or disqualified person actively manages it at least 20
-    hours per week. For a striker, eligibility uses the higher of the
-    striking member's pre-strike and current income plus current income of
-    non-striking household members.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+  summary: |-
+    “The following shall be considered as earned income:” including wages and salaries, specified VISTA/AmeriCorps and agricultural payments, certain training allowances, Title I monies subject to a cited exclusion, striker income rules, self-employment income including rental and sale proceeds, LLC/S-Corporation owner income as regular earned income, and boarder income. Rental income is earned only if actively managed “at least an average of twenty (20) hours per week”; WIOA on-the-job training does not apply to household members “under nineteen (19) years of age” under parental control.
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.403#title_i_vista_university_year_of_action_payment_considered_earned_income
+      reason: The Title I branch excludes payments made to households specified in Section 4.405.2, but that cited source is not available; the affected purpose-specific Title I earned-income classification is deferred.
 rules:
-  - name: snap_countable_employee_wage_income
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(A)
+  - name: rental_active_management_hours_per_week_threshold
+    kind: parameter
+    dtype: Decimal
+    source: 10 CCR 2506-1, 4.403(E)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "at least an average of twenty (20) hours per week"
     versions:
-      - effective_from: '2025-10-01'
+      - effective_from: '0001-01-01'
         formula: |-
-          if higher_education_state_work_study_or_work_requirement_fellowship_income:
-              0
-          else:
-              employee_wages_received
-              + garnished_or_diverted_wages_for_household_expenses
-              + wages_held_at_employee_request_that_would_have_been_paid
-              + wages_previously_withheld_by_employer_general_practice_received
-              + reasonably_anticipated_wage_advances_received
-  - name: snap_countable_vista_earned_income
-    kind: derived
-    entity: Person
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 sections 4.403(A)(2), 4.403(C), and 4.405.2(A)(3)
+          20
+
+  - name: wioa_on_the_job_training_parental_control_age_threshold
+    kind: parameter
+    dtype: Integer
+    source: 10 CCR 2506-1, 4.403(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "household members under nineteen (19) years of age"
     versions:
-      - effective_from: '2025-10-01'
-        formula: max(0, vista_or_title_i_domestic_volunteer_payment_amount - snap_vista_income_exclusion)
-  - name: snap_countable_training_allowance_earned_income
-    kind: derived
-    entity: Person
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(B)(1)
-    versions:
-      - effective_from: '2025-10-01'
+      - effective_from: '0001-01-01'
         formula: |-
-          if vocational_rehabilitation_training_allowance_from_government_program
-             and not training_allowance_is_reimbursement
-             and not training_allowance_paid_under_wioa:
-              training_allowance_amount
-          else: 0
-  - name: snap_countable_wioa_ojt_earned_income
+          19
+
+  - name: rental_property_income_earned_income
     kind: derived
-    entity: Person
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 sections 4.403(B)(2) and 4.405.2(A)(6)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: max(0, wioa_on_the_job_training_earnings_amount - snap_wioa_payment_exclusion)
-  - name: snap_sick_vacation_bonus_earned_income
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(A)(4)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          if person_still_employed_when_sick_vacation_or_bonus_pay_received:
-              sick_vacation_or_bonus_pay_received
-          else: 0
-  - name: snap_striker_income_for_eligibility
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(D)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          if household_has_striking_member:
-              max(striking_member_pre_strike_income, striking_member_current_income)
-              + non_striking_household_members_current_income
-          else: current_household_income
-  - name: snap_rental_income_is_earned
-    kind: derived
-    entity: Household
+    entity: Payment
     dtype: Judgment
     period: Month
-    source: 10 CCR 2506-1 section 4.403(E)(1)
+    source: 10 CCR 2506-1, 4.403(E)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403#rental_active_management_hours_per_week_threshold
+              output: rental_active_management_hours_per_week_threshold
+              hash: sha256:local
     versions:
-      - effective_from: '2025-10-01'
-        formula: average_rental_property_management_hours_per_week >= 20
-  - name: snap_countable_rental_earned_income
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(E)(1)
-    versions:
-      - effective_from: '2025-10-01'
+      - effective_from: '0001-01-01'
         formula: |-
-          if snap_rental_income_is_earned:
-              max(0, rental_property_gross_income - rental_property_business_costs)
-          else: 0
-  - name: snap_capital_goods_sale_self_employment_income
+          payment_is_money_from_rental_or_lease_of_self_employment_property
+          and property_active_management_average_hours_per_week >= rental_active_management_hours_per_week_threshold
+
+  - name: wioa_on_the_job_training_earnings_earned_income
     kind: derived
-    entity: Household
-    dtype: Money
+    entity: Payment
+    dtype: Judgment
     period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(E)(2)
+    source: 10 CCR 2506-1, 4.403(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403#wioa_on_the_job_training_parental_control_age_threshold
+              output: wioa_on_the_job_training_parental_control_age_threshold
+              hash: sha256:local
     versions:
-      - effective_from: '2025-10-01'
-        formula: capital_goods_services_or_property_sale_proceeds_connected_to_self_employment
-  - name: snap_llc_s_corporation_owner_draw_earned_income
-    kind: derived
-    entity: Person
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(F)
-    versions:
-      - effective_from: '2025-10-01'
+      - effective_from: '0001-01-01'
         formula: |-
-          if llc_s_corporation_owner_receives_draw:
-              max(0, llc_s_corporation_business_income - llc_s_corporation_business_expenses)
-          else: 0
-  - name: snap_llc_s_corporation_owner_earned_income
+          payment_is_earnings_from_wioa_on_the_job_training
+          and not (
+            household_member_age_years < wioa_on_the_job_training_parental_control_age_threshold
+            and household_member_under_parental_control_of_another_adult_member
+          )
+
+  - name: payment_considered_earned_income
     kind: derived
-    entity: Person
-    dtype: Money
+    entity: Payment
+    dtype: Judgment
     period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403(F)
+    source: 10 CCR 2506-1, 4.403(A)-(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403#rental_property_income_earned_income
+              output: rental_property_income_earned_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403#wioa_on_the_job_training_earnings_earned_income
+              output: wioa_on_the_job_training_earnings_earned_income
+              hash: sha256:local
     versions:
-      - effective_from: '2025-10-01'
-        formula: llc_s_corporation_owner_salary + snap_llc_s_corporation_owner_draw_earned_income
-  - name: snap_countable_earned_income
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.403
-    versions:
-      - effective_from: '2025-10-01'
+      - effective_from: '0001-01-01'
         formula: |-
-          snap_countable_employee_wage_income
-          + household_vista_or_title_i_domestic_volunteer_earned_income
-          + household_training_allowance_earned_income
-          + household_wioa_ojt_earned_income
-          + snap_sick_vacation_bonus_earned_income
-          + snap_countable_rental_earned_income
-          + household_llc_s_corporation_owner_earned_income
-          + snap_boarder_net_self_employment_income
-          + other_countable_self_employment_earned_income
+          (
+            payment_is_for_services_as_employee
+            and not payment_is_countable_employment_income_received_by_higher_education_student_in_state_work_study
+            and not payment_is_countable_employment_income_received_by_higher_education_student_in_fellowship_with_work_requirement
+          )
+          or payment_is_garnishment_from_employee_services
+          or payment_is_money_legally_obligated_to_employee_and_diverted_to_third_party_for_employee_household_expenses
+          or payment_is_government_payment_from_agricultural_stabilization_and_conservation_service
+          or (
+            payment_is_vista_wages
+            and not client_was_receiving_snap_benefits_when_joined_vista
+          )
+          or (
+            payment_is_advance_on_wages
+            and advance_on_wages_reasonably_anticipated
+          )
+          or (
+            payment_is_wages_held_at_employee_request
+            and month_is_month_wages_would_otherwise_have_been_paid_by_employer
+          )
+          or (
+            payment_is_wages_held_by_employer_as_general_practice
+            and household_anticipates_receiving_previously_withheld_wages
+          )
+          or (
+            payment_is_sick_leave_vacation_or_bonus_pay
+            and person_was_still_employed_while_receiving_pay
+          )
+          or (
+            payment_is_from_vocational_or_rehabilitation_program_recognized_by_federal_state_or_local_government
+            and not payment_is_reimbursement
+            and not payment_is_allowance_paid_under_wioa
+          )
+          or wioa_on_the_job_training_earnings_earned_income
+          or payment_is_pre_strike_or_current_striker_income_selected_under_striker_rule
+          or rental_property_income_earned_income
+          or payment_is_money_from_sale_of_capital_goods_services_or_property_connected_to_self_employment_enterprise
+          or payment_is_llc_or_s_corporation_owner_regular_earned_income
+          or payment_is_boarder_direct_payment_to_household_for_room_or_meals
+          or payment_is_boarder_contribution_to_household_for_shelter_expenses
+
+  - name: earned_income_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1, 4.403(A)-(G)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.403#payment_considered_earned_income
+              output: payment_considered_earned_income
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if payment_considered_earned_income: max(0, payment_amount) else: 0

@@ -1,0 +1,263 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+  summary: |-
+    "If the full amount or remaining amount of an AE or IHE claim cannot be liquidated in three (3) years, the local office may compromise the claim..."
+    "IPV claims shall not be compromised, unless specified in a court decision."
+    "Benefits authorized under Colorado Electronic Benefits Transfer System (CO/EBTS) shall be used to calculate the claim... the local office must offset the amount of the claim..."
+    "Expungements and any return of benefits that occur must be used to offset the amount of the claim."
+    "In no circumstance may the local office collect more than the amount of the claim."
+    "The value of claims resulting from trafficking related offenses is the value of the trafficked benefits..."
+    "The twenty percent (20%) earned income deduction shall not be applied to that part of any earned income that the household failed to report in a timely manner..."
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.801.3#claim_for_household_certified_below_130_percent_fpl_failure_to_report_income_increase
+      reason: The source requires identifying a household certified below 130% FPL as defined in section 4.401.1, but that upstream definition is not available in the provided context. The affected first-month and over-issuance calculation surface is deferred.
+rules:
+  - name: claim_liquidation_compromise_period_years
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 4.801.3(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+              excerpt: "cannot be liquidated in three (3) years"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: earned_income_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 10 CCR 2506-1 4.801.3(C)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+              excerpt: "twenty percent (20%) earned income deduction"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+
+  - name: bce_claim_net_income_or_size_change_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.801.3(C)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_eligible_under_bce
+          and (household_net_income_changed or household_size_changed)
+
+  - name: bce_claim_may_be_established
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.801.3(C)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not household_eligible_under_bce
+          or bce_claim_net_income_or_size_change_required
+
+  - name: ae_ihe_gross_claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 4.801.3(C)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if bce_claim_may_be_established: max(0, allotment_received - correct_allotment) else: 0
+
+  - name: claim_required_offset_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 4.801.3(C)(1)-(2), (D)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(gross_claim_amount_before_offsets, max(0, unrestored_lost_benefits + expunged_benefits + returned_benefits + restored_benefits_owed_to_related_household))
+
+  - name: collectible_claim_amount_after_offsets
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 4.801.3(C)(1)-(2), (D)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(gross_claim_amount_before_offsets, max(0, gross_claim_amount_before_offsets - claim_required_offset_amount))
+
+  - name: trafficking_claim_value
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 4.801.3(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          trafficked_benefits_value
+
+  - name: claim_is_eligible_for_additional_compromise
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.801.3(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          claim_is_agency_error_or_inadvertent_household_error
+          and claim_cannot_be_liquidated_within_compromise_period
+          and household_demonstrates_need_or_hardship
+          and not claim_already_reduced_by_administrative_or_district_court_order
+
+  - name: ipv_claim_may_be_compromised
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.801.3(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          claim_is_ipv
+          and compromise_specified_in_court_decision
+
+  - name: compromised_claim_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 4.801.3(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if claim_is_eligible_for_additional_compromise or ipv_claim_may_be_compromised: amount_household_can_pay_within_compromise_period else: full_or_remaining_claim_amount
+
+  - name: earned_income_deduction_allowed_for_claim_calculation
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 4.801.3(C)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          earned_income_deduction_rate * max(0, earned_income_timely_reported_for_claim_calculation)
+
+  - name: pursued_as_ihe_claim_before_ipv_determination
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 4.801.3(D)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.801.3
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          claim_being_pursued_as_ipv_claim
+          and not waiver_of_adh_or_consent_agreement_signed
+          and not ipv_or_fraud_determined

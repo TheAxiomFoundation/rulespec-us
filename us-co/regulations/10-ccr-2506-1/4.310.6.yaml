@@ -1,0 +1,432 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+  summary: |-
+    Employment will be considered suitable unless listed conditions apply, including wages below the higher applicable minimum wage, piece-rate yield below that wage, required labor-organization action, strike or lockout site without injunction, unreasonable health or safety risk, medical unfitness, work outside the member's major field before the stated registration period exception, unreasonable commuting distance or time, lack of transportation, or interference with religious observances, convictions, or beliefs.
+rules:
+  - name: fallback_federal_minimum_wage_percentage
+    kind: parameter
+    dtype: Rate
+    source: 10 CCR 2506-1 section 4.310.6(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+              excerpt: "Eighty percent (80%) of the federal minimum wage"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.80
+
+  - name: major_field_registration_calendar_day_period
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.310.6(E)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+              excerpt: "after a period of thirty (30) calendar days from registration"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: daily_commuting_time_hour_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.310.6(E)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+              excerpt: "exceeds two (2) hours per day"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2
+
+  - name: applicable_suitable_employment_hourly_wage
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.310.6(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#fallback_federal_minimum_wage_percentage
+              output: fallback_federal_minimum_wage_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if federal_minimum_wage_is_applicable and state_minimum_wage_is_applicable: max(federal_minimum_wage, state_minimum_wage) else: if federal_minimum_wage_is_applicable: federal_minimum_wage else: if state_minimum_wage_is_applicable: state_minimum_wage else: fallback_federal_minimum_wage_percentage * federal_minimum_wage
+
+  - name: employment_unsuitable_due_to_insufficient_wages
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#applicable_suitable_employment_hourly_wage
+              output: applicable_suitable_employment_hourly_wage
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          wages_offered < applicable_suitable_employment_hourly_wage
+
+  - name: piece_rate_employment_unsuitable_due_to_insufficient_average_hourly_yield
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#applicable_suitable_employment_hourly_wage
+              output: applicable_suitable_employment_hourly_wage
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          employment_offered_on_piece_rate
+          and reasonably_expected_average_hourly_piece_rate_yield < applicable_suitable_employment_hourly_wage
+
+  - name: employment_unsuitable_due_to_required_labor_organization_action
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          employment_condition_requires_joining_resigning_from_or_refraining_from_legitimate_labor_organization
+
+  - name: employment_unsuitable_due_to_strike_or_lockout_site
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          work_site_subject_to_strike_or_lockout_at_time_of_offer
+          and not strike_enjoined_under_labor_management_relations_or_railway_labor_act
+
+  - name: employment_unsuitable_due_to_unreasonable_health_or_safety_risk
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_member_demonstrates_or_local_office_becomes_aware_of_unreasonable_health_or_safety_risk
+
+  - name: employment_unsuitable_due_to_documented_physical_or_mental_unfitness
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          client_physically_or_mentally_unfit_for_employment_established_by_documentary_medical_evidence_or_reliable_information
+
+  - name: employment_unsuitable_due_to_major_field_mismatch
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#major_field_registration_calendar_day_period
+              output: major_field_registration_calendar_day_period
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          employment_offered_not_in_household_members_major_field_experience
+          and (
+              calendar_days_since_registration <= major_field_registration_calendar_day_period
+              or job_opportunities_in_major_field_have_been_offered_after_registration_period
+          )
+
+  - name: employment_unsuitable_due_to_unreasonable_distance
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          distance_from_home_to_place_of_employment_unreasonable_considering_expected_wage_and_commuting_time_and_cost
+
+  - name: employment_unsuitable_due_to_excessive_daily_commuting_time
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#daily_commuting_time_hour_limit
+              output: daily_commuting_time_hour_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          daily_commuting_time_hours_excluding_child_care_transport > daily_commuting_time_hour_limit
+
+  - name: employment_unsuitable_due_to_transportation_unavailable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          distance_to_place_of_employment_prohibits_walking
+          and not public_transportation_available_to_job_site
+          and not private_transportation_available_to_job_site
+
+  - name: employment_unsuitable_due_to_religious_interference
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6(E)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          working_hours_or_nature_of_employment_interferes_with_religious_observances_convictions_or_beliefs
+
+  - name: employment_offer_unsuitable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_insufficient_wages
+              output: employment_unsuitable_due_to_insufficient_wages
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#piece_rate_employment_unsuitable_due_to_insufficient_average_hourly_yield
+              output: piece_rate_employment_unsuitable_due_to_insufficient_average_hourly_yield
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_required_labor_organization_action
+              output: employment_unsuitable_due_to_required_labor_organization_action
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_strike_or_lockout_site
+              output: employment_unsuitable_due_to_strike_or_lockout_site
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_unreasonable_health_or_safety_risk
+              output: employment_unsuitable_due_to_unreasonable_health_or_safety_risk
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_documented_physical_or_mental_unfitness
+              output: employment_unsuitable_due_to_documented_physical_or_mental_unfitness
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_major_field_mismatch
+              output: employment_unsuitable_due_to_major_field_mismatch
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_unreasonable_distance
+              output: employment_unsuitable_due_to_unreasonable_distance
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_excessive_daily_commuting_time
+              output: employment_unsuitable_due_to_excessive_daily_commuting_time
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_transportation_unavailable
+              output: employment_unsuitable_due_to_transportation_unavailable
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_unsuitable_due_to_religious_interference
+              output: employment_unsuitable_due_to_religious_interference
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          employment_unsuitable_due_to_insufficient_wages
+          or piece_rate_employment_unsuitable_due_to_insufficient_average_hourly_yield
+          or employment_unsuitable_due_to_required_labor_organization_action
+          or employment_unsuitable_due_to_strike_or_lockout_site
+          or employment_unsuitable_due_to_unreasonable_health_or_safety_risk
+          or employment_unsuitable_due_to_documented_physical_or_mental_unfitness
+          or employment_unsuitable_due_to_major_field_mismatch
+          or employment_unsuitable_due_to_unreasonable_distance
+          or employment_unsuitable_due_to_excessive_daily_commuting_time
+          or employment_unsuitable_due_to_transportation_unavailable
+          or employment_unsuitable_due_to_religious_interference
+
+  - name: employment_offer_considered_suitable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.310.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.310.6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.310.6#employment_offer_unsuitable
+              output: employment_offer_unsuitable
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not employment_offer_unsuitable

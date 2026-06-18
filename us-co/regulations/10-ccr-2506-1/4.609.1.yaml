@@ -5,15 +5,15 @@ module:
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
   summary: |-
-    "Households that receive SNAP and Colorado Works (CW) basic cash assistance that become ineligible" because of household income changes "are eligible to receive T-SNAP." "CW diversion payments are not considered basic cash assistance." Eligible households have the "SNAP allotment continued for five (5) months"; "Only the following four (4) changes will be acted upon." The existing certification period ends, a new five-month period is assigned, recertification is postponed, and listed sanctioned or all-member-disqualified households are not eligible.
-  deferred_outputs:
-    - output: us-co:regulations/10-ccr-2506-1/4.609.1#snap_continued_eligibility_and_benefit_level_after_t_snap_denial
-      reason: Section 4.609.1(D) requires households denied or not eligible for T-SNAP to have continued eligibility and benefit level determined in accordance with Section 4.604, but no RuleSpec context for Section 4.604 is available.
+    Households receiving SNAP and Colorado Works basic cash assistance that become ineligible for continued CW basic cash assistance because of household-income changes are eligible for T-SNAP. Eligible households have the SNAP allotment continued for five months based on the prior SNAP allotment, acting only on loss of the CW grant, certain household-composition changes, October 1 SNAP-standard COLA updates, and IPV disqualification. T-SNAP ends the existing certification period, assigns a new five-month certification period, and postpones normal recertification until that transitional period ends. Households leaving CW due to sanction, and households ineligible for SNAP because all individuals meet listed disqualification or ineligibility criteria, are not eligible for T-SNAP.
+imports:
+  - us-co:regulations/10-ccr-2506-1/4.607#federal_or_utility_mass_change_notice_and_prospective_implementation
+  - us-co:regulations/10-ccr-2506-1/4.604#reported_change_general_processing_timely
 rules:
-  - name: t_snap_transitional_period_months
+  - name: t_snap_transitional_certification_period_months
     kind: parameter
     dtype: Count
-    source: 10 CCR 2506-1, 4.609.1(B), (C)
+    source: 10 CCR 2506-1 section 4.609.1(B) and (C)
     metadata:
       proof:
         atoms:
@@ -27,89 +27,12 @@ rules:
         formula: |-
           5
 
-  - name: member_of_household
-    kind: data_relation
-    data_relation:
-      predicate: member_of_household
-      arity: 2
-      arguments:
-        - Person
-        - Household
-    source: 10 CCR 2506-1, 4.609.1(B)(2), (E)(2)
-
-  - name: t_snap_member_snap_ineligibility_criterion
-    kind: derived
-    entity: Person
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1, 4.609.1(E)(2)(a)-(h)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          person_disqualified_for_intentional_program_violation
-          or person_ineligible_for_failure_to_comply_with_snap_work_requirement
-          or person_is_ineligible_student
-          or person_is_ineligible_non_citizen
-          or person_disqualified_for_failure_to_provide_information_needed_for_snap_eligibility_or_review
-          or person_disqualified_for_receiving_snap_benefits_in_more_than_one_household_in_same_month
-          or person_disqualified_for_being_fleeing_felon
-          or person_is_abawd_failing_to_comply_with_section_4_310_requirements
-
-  - name: household_members_all_snap_ineligible_for_t_snap
+  - name: t_snap_basic_cash_assistance_excludes_cw_diversion_payments
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
-    source: 10 CCR 2506-1, 4.609.1(E)(2)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          len(member_of_household) > 0
-          and count_where(member_of_household, t_snap_member_snap_ineligibility_criterion) == len(member_of_household)
-
-  - name: t_snap_eligible
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1, 4.609.1(A), (E)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          household_receives_snap
-          and household_receives_colorado_works_basic_cash_assistance_excluding_diversion_payments
-          and household_becomes_ineligible_for_continued_colorado_works_basic_cash_assistance_because_of_household_income_changes
-          and not household_leaves_colorado_works_due_to_colorado_works_sanction
-          and not household_members_all_snap_ineligible_for_t_snap
-
-  - name: t_snap_continued_allotment
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1, 4.609.1(B)
+    source: 10 CCR 2506-1 section 4.609.1(A)
     metadata:
       proof:
         atoms:
@@ -120,78 +43,233 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if t_snap_eligible: max(0, snap_allotment_received_before_income_caused_colorado_works_basic_cash_ineligibility + t_snap_allotment_adjustment_for_loss_of_colorado_works_cash_grant + t_snap_allotment_adjustment_for_household_member_leaving_and_applying_for_snap_in_another_household + t_snap_allotment_adjustment_for_october_first_snap_eligibility_standard_cost_of_living_update + t_snap_allotment_adjustment_for_intentional_program_violation_disqualification) else: 0
+          household_received_cw_diversion_payment
+          and not cw_diversion_payment_treated_as_cw_basic_cash_assistance
 
-  - name: t_snap_allotment_continuation_months
-    kind: derived
-    entity: Household
-    dtype: Count
-    period: Month
-    source: 10 CCR 2506-1, 4.609.1(B)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
-              excerpt: "continued for five (5) months"
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          if t_snap_eligible: t_snap_transitional_period_months else: 0
-
-  - name: t_snap_new_certification_period_months
-    kind: derived
-    entity: Household
-    dtype: Count
-    period: Month
-    source: 10 CCR 2506-1, 4.609.1(C)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
-              excerpt: "new five (5) month certification period"
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          if t_snap_eligible: t_snap_transitional_period_months else: 0
-
-  - name: t_snap_existing_certification_period_ends
+  - name: t_snap_disqualifying_all_members_snap_ineligible
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
-    source: 10 CCR 2506-1, 4.609.1(C)
+    source: 10 CCR 2506-1 section 4.609.1(E)(2)
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: condition
+            kind: formula
             source:
               corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          t_snap_eligible
+          household_ineligible_for_snap_because_all_individuals_are_disqualified_for_ipv
+          or household_ineligible_for_snap_because_all_individuals_are_ineligible_for_failure_to_comply_with_work_requirement
+          or household_ineligible_for_snap_because_all_individuals_are_ineligible_students
+          or household_ineligible_for_snap_because_all_individuals_are_ineligible_non_citizens
+          or household_ineligible_for_snap_because_all_individuals_are_disqualified_for_failing_to_provide_information
+          or household_ineligible_for_snap_because_all_individuals_are_disqualified_for_receiving_snap_in_more_than_one_household_same_month
+          or household_ineligible_for_snap_because_all_individuals_are_disqualified_fleeing_felons
+          or household_ineligible_for_snap_because_all_individuals_are_abawds_who_fail_section_4_310_requirements
 
-  - name: t_snap_recertification_requirements_postponed
+  - name: t_snap_household_not_eligible
     kind: derived
     entity: Household
     dtype: Judgment
     period: Month
-    source: 10 CCR 2506-1, 4.609.1(C)
+    source: 10 CCR 2506-1 section 4.609.1(E)
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: condition
+            kind: formula
             source:
               corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_disqualifying_all_members_snap_ineligible
+              output: t_snap_disqualifying_all_members_snap_ineligible
+              hash: sha256:local
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          t_snap_eligible
+          household_left_cw_program_due_to_cw_sanction
+          or t_snap_disqualifying_all_members_snap_ineligible
+
+  - name: t_snap_household_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.609.1(A) and (E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_household_not_eligible
+              output: t_snap_household_not_eligible
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_receives_snap
+          and household_receives_cw_basic_cash_assistance
+          and household_becomes_ineligible_for_continued_cw_basic_cash_assistance_because_of_household_income_changes
+          and not t_snap_household_not_eligible
+
+  - name: t_snap_allotment_limited_to_allowed_changes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.609.1(B)(1)-(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.607#federal_or_utility_mass_change_notice_and_prospective_implementation
+              output: federal_or_utility_mass_change_notice_and_prospective_implementation
+              hash: sha256:7b99daf82220b5efcf905edd9fc9e2814404e7aac935ea8a655bbb8ad373e705
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          t_snap_allotment_determination_acted_on_loss_of_cw_cash_grant
+          and (
+              not t_snap_allotment_determination_acted_on_household_composition_member_left_and_applied_for_snap_in_another_household
+              or household_composition_change_was_member_leaving_and_applying_for_snap_in_another_household
+          )
+          and (
+              not t_snap_allotment_determination_acted_on_october_first_snap_eligibility_standards_cola_update
+              or federal_or_utility_mass_change_notice_and_prospective_implementation
+          )
+          and (
+              not t_snap_allotment_determination_acted_on_ipv_disqualification
+              or ipv_disqualification_imposed
+          )
+          and not t_snap_allotment_determination_acted_on_any_other_change
+
+  - name: t_snap_continued_allotment_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 10 CCR 2506-1 section 4.609.1(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_household_eligible
+              output: t_snap_household_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_allotment_limited_to_allowed_changes
+              output: t_snap_allotment_limited_to_allowed_changes
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if t_snap_household_eligible and t_snap_allotment_limited_to_allowed_changes: max(0, snap_allotment_based_on_amount_household_received_before_income_made_household_ineligible_for_cw_basic_cash_assistance_after_allowed_t_snap_changes) else: 0
+
+  - name: t_snap_certification_period_assigned
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.609.1(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_household_eligible
+              output: t_snap_household_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_transitional_certification_period_months
+              output: t_snap_transitional_certification_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          t_snap_household_eligible
+          and household_existing_snap_certification_period_ended_when_allotment_continued
+          and household_assigned_new_certification_period_months == t_snap_transitional_certification_period_months
+
+  - name: t_snap_recertification_postponed_until_transitional_period_end
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.609.1(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.609.1#t_snap_household_eligible
+              output: t_snap_household_eligible
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          t_snap_household_eligible
+          and normal_recertification_requirements_postponed_until_end_of_transitional_certification_period
+
+  - name: t_snap_denied_or_ineligible_continued_eligibility_processed_as_reported_change
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.609.1(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.609.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.604#reported_change_general_processing_timely
+              output: reported_change_general_processing_timely
+              hash: sha256:9caa5caeb75456a3aa6d8187c2a5143b443a6a2acccbbc32b4e07a6f227c126a
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_denied_t_snap_or_not_eligible_for_t_snap
+          and reported_change_general_processing_timely
+          and snap_continued_eligibility_and_benefit_level_determined_after_t_snap_denial_or_ineligibility

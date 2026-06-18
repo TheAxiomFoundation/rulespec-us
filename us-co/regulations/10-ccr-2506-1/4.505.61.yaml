@@ -1,0 +1,241 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+  summary: |-
+    SSA QCHS is available to verify whether a lawful permanent resident has earned or can receive credit for forty qualifying quarters; without documentation, participation waits until forty-quarter verification is received from SSA or the individual. If SSA records do not verify forty credits or quarters and the individual obtains an SSA statement that the number is under review, SNAP benefits may continue for up to six additional months from the original insufficient-quarter determination. Post-December 31, 1996 quarters are not creditable if the non-citizen, parent, or spouse received a federal means-tested public benefit during the credited period, subject to the listed exclusions and the same-quarter fortieth-quarter rule.
+rules:
+  - name: qualifying_quarters_required_for_lpr_credit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.505.61
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+              excerpt: "forty (40) qualifying quarters"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          40
+
+  - name: ssa_under_review_snap_continuation_month_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.505.61
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+              excerpt: "up to six (6) additional months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          6
+
+  - name: lpr_quarters_participation_verification_received
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#qualifying_quarters_required_for_lpr_credit
+              output: qualifying_quarters_required_for_lpr_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          lawful_permanent_resident_claims_qualifying_quarters
+          and (
+              individual_has_documentation_of_qualifying_quarters
+              or verification_of_qualifying_quarters_received_from_ssa
+              or verification_of_qualifying_quarters_received_from_individual
+          )
+          and verified_qualifying_quarters_count >= qualifying_quarters_required_for_lpr_credit
+
+  - name: ssa_under_review_snap_benefits_may_continue
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#ssa_under_review_snap_continuation_month_limit
+              output: ssa_under_review_snap_continuation_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ssa_existing_records_do_not_verify_claimed_qualifying_quarters
+          and individual_believes_ssa_records_not_correct
+          and individual_obtained_ssa_statement_credits_or_quarters_under_review
+          and months_since_original_insufficient_quarters_determination <= ssa_under_review_snap_continuation_month_limit
+
+  - name: benefit_receipt_excluded_from_federal_means_tested_public_benefit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          emergency_medical_assistance_under_title_xix_for_non_transplant_emergency_condition
+          or short_term_non_cash_in_kind_emergency_disaster_relief
+          or assistance_or_benefits_under_national_school_lunch_act
+          or assistance_or_benefits_under_child_nutrition_act_of_1966
+          or public_health_assistance_for_immunizations_or_communicable_disease_testing_or_treatment
+          or qualified_alien_foster_care_or_adoption_assistance_under_title_iv_parts_b_or_e
+          or attorney_general_specified_life_or_safety_in_kind_community_service
+          or student_assistance_under_higher_education_act_titles_iv_v_ix_or_x
+          or means_tested_program_under_elementary_and_secondary_education_act
+          or benefits_under_head_start_act
+          or benefits_under_workforce_investment_act
+
+  - name: federal_means_tested_public_benefit_receipt_countable_for_quarter
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61(A), (C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#benefit_receipt_excluded_from_federal_means_tested_public_benefit
+              output: benefit_receipt_excluded_from_federal_means_tested_public_benefit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          received_federal_means_tested_public_benefit_during_quarter_period
+          and not benefit_receipt_excluded_from_federal_means_tested_public_benefit
+
+  - name: post_cutoff_quarter_credit_barred_by_public_benefit_receipt
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#federal_means_tested_public_benefit_receipt_countable_for_quarter
+              output: federal_means_tested_public_benefit_receipt_countable_for_quarter
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          qualifying_quarter_period_begins_after_december_31_1996
+          and (
+              federal_means_tested_public_benefit_receipt_countable_for_quarter
+              or parent_received_countable_federal_means_tested_public_benefit_during_quarter_period
+              or spouse_received_countable_federal_means_tested_public_benefit_during_quarter_period
+          )
+
+  - name: fortieth_quarter_allowed_when_earned_before_same_quarter_benefit_application
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#qualifying_quarters_required_for_lpr_credit
+              output: qualifying_quarters_required_for_lpr_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          quarter_is_fortieth_quarter_of_coverage
+          and quarters_count_with_this_quarter == qualifying_quarters_required_for_lpr_credit
+          and non_citizen_earned_quarter_before_applying_for_snap_or_other_federal_means_tested_public_benefit_in_same_quarter
+
+  - name: quarter_creditable_after_benefit_receipt_evaluation
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.505.61(A), (B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.505.61
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#post_cutoff_quarter_credit_barred_by_public_benefit_receipt
+              output: post_cutoff_quarter_credit_barred_by_public_benefit_receipt
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.505.61#fortieth_quarter_allowed_when_earned_before_same_quarter_benefit_application
+              output: fortieth_quarter_allowed_when_earned_before_same_quarter_benefit_application
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          quarter_of_coverage_creditable_under_title_ii_social_security_act
+          and (
+              not post_cutoff_quarter_credit_barred_by_public_benefit_receipt
+              or fortieth_quarter_allowed_when_earned_before_same_quarter_benefit_application
+          )

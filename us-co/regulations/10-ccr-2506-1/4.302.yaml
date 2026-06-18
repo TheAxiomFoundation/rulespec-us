@@ -1,16 +1,186 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual requires each household member to provide an
-    SSN or proof of application for an SSN, and disqualifies only the
-    individual who refuses or fails without good cause to provide or apply for
-    an SSN. This section restates the federal SSN eligibility rule in 7 CFR
-    273.6.
+  proof_validation:
+    required: true
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+  summary: |-
+    As a condition of SNAP eligibility, each household member shall provide an SSN or proof of application for an SSN; refusal or failure without good cause disqualifies only the noncooperating individual. Newborn proof may be provided at the next recertification within six months after birth. The local office shall not require a Social Security card or other official documents to verify an SSN, and sincere religious objection permits participation if otherwise eligible.
 imports:
   - us:regulations/7-cfr/273/6
 rules:
+  - name: newborn_ssn_or_application_proof_recertification_month_limit
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.302(B)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+              excerpt: "at its next recertification within six (6) months following the baby's birth"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          6
+
+  - name: ssn_good_cause_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(B)(2) and 4.302(C)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          member_has_documentary_or_collateral_evidence_of_ssn_application_or_every_effort
+          or member_unable_to_obtain_documents_required_by_ssa_for_ssn_application
+          or household_not_at_fault_for_not_providing_proof_of_application_with_ssa
+
+  - name: ssn_requirement_ineligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(A)(3), 4.302(B)(2), and 4.302(C)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          member_required_to_provide_ssn
+          and member_refused_to_supply_ssn_at_application_or_failed_to_provide_proof_of_ssn_application
+          and not ssn_good_cause_applies
+          and not member_later_provided_ssn_or_verification_of_ssn_application_to_local_office
+          and not member_refuses_to_provide_ssn_based_on_sincere_religious_objection
+
+  - name: ssn_requirement_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(A), 4.302(B), and 4.302(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.302#ssn_requirement_ineligible
+              output: ssn_requirement_ineligible
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not ssn_requirement_ineligible
+
+  - name: newborn_ssn_requirement_timing_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(B)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.302#newborn_ssn_or_application_proof_recertification_month_limit
+              output: newborn_ssn_or_application_proof_recertification_month_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          member_is_newborn_child
+          and household_unable_to_provide_proof_of_ssn_application_for_newborn
+          and household_provides_ssn_or_application_proof_at_next_recertification
+          and months_following_baby_birth_at_next_recertification <= newborn_ssn_or_application_proof_recertification_month_limit
+
+  - name: ssn_card_or_official_document_verification_requirement_prohibited
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          local_office_required_social_security_card_or_other_official_documents_to_verify_ssn
+
+  - name: ssn_disqualification_adverse_action_notice_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(B)(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          participating_household_benefits_reduced_or_terminated_within_certification_period
+          and household_member_disqualified_for_failure_to_meet_ssn_requirement
+
+  - name: ssn_disqualification_adverse_action_notice_issued
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.302(B)(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.302
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.302#ssn_disqualification_adverse_action_notice_required
+              output: ssn_disqualification_adverse_action_notice_required
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ssn_disqualification_adverse_action_notice_required
+          and local_office_issued_notice_of_adverse_action
+
   - name: restates_ssn_good_cause
     kind: source_relation
     source: 10 CCR 2506-1 section 4.302(C)
@@ -18,6 +188,7 @@ rules:
       type: restates
       target: us:regulations/7-cfr/273/6#snap_member_ssn_good_cause_applies
       authority: federal
+
   - name: restates_ssn_disqualification
     kind: source_relation
     source: 10 CCR 2506-1 section 4.302(A), 4.302(B), and 4.302(C)
@@ -25,9 +196,10 @@ rules:
       type: restates
       target: us:regulations/7-cfr/273/6#snap_member_ssn_requirement_ineligible
       authority: federal
+
   - name: restates_ssn_eligibility
     kind: source_relation
-    source: 10 CCR 2506-1 section 4.302
+    source: 10 CCR 2506-1 section 4.302(A), 4.302(B), and 4.302(C)
     source_relation:
       type: restates
       target: us:regulations/7-cfr/273/6#snap_member_ssn_requirement_eligible

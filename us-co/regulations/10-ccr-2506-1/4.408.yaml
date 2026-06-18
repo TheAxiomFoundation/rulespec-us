@@ -1,70 +1,124 @@
 format: rulespec/v1
 module:
-  summary: |-
-    Colorado's SNAP rule manual exempts households eligible under Expanded
+  summary: 'Colorado''s SNAP rule manual exempts households eligible under Expanded
+
     Categorical Eligibility or Basic Categorical Eligibility from resource
+
     eligibility criteria. Other households use anticipated resources after
+
     section 4.410 exemptions for the issuance month. Sponsor resources counted
-    toward a non-citizen household equal the sponsor's total resources less
+
+    toward a non-citizen household equal the sponsor''s total resources less
+
     2000 dollars and are added to post-exemption countable resources. The
+
     resulting resource eligibility test is the federal 7 CFR 273.8 resource
-    standard using USDA FY 2026 COLA asset limits.
+
+    standard using USDA FY 2026 COLA asset limits.'
   source_verification:
     corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.408
+  proof_validation:
+    required: true
 imports:
-  - us:regulations/7-cfr/273/8
-  - us:policies/usda/snap/fy-2026-cola/deductions
+- us:regulations/7-cfr/273/8
+- us:policies/usda/snap/fy-2026-cola/deductions
 rules:
-  - name: restates_resource_limits
-    kind: source_relation
-    source: 10 CCR 2506-1 section 4.408(E)
-    source_relation:
-      type: restates
-      target: us:policies/usda/snap/fy-2026-cola/deductions#snap_asset_limit
-      authority: federal
-    verification:
-      values:
-        snap_asset_limit_elderly_or_disabled_member: 4500
-        snap_asset_limit_other_households: 3000
-  - name: snap_categorically_eligible_for_resource_exemption
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: 10 CCR 2506-1 section 4.408(A)
-    versions:
-      - effective_from: '2025-10-01'
-        formula: snap_expanded_categorical_eligible or snap_basic_categorical_eligible
-  - name: snap_sponsor_resources_counted
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.408(B)
-    versions:
-      - effective_from: '2024-10-01'
-        formula: |-
-          if sponsored_noncitizen_household:
-              max(0, sponsor_total_resources - 2000)
-          else: 0
-  - name: snap_countable_resources_for_resource_test
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.408(B)
-    versions:
-      - effective_from: '2024-10-01'
-        formula: snap_countable_resources_after_exemptions + snap_sponsor_resources_counted
-  - name: snap_countable_financial_resources
-    kind: derived
-    entity: Household
-    dtype: Money
-    period: Month
-    unit: USD
-    source: 10 CCR 2506-1 section 4.408(B)
-    versions:
-      - effective_from: '2024-10-01'
-        formula: snap_countable_resources_for_resource_test
+- name: restates_resource_limits
+  kind: source_relation
+  source: 10 CCR 2506-1 section 4.408(E)
+  source_relation:
+    type: restates
+    target: us:policies/usda/snap/fy-2026-cola/deductions#snap_asset_limit
+    authority: federal
+  verification:
+    values:
+      snap_asset_limit_elderly_or_disabled_member: 4500
+      snap_asset_limit_other_households: 3000
+- name: snap_categorically_eligible_for_resource_exemption
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1 section 4.408(A)
+  versions:
+  - effective_from: '2025-10-01'
+    formula: snap_expanded_categorical_eligible or snap_basic_categorical_eligible
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.408
+          span: 10 CCR 2506-1 section 4.408(A)
+- name: snap_sponsor_resources_counted_floor
+  kind: parameter
+  dtype: Count
+  source: 10 CCR 2506-1 section 4.408(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.408
+          span: 10 CCR 2506-1 section 4.408(B)
+  versions:
+  - effective_from: '2024-10-01'
+    formula: '2000'
+- name: snap_sponsor_resources_counted
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1 section 4.408(B)
+  versions:
+  - effective_from: '2024-10-01'
+    formula: "if sponsored_noncitizen_household:\n    max(0, sponsor_total_resources\
+      \ - snap_sponsor_resources_counted_floor)\nelse: 0"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-co:regulations/10-ccr-2506-1/4.408#snap_sponsor_resources_counted_floor
+          output: snap_sponsor_resources_counted_floor
+          hash: sha256:local
+- name: snap_countable_resources_for_resource_test
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1 section 4.408(B)
+  versions:
+  - effective_from: '2024-10-01'
+    formula: snap_countable_resources_after_exemptions + snap_sponsor_resources_counted
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.408
+          span: 10 CCR 2506-1 section 4.408(B)
+- name: snap_countable_financial_resources
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1 section 4.408(B)
+  versions:
+  - effective_from: '2024-10-01'
+    formula: snap_countable_resources_for_resource_test
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.408
+          span: 10 CCR 2506-1 section 4.408(B)
