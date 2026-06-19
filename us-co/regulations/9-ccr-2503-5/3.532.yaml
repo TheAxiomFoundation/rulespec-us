@@ -1,0 +1,305 @@
+format: rulespec/v1
+imports:
+- us-co:regulations/9-ccr-2503-5/3.530#oap_total_monthly_grant_standard
+- us-co:regulations/9-ccr-2503-5/3.530#oap_payment_floor_standard
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+  summary: For Old Age Pension (OAP), grant payments are calculated for one client
+    per case by subtracting the client's total countable income from the OAP grant
+    standard, with a state supplementary payment added when needed to reach the OAP
+    payment floor. Eligibility timing determines whether the first month is paid in
+    full or prorated by remaining days in the month, and clients transitioning from
+    another Adult Financial program at age sixty move to OAP effective the first day
+    of their birth month. OAP grant and Personal Needs Allowance (PNA) payments are
+    not available to inmates of penal institutions or residents of unlicensed or uncertified
+    facilities, and PNA is payable only after at least thirty consecutive days in
+    specified medical, long-term-care, or (for clients sixty-five or older) psychiatric
+    facilities. For each full calendar month in such a facility, the OAP PNA maximum
+    is $79.
+rules:
+- name: oap_client_eligible_for_grant_payments_under_3_532
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 9 CCR 2503-5 3.532 B, E
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: 'When a client has been found eligible based upon eligibility rules
+            as outlined in Sections 3.520.6 and 3.520.7 ... The following persons
+            are not eligible for a PNA or OAP grant payments: 1. Inmates in a penal
+            institution; or, 2. Residents in an unlicensed private or uncertified
+            public facility.'
+  versions:
+  - effective_from: '2016-10-01'
+    formula: 'client_is_oap_eligible_under_sections_3_520_6_and_3_520_7
+
+      and not client_is_inmate_in_penal_institution
+
+      and not client_is_resident_in_unlicensed_or_uncertified_facility'
+- name: oap_authorized_grant_payment_for_month
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 9 CCR 2503-5 3.532 A, B
+  metadata:
+    proof:
+      atoms:
+      - kind: import
+        path: versions[0].formula
+        import:
+          target: us-co:regulations/9-ccr-2503-5/3.530#oap_total_monthly_grant_standard
+          output: oap_total_monthly_grant_standard
+          hash: sha256:8b3031855cedaee3683e939c2794f44b088ebc47ee9e306130689130824bd48e
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: OAP grant payments shall be calculated on an individual basis,
+            with just one client per case. ... the amount of the client's authorized
+            OAP grant payment shall be determined by deducting the client's total
+            countable income from the OAP grant standard listed in Section 3.530.A.
+  versions:
+  - effective_from: '2016-10-01'
+    formula: 'if oap_client_eligible_for_grant_payments_under_3_532: max(0, oap_total_monthly_grant_standard
+      - client_total_countable_income_for_oap) else: 0'
+- name: oap_state_supplementary_payment_for_month
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 9 CCR 2503-5 3.532 B
+  metadata:
+    proof:
+      atoms:
+      - kind: import
+        path: versions[0].formula
+        import:
+          target: us-co:regulations/9-ccr-2503-5/3.530#oap_payment_floor_standard
+          output: oap_payment_floor_standard
+          hash: sha256:8b3031855cedaee3683e939c2794f44b088ebc47ee9e306130689130824bd48e
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: If the grant payment is less than the OAP payment floor standard
+            outlined in section 3.530, a state supplementary payment will be issued
+            to raise the grant payment to meet the payment floor standard.
+  versions:
+  - effective_from: '2016-10-01'
+    formula: "if oap_client_eligible_for_grant_payments_under_3_532:\n  if oap_authorized_grant_payment_for_month\
+      \ < oap_payment_floor_standard:\n    oap_payment_floor_standard - oap_authorized_grant_payment_for_month\n\
+      \  else:\n    0\nelse:\n  0"
+- name: oap_total_grant_payment_including_state_supplement_for_month
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 9 CCR 2503-5 3.532 B
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: '... the amount of the client''s authorized OAP grant payment shall
+            be determined by deducting the client''s total countable income from the
+            OAP grant standard ... If the grant payment is less than the OAP payment
+            floor standard ... a state supplementary payment will be issued to raise
+            the grant payment to meet the payment floor standard.'
+  versions:
+  - effective_from: '2016-10-01'
+    formula: oap_authorized_grant_payment_for_month + oap_state_supplementary_payment_for_month
+- name: oap_first_month_grant_payment_with_proration
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 9 CCR 2503-5 3.532 B(1)-(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: 1. If determined eligible on the first of the month, the client
+            shall receive his or her authorized grant payment in the initial and subsequent
+            months. 2. If determined eligible on any other day of the month, the client's
+            first month grant payment shall be prorated according to the number of
+            days remaining in the month; the client shall receive their authorized
+            grant payments in subsequent months.
+  versions:
+  - effective_from: '2016-10-01'
+    formula: "if not oap_client_eligible_for_grant_payments_under_3_532:\n  0\nelse:\n\
+      \  if client_eligibility_determined_on_first_day_of_month:\n    oap_total_grant_payment_including_state_supplement_for_month\n\
+      \  else:\n    oap_total_grant_payment_including_state_supplement_for_month *\
+      \ fraction_of_month_remaining_at_oap_eligibility_determination"
+- name: oap_client_transitions_from_other_af_program_in_birth_month
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 9 CCR 2503-5 3.532 B(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: If a client is receiving services in another Adult Financial (AF)
+            program in the month he or she turns sixty (60) years of age and is otherwise
+            eligible for OAP, the client shall transition from the other AF program
+            to OAP effective the first day of the client's birth month, and receive
+            his or her authorized grant payment for the birthday month and subsequent
+            months.
+  versions:
+  - effective_from: '2016-10-01'
+    formula: 'client_receives_other_adult_financial_program_in_current_month
+
+      and client_turns_60_during_current_month
+
+      and client_is_otherwise_eligible_for_oap'
+- name: client_resides_in_3_532_d_listed_facility_scalar_limit
+  kind: parameter
+  dtype: Count
+  source: 9 CCR 2503-5 3.532 D
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: 'The client shall be eligible only for a monthly PNA when program
+            requirements are met and the client is a resident for at least thirty
+            (30) consecutive days, in one of the following facilities: 1. In a general
+            medical and surgical hospital; 2. In a nursing home, assisted living residence,
+            or, intermediate care facility, group home, host home, other long-term
+            care facility, or Adult Financial approved setting; or 3. In a psychiatric
+            facility when sixty-five (65) years of age or older.'
+  versions:
+  - effective_from: '2016-10-01'
+    formula: '65'
+- name: client_resides_in_3_532_d_listed_facility
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 9 CCR 2503-5 3.532 D
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: 'The client shall be eligible only for a monthly PNA when program
+            requirements are met and the client is a resident for at least thirty
+            (30) consecutive days, in one of the following facilities: 1. In a general
+            medical and surgical hospital; 2. In a nursing home, assisted living residence,
+            or, intermediate care facility, group home, host home, other long-term
+            care facility, or Adult Financial approved setting; or 3. In a psychiatric
+            facility when sixty-five (65) years of age or older.'
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-co:regulations/9-ccr-2503-5/3.532#client_resides_in_3_532_d_listed_facility_scalar_limit
+          output: client_resides_in_3_532_d_listed_facility_scalar_limit
+          hash: sha256:local
+  versions:
+  - effective_from: '2016-10-01'
+    formula: 'client_is_resident_in_general_medical_and_surgical_hospital
+
+      or client_is_resident_in_long_term_care_or_oap_approved_setting
+
+      or (client_is_resident_in_psychiatric_facility and client_age_in_years >= client_resides_in_3_532_d_listed_facility_scalar_limit)'
+- name: oap_pna_eligible_for_month
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 9 CCR 2503-5 3.532 D, E
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: 'The client shall be eligible only for a monthly PNA when program
+            requirements are met and the client is a resident for at least thirty
+            (30) consecutive days, in one of the following facilities ... The following
+            persons are not eligible for a PNA or OAP grant payments: 1. Inmates in
+            a penal institution; or, 2. Residents in an unlicensed private or uncertified
+            public facility.'
+  versions:
+  - effective_from: '2016-10-01'
+    formula: 'client_meets_program_requirements_for_pna
+
+      and client_has_been_resident_for_at_least_30_consecutive_days_in_facility
+
+      and client_resides_in_3_532_d_listed_facility
+
+      and not client_is_inmate_in_penal_institution
+
+      and not client_is_resident_in_unlicensed_or_uncertified_facility'
+- name: oap_pna_maximum_monthly_amount_for_full_calendar_month
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 9 CCR 2503-5 3.532 F
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: For every full calendar month ... effective October 1, 2016.
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: the OAP PNA maximum shall be seventy-nine dollars ($79), effective
+            October 1, 2016.
+  versions:
+  - effective_from: '2016-10-01'
+    formula: '79'
+- name: oap_pna_payment_amount_for_month
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 9 CCR 2503-5 3.532 D, F
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.532
+          excerpt: The client shall be eligible only for a monthly PNA ... For every
+            full calendar month that the client is a resident in a facility listed
+            in Section 3.532.D, the OAP PNA maximum shall be seventy-nine dollars
+            ($79), effective October 1, 2016.
+  versions:
+  - effective_from: '2016-10-01'
+    formula: 'if oap_pna_eligible_for_month and client_is_resident_for_full_calendar_month_in_3_532_d_facility:
+      oap_pna_maximum_monthly_amount_for_full_calendar_month else: 0'
