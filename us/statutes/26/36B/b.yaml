@@ -1,0 +1,133 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/36B
+  deferred_outputs:
+  - output: us:statutes/26/36B/b/3/A#applicable_percentage
+    reason: The detailed applicable-percentage computation is scoped to subparagraph
+      (3)(A) and requires indexing, the post-2018 additional adjustment and failsafe,
+      and the temporary 2021-through-2025 replacement percentage table. This parent
+      formula uses the source-stated applicable percentage as a boundary input.
+  - output: us:statutes/26/36B/b/3/B#applicable_second_lowest_cost_silver_plan
+    reason: The plan-selection definition depends on rating-area Exchange plan data,
+      section 1(c), section 151 deduction status, and subsection (e) spouse credit
+      denial mechanics that are not available as executable context.
+  - output: us:statutes/26/36B/b/3/C#adjusted_monthly_premium
+    reason: The adjusted monthly premium calculation requires the applicable second
+      lowest cost silver plan, age-rating mechanics under section 2701 of the Public
+      Health Service Act, and wellness-discount treatment under section 2705(d), which
+      are outside the copied executable context.
+  - output: us:statutes/26/36B/b/3/D#additional_benefit_premium_exclusion
+    reason: The exclusion for premiums allocable to additional benefits depends on
+      allocation rules prescribed by the Secretary of Health and Human Services and
+      Patient Protection and Affordable Care Act benefit classifications not available
+      as executable context.
+  - output: us:statutes/26/36B/b/3/E#pediatric_dental_premium_treatment
+    reason: The pediatric dental special rule depends on a plan described in section
+      1311(d)(2)(B)(ii)(I) of the Patient Protection and Affordable Care Act and Secretary-prescribed
+      allocation regulations, neither of which is available as executable context.
+  summary: Paragraph (1) defines the premium assistance credit amount as the sum of
+    premium assistance amounts for all coverage months. Paragraph (2) sets each monthly
+    amount as the lesser of qualified health plan premiums or the benchmark-premium
+    excess over 1/12 of applicable percentage times household income.
+rules:
+- name: coverage_months
+  kind: data_relation
+  source: 26 USC 36B(b)(1)
+  data_relation:
+    predicate: coverage_months
+    arity: 2
+    arguments:
+    - TaxUnit
+    - CoverageMonth
+- name: required_contribution_annual_to_monthly_divisor
+  kind: parameter
+  dtype: Decimal
+  source: 26 USC 36B(b)(2)(B)(ii)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/36B
+          excerpt: 1/12 of the product
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '12'
+- name: required_monthly_contribution
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 26 USC 36B(b)(2)(B)(ii)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/36B
+          excerpt: 1/12 of the product
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+          output: required_contribution_annual_to_monthly_divisor
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: (household_income_for_taxable_year / required_contribution_annual_to_monthly_divisor)
+      * applicable_percentage_for_taxable_year
+- name: premium_assistance_amount
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 26 USC 36B(b)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/36B
+          excerpt: lesser of
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/36B
+          excerpt: excess (if any)
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/36B/b#required_monthly_contribution
+          output: required_monthly_contribution
+          hash: sha256:local
+  versions:
+  - effective_from: '1990-01-01'
+    formula: min(max(0, monthly_premiums_for_exchange_qualified_health_plans_covering_taxpayer_spouse_or_dependents),
+      max(0, adjusted_monthly_premium_for_applicable_second_lowest_cost_silver_plan
+      - required_monthly_contribution))
+- name: premium_assistance_credit_amount
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: paragraph (1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/36B
+          excerpt: sum of the premium assistance amounts
+  versions:
+  - effective_from: '1990-01-01'
+    formula: sum(coverage_months.premium_assistance_amount_determined_for_coverage_month)
