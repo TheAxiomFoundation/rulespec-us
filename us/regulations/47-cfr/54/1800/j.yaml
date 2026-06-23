@@ -1,0 +1,94 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/47/54/1800
+  summary: |-
+    47 CFR 54.1800(j) defines “eligible household” as a household meeting any listed eligibility path, regardless of Lifeline support under subpart E or broadband-provider arrearages. Paths include a member meeting § 54.409(a)(2), (a)(3), or (b); household income at or below 200% of Federal Poverty Guidelines; school lunch/breakfast/CEP participation; current-award-year Federal Pell Grant with stated verification; provider low-income-program criteria subject to § 54.1806(a)(2); or WIC assistance.
+rules:
+  - name: federal_poverty_guidelines_income_limit_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 47 CFR 54.1800(j)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "at or below 200% of the Federal Poverty Guidelines"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2.00
+
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+
+  - name: eligible_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.1800(j)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "At least one member of the household meets the qualifications in § 54.409(a)(2) or (3) or (b)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "household's income ... at or below 200% of the Federal Poverty Guidelines"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "free and reduced price lunch program ... school breakfast program ... Community Eligibility Provision"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "Federal Pell Grant ... in the current award year ... verifiable"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "meets the eligibility criteria for a participating provider's existing low-income program"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/1800
+              excerpt: "receives assistance through the special supplemental nutritional program for women, infants and children"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          count_where(member_of_household, member_meets_qualifications_under_section_54_409_a_2_or_3_or_b) > 0
+          or household_income <= federal_poverty_guidelines_income_limit_multiplier * federal_poverty_guidelines_for_household_size
+          or count_where(member_of_household, member_approved_for_free_or_reduced_price_lunch_or_school_breakfast_benefits) > 0
+          or count_where(member_of_household, member_enrolled_in_community_eligibility_provision_school_or_district) > 0
+          or (
+            count_where(member_of_household, member_received_current_award_year_federal_pell_grant) > 0
+            and (
+              federal_pell_grant_award_is_verifiable_through_national_verifier_or_nlad
+              or participating_provider_verifies_federal_pell_grant_eligibility_under_section_54_1806_a_2
+            )
+          )
+          or count_where(member_of_household, member_meets_participating_provider_existing_low_income_program_criteria_subject_to_section_54_1806_a_2) > 0
+          or count_where(member_of_household, member_receives_wic_assistance) > 0
