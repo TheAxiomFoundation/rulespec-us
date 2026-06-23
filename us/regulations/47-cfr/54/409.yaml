@@ -1,0 +1,213 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/47/54/409
+  summary: |-
+    To constitute a qualifying low-income consumer, household income must be at or below 135% of Federal Poverty Guidelines, or the consumer/dependent/household must receive listed federal assistance; survivors may qualify for emergency communications support if they suffer financial hardship and requested line separation. Tribal-lands consumers are eligible if they meet paragraph (a) or participate in listed Tribal-specific federal assistance programs. In addition, the consumer and anyone else in the subscriber's household must not already be subscribed to Lifeline service.
+rules:
+  - name: lifeline_income_limit_ratio
+    kind: parameter
+    dtype: Rate
+    source: 47 CFR 54.409(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+              excerpt: "at or below 135% of the Federal Poverty Guidelines"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.35
+
+  - name: income_qualifies_for_lifeline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#lifeline_income_limit_ratio
+              output: lifeline_income_limit_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_income_fpg_ratio <= lifeline_income_limit_ratio
+
+  - name: federal_assistance_program_qualifies_for_lifeline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          consumer_or_dependent_or_household_receives_medicaid
+          or consumer_or_dependent_or_household_receives_snap
+          or consumer_or_dependent_or_household_receives_supplemental_security_income
+          or consumer_or_dependent_or_household_receives_federal_public_housing_assistance
+          or consumer_or_dependent_or_household_receives_veterans_and_survivors_pension_benefit
+
+  - name: survivor_emergency_communications_support_qualifies_for_lifeline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          consumer_is_survivor
+          and survivor_suffers_financial_hardship_as_defined_by_section_54_400_s
+          and survivor_requested_line_separation_under_47_usc_345_c_1
+
+  - name: paragraph_a_lifeline_qualification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#income_qualifies_for_lifeline
+              output: income_qualifies_for_lifeline
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#federal_assistance_program_qualifies_for_lifeline
+              output: federal_assistance_program_qualifies_for_lifeline
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#survivor_emergency_communications_support_qualifies_for_lifeline
+              output: survivor_emergency_communications_support_qualifies_for_lifeline
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          income_qualifies_for_lifeline
+          or federal_assistance_program_qualifies_for_lifeline
+          or survivor_emergency_communications_support_qualifies_for_lifeline
+
+  - name: tribal_specific_assistance_program_qualifies_for_lifeline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          consumer_or_dependent_or_household_participates_in_bureau_of_indian_affairs_general_assistance
+          or consumer_or_dependent_or_household_participates_in_tribally_administered_tanf
+          or household_participates_in_head_start_and_meets_its_income_qualifying_standard
+          or consumer_or_dependent_or_household_participates_in_food_distribution_program_on_indian_reservations
+
+  - name: tribal_lands_lifeline_qualification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#paragraph_a_lifeline_qualification
+              output: paragraph_a_lifeline_qualification
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#tribal_specific_assistance_program_qualifies_for_lifeline
+              output: tribal_specific_assistance_program_qualifies_for_lifeline
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          consumer_lives_on_tribal_lands
+          and (paragraph_a_lifeline_qualification or tribal_specific_assistance_program_qualifies_for_lifeline)
+
+  - name: qualifying_low_income_consumer_for_lifeline
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 47 CFR 54.409(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/47/54/409
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#paragraph_a_lifeline_qualification
+              output: paragraph_a_lifeline_qualification
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/47-cfr/54/409#tribal_lands_lifeline_qualification
+              output: tribal_lands_lifeline_qualification
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (paragraph_a_lifeline_qualification or tribal_lands_lifeline_qualification)
+          and not consumer_already_receiving_lifeline_service
+          and not anyone_else_in_subscriber_household_subscribed_to_lifeline_service
