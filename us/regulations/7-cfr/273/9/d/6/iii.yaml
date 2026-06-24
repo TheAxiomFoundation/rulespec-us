@@ -1,0 +1,102 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/9
+  summary: |-
+    Standard utility allowances may replace actual utility costs for the excess shelter deduction. The limited utility allowance must include at least two utilities. A standard with a heating or cooling component must be available to households with separate heating or cooling costs, qualifying rental-billing arrangements, or qualifying LIHEAA/similar energy assistance payments greater than $20 annually.
+rules:
+  - name: liheaa_or_similar_energy_assistance_annual_payment_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.9(d)(6)(iii)(D)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "$20 annually"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          20
+
+  - name: limited_utility_allowance_required_minimum_utility_count
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.9(d)(6)(iii)(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "at least two utilities"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          2
+
+  - name: snap_limited_utility_allowance_meets_minimum_utility_count
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(d)(6)(iii)(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "at least two utilities"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          limited_utility_allowance_utility_count >= limited_utility_allowance_required_minimum_utility_count
+
+  - name: snap_standard_with_heating_or_cooling_component_available
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(d)(6)(iii)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "heating or cooling expenses separately"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "unless the State agency mandates"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "current month or in the immediately preceding 12 months"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          household_incurs_heating_or_cooling_expenses_separately_from_rent_or_mortgage
+          or (
+            household_in_rental_housing_billed_by_landlord_based_on_individual_usage_or_flat_rate_separately_from_rent
+            and (
+              not household_in_public_housing_unit_with_central_utility_meters_charged_only_for_excess_heating_or_cooling_costs
+              or state_agency_mandates_use_of_standard_utility_allowances_under_paragraph_g
+            )
+          )
+          or (
+            liheaa_or_similar_energy_assistance_payment_received_or_made_on_household_behalf_in_current_month_or_immediately_preceding_twelve_months
+            and liheaa_or_similar_energy_assistance_annual_payment_amount > liheaa_or_similar_energy_assistance_annual_payment_threshold
+          )
