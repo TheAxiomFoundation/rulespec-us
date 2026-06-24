@@ -1,0 +1,240 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/45/1302/12
+  deferred_outputs:
+    - output: us:regulations/45-cfr/1302/12/g#community_with_1000_or_fewer_individuals_eligibility_criteria
+      reason: >-
+        Paragraph (g) allows programs in communities with 1,000 or fewer individuals to establish eligibility criteria
+        by reference to section 645(a)(2) of the Act and protects children eligible under paragraphs (c) through (f);
+        the cross-referenced Act criteria and community/program administrative structure are not encoded here.
+    - output: us:regulations/45-cfr/1302/12/h#age_verification_compliance
+      reason: >-
+        Paragraph (h) imposes a program-staff verification and documentation-barrier procedural duty rather than a
+        participant eligibility computation represented by the current executable surface.
+    - output: us:regulations/45-cfr/1302/12/j#eligibility_duration
+      reason: >-
+        Paragraph (j) governs continuing eligibility across program years, transitions, and program types, including
+        discretionary compelling-reason exceptions and section 645A-funded programs, which require enrollment-history
+        and program-year lifecycle modeling not represented here.
+    - output: us:regulations/45-cfr/1302/12/k#eligibility_determination_records
+      reason: >-
+        Paragraph (k) prescribes recordkeeping contents and retention periods, not a participant eligibility formula.
+    - output: us:regulations/45-cfr/1302/12/l#eligibility_violation_policies_and_procedures
+      reason: >-
+        Paragraph (l) requires written personnel policies and procedures for intentional eligibility violations; it is
+        an administrative compliance duty outside the participant eligibility calculations encoded here.
+  summary: |-
+    45 CFR 1302.12 sets Head Start eligibility paths: income at or below the poverty line, public assistance,
+    homelessness, or foster care; a 10 percent benefit-from-services allowance; an additional 35 percent allowance
+    for families below 130 percent of poverty with required outreach/selection policies; Tribal eligibility
+    notwithstanding paragraph (c); and Migrant or Seasonal Head Start eligibility based on primary agricultural
+    employment income and paragraph (b) age requirements.
+rules:
+  - name: overincome_exception_enrollment_cap
+    kind: parameter
+    dtype: Rate
+    source: 45 CFR 1302.12(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "only make up to 10 percent of a program's enrollment"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          0.10
+
+  - name: additional_allowance_enrollment_cap
+    kind: parameter
+    dtype: Rate
+    source: 45 CFR 1302.12(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "may enroll an additional 35 percent of participants"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          0.35
+
+  - name: additional_allowance_income_limit_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 45 CFR 1302.12(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "whose incomes are below 130 percent of the poverty line"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          1.30
+
+  - name: reportable_overincome_lower_bound_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 45 CFR 1302.12(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "family incomes are between 100 and 130 percent of the poverty line"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          1.00
+
+  - name: paragraph_c_participant_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/45-cfr/1302/12#overincome_exception_enrollment_cap
+              output: overincome_exception_enrollment_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          family_income <= poverty_line_amount
+          or family_is_eligible_for_public_assistance
+          or family_would_be_potentially_eligible_for_public_assistance_in_absence_of_child_care
+          or child_is_homeless_as_defined_in_part_1305
+          or child_is_in_foster_care
+          or (
+              participant_would_benefit_from_services
+              and program_paragraph_c_2_participant_share_after_enrollment <= overincome_exception_enrollment_cap
+          )
+
+  - name: additional_allowance_participant_may_be_enrolled
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/45-cfr/1302/12#additional_allowance_enrollment_cap
+              output: additional_allowance_enrollment_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/45-cfr/1302/12#additional_allowance_income_limit_multiplier
+              output: additional_allowance_income_limit_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          family_does_not_meet_paragraph_c_criterion
+          and family_income < poverty_line_amount * additional_allowance_income_limit_multiplier
+          and program_additional_allowance_participant_share_after_enrollment <= additional_allowance_enrollment_cap
+          and program_establishes_and_implements_required_outreach_and_enrollment_policies_before_serving_non_paragraph_c_participants
+          and program_establishes_criteria_serving_paragraph_c_eligible_pregnant_women_and_children_first
+
+  - name: report_to_regional_office_required_for_between_100_and_130_percent_enrollment
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "family incomes are between 100 and 130 percent of the poverty line"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/45-cfr/1302/12#reportable_overincome_lower_bound_multiplier
+              output: reportable_overincome_lower_bound_multiplier
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/45-cfr/1302/12#additional_allowance_income_limit_multiplier
+              output: additional_allowance_income_limit_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          family_does_not_meet_paragraph_c_criterion
+          and family_income >= poverty_line_amount * reportable_overincome_lower_bound_multiplier
+          and family_income < poverty_line_amount * additional_allowance_income_limit_multiplier
+
+  - name: tribal_service_area_participant_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          tribal_program
+          and participant_in_approved_service_area
+          and participant_meets_age_requirements_under_paragraph_b
+
+  - name: migrant_or_seasonal_participant_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          at_least_one_family_member_income_comes_primarily_from_agricultural_employment
+          and participant_meets_age_requirements_under_paragraph_b
