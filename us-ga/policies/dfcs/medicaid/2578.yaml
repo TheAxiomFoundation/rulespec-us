@@ -1,0 +1,194 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+  summary: |-
+    "A NH vendor payment can be authorized for the SSI recipient entering a NH if all the following conditions are met: The A/R is a resident of Georgia. The A/R has an approved Level of Care (LOC). The A/R has not transferred a resource for less than fair market value within 60 months prior to the month of application." SSI-only payments are reduced to "$30.00 the month following the month of NH admission" and State Supplement amounts are "$20.00", "$35.00", and "$40.00" for the listed effective dates. Patient liability uses all income including SSI for the admission month and only LA-D SSI entitlement plus other income for following months.
+rules:
+  - name: resource_transfer_lookback_months
+    kind: parameter
+    dtype: Count
+    source: Policy 2578, Basic Considerations
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "within 60 months prior to the month of application"
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          60
+
+  - name: ssi_only_nursing_home_payment_amount_after_admission
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Policy 2578, Basic Considerations
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "reduced to $30.00 the month following the month of NH admission"
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          30
+
+  - name: nursing_home_state_supplement_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Policy 2578, Basic Considerations, State Supplement table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "Effective Date State Supplement Amount 7/1/2006 $20.00"
+          - path: versions[1].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "7/1/2018 $35.00"
+          - path: versions[2].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "7/1/2019 $40.00"
+    versions:
+      - effective_from: '2006-07-01'
+        formula: |-
+          20
+      - effective_from: '2018-07-01'
+        formula: |-
+          35
+      - effective_from: '2019-07-01'
+        formula: |-
+          40
+
+  - name: ssi_recipient_nursing_home_vendor_payment_authorizable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Policy 2578, Basic Considerations; SSI Recipient is not a Resident of Georgia; SSI Recipient is not approved for Level of Care
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "within 60 months prior to the month of application"
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          receives_ssi_prior_to_nursing_home_admission
+          and resident_of_georgia
+          and approved_level_of_care
+          and not (
+            resource_transferred_for_less_than_fair_market_value
+            and months_before_application_of_resource_transfer <= resource_transfer_lookback_months
+          )
+
+  - name: expected_ssi_only_payment_after_nursing_home_admission
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Policy 2578, Basic Considerations
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "SSI payment amount reduced to $30.00 the month following the month of NH admission"
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          if receives_ssi_only and month_following_nursing_home_admission: ssi_only_nursing_home_payment_amount_after_admission else: 0
+
+  - name: expected_state_supplement_for_nursing_home_ssi_recipient
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Policy 2578, Basic Considerations, State Supplement table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+              excerpt: "They will also receive a State Supplement."
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          if receives_ssi_only and month_following_nursing_home_admission: nursing_home_state_supplement_amount else: 0
+
+  - name: patient_liability_for_month_of_admission_to_lad
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Policy 2578, Procedures Step 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          if month_is_admission_month_to_lad: max(0, all_income_available_in_month_including_ssi) else: 0
+
+  - name: patient_liability_for_month_after_admission_to_lad
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Policy 2578, Procedures Step 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/medicaid/2578
+    versions:
+      - effective_from: '2019-07-01'
+        formula: |-
+          if month_is_after_admission_month_to_lad: max(0, ssi_entitled_in_lad + other_income) else: 0
