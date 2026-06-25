@@ -1,0 +1,124 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-14
+  summary: |-
+    Step 6 Complete the GIC test by comparing the gross countable income of the AU to the GIC for the AU size. Step 7 Complete a SON trial budget to determine eligibility for the $250 standard work deduction. Step 11 Subtract the net countable income determined in Step 10 from the SON. Step 13 Authorize as the TANF benefit the amount of the deficit or the amount of the family maximum, whichever is less.
+imports:
+  - us-ga:policies/dfcs/tanf/1605/block-3#financially_eligible_under_gross_income_ceiling
+  - us-ga:policies/dfcs/tanf/1605/block-4#standard_work_deduction_available_in_son_trial_budget_at_application
+  - us-ga:policies/dfcs/tanf/1605/block-4#financially_eligible_under_standard_of_need
+  - us-ga:policies/dfcs/tanf/1605/block-4#net_countable_income
+  - us-ga:policies/dfcs/tanf/appendix-a#standard_of_need
+  - us-ga:policies/dfcs/tanf/appendix-a#family_maximum_tanf
+rules:
+  - name: son_trial_budget_step_satisfied
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: DFCS TANF 1605 block 14, Step 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-14
+              excerpt: "Proceed to Step 8 if the SON trial budget is not necessary. If ineligible in the SON trial budget, deny or terminate cash assistance. If eligible in the SON trial budget, proceed to Step 8."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-4#standard_work_deduction_available_in_son_trial_budget_at_application
+              output: standard_work_deduction_available_in_son_trial_budget_at_application
+              hash: sha256:e2b1d8a6e8c85cee64c552c1539db054b31dcfe015aa8be5326216f099fb1419
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          (not son_trial_budget_is_necessary)
+          or standard_work_deduction_available_in_son_trial_budget_at_application > 0
+
+  - name: cash_assistance_financial_eligibility_established
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: DFCS TANF 1605 block 14, Steps 6 through 11
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-14
+              excerpt: "If the gross countable income is greater than the GIC, deny or terminate cash assistance. If ineligible in the SON trial budget, deny or terminate cash assistance. If the net countable income is greater than or equal to the SON, deny or terminate cash assistance."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-3#financially_eligible_under_gross_income_ceiling
+              output: financially_eligible_under_gross_income_ceiling
+              hash: sha256:5052a0b7450cdb5478a35085a6394b89fc48ecaf1eaa9ae1d43dd4c3fd20f482
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-14#son_trial_budget_step_satisfied
+              output: son_trial_budget_step_satisfied
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-4#financially_eligible_under_standard_of_need
+              output: financially_eligible_under_standard_of_need
+              hash: sha256:e2b1d8a6e8c85cee64c552c1539db054b31dcfe015aa8be5326216f099fb1419
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          financially_eligible_under_gross_income_ceiling
+          and son_trial_budget_step_satisfied
+          and financially_eligible_under_standard_of_need
+
+  - name: cash_assistance_benefit_amount_after_financial_eligibility
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DFCS TANF 1605 block 14, Steps 11 through 13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-14
+              excerpt: "Subtract the net countable income determined in Step 10 from the SON. If the net countable income is less than the SON, proceed to Step 12. Step 12 Compare the deficit from Step 11 to the family maximum. Step 13 Authorize as the TANF benefit the amount of the deficit or the amount of the family maximum, whichever is less."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-14#cash_assistance_financial_eligibility_established
+              output: cash_assistance_financial_eligibility_established
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-4#net_countable_income
+              output: net_countable_income
+              hash: sha256:e2b1d8a6e8c85cee64c552c1539db054b31dcfe015aa8be5326216f099fb1419
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/appendix-a#standard_of_need
+              output: standard_of_need
+              hash: sha256:5eb46e90e0b027db4ba85994be630634ce990629547c1ce2713a33a0568781f3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/appendix-a#family_maximum_tanf
+              output: family_maximum_tanf
+              hash: sha256:5eb46e90e0b027db4ba85994be630634ce990629547c1ce2713a33a0568781f3
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          if cash_assistance_financial_eligibility_established: min(max(0, standard_of_need[au_size] - net_countable_income), family_maximum_tanf[au_size]) else: 0
