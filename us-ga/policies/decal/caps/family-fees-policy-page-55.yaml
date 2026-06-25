@@ -1,0 +1,219 @@
+format: rulespec/v1
+imports:
+  - us-ga:policies/decal/caps/family-fees-policy-page-54#assessed_weekly_family_fee_for_eligibility_period
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+  summary: |-
+    CAPS Policy – Family Fees, page 55: family fees are not assessed for a parent who is 17 years of age or younger or when the family's gross applicable income is at or below 10% of the poverty guidelines. CAPS pays the lesser of the CAPS maximum reimbursement rate and the provider's published rate, deducts the assessed family fee from weekly reimbursement, the parent pays the family fee to the provider while any child receives CAPS-subsidized care, and CAPS staff deny the application if the family fee exceeds the allowable state reimbursement rate for all children in care.
+rules:
+  - name: no_fee_poverty_guideline_percentage
+    kind: parameter
+    dtype: Rate
+    source: CAPS Policy Manual § 9.5.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "The family’s gross applicable income is at or below 10% of the poverty guidelines"
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          0.10
+
+  - name: minor_parent_family_fee_not_assessed
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Week
+    source: CAPS Policy Manual § 9.5.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "A parent who is 17 years of age or younger"
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          parent_is_17_years_of_age_or_younger
+
+  - name: very_low_income_family_fee_not_assessed
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Week
+    source: CAPS Policy Manual § 9.5.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "The family’s gross applicable income is at or below 10% of the poverty guidelines"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-55#no_fee_poverty_guideline_percentage
+              output: no_fee_poverty_guideline_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          family_gross_applicable_income_as_percentage_of_poverty_guidelines <= no_fee_poverty_guideline_percentage
+
+  - name: page55_family_fee_not_assessed
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Week
+    source: CAPS Policy Manual § 9.5.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-55#minor_parent_family_fee_not_assessed
+              output: minor_parent_family_fee_not_assessed
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-55#very_low_income_family_fee_not_assessed
+              output: very_low_income_family_fee_not_assessed
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          minor_parent_family_fee_not_assessed
+          or very_low_income_family_fee_not_assessed
+
+  - name: caps_weekly_reimbursement_before_family_fee
+    kind: derived
+    entity: ChildCareScholarship
+    dtype: Money
+    period: Week
+    unit: USD
+    source: CAPS Policy Manual § 9.6.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "CAPS will pay the lesser amount between the CAPS maximum reimbursement rate ... and the provider’s published rate."
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          min(caps_maximum_reimbursement_rate, provider_published_rate)
+
+  - name: caps_weekly_reimbursement_after_assessed_family_fee
+    kind: derived
+    entity: ChildCareScholarship
+    dtype: Money
+    period: Week
+    unit: USD
+    source: CAPS Policy Manual § 9.6.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "CAPS will deduct the assessed family fee from the total weekly amount to be reimbursed."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-55#caps_weekly_reimbursement_before_family_fee
+              output: caps_weekly_reimbursement_before_family_fee
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-54#assessed_weekly_family_fee_for_eligibility_period
+              output: assessed_weekly_family_fee_for_eligibility_period
+              hash: sha256:a906bb77ef34e06d46eb618cc476c75e3b88470b5a869d91b86ca8b223e2ff62
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          max(0, caps_weekly_reimbursement_before_family_fee - assessed_weekly_family_fee_for_eligibility_period)
+
+  - name: parent_responsible_for_family_fee_to_provider
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Week
+    source: CAPS Policy Manual § 9.6.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "The parent is responsible for paying the family fee to the child care provider as long as any child is receiving care through CAPS subsidies."
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          any_child_is_receiving_care_through_caps_subsidies
+
+  - name: family_fee_exceeds_allowable_state_reimbursement
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Week
+    source: CAPS Policy Manual § 9.6.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "If the family fee exceeds the allowable state reimbursement rate for all children in care"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-54#assessed_weekly_family_fee_for_eligibility_period
+              output: assessed_weekly_family_fee_for_eligibility_period
+              hash: sha256:a906bb77ef34e06d46eb618cc476c75e3b88470b5a869d91b86ca8b223e2ff62
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          assessed_weekly_family_fee_for_eligibility_period > allowable_state_reimbursement_rate_for_all_children_in_care
+
+  - name: application_denied_because_family_responsibility_exceeds_allowable_benefit
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Week
+    source: CAPS Policy Manual § 9.6.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/decal/caps/policy-manual/page-55
+              excerpt: "CAPS staff will deny the application because the family’s responsibility exceeds the allowable benefit."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/decal/caps/family-fees-policy-page-55#family_fee_exceeds_allowable_state_reimbursement
+              output: family_fee_exceeds_allowable_state_reimbursement
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-06'
+        formula: |-
+          family_fee_exceeds_allowable_state_reimbursement
