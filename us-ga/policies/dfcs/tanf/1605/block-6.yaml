@@ -1,0 +1,112 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-6
+  summary: |-
+    The benefit amount is the difference between the SON and net countable income or the family maximum, whichever is less. The income of AU members and certain non-AU members is considered; included non-AU members are penalized SFU members and disqualified individuals.
+imports:
+  - us-ga:policies/dfcs/tanf/appendix-a#standard_of_need
+  - us-ga:policies/dfcs/tanf/appendix-a#family_maximum_tanf
+rules:
+  - name: tanf_budget_people
+    kind: data_relation
+    data_relation:
+      predicate: person_associated_with_tanf_budget
+      arity: 2
+      arguments:
+        - name: person
+          entity: Person
+        - name: tanf_unit
+          entity: TanfUnit
+    source: DFCS TANF 1605 block 6
+
+  - name: income_included_in_budget_for_financial_eligibility_and_benefit_amount
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: DFCS TANF 1605 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-6
+              excerpt: "The income of AU members and certain non-AU members is considered"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-6
+              excerpt: "penalized standard filing unit (SFU) member; disqualified individual"
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          person_is_assistance_unit_member
+          or (
+            person_is_non_assistance_unit_member
+            and (
+              person_is_penalized_standard_filing_unit_member
+              or person_is_disqualified_individual
+            )
+          )
+
+  - name: budgeted_income_for_financial_eligibility_and_benefit_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DFCS TANF 1605 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-6
+              excerpt: "income ... is included in the budget when determining financial eligibility and benefit amount"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1605/block-6#income_included_in_budget_for_financial_eligibility_and_benefit_amount
+              output: income_included_in_budget_for_financial_eligibility_and_benefit_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          sum_where(tanf_budget_people, person_income, income_included_in_budget_for_financial_eligibility_and_benefit_amount)
+
+  - name: benefit_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DFCS TANF 1605 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1605/block-6
+              excerpt: "benefit amount is the difference between the SON and net countable income or the family maximum, whichever is less"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/appendix-a#standard_of_need
+              output: standard_of_need
+              hash: sha256:5eb46e90e0b027db4ba85994be630634ce990629547c1ce2713a33a0568781f3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/appendix-a#family_maximum_tanf
+              output: family_maximum_tanf
+              hash: sha256:5eb46e90e0b027db4ba85994be630634ce990629547c1ce2713a33a0568781f3
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          min(max(0, standard_of_need[au_size] - net_countable_income), family_maximum_tanf[au_size])

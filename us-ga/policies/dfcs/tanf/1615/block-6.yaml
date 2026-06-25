@@ -1,0 +1,238 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+  summary: |-
+    Expenses incurred for childcare or for the care of an incapacitated individual in the home are deducted when the care is necessary because of employment of the AU member. Dependent care deductions may not exceed $200 monthly for each child under the age of two or $175 monthly for each individual age two or above. The need for an incapacitated individual to receive care in the home must be verified by a physician's statement. Verify dependent care deductions at initial application, at review or at interim changes, if the amount is more than $200.00 monthly.
+rules:
+  - name: dependent_care_child_under_two_monthly_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "$200 monthly for each child under the age of two"
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          200
+
+  - name: dependent_care_individual_age_two_or_above_monthly_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "$175 monthly for each individual age two or above"
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          175
+
+  - name: dependent_care_verification_monthly_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "if the amount is more than $200.00 monthly"
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          200
+
+  - name: dependent_care_recipients
+    kind: data_relation
+    data_relation:
+      predicate: dependent_care_recipient_of_tanf_unit
+      arity: 2
+      arguments:
+        - name: dependent_care_recipient
+          entity: Person
+        - name: tanf_unit
+          entity: TanfUnit
+    source: DFCS TANF 1615 block 6
+
+  - name: dependent_care_recipient_deduction_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "deducted when the care is necessary because of employment of the AU member"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "childcare or for the care of an incapacitated individual in the home"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "must be verified by a physician's statement"
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          care_is_necessary_because_of_employment_of_assistance_unit_member
+          and (
+            dependent_care_is_for_childcare
+            or (
+              dependent_care_is_for_incapacitated_individual_in_home
+              and incapacitated_individual_care_need_verified_by_physician_statement
+            )
+          )
+
+  - name: dependent_care_recipient_monthly_limit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "A child is age two beginning with the month following the month of the child's second birthday."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_child_under_two_monthly_limit
+              output: dependent_care_child_under_two_monthly_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_individual_age_two_or_above_monthly_limit
+              output: dependent_care_individual_age_two_or_above_monthly_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          if dependent_care_recipient_is_child_under_age_two: dependent_care_child_under_two_monthly_limit else: dependent_care_individual_age_two_or_above_monthly_limit
+
+  - name: dependent_care_recipient_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "Expenses incurred for childcare or for the care of an incapacitated individual in the home are deducted"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_recipient_deduction_allowed
+              output: dependent_care_recipient_deduction_allowed
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_recipient_monthly_limit
+              output: dependent_care_recipient_monthly_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          if dependent_care_recipient_deduction_allowed: min(max(0, dependent_care_expense), dependent_care_recipient_monthly_limit) else: 0
+
+  - name: dependent_care_deduction
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "Dependent care deductions may not exceed the following amounts"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_recipient_deduction
+              output: dependent_care_recipient_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_recipient_deduction_allowed
+              output: dependent_care_recipient_deduction_allowed
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          sum_where(dependent_care_recipients, dependent_care_recipient_deduction, dependent_care_recipient_deduction_allowed)
+
+  - name: dependent_care_deduction_verification_required
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: DFCS TANF 1615 block 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/tanf/1615/block-6
+              excerpt: "Verify dependent care deductions at initial application, at review or at interim changes, if the amount is more than $200.00 monthly."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_deduction
+              output: dependent_care_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/dfcs/tanf/1615/block-6#dependent_care_verification_monthly_threshold
+              output: dependent_care_verification_monthly_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-12-01'
+        formula: |-
+          determination_is_at_initial_application_review_or_interim_change
+          and dependent_care_deduction > dependent_care_verification_monthly_threshold
