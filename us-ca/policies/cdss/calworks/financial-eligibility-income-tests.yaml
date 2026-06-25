@@ -1,0 +1,148 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/statute/wic/11450.12
+  summary: |-
+    (a) An applicant family shall not be eligible unless the family's income, exclusive of the first four hundred fifty dollars ($450) of earned income for each employed person, is less than the minimum basic standard of adequate care. If there are subsequent changes to the income exemption in Section 11451.5(c), the exemption amount changes by an equal amount. (b) Applicant-family reasonably anticipated income, less specified exclusions, must be below the maximum aid payment. (c) Recipient-family reasonably anticipated income, less exempt income, must not exceed the income reporting threshold. (d) Operative July 1, 2022.
+imports:
+  - us-ca:policies/cdss/calworks/minimum-basic-standard-of-adequate-care#minimum_basic_standard_schedule_amount_for_family
+rules:
+  - name: statutory_earned_income_exemption_per_employed_person
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11450.12(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "first four hundred fifty dollars ($450) of earned income for each employed person"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "This section shall become operative on July 1, 2022."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          450
+
+  - name: earned_income_exemption_per_employed_person
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 11450.12(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "the earned income exemption amount specified in this section shall be changed by an equal amount"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/financial-eligibility-income-tests#statutory_earned_income_exemption_per_employed_person
+              output: statutory_earned_income_exemption_per_employed_person
+              hash: sha256:local
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "This section shall become operative on July 1, 2022."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          statutory_earned_income_exemption_per_employed_person + income_exemption_change_under_section_11451_5_c
+
+  - name: applicant_family_satisfies_minimum_basic_standard_income_test
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: 11450.12(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "income, exclusive of the first four hundred fifty dollars ($450) of earned income for each employed person, is less than the minimum basic standard of adequate care"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/financial-eligibility-income-tests#earned_income_exemption_per_employed_person
+              output: earned_income_exemption_per_employed_person
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/minimum-basic-standard-of-adequate-care#minimum_basic_standard_schedule_amount_for_family
+              output: minimum_basic_standard_schedule_amount_for_family
+              hash: sha256:b074596ebc9236f63f90d1aa6d1c437fe4e4a91130391fba3c7c432edf873a14
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "This section shall become operative on July 1, 2022."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          (family_income - min(family_earned_income, earned_income_exemption_per_employed_person * employed_person_count)) < minimum_basic_standard_schedule_amount_for_family
+
+  - name: applicant_family_satisfies_maximum_aid_payment_income_test
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: 11450.12(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "reasonably anticipated income, less exempt income, and exclusive of amounts of disability-based unearned income and earned income exempt under Section 11451.5, equals or exceeds the maximum aid payment"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "This section shall become operative on July 1, 2022."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          (reasonably_anticipated_income - exempt_income - disability_based_unearned_income - earned_income_exempt_under_section_11451_5) < maximum_aid_payment_under_section_11450
+
+  - name: recipient_family_satisfies_income_reporting_threshold_for_further_aid
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: 11450.12(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "if reasonably anticipated income, less exempt income, exceeds the income reporting threshold"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450.12
+              excerpt: "This section shall become operative on July 1, 2022."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          (reasonably_anticipated_income - exempt_income) <= income_reporting_threshold_under_sections_11265_3_and_11265_47

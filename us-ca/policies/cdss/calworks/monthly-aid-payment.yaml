@@ -1,0 +1,204 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+  summary: |-
+    "Aid shall be paid for each needy family" and, in determining the amount, the family's income after stated exclusions and calculations "shall be deducted from the sum specified in the following table, as adjusted for cost-of-living increases." "In no case shall the amount of aid paid for each month exceed" that adjusted sum "plus any special needs." The table lists "Number of eligible needy persons in the same home" and "Maximum aid" from "1 ... $326" through "10 or more ... 1,403."
+rules:
+  - name: monthly_aid_payment_largest_eligible_needy_person_table_row
+    kind: parameter
+    dtype: Count
+    source: WIC 11450(a)(1)(A), maximum aid table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "10 or more ........................ 1,403"
+    versions:
+      - effective_from: '1996-06-27'
+        formula: |-
+          10
+
+  - name: statutory_monthly_aid_payment_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    indexed_by: monthly_aid_payment_person_count_key
+    source: WIC 11450(a)(1)(A), maximum aid table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "Maximum aid: 1 $326; 2 $535; 3 $663; 4 $788; 5 $899; 6 $1,010; 7 $1,109; 8 $1,209; 9 $1,306; 10 or more $1,403"
+              table:
+                header: "Number of eligible needy persons in the same home / Maximum aid"
+                row_key: "Number of eligible needy persons in the same home"
+                column_key: "Maximum aid"
+    versions:
+      - effective_from: '1996-06-27'
+        values:
+          1: 326
+          2: 535
+          3: 663
+          4: 788
+          5: 899
+          6: 1010
+          7: 1109
+          8: 1209
+          9: 1306
+          10: 1403
+
+  - name: monthly_aid_payment_person_count_key
+    kind: derived
+    entity: Family
+    dtype: Count
+    period: Month
+    source: WIC 11450(a)(1)(A), maximum aid table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "Number of eligible needy persons in the same home ... 10 or more"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#monthly_aid_payment_largest_eligible_needy_person_table_row
+              output: monthly_aid_payment_largest_eligible_needy_person_table_row
+              hash: sha256:local
+    versions:
+      - effective_from: '1996-06-27'
+        formula: |-
+          if eligible_needy_person_count_in_same_home >= monthly_aid_payment_largest_eligible_needy_person_table_row: monthly_aid_payment_largest_eligible_needy_person_table_row else: eligible_needy_person_count_in_same_home
+
+  - name: statutory_monthly_aid_payment_schedule_amount
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: WIC 11450(a)(1)(A), maximum aid table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "the sum specified in the following table"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#statutory_monthly_aid_payment_amount
+              output: statutory_monthly_aid_payment_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#monthly_aid_payment_person_count_key
+              output: monthly_aid_payment_person_count_key
+              hash: sha256:local
+    versions:
+      - effective_from: '1996-06-27'
+        formula: |-
+          statutory_monthly_aid_payment_amount[monthly_aid_payment_person_count_key]
+
+  - name: adjusted_monthly_aid_payment_schedule_amount
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: WIC 11450(a)(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "as adjusted for cost-of-living increases pursuant to Section 11453 and paragraph (2)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#statutory_monthly_aid_payment_schedule_amount
+              output: statutory_monthly_aid_payment_schedule_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '1996-06-27'
+        formula: |-
+          statutory_monthly_aid_payment_schedule_amount + cost_of_living_adjustment_to_monthly_aid_payment_under_section_11453_and_paragraph_2
+
+  - name: monthly_aid_payment_cap_including_special_needs
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: WIC 11450(a)(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "shall the amount of aid paid for each month exceed the sum specified in the following table ... plus any special needs"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#adjusted_monthly_aid_payment_schedule_amount
+              output: adjusted_monthly_aid_payment_schedule_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '1996-06-27'
+        formula: |-
+          adjusted_monthly_aid_payment_schedule_amount + special_needs_under_subdivisions_c_e_and_f
+
+  - name: monthly_aid_payment
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: WIC 11450(a)(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "the family's income ... shall be deducted from the sum specified in the following table"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/wic/11450/a/1/A
+              excerpt: "In no case shall the amount of aid paid for each month exceed the sum ... plus any special needs"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#adjusted_monthly_aid_payment_schedule_amount
+              output: adjusted_monthly_aid_payment_schedule_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:policies/cdss/calworks/monthly-aid-payment#monthly_aid_payment_cap_including_special_needs
+              output: monthly_aid_payment_cap_including_special_needs
+              hash: sha256:local
+    versions:
+      - effective_from: '1996-06-27'
+        formula: |-
+          min(monthly_aid_payment_cap_including_special_needs, max(0, adjusted_monthly_aid_payment_schedule_amount - prospective_semiannual_family_income_after_exemptions_and_section_11451_5_calculation) + special_needs_under_subdivisions_c_e_and_f)
