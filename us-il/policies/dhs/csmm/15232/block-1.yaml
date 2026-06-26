@@ -1,0 +1,83 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-il/manual/dhs/csmm/15232/block-1
+  summary: |-
+    "determine eligibility and benefit amount by applying the 3/4 earned income deduction to the client's gross earned income"; "Allow this deduction for each employed person"; "Do not allow" it after specified job quit/reduction, employment refusal, or untimely income reporting without good cause.
+rules:
+  - name: earned_income_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: WAG 08-01-02-c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15232/block-1
+              excerpt: "3/4 earned income deduction"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3 / 4
+
+  - name: three_quarters_earned_income_deduction_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: WAG 08-01-02-c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15232/block-1
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15232/block-1
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_employed
+          and (active_case or intake_or_swaps_medical_to_cash_and_family_eligible_after_first_test)
+          and not person_quit_job_or_reduced_earnings_without_good_cause_within_30_day_period_before_month
+          and not person_refused_bona_fide_or_job_service_employment_without_good_cause_within_30_day_period_before_month
+          and not person_failed_without_good_cause_to_report_income_timely
+
+  - name: three_quarters_earned_income_deduction_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: WAG 08-01-02-c
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15232/block-1
+              excerpt: "deduct 3/4 of the gross earned income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/15232/block-1#earned_income_deduction_rate
+              output: earned_income_deduction_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/15232/block-1#three_quarters_earned_income_deduction_allowed
+              output: three_quarters_earned_income_deduction_allowed
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if three_quarters_earned_income_deduction_allowed: earned_income_deduction_rate * max(0, gross_earned_income) else: 0
