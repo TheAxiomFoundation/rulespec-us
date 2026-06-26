@@ -1,0 +1,164 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+  summary: |-
+    A family qualifies for TANF benefits if nonexempt income is at least $1 less than the Payment Level. TANF payments of less than $1 are not made. Non-regular roll checks must be at least $1. Regular monthly TANF benefits and IPE payments are rounded down to the nearest whole dollar.
+rules:
+  - name: tanf_minimum_cash_payment_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: WAG 10-01-02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "TANF payments of less than $1 are not made."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: non_regular_roll_minimum_check_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: WAG 10-01-02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "Non-regular roll (Mercury) checks must be at least $1."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: tanf_cash_eligible
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: WAG 10-01-02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "nonexempt income is at least $1 less than the Payment Level"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "If nonexempt income is equal to or greater than the Payment Level, eligibility for cash benefits under the TANF program does not exist."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/15820/block-1#tanf_minimum_cash_payment_amount
+              output: tanf_minimum_cash_payment_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          payment_level - nonexempt_income >= tanf_minimum_cash_payment_amount
+
+  - name: regular_monthly_tanf_benefit
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: WAG 10-01-02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "Regular monthly TANF benefits ... are rounded down to the nearest whole dollar."
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "TANF payments of less than $1 are not made."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/15820/block-1#tanf_minimum_cash_payment_amount
+              output: tanf_minimum_cash_payment_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if floor(unrounded_regular_monthly_tanf_benefit) >= tanf_minimum_cash_payment_amount: floor(unrounded_regular_monthly_tanf_benefit) else: 0
+
+  - name: initial_prorated_entitlement_payment
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: WAG 10-01-02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "Initial Prorated Entitlement (IPE) payments are rounded down to the nearest whole dollar."
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "TANF payments of less than $1 are not made."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/15820/block-1#tanf_minimum_cash_payment_amount
+              output: tanf_minimum_cash_payment_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if floor(unrounded_initial_prorated_entitlement_payment) >= tanf_minimum_cash_payment_amount: floor(unrounded_initial_prorated_entitlement_payment) else: 0
+
+  - name: non_regular_roll_check_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: WAG 10-01-02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/15820/block-1
+              excerpt: "Non-regular roll (Mercury) checks must be at least $1."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/15820/block-1#non_regular_roll_minimum_check_amount
+              output: non_regular_roll_minimum_check_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if unrounded_non_regular_roll_check_amount >= non_regular_roll_minimum_check_amount: unrounded_non_regular_roll_check_amount else: 0
