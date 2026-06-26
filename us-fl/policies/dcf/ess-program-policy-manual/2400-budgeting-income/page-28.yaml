@@ -1,0 +1,310 @@
+format: rulespec/v1
+imports:
+  - us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+  summary: |-
+    For TCA, ineligible noncitizens and individuals whose needs are excluded because of welfare enumeration are not eligible for the standard deduction. The initial standard income deduction is $90. Each individual who has earnings, is otherwise eligible, and whose needs are considered may receive the $200 and 1/2 earned income disregard after the standard earned income deduction if the individual received TCA in one of the past four months or has income after the $90 disregard below the applicable payment standard. Penalized individuals remain eligible for all earned income disregards, up-front diversion cash does not count as a month of cash assistance, and TCA does not allow the child care disregard in budgeting.
+rules:
+  - name: tca_full_earned_income_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "$200 and 1/2 earned income disregard"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          200
+
+  - name: tca_earned_income_disregard_fraction_after_first_amount
+    kind: parameter
+    dtype: Rate
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "$200 and 1/2 earned income disregard"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          1 / 2
+
+  - name: tca_lookback_months_for_full_earned_income_disregard
+    kind: parameter
+    dtype: Count
+    period: Month
+    source: ESS Program Policy Manual 2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "one of the past four months"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          4
+
+  - name: tca_remainder_of_first_earned_income_disregard_after_standard
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+              output: tca_standard_earned_income_disregard_amount
+              hash: sha256:6f5332fa22cf51fcb905d7f5c53a24e26ebcee88c64c39733d5f5c9741a1b11d
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-28#tca_full_earned_income_disregard_amount
+              output: tca_full_earned_income_disregard_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "subtract $110 for a total of $200"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          max(0, tca_full_earned_income_disregard_amount - tca_standard_earned_income_disregard_amount)
+
+  - name: tca_standard_deduction_disregard_available_to_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0305
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "ineligible noncitizens"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "individuals whose needs are excluded because of welfare enumeration"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          not individual_is_ineligible_noncitizen
+          and not individual_needs_excluded_because_of_welfare_enumeration
+
+  - name: tca_month_counts_for_full_earned_income_disregard_history
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "eligible for and received TCA in one of the past four months"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "Receipt of an up-front diversion cash payment does not count as a month of cash assistance"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          individual_was_eligible_for_and_received_tca_in_month
+          and not month_was_up_front_diversion_cash_payment
+
+  - name: tca_countable_income_after_standard_earned_disregard
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+              output: tca_standard_earned_income_disregard_amount
+              hash: sha256:6f5332fa22cf51fcb905d7f5c53a24e26ebcee88c64c39733d5f5c9741a1b11d
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "This initial $90 earned income disregard is subtracted from earned income, and then unearned income is added"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          max(0, individual_gross_earned_income - tca_standard_earned_income_disregard_amount) + individual_unearned_income + individual_deemed_income
+
+  - name: tca_individual_eligible_for_full_earned_income_disregard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "Each individual (who has earnings and is otherwise eligible) whose needs are considered"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "Note: Individuals penalized due to Child Support Enforcement noncompliance or third party liability are eligible for all earned income disregards."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "have been eligible for and received TCA in one of the past four months"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "less the $90 standard earned income disregard, which is less than the applicable payment standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-28#tca_countable_income_after_standard_earned_disregard
+              output: tca_countable_income_after_standard_earned_disregard
+              hash: sha256:local
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          individual_has_earnings
+          and (individual_otherwise_eligible_for_tca_earned_income_disregards or individual_penalized_due_to_child_support_enforcement_noncompliance or individual_penalized_due_to_third_party_liability)
+          and individual_needs_considered_in_tca_or_mfam_eligibility
+          and (individual_received_tca_countable_months_in_past_lookback >= 1 or tca_countable_income_after_standard_earned_disregard < applicable_tca_payment_standard_for_sfu)
+
+  - name: tca_additional_earned_income_disregard_after_standard
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-28#tca_individual_eligible_for_full_earned_income_disregard
+              output: tca_individual_eligible_for_full_earned_income_disregard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+              output: tca_standard_earned_income_disregard_amount
+              hash: sha256:6f5332fa22cf51fcb905d7f5c53a24e26ebcee88c64c39733d5f5c9741a1b11d
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-28#tca_remainder_of_first_earned_income_disregard_after_standard
+              output: tca_remainder_of_first_earned_income_disregard_after_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-28#tca_earned_income_disregard_fraction_after_first_amount
+              output: tca_earned_income_disregard_fraction_after_first_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "The $90 standard earned income disregard is included in the first $200 earned income disregard"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if tca_individual_eligible_for_full_earned_income_disregard: min(max(0, individual_gross_earned_income - tca_standard_earned_income_disregard_amount), tca_remainder_of_first_earned_income_disregard_after_standard) + (tca_earned_income_disregard_fraction_after_first_amount * max(0, individual_gross_earned_income - tca_standard_earned_income_disregard_amount - tca_remainder_of_first_earned_income_disregard_after_standard)) else: 0
+
+  - name: tca_total_earned_income_disregard_with_standard
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0314-2420.0315
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+              output: tca_standard_earned_income_disregard_amount
+              hash: sha256:6f5332fa22cf51fcb905d7f5c53a24e26ebcee88c64c39733d5f5c9741a1b11d
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-28#tca_additional_earned_income_disregard_after_standard
+              output: tca_additional_earned_income_disregard_after_standard
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "$90 standard earned income disregard is included in the first $200 earned income disregard"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          min(individual_gross_earned_income, tca_standard_earned_income_disregard_amount) + tca_additional_earned_income_disregard_after_standard
+
+  - name: tca_child_care_disregard_allowed_in_budgeting
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0325
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-28
+              excerpt: "TCA does not allow the child care disregard in budgeting."
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          false
