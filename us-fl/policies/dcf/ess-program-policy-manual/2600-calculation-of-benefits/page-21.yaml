@@ -1,0 +1,300 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+  summary: |-
+    TCA test budgets and deeming formulas must consider specified parent, stepparent, spouse, sponsor, and child-support collection cases before the Eligibility Standard Test. For any eligibility or benefit budget: total gross earned income; subtract $90; subtract the $200 and 1/2 earned income disregard if eligible; add unearned income; a surplus makes the AG ineligible; a deficit of at least $10 is issued as the benefit, and cash benefits under $10 are not issued. Sponsored noncitizen income and assets are deemed to the noncitizen, with special I-864 rules for affidavits signed on or after December 19, 1997.
+rules:
+  - name: tca_standard_earned_income_disregard
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "Subtract the standard disregard of $90."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+
+  - name: tca_remainder_earned_income_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "Subtract the remainder of $200 and 1/2 earned income disregard, if eligible."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          200
+
+  - name: tca_remainder_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 2620.0111.01 Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "Subtract the remainder of $200 and 1/2 earned income disregard, if eligible."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1 / 2
+
+  - name: tca_minimum_issuable_cash_benefit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Step 6 and note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "If a deficit of at least $10 results... Cash benefits are not issued for amounts less than $10."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: tca_income_after_standard_earned_income_disregard
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Steps 1-2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "Total the gross earned income. Subtract the standard disregard of $90."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, gross_earned_income - tca_standard_earned_income_disregard)
+
+  - name: tca_countable_earned_income_after_disregards
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Steps 1-3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "Subtract the remainder of $200 and 1/2 earned income disregard, if eligible."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if eligible_for_remainder_earned_income_disregard: max(0, tca_income_after_standard_earned_income_disregard - tca_remainder_earned_income_disregard_amount) * tca_remainder_earned_income_disregard_rate else: tca_income_after_standard_earned_income_disregard
+
+  - name: tca_budget_countable_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Step 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "Add unearned income to the remaining income."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tca_countable_earned_income_after_disregards + unearned_income
+
+  - name: tca_budget_has_surplus
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: 2620.0111.01 Step 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "If a surplus results, the AG is ineligible for TCA or RAP."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tca_budget_countable_income > applicable_budget_standard
+
+  - name: tca_assistance_group_eligible_after_budget
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: 2620.0111.01 Step 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "If a surplus results, the AG is ineligible for TCA or RAP."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not tca_budget_has_surplus
+
+  - name: tca_budget_deficit
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Step 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "If a deficit of at least $10 results, the remainder is the amount of the benefit to be issued."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, applicable_budget_standard - tca_budget_countable_income)
+
+  - name: tca_cash_benefit_to_issue
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0111.01 Step 6 and note
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "If a deficit of at least $10 results... Cash benefits are not issued for amounts less than $10."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if tca_budget_deficit >= tca_minimum_issuable_cash_benefit: tca_budget_deficit else: 0
+
+  - name: sponsored_noncitizen_sponsor_income_deemed_available
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0201 Sponsored Noncitizens
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "All of the income and assets of the noncitizen's sponsor is deemed to the noncitizen for purposes of determining eligibility."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if person_is_sponsored_noncitizen: sponsor_income else: 0
+
+  - name: sponsored_noncitizen_sponsor_assets_deemed_available
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0201 Sponsored Noncitizens
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "All of the income and assets of the noncitizen's sponsor is deemed to the noncitizen for purposes of determining eligibility."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if person_is_sponsored_noncitizen: sponsor_assets else: 0
+
+  - name: i_864_sponsor_and_spouse_income_deemed_for_tca
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0202.01 Noncitizens Sponsored On or After 12/19/97
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "sponsor signed an Affidavit of Support, USCIS Form I-864, on or after December 19, 1997"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if noncitizen_has_i_864_sponsor_in_relevant_period and not noncitizen_became_naturalized_citizen and not noncitizen_left_country: sponsor_income + sponsor_legal_spouse_income else: 0
+
+  - name: i_864_sponsor_and_spouse_assets_deemed_for_tca
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 2620.0202.01 Noncitizens Sponsored On or After 12/19/97
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-21
+              excerpt: "all of the income and assets of the sponsor and the sponsor's legal spouse considered"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if noncitizen_has_i_864_sponsor_in_relevant_period and not noncitizen_became_naturalized_citizen and not noncitizen_left_country: sponsor_assets + sponsor_legal_spouse_assets else: 0
