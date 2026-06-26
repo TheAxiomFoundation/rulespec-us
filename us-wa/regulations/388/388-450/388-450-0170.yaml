@@ -1,0 +1,253 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+  summary: If an individual is working, the department deducts the first $500 of total
+    household earned income, then subtracts 50% of the remaining monthly gross earned
+    income. Pre-approval dependent-care payments may be deducted for dependent children
+    or incapacitated adults getting cash assistance with the person, subject to proration,
+    gross-income cap, per-recipient table limits, non-parent/stepparent care provider,
+    and verification.
+rules:
+- name: earned_income_initial_deduction
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: us-wa/regulation/388/388-450/388-450-0170(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+          excerpt: deducting the first $500
+  versions:
+  - effective_from: '2019-12-01'
+    formula: '500'
+- name: remaining_earned_income_deduction_rate
+  kind: parameter
+  dtype: Rate
+  source: us-wa/regulation/388/388-450/388-450-0170(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+          excerpt: subtract 50% of the remaining monthly gross earned income
+  versions:
+  - effective_from: '2019-12-01'
+    formula: '0.50'
+- name: counted_earned_income_after_work_deductions
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  unit: USD
+  period: Month
+  source: us-wa/regulation/388/388-450/388-450-0170(1)-(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wa:regulations/388/388-450/388-450-0170#earned_income_initial_deduction
+          output: earned_income_initial_deduction
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wa:regulations/388/388-450/388-450-0170#remaining_earned_income_deduction_rate
+          output: remaining_earned_income_deduction_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '2019-12-01'
+    formula: max(0, max(0, household_gross_earned_income - earned_income_initial_deduction)
+      - (remaining_earned_income_deduction_rate * max(0, household_gross_earned_income
+      - earned_income_initial_deduction)))
+- name: dependent_care_hours_band_upper_bound
+  kind: parameter
+  dtype: Decimal
+  indexed_by: dependent_care_hours_band
+  versions:
+  - effective_from: '2019-12-01'
+    values:
+      0: 40
+      1: 80
+      2: 120
+  source: us-wa/regulation/388/388-450/388-450-0170(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+          table:
+            header: Dependent Care Maximum Deductions
+            row_key: Hours Worked Per Month
+            column_key: row selector
+- name: dependent_care_hours_band
+  kind: derived
+  entity: Person
+  dtype: Integer
+  period: Month
+  source: us-wa/regulation/388/388-450/388-450-0170(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+          table:
+            header: Dependent Care Maximum Deductions
+            row_key: Hours Worked Per Month
+            column_key: row selector
+  versions:
+  - effective_from: '2019-12-01'
+    formula: 'if hours_worked_per_month <= dependent_care_hours_band_upper_bound[0]:
+      0 else: if hours_worked_per_month <= dependent_care_hours_band_upper_bound[1]:
+      1 else: if hours_worked_per_month <= dependent_care_hours_band_upper_bound[2]:
+      2 else: 3'
+- name: dependent_care_child_under_two_monthly_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  indexed_by: dependent_care_hours_band
+  source: us-wa/regulation/388/388-450/388-450-0170(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+          table:
+            header: Dependent Care Maximum Deductions
+            row_key: Hours Worked Per Month
+            column_key: Child Under Two Years of Age
+  versions:
+  - effective_from: '2019-12-01'
+    values:
+      0: 50.0
+      1: 100.0
+      2: 150.0
+      3: 200.0
+- name: dependent_care_age_two_or_incapacitated_adult_monthly_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  indexed_by: dependent_care_hours_band
+  source: us-wa/regulation/388/388-450/388-450-0170(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+          table:
+            header: Dependent Care Maximum Deductions
+            row_key: Hours Worked Per Month
+            column_key: Child Two Years of Age and Older or Incapacitated Adult
+  versions:
+  - effective_from: '2019-12-01'
+    values:
+      0: 43.75
+      1: 87.5
+      2: 131.25
+      3: 175.0
+- name: dependent_care_recipient_monthly_limit
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Month
+  source: us-wa/regulation/388/388-450/388-450-0170(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wa:regulations/388/388-450/388-450-0170#dependent_care_child_under_two_monthly_limit
+          output: dependent_care_child_under_two_monthly_limit
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wa:regulations/388/388-450/388-450-0170#dependent_care_age_two_or_incapacitated_adult_monthly_limit
+          output: dependent_care_age_two_or_incapacitated_adult_monthly_limit
+          hash: sha256:local
+  versions:
+  - effective_from: '2019-12-01'
+    formula: 'if recipient_is_dependent_child_under_two_years_of_age: dependent_care_child_under_two_monthly_limit[dependent_care_hours_band]
+      else: dependent_care_age_two_or_incapacitated_adult_monthly_limit[dependent_care_hours_band]'
+- name: dependent_care_deduction_allowed_for_recipient
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: us-wa/regulation/388/388-450/388-450-0170(4), (b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+  versions:
+  - effective_from: '2019-12-01'
+    formula: 'care_paid_before_benefit_approval
+
+      and recipient_gets_cash_assistance_with_person
+
+      and care_provider_is_not_parent_or_stepparent
+
+      and expense_verified'
+- name: dependent_care_recipient_deduction
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Month
+  source: us-wa/regulation/388/388-450/388-450-0170(4), (a), (b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wa/regulation/388/388-450/388-450-0170
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wa:regulations/388/388-450/388-450-0170#dependent_care_recipient_monthly_limit
+          output: dependent_care_recipient_monthly_limit
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wa:regulations/388/388-450/388-450-0170#dependent_care_deduction_allowed_for_recipient
+          output: dependent_care_deduction_allowed_for_recipient
+          hash: sha256:local
+  versions:
+  - effective_from: '2019-12-01'
+    formula: |-
+      if dependent_care_deduction_allowed_for_recipient: min(max(0, gross_monthly_income), min(dependent_care_amount_paid_prorated_to_eligibility_date, dependent_care_recipient_monthly_limit)) else: 0
