@@ -1,0 +1,341 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+  summary: |-
+    If an individual in the assistance group is prospectively ineligible for the following month, needs are removed the following month; if 10-day advance notice cannot be given, an overpayment exists. Benefits must be at least $10, except lesser benefits are issued when due to proration or mandatory recoupment. Vendor-paid expenses paid in full are not allowed under income-disregard policy. The first $90 of each individual's gross earned income is deducted in regular and deeming budgets.
+rules:
+  - name: tca_minimum_issuable_benefit_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0208
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "Benefits must be at least $10."
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          10
+
+  - name: tca_advance_notice_days_before_reduction_or_cancellation
+    kind: parameter
+    dtype: Count
+    source: ESS Program Policy Manual 2420.0207.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "10 day advance notice"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          10
+
+  - name: tca_standard_earned_income_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0304
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "The first $90 of each individual's gross earned income is deducted"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          90
+
+  - name: tca_benefit_issued_after_minimum_rule
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0208
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_minimum_issuable_benefit_amount
+              output: tca_minimum_issuable_benefit_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "Assistance groups entitled to a lesser amount will not receive a benefit"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "If the TCA benefit is less than $10 due to proration, the benefit will be issued."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "mandatory recoupment of an overpayment reduces the benefit to less than $10"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if calculated_tca_benefit_amount < tca_minimum_issuable_benefit_amount and not benefit_less_than_minimum_due_to_proration and not mandatory_recoupment_of_overpayment_reduces_benefit_below_minimum: 0 else: max(0, calculated_tca_benefit_amount)
+
+  - name: tca_recipient_status_continues_when_minimum_benefit_not_issued
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0208
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "continue to be considered TCA recipients"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          assistance_group_ineligible_for_issuance_because_benefit_is_less_than_minimum
+
+  - name: medicaid_eligible_when_minimum_tca_benefit_not_issued
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0208
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "and are eligible for Medicaid benefits"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          assistance_group_ineligible_for_issuance_because_benefit_is_less_than_minimum
+
+  - name: tca_overpayment_exists_when_notice_for_removed_needs_not_possible
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0207.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "If it is not possible to give a 10 day advance notice ... an overpayment will exist"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          assistance_group_has_individual_whose_needs_must_be_removed_following_month
+          and not possible_to_give_advance_notice_days_before_following_month_cancellation_or_reduction
+
+  - name: individual_needs_removed_following_month
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0207.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "If an individual in the assistance group is determined to be prospectively ineligible for the following month, his needs must be removed"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          individual_in_assistance_group
+          and individual_determined_prospectively_ineligible_for_following_month
+
+  - name: removed_individual_income_continues_to_be_budgeted
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0207.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "the income must continue to be budgeted"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          individual_needs_removed
+          and removed_individual_income_must_continue_to_be_considered_in_benefit
+
+  - name: removed_individual_income_removed_same_month
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0207.02
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "the income is removed effective the same month the individual is removed"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          individual_needs_removed
+          and not removed_individual_income_must_continue_to_be_considered_in_benefit
+
+  - name: expense_allowed_under_income_disregard_policy
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0301
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "Any expense which is paid in full by a vendor payment cannot be allowed"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          expense_claimed_under_income_disregard_policy
+          and not expense_paid_in_full_by_vendor_payment
+
+  - name: standard_earned_income_disregard_in_regular_budget
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0304
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+              output: tca_standard_earned_income_disregard_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "must be budgeted for each individual whose earned income is considered in determining eligibility"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if earned_income_considered_in_tca_eligibility: min(max(0, gross_earned_income), tca_standard_earned_income_disregard_amount) else: 0
+
+  - name: balance_after_standard_earned_income_disregard_in_regular_budget
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0304
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#standard_earned_income_disregard_in_regular_budget
+              output: standard_earned_income_disregard_in_regular_budget
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "(Gross Earned Income) - (Standard Earned Income Disregard) = (Balance after Standard Earned Income Disregard)."
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          max(0, gross_earned_income - standard_earned_income_disregard_in_regular_budget)
+
+  - name: standard_earned_income_disregard_in_deeming_budget
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0304
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#tca_standard_earned_income_disregard_amount
+              output: tca_standard_earned_income_disregard_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "The first $90 of each individual's gross earned income is deducted in the deeming budget."
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if earned_income_considered_in_tca_deeming_budget: min(max(0, gross_earned_income), tca_standard_earned_income_disregard_amount) else: 0
+
+  - name: balance_after_standard_earned_income_disregard_in_deeming_budget
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0304
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-fl:policies/dcf/ess-program-policy-manual/2400-budgeting-income/page-27#standard_earned_income_disregard_in_deeming_budget
+              output: standard_earned_income_disregard_in_deeming_budget
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-27
+              excerpt: "(Gross Earned Income) - (Standard Earned Income Disregard) = (Balance after Standard Earned Income Disregard)."
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          max(0, gross_earned_income - standard_earned_income_disregard_in_deeming_budget)
