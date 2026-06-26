@@ -1,0 +1,242 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+  summary: |-
+    TCA vendor/subsidized payment standards use the amount the individual is actually obligated to pay; zero public-housing rent obligation is Tier III. Tier I applies above $50 and to specified shelter/homeless/teen-parent alternate living cases; Tier II applies from $.01 to $50; Tier III applies to shelter-related costs without purchased shelter obligation, no shelter costs, and teen parents living with a parent, legal guardian, or adult relative. Questionable shelter obligations without proof are budgeted at Tier III until proof is provided.
+rules:
+  - name: tca_tier_i_shelter_obligation_threshold_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0340, Tier I/Tier II
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+              excerpt: "Tier I ... shelter obligation greater than $50 ... Tier II ... $.01 to $50"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          50
+
+  - name: tca_tier_ii_minimum_shelter_obligation_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0340, Tier II
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+              excerpt: "Tier II ... shelter obligation of $.01 to $50"
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          0.01
+
+  - name: tca_countable_shelter_obligation_for_payment_tier
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0339
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if assistance_group_subsidized_by_public_housing_authority: public_housing_authority_actual_rent_obligation_amount else: assistance_group_shelter_obligation_amount
+
+  - name: tca_tier_i_payment_standard_applies
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0340, Tier I
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          tca_countable_shelter_obligation_for_payment_tier > tca_tier_i_shelter_obligation_threshold_amount
+          or assistance_group_is_homeless
+          or assistance_group_lives_in_shelter
+          or battered_woman_lives_in_shelter
+          or teen_parent_lives_in_alternate_living_arrangement
+
+  - name: tca_tier_ii_payment_standard_applies
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0340, Tier II
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          tca_countable_shelter_obligation_for_payment_tier >= tca_tier_ii_minimum_shelter_obligation_amount
+          and tca_countable_shelter_obligation_for_payment_tier <= tca_tier_i_shelter_obligation_threshold_amount
+          and not tca_tier_i_payment_standard_applies
+
+  - name: tca_tier_iii_payment_standard_applies
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0339 and 2420.0340, Tier III
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          (assistance_group_responsible_for_shelter_related_costs and not assistance_group_has_purchased_shelter_obligation)
+          or assistance_group_has_no_shelter_or_shelter_related_costs
+          or teen_parent_lives_in_home_of_parent_legal_guardian_or_adult_relative
+          or (assistance_group_subsidized_by_public_housing_authority and public_housing_authority_actual_rent_obligation_amount == 0)
+
+  - name: tca_payment_standard_tier
+    kind: derived
+    entity: TanfUnit
+    dtype: Integer
+    period: Month
+    source: ESS Program Policy Manual 2420.0339 and 2420.0340
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if tca_tier_i_payment_standard_applies: 1 else: if tca_tier_ii_payment_standard_applies: 2 else: 3
+
+  - name: tca_shelter_obligation_statement_acceptable
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0341
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          (shelter_obligation_reported_at_application and not shelter_obligation_questionable)
+          or ((scheduled_complete_eligibility_review or recipient_moves or shelter_obligation_increase_reported_would_raise_tier) and not shelter_obligation_questionable)
+
+  - name: tca_tier_iii_budgeted_for_questionable_shelter_obligation_without_proof
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0341
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          (shelter_obligation_reported_at_application or scheduled_complete_eligibility_review)
+          and shelter_obligation_questionable
+          and not proof_of_shelter_obligation_provided
+
+  - name: tca_shelter_standard_applies_after_late_proof
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0341
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          proof_of_shelter_obligation_later_provided
+          and tca_payment_month_is_first_month_following_receipt_of_proof
+
+  - name: tca_shelter_obligation_continues_during_eviction_process
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: ESS Program Policy Manual 2420.0341
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          recipient_has_shelter_obligation
+          and recipient_in_process_of_being_evicted
+
+  - name: tca_double_stepparent_spouse_shelter_obligation_share
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: ESS Program Policy Manual 2420.0341, stepparent situations
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2400-budgeting-income/page-29
+    versions:
+      - effective_from: '1996-07-01'
+        formula: |-
+          if double_stepparent_case: total_monthly_shelter_obligation_of_spouses / 2 else: total_monthly_shelter_obligation_of_spouses
