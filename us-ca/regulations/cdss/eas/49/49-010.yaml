@@ -1,0 +1,123 @@
+format: rulespec/v1
+imports:
+  - us-ca:regulations/cdss/eas/49/49-040#ca_capi_resource_eligible
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/regulation/cdss/eas/49/49-010
+  summary: |-
+    ".1 To be eligible for the CAPI a person must complete the application process and meet all of the following conditions" including non-citizen immigration status, age 65 or over/blind/disabled SSI status, SSI/SSP ineligibility solely due to immigration status, California residence, permitted income and resources, and other SSI/SSP eligibility criteria except as modified by CAPI regulations. ".2 A person is NOT eligible for CAPI" for specified public-institution, felony-flight, probation/parole, outside-United-States, or other-benefits filing disqualifications; a person outside the United States for at least 30 consecutive days remains considered outside until back for at least 30 consecutive days.
+rules:
+  - name: ca_capi_extended_absence_days
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: MPP 49-010.241
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/cdss/eas/49/49-010
+              excerpt: "outside of the United States for at least 30 consecutive days"
+    versions:
+      - effective_from: '2003-10-16'
+        formula: |-
+          30
+
+  - name: ca_capi_return_presence_days_required_after_extended_absence
+    kind: parameter
+    dtype: Count
+    period: Day
+    source: MPP 49-010.241
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/regulation/cdss/eas/49/49-010
+              excerpt: "back in the United States for at least 30 consecutive days"
+    versions:
+      - effective_from: '2003-10-16'
+        formula: |-
+          30
+
+  - name: ca_capi_considered_remaining_outside_united_states
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: MPP 49-010.241
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/cdss/eas/49/49-010
+              excerpt: "considered to remain outside the United States until he or she has been back in the United States for at least 30 consecutive days"
+    versions:
+      - effective_from: '2003-10-16'
+        formula: |-
+          consecutive_days_outside_united_states >= ca_capi_extended_absence_days
+          and consecutive_days_back_in_united_states < ca_capi_return_presence_days_required_after_extended_absence
+
+  - name: ca_capi_outside_united_states_disqualification
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: MPP 49-010.24-.241
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/cdss/eas/49/49-010
+              excerpt: "Is outside of the United States for an entire calendar month"
+    versions:
+      - effective_from: '2003-10-16'
+        formula: |-
+          person_is_outside_united_states_for_entire_calendar_month
+          or (ca_capi_considered_remaining_outside_united_states and considered_outside_status_covers_entire_calendar_month)
+
+  - name: ca_capi_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: MPP 49-010.1-.2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/regulation/cdss/eas/49/49-010
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ca:regulations/cdss/eas/49/49-040#ca_capi_resource_eligible
+              output: ca_capi_resource_eligible
+              hash: sha256:adc8fa1a54d2ffae398d3a43f00f8c43405c9055790b01b26b9240d56e146123
+    versions:
+      - effective_from: '2003-10-16'
+        formula: |-
+          person_completed_capi_application_process
+          and person_is_non_citizen
+          and person_meets_appropriate_immigration_status_provisions_described_in_mpp_section_49_020
+          and (person_is_age_65_or_over or person_is_blind_for_ssi_ssp_purposes or person_is_disabled_for_ssi_ssp_purposes)
+          and person_is_ineligible_for_ssi_ssp_solely_due_to_immigration_status_under_title_iv_of_public_law_104_193
+          and person_resides_in_california
+          and person_income_does_not_exceed_capi_permitted_limit
+          and ca_capi_resource_eligible
+          and person_meets_other_current_ssi_ssp_eligibility_criteria_except_as_modified_by_capi_regulations
+          and not person_is_resident_of_public_institution_for_entire_calendar_month
+          and not person_flees_to_avoid_felony_prosecution_or_custody_or_confinement_after_conviction
+          and not person_violates_condition_of_probation_or_parole_imposed_under_federal_or_state_law
+          and not ca_capi_outside_united_states_disqualification
+          and not person_fails_to_file_for_all_other_possible_benefits_described_in_mpp_section_49_045
