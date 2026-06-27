@@ -1,0 +1,188 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+  summary: |-
+    Compute OSS payments for a single individual, an individual with dependents, and an SSI eligible couple. For a single individual, gross income less exclusions minus personal needs allowance is available income; recognized cost of care minus available income is the deficit; the deficit equals the OSS payment. For an individual with dependents, compute dependent countable income, dependent need, deduct that need from the individual's income, and the resulting deficit equals the OSS payment. HCDA income eligibility requires income not exceeding the state income standard.
+rules:
+  - name: oss_budget_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.06 SSI Eligible Couple; 2640.0131.04-.05 OSS computation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "each individual will be considered as an assistance group with that individual's own income considered"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if ssi_eligible_couple_member_budgeted_as_own_assistance_group: individual_own_gross_income_less_exclusions else: individual_gross_income_less_exclusions
+
+  - name: oss_dependent_countable_unearned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.05, Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "dependent's combined unearned income minus the unearned income disregards"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, dependent_combined_unearned_income - dependent_unearned_income_disregards)
+
+  - name: oss_dependent_countable_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.05, Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "dependent's combined earned income minus the earned income disregards"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, dependent_combined_earned_income - dependent_earned_income_disregards)
+
+  - name: oss_dependent_countable_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.05, Step 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "Add the dependent's countable earned and unearned income together"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          oss_dependent_countable_earned_income + oss_dependent_countable_unearned_income
+
+  - name: oss_dependent_need
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.05, Step 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "spouse's need allowance plus the need allowance for each child minus the dependents countable income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, spouse_need_allowance + child_need_allowances - oss_dependent_countable_income)
+
+  - name: oss_income_available_for_cost_of_care
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.04 Step 1; 2640.0131.05 Steps 1 and 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "Deduct the dependent's need (if any) from the individual's income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if individual_has_dependents: oss_budget_income - personal_needs_allowance - oss_dependent_need else: oss_budget_income - personal_needs_allowance
+
+  - name: fl_oss
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 2640.0131.04 Step 2-3; 2640.0131.05 Step 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "recognized cost of care minus available income equals the deficit. The deficit in dollars and cents equals the OSS payment."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, recognized_cost_of_care - oss_income_available_for_cost_of_care)
+
+  - name: hcda_income_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 2640.0133 HCDA Eligibility Determination
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-fl/manual/dcf/ess-program-policy-manual/2600-calculation-of-benefits/page-58
+              excerpt: "an individual must not have income that exceeds the state income standard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_is_hcda_applicant_or_recipient
+          and (
+            (
+              not married_couple_living_in_same_hcda_home_both_hcda_applicants_or_recipients
+              and hcda_individual_income <= hcda_state_income_standard
+            )
+            or (
+              married_couple_living_in_same_hcda_home_both_hcda_applicants_or_recipients
+              and couple_chooses_hcda_couple_treatment
+              and hcda_couple_income <= hcda_couple_state_income_standard
+            )
+            or (
+              married_couple_living_in_same_hcda_home_both_hcda_applicants_or_recipients
+              and couple_chooses_hcda_individual_treatment
+              and hcda_individual_income <= hcda_state_income_standard
+            )
+            or (
+              married_couple_living_in_same_hcda_home_both_hcda_applicants_or_recipients
+              and couple_not_eligible_as_hcda_couple_on_income
+              and hcda_individual_income <= hcda_state_income_standard
+            )
+          )
