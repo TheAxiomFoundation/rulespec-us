@@ -2,6 +2,10 @@
 
 Georgia RuleSpec source registry and policy metadata.
 
+This directory is the canonical home for Georgia RuleSpec content. It absorbs
+the former standalone `TheAxiomFoundation/rulespec-us-ga` repository, which is
+archived after the move to the country-level `rulespec-us` monorepo.
+
 ## Contents
 
 - `sources/`: source slices, target manifests, and sidecar metadata when available.
