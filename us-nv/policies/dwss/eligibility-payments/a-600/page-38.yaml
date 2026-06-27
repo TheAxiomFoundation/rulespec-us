@@ -1,0 +1,230 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+  summary: '"The benefit amount is determined by comparing the net income after the
+    application of all earned income disregards and dependent care deductions compared
+    to the payment allowance for the household size. A benefit is always a whole dollar
+    amount. Round all amounts down to the nearest dollar. The minimum benefit amount
+    is $10."'
+rules:
+- name: tanf_minimum_issuable_benefit
+  kind: parameter
+  dtype: Money
+  period: Month
+  unit: USD
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: The minimum benefit amount is $10.
+  versions:
+  - effective_from: '2025-08-11'
+    formula: '10'
+- name: employment_retention_payment_amount
+  kind: parameter
+  dtype: Money
+  period: Month
+  unit: USD
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: eligible for a $50 per month Employment Retention Payment
+  versions:
+  - effective_from: '2025-08-11'
+    formula: '50'
+- name: employment_retention_payment_duration_months
+  kind: parameter
+  dtype: Count
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: for six months
+  versions:
+  - effective_from: '2025-08-11'
+    formula: '6'
+- name: earned_income_for_employment_retention_payment_minimum
+  kind: parameter
+  dtype: Money
+  period: Month
+  unit: USD
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: in which at least $1 of the income is earned
+  versions:
+  - effective_from: '2025-08-11'
+    formula: '1'
+- name: snap_net_income_reduction_rate
+  kind: parameter
+  dtype: Rate
+  source: A-660.12 TANF Budgeting Steps
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: multiplying the net income by 0.3
+  versions:
+  - effective_from: '2025-08-11'
+    formula: '0.3'
+- name: tanf_gross_income_poverty_test_rate
+  kind: parameter
+  dtype: Rate
+  source: A-660.12 TANF Budgeting Steps, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: 130% of the Federal Poverty Level
+  versions:
+  - effective_from: '2025-08-11'
+    formula: '1.30'
+- name: tanf_cash_gross_income_test_passes
+  kind: derived
+  entity: TanfUnit
+  dtype: Judgment
+  period: Month
+  source: A-660.12 TANF Budgeting Steps, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: If the Total Income is greater than the 130% of poverty. Case is
+            ineligible for cash benefits.
+  versions:
+  - effective_from: '2025-08-11'
+    formula: total_income_for_tanf_gross_income_test <= tanf_gross_income_poverty_test_rate
+      * federal_poverty_level_for_family_size
+- name: nv_tanf
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: comparing the net income ... to the payment allowance
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-nv:policies/dwss/eligibility-payments/a-600/page-38#tanf_minimum_issuable_benefit
+          output: tanf_minimum_issuable_benefit
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-08-11'
+    formula: 'if not tanf_cash_gross_income_test_passes: 0 else: if max(0, floor(tanf_payment_allowance_for_household_size
+      - tanf_net_income_after_disregards_and_dependent_care_deductions)) == 0: 0 else:
+      if supplemental_payment_due or payment_after_overpayment_recoupment_processed:
+      max(0, floor(tanf_payment_allowance_for_household_size - tanf_net_income_after_disregards_and_dependent_care_deductions))
+      else: max(tanf_minimum_issuable_benefit, max(0, floor(tanf_payment_allowance_for_household_size
+      - tanf_net_income_after_disregards_and_dependent_care_deductions)))'
+- name: monthly_snap_allotment
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: A-660.12 TANF Budgeting Steps
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: multiplying the net income by 0.3 (round up) and subtracting that
+            amount from the maximum allotment
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-nv:policies/dwss/eligibility-payments/a-600/page-38#snap_net_income_reduction_rate
+          output: snap_net_income_reduction_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-08-11'
+    formula: max(0, maximum_snap_allotment_for_household_size - ceil(snap_net_income
+      * snap_net_income_reduction_rate))
+- name: employment_retention_payment_eligible
+  kind: derived
+  entity: TanfUnit
+  dtype: Judgment
+  period: Month
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: If a household is due to terminate for excess income (in which
+            at least $1 of the income is earned)
+  versions:
+  - effective_from: '2025-08-11'
+    formula: 'household_due_to_terminate_for_excess_income
+
+      and earned_income_in_terminating_household >= earned_income_for_employment_retention_payment_minimum
+
+      and employment_retention_payment_month_number <= employment_retention_payment_duration_months'
+- name: employment_retention_payment
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: A-660.12 TANF Benefit Amount/SNAP Allotment note
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nv/manual/dwss/eligibility-payments/a-600/page-38
+          excerpt: eligible for a $50 per month Employment Retention Payment (ERP)
+            for six months
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-nv:policies/dwss/eligibility-payments/a-600/page-38#employment_retention_payment_amount
+          output: employment_retention_payment_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-08-11'
+    formula: 'if employment_retention_payment_eligible: employment_retention_payment_amount
+      else: 0'
