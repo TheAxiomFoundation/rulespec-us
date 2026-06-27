@@ -1,0 +1,202 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+  summary: Effective Date January 1, 2023. If total countable income is equal to or
+    greater than the flat grant amount for the assistance unit size, the assistance
+    unit is ineligible. If total countable income is less than the flat grant amount,
+    the deficit rounded down, if $10 or more, is the grant amount. If deficit is less
+    than $10, the assistance unit is FITAP eligible but no grant is paid. Flat grant
+    amounts are listed for 1 through 18 persons; for households exceeding 18 persons,
+    add the flat grant amount for the number in excess of 18 to the flat grant amount
+    for 18 persons and subtract $100.
+rules:
+- name: fitap_flat_grant_amount_by_person_count
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  indexed_by: assistance_unit_size
+  source: B-641-1-1-FITAP - PO Flat Grant Amount
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: 'Number of Persons / Flat Grant Amount: 1 $244 ... 18 $1,678'
+          table:
+            header: B-641-1-1-FITAP - PO Flat Grant Amount
+            row_key: Number of Persons
+            column_key: Flat Grant Amount
+  versions:
+  - effective_from: '2023-01-01'
+    values:
+      1: 244
+      2: 376
+      3: 484
+      4: 568
+      5: 654
+      6: 732
+      7: 804
+      8: 882
+      9: 954
+      10: 1024
+      11: 1102
+      12: 1180
+      13: 1260
+      14: 1340
+      15: 1424
+      16: 1514
+      17: 1582
+      18: 1678
+- name: fitap_flat_grant_max_listed_persons
+  kind: parameter
+  dtype: Count
+  source: B-641-1-1-FITAP - PO Flat Grant Amount, Note 1
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: 18+ See Note 1
+  versions:
+  - effective_from: '2023-01-01'
+    formula: '18'
+- name: fitap_large_unit_subtraction
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: B-641-1-1-FITAP - PO Flat Grant Amount, Note 1
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: subtract $100
+  versions:
+  - effective_from: '2023-01-01'
+    formula: '100'
+- name: fitap_minimum_payable_deficit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Month
+  source: B-641-1-FITAP - PO Determination of Eligibility and Grant Amount
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: if $10 or more, is the grant amount. If deficit is less than $10
+  versions:
+  - effective_from: '2023-01-01'
+    formula: '10'
+- name: fitap_flat_grant_amount
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: B-641-1-1-FITAP - PO Flat Grant Amount
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: To determine the amount for households exceeding 18 persons, add
+            the flat grant amount for the number in excess of 18 to the flat grant
+            amount for 18 persons and subtract $100.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:policies/dcfs/economic-independence/b-640-fitap-income-limits-398921#fitap_flat_grant_amount_by_person_count
+          output: fitap_flat_grant_amount_by_person_count
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:policies/dcfs/economic-independence/b-640-fitap-income-limits-398921#fitap_flat_grant_max_listed_persons
+          output: fitap_flat_grant_max_listed_persons
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:policies/dcfs/economic-independence/b-640-fitap-income-limits-398921#fitap_large_unit_subtraction
+          output: fitap_large_unit_subtraction
+          hash: sha256:local
+  versions:
+  - effective_from: '2023-01-01'
+    formula: 'if assistance_unit_size > fitap_flat_grant_max_listed_persons: fitap_flat_grant_amount_by_person_count[fitap_flat_grant_max_listed_persons]
+      + fitap_flat_grant_amount_by_person_count[assistance_unit_size - fitap_flat_grant_max_listed_persons]
+      - fitap_large_unit_subtraction else: fitap_flat_grant_amount_by_person_count[assistance_unit_size]'
+- name: fitap_eligible
+  kind: derived
+  entity: TanfUnit
+  dtype: Judgment
+  period: Month
+  source: B-641-1-FITAP - PO Determination of Eligibility and Grant Amount
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: If the total countable income is equal to or greater than the flat
+            grant amount for the assistance unit size, the assistance unit is ineligible.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:policies/dcfs/economic-independence/b-640-fitap-income-limits-398921#fitap_flat_grant_amount
+          output: fitap_flat_grant_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '2023-01-01'
+    formula: total_countable_income < fitap_flat_grant_amount
+- name: la_fitap
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: B-641-1-FITAP - PO Determination of Eligibility and Grant Amount
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-la/manual/dcfs/economic-independence/b-640-fitap-income-limits-398921
+          excerpt: If total countable income is less than the flat grant amount ...
+            the deficit rounded down, if $10 or more, is the grant amount. If deficit
+            is less than $10 ... no grant is paid.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:policies/dcfs/economic-independence/b-640-fitap-income-limits-398921#fitap_flat_grant_amount
+          output: fitap_flat_grant_amount
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:policies/dcfs/economic-independence/b-640-fitap-income-limits-398921#fitap_minimum_payable_deficit
+          output: fitap_minimum_payable_deficit
+          hash: sha256:local
+  versions:
+  - effective_from: '2023-01-01'
+    formula: "if total_countable_income < fitap_flat_grant_amount:\n  if floor(fitap_flat_grant_amount\
+      \ - total_countable_income) >= fitap_minimum_payable_deficit:\n    floor(fitap_flat_grant_amount\
+      \ - total_countable_income)\n  else:\n    0\nelse:\n  0"
