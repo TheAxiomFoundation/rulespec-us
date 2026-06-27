@@ -1,0 +1,108 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+  summary: |-
+    The procedure to determine the grant amount differs based upon the types of income the unit receives. If the unit receives no income other than MFIP, the Transitional Standard is the total MFIP grant. For unearned income only, subtract unearned income from the Transitional Standard. For earned income, subtract net earned income from the Family Wage Level and compare the difference to the Transitional Standard. For both earned and unearned income, subtract unearned income from the applicable standard or difference. Applicant cases are prorated, recoupment is subtracted if applicable, the food portion is issued as EBT, and any remaining amount is issued in cash.
+rules:
+  - name: total_mfip_grant_before_proration
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Combined Manual 0022.12, MFIP grant calculation before applicant proration and recoupment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "If the unit receives NO INCOME (other than MFIP), the Transitional Standard is the total MFIP grant."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "If the unit receives UNEARNED INCOME ONLY, subtract the amount of unearned income in the budget month from the Transitional Standard"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "Subtract the net earned income in the budget month from the Family Wage Level for the corresponding payment month."
+    versions:
+      - effective_from: '2015-01-01'
+        formula: |-
+          if unit_receives_no_income_other_than_mfip: transitional_standard_for_corresponding_payment_month else: if unit_receives_unearned_income_only: max(0, transitional_standard_for_corresponding_payment_month - unearned_income_in_budget_month) else: if unit_has_earned_income_only: max(0, min(transitional_standard_for_corresponding_payment_month, family_wage_level_for_corresponding_payment_month - net_earned_income_in_budget_month)) else: if unit_has_both_earned_and_unearned_income: max(0, min(transitional_standard_for_corresponding_payment_month, family_wage_level_for_corresponding_payment_month - net_earned_income_in_budget_month) - unearned_income_in_budget_month) else: 0
+  - name: final_total_mfip_grant
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Combined Manual 0022.12, applicant proration and recoupment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "For applicant cases, prorate the benefit."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "Subtract the recoupment if applicable."
+    versions:
+      - effective_from: '2015-01-01'
+        formula: |-
+          if unit_is_applicant_case: max(0, prorated_benefit_under_section_0022_12_03 - recoupment_amount_if_applicable) else: max(0, total_mfip_grant_before_proration - recoupment_amount_if_applicable)
+  - name: mfip_food_portion_issued_as_ebt
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Combined Manual 0022.12, food portion issuance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "Issue the food portion of the grant as EBT."
+    versions:
+      - effective_from: '2015-01-01'
+        formula: |-
+          min(final_total_mfip_grant, mfip_food_portion_amount_under_section_0020_09)
+  - name: mfip_cash_portion_issued_as_cash
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Combined Manual 0022.12, remaining cash issuance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mn/manual/dhs/combined-manual/current/page-944
+              excerpt: "Issue any remaining amount in cash."
+    versions:
+      - effective_from: '2015-01-01'
+        formula: |-
+          max(0, final_total_mfip_grant - mfip_food_portion_issued_as_ebt)
