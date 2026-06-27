@@ -1,0 +1,79 @@
+# Arizona Cash Assistance -- FY 2026
+#
+# This program spec composes the Arizona DES FAA5 Cash Assistance rules already
+# encoded under us-az/policies/des/faa5. The underlying source modules cover the
+# payment-standard, needy-family, and eligible-no-pay financial path; broader
+# demographic, immigration, resource, time-limit, sanction, and procedural gates
+# remain incomplete at this top-level surface.
+
+program: us-az/tanf
+period: 2026-01
+
+outputs:
+  - az_tanf_payment_standard
+  - az_tanf_countable_income
+  - az_tanf_prospectively_eligible
+  - az_tanf_eligible_no_pay
+  - az_tanf
+
+acknowledged_incomplete:
+  - az_tanf_prospectively_eligible
+  - az_tanf
+
+scope:
+  state:
+    - policies/des/faa5/ca-payment-standard-a1-2fa2
+    - policies/des/faa5/ca-benefit-determination/needy-family-test
+    - policies/des/faa5/ca-benefit-determination/payment-standard-test
+    - policies/des/faa5/ca-benefit-determination/payments-under-10-dollars
+
+transformations:
+  - pattern: derived_formula
+    name: az_tanf_payment_standard
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-az/tanf/fy-2026 payment-standard bridge
+    formula: ca_annual_payment_standard / 12
+
+  - pattern: derived_formula
+    name: az_tanf_countable_income
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-az/tanf/fy-2026 countable-income bridge
+    formula: ca_payment_standard_net_income / 12
+
+  - pattern: derived_formula
+    name: az_tanf_prospectively_eligible
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-az/tanf/fy-2026 prospective-eligibility bridge
+    formula: ca_prospective_eligibility_requirements_met
+
+  - pattern: derived_formula
+    name: az_tanf_eligible_no_pay
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-az/tanf/fy-2026 eligible-no-pay bridge
+    formula: ca_eligible_no_pay_case
+
+  - pattern: conditional_value
+    name: az_tanf
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-az/tanf/fy-2026 benefit amount composition
+    condition: az_tanf_prospectively_eligible and not az_tanf_eligible_no_pay
+    when_true: ca_payment_standard_net_unrounded_payment / 12
+    when_false: 0
