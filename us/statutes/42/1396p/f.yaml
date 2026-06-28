@@ -1,0 +1,209 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/1396p/f
+  summary: Paragraph (1) makes an individual ineligible for medical assistance with
+    respect to nursing facility or other long-term care services if the individual's
+    home equity interest exceeds $500,000, subject to a State option up to $750,000,
+    annual CPI-U increases beginning with 2011 rounded to the nearest $1,000, exceptions
+    for a lawfully residing spouse or qualifying child, and waiver for demonstrated
+    hardship.
+rules:
+- name: statutory_home_equity_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 42 U.S.C. 1396p(f)(1)(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: exceeds $500,000
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '500000'
+- name: maximum_state_substituted_home_equity_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 42 U.S.C. 1396p(f)(1)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: does not exceed $750,000
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '750000'
+- name: home_equity_limit_rounding_multiple
+  kind: parameter
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 42 U.S.C. 1396p(f)(1)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: rounded to the nearest $1,000
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '1000'
+- name: adjusted_statutory_home_equity_limit
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 42 U.S.C. 1396p(f)(1)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: increased, beginning with 2011, from year to year based on the
+            percentage increase in the consumer price index
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: rounded to the nearest $1,000
+  versions:
+  - effective_from: '2011-01-01'
+    formula: floor(((statutory_home_equity_limit * (1 + cumulative_cpi_u_increase_rate_since_statutory_base_year))
+      / home_equity_limit_rounding_multiple) + 0.5) * home_equity_limit_rounding_multiple
+- name: adjusted_maximum_state_substituted_home_equity_limit
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 42 U.S.C. 1396p(f)(1)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: The dollar amounts specified in this paragraph shall be increased
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: rounded to the nearest $1,000
+  versions:
+  - effective_from: '2011-01-01'
+    formula: floor(((maximum_state_substituted_home_equity_limit * (1 + cumulative_cpi_u_increase_rate_since_statutory_base_year))
+      / home_equity_limit_rounding_multiple) + 0.5) * home_equity_limit_rounding_multiple
+- name: applicable_home_equity_limit
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 42 U.S.C. 1396p(f)(1)(A)-(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: A State may elect ... by substituting for "$500,000", an amount
+            that exceeds such amount, but does not exceed $750,000
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'if state_elects_higher_home_equity_limit: min(max(state_substituted_home_equity_limit_amount,
+      adjusted_statutory_home_equity_limit), adjusted_maximum_state_substituted_home_equity_limit)
+      else: adjusted_statutory_home_equity_limit'
+- name: paragraph_1_home_equity_bar_waived_for_hardship
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 42 U.S.C. 1396p(f)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: paragraph (1) is waived in the case of a demonstrated hardship
+  versions:
+  - effective_from: '2011-01-01'
+    formula: demonstrated_hardship_waiver_granted
+- name: paragraph_1_home_equity_bar_exception_applies
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 42 U.S.C. 1396p(f)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: Paragraph (1) shall not apply ... if ... spouse ... or ... child
+            ... is lawfully residing in the individual's home
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'spouse_lawfully_resides_in_individual_home
+
+      or child_under_age_21_lawfully_resides_in_individual_home
+
+      or child_blind_lawfully_resides_in_individual_home
+
+      or child_permanently_and_totally_disabled_lawfully_resides_in_individual_home
+
+      or child_disabled_as_defined_in_section_1382c_lawfully_resides_in_individual_home'
+- name: is_medicaid_long_term_care_home_equity_eligible
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 42 U.S.C. 1396p(f)(1)-(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: the individual shall not be eligible ... if the individual's equity
+            interest ... exceeds $500,000
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: Paragraph (1) shall not apply
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/statute/42/1396p/f
+          excerpt: paragraph (1) is waived in the case of a demonstrated hardship
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'individual_home_equity_interest <= applicable_home_equity_limit
+
+      or paragraph_1_home_equity_bar_exception_applies
+
+      or paragraph_1_home_equity_bar_waived_for_hardship'
