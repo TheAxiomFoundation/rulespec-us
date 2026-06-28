@@ -1,0 +1,193 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/1396b/v
+  summary: |-
+    Paragraph (1) bars payment for medical assistance furnished to an alien who is not lawfully admitted for permanent residence or otherwise permanently residing in the United States under color of law, except as provided in paragraphs (2), (4), and (5). Paragraph (2) requires payment for such an alien only when the care and services are necessary for treatment of an emergency medical condition, the alien otherwise meets Medicaid eligibility requirements, and the care and services are not related to an organ transplant procedure. Paragraph (3) defines emergency medical condition. Paragraph (4) permits a State plan election for lawfully residing pregnant women and children. Paragraph (5), beginning October 1, 2026, adds a resident-and-status payment limitation except as provided in paragraphs (2) and (4).
+rules:
+  - name: pregnancy_postpartum_period_days
+    kind: parameter
+    dtype: Count
+    source: 42 U.S.C. 1396b(v)(4)(A)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+              excerpt: "during the 60-day period beginning on the last day of the pregnancy"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          60
+
+  - name: child_age_ceiling_years
+    kind: parameter
+    dtype: Count
+    source: 42 U.S.C. 1396b(v)(4)(A)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+              excerpt: "Individuals under 21 years of age"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          21
+
+  - name: alien_described_in_payment_bar
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396b(v)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          not alien_lawfully_admitted_for_permanent_residence
+          and not alien_otherwise_permanently_residing_in_united_states_under_color_of_law
+
+  - name: emergency_medical_condition
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396b(v)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          medical_condition_manifested_by_acute_symptoms_of_sufficient_severity
+          and absence_of_immediate_medical_attention_could_reasonably_be_expected_to_place_health_in_serious_jeopardy
+          or medical_condition_manifested_by_acute_symptoms_of_sufficient_severity
+          and absence_of_immediate_medical_attention_could_reasonably_be_expected_to_seriously_impair_bodily_functions
+          or medical_condition_manifested_by_acute_symptoms_of_sufficient_severity
+          and absence_of_immediate_medical_attention_could_reasonably_be_expected_to_cause_serious_dysfunction_of_bodily_organ_or_part
+
+  - name: is_emergency_medicaid_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396b(v)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396b/v#alien_described_in_payment_bar
+              output: alien_described_in_payment_bar
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396b/v#emergency_medical_condition
+              output: emergency_medical_condition
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          alien_described_in_payment_bar
+          and emergency_medical_condition
+          and care_and_services_are_necessary_for_treatment_of_emergency_medical_condition
+          and alien_otherwise_meets_medicaid_state_plan_eligibility_requirements
+          and not care_and_services_related_to_organ_transplant_procedure
+
+  - name: state_lawfully_residing_pregnancy_category_election_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396b(v)(4)(A)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          state_elected_plan_amendment_for_lawfully_residing_pregnant_women
+          and individual_lawfully_residing_in_united_states
+          and individual_otherwise_eligible_for_medical_assistance
+          and individual_is_during_pregnancy_or_within_postpartum_period
+
+  - name: state_lawfully_residing_child_category_election_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396b(v)(4)(A)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396b/v#child_age_ceiling_years
+              output: child_age_ceiling_years
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          state_elected_plan_amendment_for_lawfully_residing_children
+          and individual_lawfully_residing_in_united_states
+          and individual_otherwise_eligible_for_medical_assistance
+          and age < child_age_ceiling_years
+
+  - name: payment_status_requirement_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396b(v)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+              excerpt: "beginning on October 1, 2026"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1396b/v
+    versions:
+      - effective_from: '2026-10-01'
+        formula: |-
+          individual_is_resident_of_state_district_of_columbia_or_united_states_territory
+          and (individual_is_citizen_or_national_of_united_states
+          or alien_lawfully_admitted_for_permanent_residence_as_immigrant
+          or alien_has_cuban_and_haitian_entrant_status
+          or individual_lawfully_resides_in_united_states_under_compact_of_free_association)
