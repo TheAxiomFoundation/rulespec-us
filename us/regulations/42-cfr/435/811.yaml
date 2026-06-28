@@ -1,0 +1,162 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/42/435/811
+  summary: |-
+    A Medicaid agency must use a single medically needy income standard, except that States using more restrictive aged, blind, and disabled requirements than SSI may establish a separate single standard for those groups. The standard must account for assistance-unit size, may not diminish as unit size increases, must meet specified cash-assistance or more-restrictive-criteria floors, must not exceed the FFP maximum under § 435.1007, and may vary by urban and rural shelter costs.
+rules:
+  - name: income_standard_does_not_diminish_with_larger_assistance_unit
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.811(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "The standard may not diminish by an increase in the number of persons in the assistance unit."
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          income_standard_for_larger_assistance_unit >= income_standard_for_smaller_assistance_unit
+
+  - name: income_standard_meets_cash_assistance_floor
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.811(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "the income standard must be set at an amount that is no lower than the lowest income standards used under the cash assistance programs"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medically_needy_income_standard_amount >= lowest_income_standard_used_under_related_cash_assistance_programs
+
+  - name: separate_aged_blind_or_disabled_income_standard_floor
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 42 CFR 435.811(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "must be no lower than the higher of the lowest categorically needy income standard currently applied under the State's more restrictive criteria under § 435.121 or the medically needy income standard in effect under the State's Medicaid plan on January 1, 1972"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          max(lowest_categorically_needy_income_standard_currently_applied_under_more_restrictive_criteria, medically_needy_income_standard_in_effect_under_state_medicaid_plan_on_january_1_1972)
+
+  - name: separate_aged_blind_or_disabled_income_standard_complies
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.811(d)(2), (e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "the agency may establish a separate single medically needy income standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/811#separate_aged_blind_or_disabled_income_standard_floor
+              output: separate_aged_blind_or_disabled_income_standard_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "must not exceed the maximum dollar amount of income allowed for purposes of FFP under § 435.1007"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          separate_aged_blind_or_disabled_income_standard_amount >= separate_aged_blind_or_disabled_income_standard_floor
+          and separate_aged_blind_or_disabled_income_standard_amount <= maximum_dollar_amount_of_income_allowed_for_ffp_under_section_435_1007
+
+  - name: medically_needy_income_standard_complies
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.811(a)-(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "a Medicaid agency must use a single income standard under this subpart"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/811#income_standard_does_not_diminish_with_larger_assistance_unit
+              output: income_standard_does_not_diminish_with_larger_assistance_unit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/811#income_standard_meets_cash_assistance_floor
+              output: income_standard_meets_cash_assistance_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/811#separate_aged_blind_or_disabled_income_standard_complies
+              output: separate_aged_blind_or_disabled_income_standard_complies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "must not exceed the maximum dollar amount of income allowed for purposes of FFP under § 435.1007"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          agency_uses_single_income_standard_for_medically_needy_individuals
+          and income_standard_does_not_diminish_with_larger_assistance_unit
+          and medically_needy_income_standard_amount <= maximum_dollar_amount_of_income_allowed_for_ffp_under_section_435_1007
+          and (agency_uses_more_restrictive_requirements_for_aged_blind_and_disabled_individuals_than_ssi or income_standard_meets_cash_assistance_floor)
+          and (not agency_establishes_separate_aged_blind_or_disabled_income_standard or separate_aged_blind_or_disabled_income_standard_complies)
+
+  - name: income_standard_may_vary_by_urban_and_rural_shelter_costs
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.811(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/811
+              excerpt: "The income standard may vary based on the variations between shelter costs in urban areas and rural areas."
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          income_standard_variation_is_based_on_variations_between_urban_and_rural_shelter_costs
