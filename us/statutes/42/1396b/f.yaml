@@ -1,0 +1,197 @@
+format: rulespec/v1
+imports:
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/1396b/f
+  summary: "Payment shall not be made for medical assistance for a member of a family\
+    \ whose annual income exceeds the applicable income limitation. The limitation\
+    \ is 133\u2153 percent of the highest ordinary part A subchapter IV money payment\
+    \ for a family of the same size, subject to Secretary adjustment for uniform maximums\
+    \ and rounded up to the next $100 multiple unless another amount is prescribed.\
+    \ Family income excludes incurred medical or remedial care costs and, at State\
+    \ option, certain amounts paid to the State. The payment limitation does not apply\
+    \ to listed eligibility categories and to PACE program eligible individuals enrolled\
+    \ in PACE if income determined under section 1382a without subsection (b) does\
+    \ not exceed 300 percent of the SSI benefit rate under section 1382(b)(1)."
+  deferred_outputs:
+  - output: us:statutes/42/1396b/f#pace_program_exception_applies
+    reason: Generated rule kept a local fact for a cited legal section. This output
+      is deferred until the cited source can be encoded or imported without a local
+      cross-reference placeholder.
+  - output: us:statutes/42/1396b/f#payment_limitation_applies_to_medical_assistance_expenditure
+    reason: Generated rule depends on an output that validation deferred because it
+      flattened thresholded, capped, base-limited, or cross-referenced mechanics,
+      or borrowed an unrelated same-named section term.
+  - output: us:statutes/42/1396b/f#payment_limitation_category_exception_applies
+    reason: Generated rule depends on an output that validation deferred because it
+      flattened thresholded, capped, base-limited, or cross-referenced mechanics,
+      or borrowed an unrelated same-named section term.
+rules:
+- name: applicable_income_limitation_afdc_payment_rate
+  kind: parameter
+  dtype: Rate
+  source: 42 U.S.C. 1396b(f)(1)(B)(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: "133\u2153 percent"
+  versions:
+  - effective_from: '1974-01-01'
+    formula: '1.3333333333333333'
+- name: income_limitation_rounding_multiple
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 42 U.S.C. 1396b(f)(1)(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: rounded to the next higher multiple of $100
+  versions:
+  - effective_from: '1974-01-01'
+    formula: '100'
+- name: pace_income_limit_ssi_rate
+  kind: parameter
+  dtype: Rate
+  source: 42 U.S.C. 1396b(f)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: does not exceed 300 percent of the supplemental security income
+            benefit rate
+  versions:
+  - effective_from: '1974-01-01'
+    formula: '3'
+- name: unrounded_applicable_income_limitation
+  kind: derived
+  entity: Family
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 42 U.S.C. 1396b(f)(1)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: "equivalent to 133\u2153 percent of the highest amount which would\
+            \ ordinarily be paid"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/42/1396b/f#applicable_income_limitation_afdc_payment_rate
+          output: applicable_income_limitation_afdc_payment_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '1974-01-01'
+    formula: applicable_income_limitation_afdc_payment_rate * highest_amount_ordinarily_paid_to_family_without_income_or_resources_under_state_part_a_subchapter_iv_plan
+- name: applicable_income_limitation
+  kind: derived
+  entity: Family
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 42 U.S.C. 1396b(f)(1)(B)-(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: may adjust the amount otherwise determined under clause (i)
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: rounded to the next higher multiple of $100
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/42/1396b/f#income_limitation_rounding_multiple
+          output: income_limitation_rounding_multiple
+          hash: sha256:local
+  versions:
+  - effective_from: '1974-01-01'
+    formula: 'ceil((if secretary_adjusts_for_uniform_maximum_limits_payments_to_families_of_more_than_one_size:
+      secretary_adjusted_applicable_income_limitation else: unrounded_applicable_income_limitation)
+      / income_limitation_rounding_multiple) * income_limitation_rounding_multiple'
+- name: family_income_for_payment_limitation
+  kind: derived
+  entity: Family
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 42 U.S.C. 1396b(f)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: there shall be excluded any costs ... incurred by such family for
+            medical care or for any other type of remedial care
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: at State option, an amount paid by such family ... to the State
+  versions:
+  - effective_from: '1974-01-01'
+    formula: 'max(0, family_annual_income - family_medical_or_remedial_care_costs_incurred
+      - (if state_option_excludes_family_amount_paid_to_state: family_amount_paid_to_state_for_spenddown
+      else: 0))'
+- name: family_income_exceeds_applicable_income_limitation
+  kind: derived
+  entity: Family
+  dtype: Judgment
+  period: Year
+  source: 42 U.S.C. 1396b(f)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: annual income of which exceeds the applicable income limitation
+  versions:
+  - effective_from: '1974-01-01'
+    formula: family_income_for_payment_limitation > applicable_income_limitation
+- name: state_medical_assistance_expenditures_after_family_payment_reduction
+  kind: derived
+  entity: Family
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 42 U.S.C. 1396b(f)(2)(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/42/1396b/f
+          excerpt: will be reduced by amounts paid to the State pursuant to this subparagraph
+  versions:
+  - effective_from: '1974-01-01'
+    formula: 'max(0, state_expenditures_for_which_medical_assistance_is_available_under_subsection_a_1
+      - (if state_option_excludes_family_amount_paid_to_state: family_amount_paid_to_state_for_spenddown
+      else: 0))'

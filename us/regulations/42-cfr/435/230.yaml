@@ -1,0 +1,158 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/42/435/230
+  summary: |-
+    Criteria for income standards include individuals financially eligible for but not receiving SSI before medical and remedial expense deductions, individuals meeting listed eligibility-group income standards including HMO deemed eligibility for up to 6 months and aged or disabled individuals below 100 percent of the Federal poverty level, and individuals with special status under §§ 435.135 and 435.138 when the State elects a title II disregard.
+rules:
+  - name: hmo_deemed_eligibility_maximum_enrollment_period_months
+    kind: parameter
+    dtype: Count
+    source: 42 CFR 435.230(c)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/230
+              excerpt: "up to 6 months from the date of enrollment"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          6
+
+  - name: aged_disabled_fpl_income_threshold_ratio
+    kind: parameter
+    dtype: Rate
+    source: 42 CFR 435.230(c)(2)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/230
+              excerpt: "below 100 percent of the Federal poverty level"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          1.00
+
+  - name: income_standard_met_by_hmo_deemed_eligibility
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.230(c)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/230
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/230#hmo_deemed_eligibility_maximum_enrollment_period_months
+              output: hmo_deemed_eligibility_maximum_enrollment_period_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          person_is_enrolled_in_hmo_or_other_entity
+          and person_is_deemed_to_continue_medicaid_eligible_by_agency
+          and person_became_ineligible_during_specified_enrollment_period
+          and months_since_hmo_or_other_entity_enrollment <= hmo_deemed_eligibility_maximum_enrollment_period_months
+
+  - name: income_standard_met_by_aged_disabled_fpl
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.230(c)(2)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/230
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/230#aged_disabled_fpl_income_threshold_ratio
+              output: aged_disabled_fpl_income_threshold_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          person_is_aged_or_disabled
+          and person_income_as_fraction_of_fpl < aged_disabled_fpl_income_threshold_ratio
+
+  - name: optional_categorically_needy_income_standard_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.230(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/230
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/230#income_standard_met_by_hmo_deemed_eligibility
+              output: income_standard_met_by_hmo_deemed_eligibility
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/230#income_standard_met_by_aged_disabled_fpl
+              output: income_standard_met_by_aged_disabled_fpl
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          person_financially_eligible_for_but_not_receiving_ssi_before_medical_and_remedial_expense_deductions
+          or person_would_be_eligible_for_cash_assistance_except_for_institutional_status_under_section_435_211
+          or income_standard_met_by_hmo_deemed_eligibility
+          or person_receives_home_and_community_based_waiver_services_under_section_435_217
+          or person_receives_only_optional_state_supplements_under_section_435_234
+          or person_is_institutionalized_with_income_below_special_income_level_under_section_435_236
+          or income_standard_met_by_aged_disabled_fpl
+          or person_qualifies_for_special_status_under_sections_435_135_or_435_138_with_state_title_ii_disregard_election
+
+  - name: optional_categorically_needy_aged_blind_disabled_medicaid_may_be_provided
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.230(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/230
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/230#optional_categorically_needy_income_standard_met
+              output: optional_categorically_needy_income_standard_met
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          agency_elects_more_restrictive_aged_blind_disabled_ssi_option_under_section_435_121
+          and person_meets_nonfinancial_criteria_elected_under_section_435_121
+          and person_meets_resource_requirements_elected_under_section_435_121
+          and optional_categorically_needy_income_standard_met

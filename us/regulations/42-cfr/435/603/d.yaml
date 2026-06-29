@@ -1,0 +1,153 @@
+format: rulespec/v1
+imports:
+  - us:regulations/42-cfr/435/603/e#magi_based_income
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/42/435/603/d
+  summary: |-
+    Household income is generally the sum of MAGI-based income of every individual included in the individual's household, excluding specified non-filing children and tax dependents. For individuals described in paragraph (f)(2)(i), a State may include actually available cash support exceeding nominal amounts. Effective January 1, 2014, States subtract an amount equivalent to 5 percentage points of FPL only for the highest MAGI-based income-standard Medicaid eligibility group.
+  deferred_outputs:
+    - output: us:regulations/42-cfr/435/603/d#household_income_before_fpl_disregard
+      reason: The household-level sum requires a clean executable relation over every individual included in the individual's household and a resolvable household-membership predicate; the copied dependency on paragraph (f) household membership is not available in the clean RuleSpec context.
+      blocked_by:
+        - us:regulations/42-cfr/435/603/f#medicaid_household_member
+    - output: us:regulations/42-cfr/435/603/d#household_income_for_highest_magi_income_standard_eligibility
+      reason: The final household income after the 5-percentage-point FPL disregard depends on the deferred household income sum before the disregard.
+      blocked_by:
+        - us:regulations/42-cfr/435/603/d#household_income_before_fpl_disregard
+rules:
+  - name: household_member_income_excluded
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d)(2)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "is not included in household income whether or not the individual files a tax return"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "is not included in the household income of the taxpayer"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (included_in_household_of_natural_adopted_or_step_parent
+          and not expected_required_to_file_return_under_6012_a_1)
+          or (tax_dependent_described_in_paragraph_f_2_i
+          and not expected_required_to_file_return_under_6012_a_1)
+
+  - name: household_member_counted_magi_based_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/e#magi_based_income
+              output: magi_based_income
+              hash: sha256:cd914d734d2122c7685f4bf975db72d5a1d6269297e3bcf5c7475a6614a15575
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_member_income_excluded: 0 else: magi_based_income
+
+  - name: state_option_available_cash_support_included
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "may, at State option, also include actually available cash support, exceeding nominal amounts"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if state_option_includes_actually_available_cash_support and tax_dependent_described_in_paragraph_f_2_i and cash_support_exceeds_nominal_amount: actually_available_cash_support_provided_by_claiming_taxpayer else: 0
+
+  - name: member_of_individuals_household
+    kind: data_relation
+    source: 42 CFR 435.603(d)(1)
+    data_relation:
+      predicate: member_of_individuals_household
+      arity: 2
+      arguments:
+        - individual
+        - household_member
+
+  - name: fpl_five_percentage_point_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 CFR 435.603(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "5 percentage points of the Federal poverty level"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "Effective January 1, 2014"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          0.05
+
+  - name: fpl_five_percentage_point_disregard_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "an amount equivalent to 5 percentage points of the Federal poverty level for the applicable family size"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_rate
+              output: fpl_five_percentage_point_disregard_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          federal_poverty_level_for_applicable_family_size * fpl_five_percentage_point_disregard_rate

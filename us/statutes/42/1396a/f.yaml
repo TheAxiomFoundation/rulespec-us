@@ -1,0 +1,105 @@
+format: rulespec/v1
+imports:
+  - us:statutes/42/1382c/a/1#aged_blind_or_disabled_individual
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/1396a/f
+  summary: |-
+    No State not eligible to participate in the State plan program established under subchapter XVI shall be required to provide medical assistance to any aged, blind, or disabled individual for any month unless the State would have been required to do so under its January 1, 1972 plan. For this purpose, an individual is deemed eligible if otherwise meeting State plan requirements and income, after deducting SSI, State supplementary payments, and incurred medical-care expenses recognized under State law, does not exceed the January 1, 1972 State plan standard.
+  deferred_outputs:
+    - output: us:statutes/42/1396a/f#external_exception_adjusted_medical_assistance_requirement
+      reason: The opening exceptions depend on subsection (e), section 1382h(b)(3), and section 1396r-5 displacement rules. Section 1382h(b)(3) and section 1396r-5 are not available as copied executable RuleSpec targets, so the fully exception-adjusted State requirement is deferred.
+rules:
+  - name: countable_income_for_209b_comparison
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 U.S.C. 1396a(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1396a/f
+              excerpt: "income ... after deducting any supplemental security income payment and State supplementary payment ... and incurred expenses for medical care"
+    versions:
+      - effective_from: '1974-01-01'
+        formula: |-
+          max(0, individual_income_for_medical_assistance_eligibility - supplemental_security_income_payment - state_supplementary_payment - incurred_medical_care_expenses_recognized_under_state_law)
+
+  - name: income_not_in_excess_of_1972_medical_assistance_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396a(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/42/1396a/f
+              excerpt: "is not in excess of the standard for medical assistance established under the State plan as in effect on January 1, 1972"
+    versions:
+      - effective_from: '1974-01-01'
+        formula: |-
+          countable_income_for_209b_comparison <= medical_assistance_standard_under_state_plan_on_january_1_1972
+
+  - name: is_209b_ssi_recipient_for_medicaid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396a(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1382c/a/1#aged_blind_or_disabled_individual
+              output: aged_blind_or_disabled_individual
+              hash: sha256:c275ea56e2d71cc7cd5338993032e28442f0f8e0cb27efcf41134e84db3e9984
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1396a/f
+              excerpt: "no State not eligible to participate in the State plan program established under subchapter XVI"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/42/1396a/f
+              excerpt: "except with respect to qualified disabled and working individuals ... qualified medicare beneficiaries, qualified severely impaired individuals, and individuals described in subsection (m)(1)"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1396a/f
+              excerpt: "unless such State would be ... required ... had its plan ... in effect on January 1, 1972"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396a/f#income_not_in_excess_of_1972_medical_assistance_standard
+              output: income_not_in_excess_of_1972_medical_assistance_standard
+              hash: sha256:local
+    versions:
+      - effective_from: '1974-01-01'
+        formula: |-
+          state_not_eligible_to_participate_in_state_plan_program_established_under_subchapter_xvi
+          and aged_blind_or_disabled_individual
+          and not qualified_disabled_and_working_individual_described_in_section_1396d_s
+          and not qualified_medicare_beneficiary
+          and not qualified_severely_impaired_individual
+          and not individual_described_in_subsection_m_1
+          and (
+            state_would_have_been_required_to_provide_medical_assistance_under_january_1_1972_plan
+            or (
+              other_requirements_imposed_under_state_plan_met
+              and income_not_in_excess_of_1972_medical_assistance_standard
+            )
+          )

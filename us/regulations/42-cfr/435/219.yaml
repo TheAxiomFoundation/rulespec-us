@@ -1,0 +1,130 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/42/435/219
+  summary: |-
+    If the agency provides State plan home and community-based services to individuals described in section 1915(i)(1), it may provide Medicaid to community individuals described in paragraph (a) or (b); paragraph (a) includes a 150 percent FPL income limit, and paragraph (b) includes a 300 percent SSI/FBR income limit.
+  deferred_outputs:
+    - output: us:regulations/42-cfr/435/219/c#paragraph_a_income_and_resource_methodology_requirements
+      reason: Paragraph (c) governs agency methodology approval and resource-counting administration rather than an individual eligibility predicate directly computable from the supported Person-level facts in this artifact.
+rules:
+  - name: paragraph_a_income_limit_fpl_ratio
+    kind: parameter
+    dtype: Rate
+    source: 42 CFR 435.219(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/219
+              excerpt: income that does not exceed 150 percent of the Federal poverty line (FPL)
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          1.50
+
+  - name: paragraph_b_income_limit_ssi_fbr_ratio
+    kind: parameter
+    dtype: Rate
+    source: 42 CFR 435.219(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/42/435/219
+              excerpt: income that does not exceed 300 percent of the Supplemental Security Income Federal Benefit Rate (SSI/FBR)
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          3.00
+
+  - name: paragraph_a_state_plan_hcbs_medicaid_group
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.219(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/219
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/219#paragraph_a_income_limit_fpl_ratio
+              output: paragraph_a_income_limit_fpl_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          person_not_otherwise_eligible_for_medicaid
+          and household_income_as_fraction_of_fpl <= paragraph_a_income_limit_fpl_ratio
+          and person_meets_needs_based_criteria_under_section_441_715
+          and person_will_receive_state_plan_hcbs_as_defined_in_section_440_182
+
+  - name: paragraph_b_state_plan_hcbs_medicaid_group
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.219(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/219
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/219#paragraph_b_income_limit_ssi_fbr_ratio
+              output: paragraph_b_income_limit_ssi_fbr_ratio
+              hash: sha256:local
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          person_would_be_determined_eligible_under_existing_waiver_or_demonstration_project_under_sections_1915_c_d_e_or_1115
+          and household_income_as_fraction_of_ssi_fbr <= paragraph_b_income_limit_ssi_fbr_ratio
+          and person_will_receive_state_plan_hcbs_as_defined_in_section_440_182
+
+  - name: state_plan_hcbs_medicaid_may_be_provided
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.219
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/219
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/219#paragraph_a_state_plan_hcbs_medicaid_group
+              output: paragraph_a_state_plan_hcbs_medicaid_group
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/219#paragraph_b_state_plan_hcbs_medicaid_group
+              output: paragraph_b_state_plan_hcbs_medicaid_group
+              hash: sha256:local
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          agency_provides_state_plan_hcbs_to_individuals_described_in_section_1915_i_1
+          and person_is_in_the_community
+          and (paragraph_a_state_plan_hcbs_medicaid_group or paragraph_b_state_plan_hcbs_medicaid_group)
