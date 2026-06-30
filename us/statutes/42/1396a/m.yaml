@@ -5,10 +5,12 @@ module:
   source_verification:
     corpus_citation_path: us/statute/42/1396a/m
   summary: |-
-    Individuals described are those 65 years of age or older or disabled, whose SSI-determined income does not exceed the State-established level, and whose SSI-determined resources do not exceed the SSI maximum. The State income level may not exceed 100 percent of the official poverty line. For covered optional individuals and qualified Medicare beneficiaries, medical or remedial care costs are generally not taken into account in determining income.
+    Individuals described in paragraph (1) are individuals who are 65 years of age or older or disabled, whose income does not exceed the State-established level, and whose resources do not exceed the SSI maximum except as provided by the State resource option. The State income level may not exceed not more than 100 percent of the official poverty line. Paragraphs (3) and (4) state special income-standard and medical/remedial-care-cost rules, subject to section 1382a(b)(4)(B)(ii).
   deferred_outputs:
-    - output: us:statutes/42/1396a/m#is_optional_senior_or_disabled_for_medicaid
-      reason: The final individual status depends on resources determined under section 1382b and the SSI maximum resource amount, but no copied RuleSpec context provides the section 1382b resource determination or maximum resource concept.
+    - output: us:statutes/42/1396a/m#medical_or_remedial_care_costs_not_taken_into_account_for_optional_individual_income
+      reason: The source makes the medical/remedial-care-cost exclusion subject to the exception in section 1382a(b)(4)(B)(ii), but the copied section 1382a(b)(4) RuleSpec context does not export that exact exception.
+    - output: us:statutes/42/1396a/m#medical_or_remedial_care_costs_not_taken_into_account_for_qualified_medicare_beneficiary_income
+      reason: The source makes the qualified Medicare beneficiary medical/remedial-care-cost exclusion subject to the exception in section 1382a(b)(4)(B)(ii), but the copied section 1382a(b)(4) RuleSpec context does not export that exact exception.
 rules:
   - name: optional_senior_age_threshold_years
     kind: parameter
@@ -44,6 +46,32 @@ rules:
         formula: |-
           1.00
 
+  - name: meets_optional_senior_or_disabled_age_or_disability_condition
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 1396a(m)(1)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1396a/m
+              excerpt: "who are 65 years of age or older or are disabled individuals"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396a/m#optional_senior_age_threshold_years
+              output: optional_senior_age_threshold_years
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          individual_age_years >= optional_senior_age_threshold_years
+          or disabled_as_determined_under_section_1382c_a_3
+
   - name: state_income_level_within_federal_maximum
     kind: derived
     entity: Person
@@ -58,6 +86,12 @@ rules:
             source:
               corpus_citation_path: us/statute/42/1396a/m
               excerpt: "may not exceed a percentage (not more than 100 percent) of the official poverty line"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396a/m#optional_senior_or_disabled_income_level_maximum_rate
+              output: optional_senior_or_disabled_income_level_maximum_rate
+              hash: sha256:local
     versions:
       - effective_from: '2024-01-01'
         formula: |-
@@ -68,7 +102,7 @@ rules:
     entity: Person
     dtype: Judgment
     period: Month
-    source: 42 U.S.C. 1396a(m)(1)(B), (2)(A)
+    source: 42 U.S.C. 1396a(m)(1)(B), (2)(A), (2)(C)
     metadata:
       proof:
         atoms:
@@ -77,58 +111,83 @@ rules:
             source:
               corpus_citation_path: us/statute/42/1396a/m
               excerpt: "whose income ... does not exceed an income level established by the State"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396a/m#state_income_level_within_federal_maximum
+              output: state_income_level_within_federal_maximum
+              hash: sha256:local
     versions:
       - effective_from: '2024-01-01'
         formula: |-
-          income_for_supplemental_security_income_program <= state_established_income_level_amount
+          income_determined_for_this_subsection <= state_established_income_level_amount
           and state_income_level_within_federal_maximum
 
-  - name: medical_or_remedial_care_costs_not_taken_into_account_for_optional_individual_income
+  - name: resources_do_not_exceed_optional_senior_or_disabled_resource_level
     kind: derived
     entity: Person
     dtype: Judgment
     period: Month
-    source: 42 U.S.C. 1396a(m)(3)(B)
+    source: 42 U.S.C. 1396a(m)(1)(C), (2)(B)
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/42/1396a/m
-              excerpt: "except as provided in section 1382a(b)(4)(B)(ii)"
-          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/statute/42/1396a/m
-              excerpt: "costs incurred for medical care or for any other type of remedial care shall not be taken into account in determining income"
+              excerpt: "whose resources ... do not exceed ... the maximum amount of resources"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/42/1396a/m
+              excerpt: "the State may use under paragraph (1)(C) such resource level ... which is higher"
     versions:
       - effective_from: '2024-01-01'
         formula: |-
-          covered_under_state_plan_by_subsection_a_10_A_ii_X
-          and not section_1382a_b_4_B_ii_exception_applies
+          resources_determined_for_supplemental_security_income_program <= maximum_resources_for_supplemental_security_income_program
+          or (
+            state_provides_medical_assistance_to_individuals_not_described_in_subsection_a_10_A
+            and state_elects_higher_resource_level_for_non_a10A_individuals
+            and individual_not_described_in_subsection_a_10_A
+            and state_optional_resource_level_amount_for_non_a10A_individuals > maximum_resources_for_supplemental_security_income_program
+            and resources_determined_for_supplemental_security_income_program <= state_optional_resource_level_amount_for_non_a10A_individuals
+          )
 
-  - name: medical_or_remedial_care_costs_not_taken_into_account_for_qualified_medicare_beneficiary_income
+  - name: is_optional_senior_or_disabled_for_medicaid
     kind: derived
     entity: Person
     dtype: Judgment
     period: Month
-    source: 42 U.S.C. 1396a(m)(4)(B)
+    source: 42 U.S.C. 1396a(m)(1)
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: exception
+            kind: definition
             source:
               corpus_citation_path: us/statute/42/1396a/m
-              excerpt: "except as provided in section 1382a(b)(4)(B)(ii)"
           - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/42/1396a/m
-              excerpt: "qualified medicare beneficiaries ... costs incurred for medical care or for any other type of remedial care shall not be taken into account in determining income"
+            kind: import
+            import:
+              target: us:statutes/42/1396a/m#meets_optional_senior_or_disabled_age_or_disability_condition
+              output: meets_optional_senior_or_disabled_age_or_disability_condition
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396a/m#income_does_not_exceed_state_optional_senior_or_disabled_level
+              output: income_does_not_exceed_state_optional_senior_or_disabled_level
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1396a/m#resources_do_not_exceed_optional_senior_or_disabled_resource_level
+              output: resources_do_not_exceed_optional_senior_or_disabled_resource_level
+              hash: sha256:local
     versions:
       - effective_from: '2024-01-01'
         formula: |-
-          qualified_medicare_beneficiary_described_in_section_1396d_p_1
-          and not section_1382a_b_4_B_ii_exception_applies
+          meets_optional_senior_or_disabled_age_or_disability_condition
+          and income_does_not_exceed_state_optional_senior_or_disabled_level
+          and resources_do_not_exceed_optional_senior_or_disabled_resource_level
