@@ -1,0 +1,163 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ct/statute/17b-600
+  summary: |-
+    Optional state supplementation may be provided to aged, blind and disabled individuals who receive SSI benefits or would be eligible except for income. A trust exception applies where available income "exceeds three hundred per cent of the maximum Supplemental Security Income program benefit for an individual" and other stated conditions are met. Transfer-related ineligibility applies for dispositions within twenty-four months, with a twelve thousand dollar uncompensated-value threshold for longer ineligibility.
+rules:
+  - name: ct_ssp_income_cap_multiplier
+    kind: parameter
+    dtype: Rate
+    source: Conn. Gen. Stat. § 17b-600, trust income condition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+              excerpt: "exceeds three hundred per cent of the maximum Supplemental Security Income program benefit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3.00
+
+  - name: transfer_lookback_period_months
+    kind: parameter
+    dtype: Count
+    source: Conn. Gen. Stat. § 17b-600, transfer lookback
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+              excerpt: "within twenty-four months prior to the date of application"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          24
+
+  - name: ordinary_transfer_ineligibility_period_months
+    kind: parameter
+    dtype: Count
+    source: Conn. Gen. Stat. § 17b-600, ordinary transfer ineligibility period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+              excerpt: "twenty-four months after the date of disposition"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          24
+
+  - name: extended_ineligibility_uncompensated_value_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Conn. Gen. Stat. § 17b-600, extended ineligibility threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+              excerpt: "uncompensated value of disposed of resources exceeds twelve thousand dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12000
+
+  - name: ct_ssp_income_cap_rate
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: Conn. Gen. Stat. § 17b-600, trust income condition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+              excerpt: "exceeds three hundred per cent of the maximum Supplemental Security Income program benefit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          ct_ssp_income_cap_multiplier
+
+  - name: trust_income_disregard_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Conn. Gen. Stat. § 17b-600, trust income disregard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (individual_resides_in_residential_care_home or individual_resides_in_new_horizons_facility)
+          and available_income > ct_ssp_income_cap_rate * maximum_ssi_benefit_for_individual
+          and available_income < private_rate_for_residential_care_home_or_new_horizons_facility
+          and trust_funded_solely_with_excess_income
+          and trust_provides_required_state_recovery_after_medicaid_repayment
+
+  - name: transfer_ineligibility_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Conn. Gen. Stat. § 17b-600, transfer-related ineligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          property_disposition_made_within_transfer_lookback_period
+          and property_disposed_for_less_than_fair_market_value
+          and not convincing_evidence_transaction_exclusively_for_other_purpose
+          and not disposition_made_to_qualifying_trust
+
+  - name: transfer_has_extended_ineligibility_period
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Conn. Gen. Stat. § 17b-600, uncompensated value exceeding twelve thousand dollars
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/statute/17b-600
+              excerpt: "uncompensated value of disposed of resources exceeds twelve thousand dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          transfer_ineligibility_applies
+          and uncompensated_value_of_disposed_resources > extended_ineligibility_uncompensated_value_threshold
