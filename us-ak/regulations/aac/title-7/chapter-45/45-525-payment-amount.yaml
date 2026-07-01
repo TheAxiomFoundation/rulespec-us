@@ -1,0 +1,95 @@
+format: rulespec/v1
+imports:
+  - us-ak:policies/dpa/atap/standards/2026/adult-included#ak_atap_need_standard
+  - us-ak:policies/dpa/atap/standards/2026/adult-included#adult_included_need_standard_by_family_size
+  - us-ak:policies/dpa/atap/standards/2026/adult-included#adult_included_max_payment_by_family_size
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.525
+  summary: |-
+    The department subtracts countable income and any low-shelter-cost reduction from the applicable need standard, multiplies the result by the maximum payment level for an assistance unit of two, and divides by the need standard for an assistance unit of two. Cents are carried through the calculation and rounded down in establishing the payment. Payments under $10 are not made, disregarding mandatory recoupment deductions; a pass-through child support payment is not subject to that minimum.
+  deferred_outputs:
+    - output: us-ak:regulations/aac/title-7/chapter-45/45-525-payment-amount/e#child_support_pass_through_payment_not_subject_to_atap_minimum
+      reason: |-
+        The source states that a child support services agency pass-through child support payment is not subject to the $10 ATAP minimum, but that is a separate pass-through payment surface rather than the ATAP payment amount computed here.
+    - output: us-ak:regulations/aac/title-7/chapter-45/45-525-payment-amount/f#atap_recipient_for_related_public_benefits
+      reason: |-
+        The source creates collateral recipient status for other public benefits when an income-eligible assistance unit receives no ATAP payment by operation of subsection (c) or (e); the downstream related-public-benefits status is outside the payment amount surface encoded here.
+    - output: us-ak:regulations/aac/title-7/chapter-45/45-525-payment-amount/g#child_experiencing_a_disability_for_as_47_27_025_c
+      reason: |-
+        The source defines a child experiencing a disability for AS 47.27.025(c), including parent work-activity preclusion and caregiving facts; that purpose-specific status is separate from the monthly ATAP payment amount.
+rules:
+  - name: assistance_unit_size_for_two_individuals
+    kind: parameter
+    dtype: Count
+    source: 7 AAC 45.525(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.525
+              excerpt: "assistance unit of two individuals"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          2
+
+  - name: atap_minimum_payment_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 AAC 45.525(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.525
+              excerpt: "less than $10"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          10
+
+  - name: ak_atap
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.525(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.525
+              excerpt: "subtracted from the need standard ... countable income ... reduction for low shelter costs ... product ... multiplied by the maximum payment level ... divided by the need standard ... round down ... less than $10"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included#ak_atap_need_standard
+              output: ak_atap_need_standard
+              hash: sha256:de93ce34dc325ae8bb4e7799a0f82ca10a1507db9641cb638ecd221604de2213
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included#adult_included_need_standard_by_family_size
+              output: adult_included_need_standard_by_family_size
+              hash: sha256:de93ce34dc325ae8bb4e7799a0f82ca10a1507db9641cb638ecd221604de2213
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included#adult_included_max_payment_by_family_size
+              output: adult_included_max_payment_by_family_size
+              hash: sha256:de93ce34dc325ae8bb4e7799a0f82ca10a1507db9641cb638ecd221604de2213
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if floor(max(0, ak_atap_need_standard - countable_income_under_7_aac_45_470_b - low_shelter_cost_reduction_under_7_aac_45_527_to_45_530) * adult_included_max_payment_by_family_size[assistance_unit_size_for_two_individuals] / adult_included_need_standard_by_family_size[assistance_unit_size_for_two_individuals]) < atap_minimum_payment_threshold: 0 else: max(0, floor(max(0, ak_atap_need_standard - countable_income_under_7_aac_45_470_b - low_shelter_cost_reduction_under_7_aac_45_527_to_45_530) * adult_included_max_payment_by_family_size[assistance_unit_size_for_two_individuals] / adult_included_need_standard_by_family_size[assistance_unit_size_for_two_individuals]) - mandatory_recoupment_deduction_under_7_aac_45_570)
