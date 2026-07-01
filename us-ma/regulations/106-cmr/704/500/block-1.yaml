@@ -1,0 +1,302 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+  summary: |-
+    The TAFDC grant amount calculation identifies countable earned income, applies the 100% or 50% earned-income disregards, subtracts dependent care, totals countable earned and countable unearned income, and subtracts that total from the applicable Need Standard. If the rounded result is $10 or greater but less than the applicable Payment Standard, that result is paid monthly; if greater than the Payment Standard, the Payment Standard is paid; if zero through less than $10, assistance is considered received but no monthly grant is paid; if less than zero, the assistance unit is financially ineligible. The EAEDC grant amount calculation subtracts work expenses, applicable $30 and one-third or $30 disregards, and dependent care from earned income, adds gross unearned income, and compares the result with the standard of assistance.
+imports:
+  - us-ma:regulations/106-cmr/704/410-420-table/block-1#ma_tafdc_payment_standard
+  - us-ma:regulations/106-cmr/704/270/block-1#ma_tafdc_work_related_expense_deduction_amount
+  - us-ma:regulations/106-cmr/704/275/block-1#dependent_care_deduction
+rules:
+  - name: tafdc_full_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 106 CMR 704.500, TAFDC Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "100% Earned Income Disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: tafdc_half_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 106 CMR 704.500, TAFDC Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "50 per cent of the remainder"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: tafdc_minimum_monthly_grant_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Step 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "if $10 or greater"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: eaedc_thirty_dollar_disregard_amount
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, EAEDC Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "$30 and one-third disregard or $30 disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: eaedc_one_third_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 106 CMR 704.500, EAEDC Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "$30 and one-third disregard"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1 / 3
+
+  - name: tafdc_filing_unit_members
+    kind: data_relation
+    source: 106 CMR 704.500, TAFDC Steps 1 through 4
+    data_relation:
+      predicate: tafdc_filing_unit_members
+      arity: 2
+      arguments:
+        - Person
+        - TanfUnit
+
+  - name: tafdc_member_remaining_gross_earned_income_after_exclusions
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Step 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, member_gross_earned_income - member_earned_income_noncountable_under_106_cmr_704_250 - member_full_employment_program_income - member_dependent_child_full_time_student_earned_income_used_in_financial_eligibility_test)
+
+  - name: tafdc_member_countable_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Steps 2 and 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ma:regulations/106-cmr/704/270/block-1#ma_tafdc_work_related_expense_deduction_amount
+              output: ma_tafdc_work_related_expense_deduction_amount
+              hash: sha256:1aa9f862105ffd58bc341b049134dc4b33a466aa2f609597cb7e28ea63079e4a
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ma:regulations/106-cmr/704/275/block-1#dependent_care_deduction
+              output: dependent_care_deduction
+              hash: sha256:9f91a2e2926ff439e47e760dd65a9c70b6b0f29ccd336e700bd9e34c47865e93
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if member_eligible_for_100_percent_earned_income_disregard: max(0, tafdc_member_remaining_gross_earned_income_after_exclusions - (tafdc_full_earned_income_disregard_rate * tafdc_member_remaining_gross_earned_income_after_exclusions)) else: if member_eligible_for_50_percent_earned_income_disregard: max(0, max(0, tafdc_member_remaining_gross_earned_income_after_exclusions - ma_tafdc_work_related_expense_deduction_amount) - (tafdc_half_earned_income_disregard_rate * max(0, tafdc_member_remaining_gross_earned_income_after_exclusions - ma_tafdc_work_related_expense_deduction_amount)) - dependent_care_deduction) else: max(0, tafdc_member_remaining_gross_earned_income_after_exclusions - dependent_care_deduction)
+
+  - name: tafdc_filing_unit_countable_earned_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Step 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          sum_where(tafdc_filing_unit_members, tafdc_member_countable_earned_income, filing_unit_member_included_in_grant_calculation)
+
+  - name: tafdc_filing_unit_total_countable_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Steps 5 and 6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tafdc_filing_unit_countable_earned_income + filing_unit_gross_unearned_and_other_income_not_excluded_under_106_cmr_704_250_including_deemed_and_excluded_assistance_unit_members
+
+  - name: tafdc_rounded_need_standard_deficit
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Step 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "Subtract the result of Step 6 from the applicable Need Standard ... Round this amount down to the next whole dollar"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          floor(applicable_need_standard - tafdc_filing_unit_total_countable_income)
+
+  - name: tafdc_financially_eligible_after_grant_calculation
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 704.500, TAFDC Step 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "If the result is less than zero, the assistance unit is financially ineligible."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          tafdc_rounded_need_standard_deficit >= 0
+
+  - name: tafdc_monthly_grant_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, TAFDC Step 7
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ma:regulations/106-cmr/704/410-420-table/block-1#ma_tafdc_payment_standard
+              output: ma_tafdc_payment_standard
+              hash: sha256:d128bff83dfe781b465af5f290172eec06a092c6254a25fa98ca24bca5cd7c82
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if not tafdc_financially_eligible_after_grant_calculation: 0 else: if tafdc_rounded_need_standard_deficit < tafdc_minimum_monthly_grant_threshold: 0 else: if tafdc_rounded_need_standard_deficit < ma_tafdc_payment_standard: tafdc_rounded_need_standard_deficit else: ma_tafdc_payment_standard
+
+  - name: eaedc_countable_income_after_grant_deductions
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.500, EAEDC Steps 1 and 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "Subtract work-related-expenses ... the $30 and one-third disregard or $30 disregard ... dependent care deduction, from earned income, and add the result to the gross unearned income"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (if eaedc_thirty_and_one_third_disregard_applies: max(0, max(0, eaedc_countable_earned_income_before_grant_deductions - eaedc_work_related_expenses) - eaedc_thirty_dollar_disregard_amount - (eaedc_one_third_disregard_rate * max(0, max(0, eaedc_countable_earned_income_before_grant_deductions - eaedc_work_related_expenses) - eaedc_thirty_dollar_disregard_amount)) - eaedc_dependent_care_deduction) else: if eaedc_thirty_dollar_disregard_applies: max(0, max(0, eaedc_countable_earned_income_before_grant_deductions - eaedc_work_related_expenses) - eaedc_thirty_dollar_disregard_amount - eaedc_dependent_care_deduction) else: max(0, max(0, eaedc_countable_earned_income_before_grant_deductions - eaedc_work_related_expenses) - eaedc_dependent_care_deduction)) + eaedc_gross_unearned_income
+
+  - name: eaedc_financially_eligible_after_grant_calculation
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 704.500, EAEDC Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.500
+              excerpt: "If the result is greater than or equal to zero, the assistance unit is financially eligible."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          eaedc_standard_of_assistance - eaedc_countable_income_after_grant_deductions >= 0
