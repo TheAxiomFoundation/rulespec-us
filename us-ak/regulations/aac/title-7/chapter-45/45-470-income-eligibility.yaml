@@ -1,0 +1,133 @@
+format: rulespec/v1
+imports:
+  - us-ak:policies/dpa/atap/standards/2026/adult-included-gross-income-limit#ak_atap_gross_income_limit
+  - us-ak:policies/dpa/atap/standards/2026/adult-included#ak_atap_need_standard
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470
+  summary: |-
+    The department first determines whether resources are within 7 AAC 45.280 limits and total nonexempt gross monthly income is equal to or less than the applicable 185 percent standard in 7 AAC 45.520. For qualifying units, countable income is total gross monthly income with applicable deductions and disregards under 7 AAC 45.475 - 7 AAC 45.500. The unit is income eligible if countable income is equal to or less than the applicable need standard; income exceeding either standard by $.01 or more requires denial, suspension, or termination.
+rules:
+  - name: income_excess_minimum_for_denial
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470
+              excerpt: "exceeds by $.01 or more"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          0.01
+
+  - name: countable_income_under_7_aac_45_470_b
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470
+              excerpt: "adding an assistance unit's total gross monthly income; and ... deductions and disregards from income under 7 AAC 45.475 - 7 AAC 45.500"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, total_gross_monthly_income - applicable_deductions_and_disregards_from_income_under_7_aac_45_475_to_45_500)
+
+  - name: atap_initial_income_screen_met
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470
+              excerpt: "resources are within the limits of 7 AAC 45.280 ... total nonexempt gross monthly income is equal to, or less than, the applicable 185 percent standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included-gross-income-limit#ak_atap_gross_income_limit
+              output: ak_atap_gross_income_limit
+              hash: sha256:bc07b425fed921da470cce795e8bda9b4c552ed5922db6d6ad2cca230ba15385
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          resources_within_limits_under_7_aac_45_280
+          and total_nonexempt_gross_monthly_income <= ak_atap_gross_income_limit
+
+  - name: ak_atap_eligible
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470
+              excerpt: "income eligible if that assistance unit's countable income is equal to, or less than, the applicable need standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included#ak_atap_need_standard
+              output: ak_atap_need_standard
+              hash: sha256:de93ce34dc325ae8bb4e7799a0f82ca10a1507db9641cb638ecd221604de2213
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          atap_initial_income_screen_met
+          and countable_income_under_7_aac_45_470_b <= ak_atap_need_standard
+
+  - name: atap_income_excess_requires_denial_suspension_or_termination
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ak/regulation/aac/title-7/chapter-45/7 AAC 45.470
+              excerpt: "income exceeds by $.01 or more either the applicable 185-percent limit or the applicable need standard"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included-gross-income-limit#ak_atap_gross_income_limit
+              output: ak_atap_gross_income_limit
+              hash: sha256:bc07b425fed921da470cce795e8bda9b4c552ed5922db6d6ad2cca230ba15385
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/atap/standards/2026/adult-included#ak_atap_need_standard
+              output: ak_atap_need_standard
+              hash: sha256:de93ce34dc325ae8bb4e7799a0f82ca10a1507db9641cb638ecd221604de2213
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          total_nonexempt_gross_monthly_income >= ak_atap_gross_income_limit + income_excess_minimum_for_denial
+          or countable_income_under_7_aac_45_470_b >= ak_atap_need_standard + income_excess_minimum_for_denial
