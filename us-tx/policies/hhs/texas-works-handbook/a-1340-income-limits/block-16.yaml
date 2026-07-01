@@ -1,0 +1,109 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+    upstream_source_check:
+      status: delegated_parameter_source
+      checked_paths:
+        - us-tx/statute/hr/31.003
+        - us-tx/statute/hr/31.043
+      rationale: The Texas Human Resources Code delegates TANF financial assistance amount rules and fill-the-gap budgeting mechanics to the executive commissioner and commission; this Texas Works Handbook source is the operative HHSC delegated source for the grant calculation and minimum grant rule encoded here.
+  summary: |-
+    "The TANF grant amount is the amount of the monthly benefit. The TANF grant is approximately 17 percent of the Federal Poverty Level (FPL)." "Subtract the household's adjusted gross income, rounded down to the nearest dollar, from the maximum grant amount allowed for the household's size and composition." "The minimum grant amount is $10."
+rules:
+  - name: approximate_tanf_grant_fpl_rate
+    kind: parameter
+    dtype: Rate
+    source: Texas Works Handbook A-1340, block 16
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+              excerpt: "approximately 17 percent of the Federal Poverty Level (FPL)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.17
+
+  - name: tanf_minimum_grant_amount
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas Works Handbook A-1340, block 16
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+              excerpt: "The minimum grant amount is $10."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: recommended_tanf_grant_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas Works Handbook A-1340, block 16
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+              excerpt: "Subtract the household's adjusted gross income, rounded down to the nearest dollar, from the maximum grant amount allowed for the household's size and composition."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, maximum_grant_amount_allowed_for_household_size_and_composition - floor(household_adjusted_gross_income))
+
+  - name: tx_tanf
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas Works Handbook A-1340, block 16
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+              excerpt: "After the household passes the recognizable needs test"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+              excerpt: "The minimum grant amount is $10."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/a-1340-income-limits/block-16
+              excerpt: "Benefits of less than $10 are issued only for: supplemental payments; and payments made after processing a recoupment."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_passes_recognizable_needs_test:
+            if recommended_tanf_grant_amount < tanf_minimum_grant_amount:
+              if payment_is_supplemental or payment_made_after_processing_recoupment:
+                recommended_tanf_grant_amount
+              else:
+                tanf_minimum_grant_amount
+            else:
+              recommended_tanf_grant_amount
+          else:
+            0
