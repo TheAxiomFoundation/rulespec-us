@@ -1,0 +1,104 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.280
+  summary: |-
+    An applicant who has received TAFDC within the last four calendar months is eligible to have 50 per cent of remaining gross earned income disregarded after work-related expenses and before dependent care deductions, unless one of the listed disqualifying conditions exists.
+rules:
+  - name: tafdc_application_earned_income_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 106 CMR 704.280
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.280
+              excerpt: "50 per cent of the remaining gross earned income disregarded"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.50
+
+  - name: tafdc_application_earned_income_disregard_disqualified
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 704.280(A)-(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.280
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_reduced_income_or_terminated_employment_without_good_cause_before_grant_calculation_month
+          or applicant_refused_bona_fide_job_offer_without_good_cause_in_same_period
+          or applicant_failed_without_good_cause_to_make_timely_report_of_income_received
+          or applicant_is_employed_in_full_employment_program
+          or applicant_is_not_included_in_case_but_legally_liable_to_support_dependent_child
+
+  - name: tafdc_application_earned_income_disregard_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 106 CMR 704.280
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.280
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ma:regulations/106-cmr/704/280/block-1#tafdc_application_earned_income_disregard_disqualified
+              output: tafdc_application_earned_income_disregard_disqualified
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          applicant_received_tafdc_within_last_four_calendar_months
+          and not tafdc_application_earned_income_disregard_disqualified
+
+  - name: tafdc_application_earned_income_disregard_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 106 CMR 704.280
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/regulation/dta/106-cmr/704/704.280
+              excerpt: "remaining gross earned income disregarded, after work-related-expenses, but before dependent care deductions"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ma:regulations/106-cmr/704/280/block-1#tafdc_application_earned_income_disregard_rate
+              output: tafdc_application_earned_income_disregard_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ma:regulations/106-cmr/704/280/block-1#tafdc_application_earned_income_disregard_eligible
+              output: tafdc_application_earned_income_disregard_eligible
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if tafdc_application_earned_income_disregard_eligible: tafdc_application_earned_income_disregard_rate * max(0, remaining_gross_earned_income_after_work_related_expenses_before_dependent_care_deductions) else: 0
