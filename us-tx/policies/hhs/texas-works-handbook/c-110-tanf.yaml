@@ -1,0 +1,139 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/c-110-tanf
+    upstream_source_check:
+      status: delegated_parameter_source
+      checked_paths:
+        - us-tx/statute/hr/31.003
+        - us-tx/statute/hr/31.043
+      rationale: Texas Human Resources Code delegates TANF financial assistance amount rules and budgeting methods to HHSC; the Texas Works Handbook is the operative HHSC parameter and proration source for these TANF grant calculations.
+  summary: |-
+    C-111 lists TANF Budgetary Allowances effective Oct. 1, 2025. C-112 provides that after eligibility is determined, the TANF grant amount is prorated for the first month by multiplying the recommended grant by the C-112.1 multiplier, rounding down to the next dollar, and denying a first-month grant if the result is less than $10. One-Time TANF and One-Time TANF for Relatives payments are not prorated.
+imports:
+rules:
+  - name: proration_file_date_day_limit
+    kind: parameter
+    dtype: Count
+    source: Texas Works Handbook C-112, Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/c-110-tanf
+              excerpt: "Determine the earlier of the certification date or the 30th day after the file date."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          30
+
+  - name: first_month_minimum_prorated_grant
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Texas Works Handbook C-112, Step 4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/c-110-tanf
+              excerpt: "If the resulting prorated grant is less than $10, the household is not eligible for a grant in the first month."
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          10
+
+  - name: tanf_proration_multiplier_by_financial_eligibility_begin_day
+    kind: parameter
+    dtype: Rate
+    indexed_by: date_financial_eligibility_begins_day
+    source: Texas Works Handbook C-112.1, Proration Multiplier Chart
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/c-110-tanf
+              table:
+                header: "Date Financial Eligibility Begins Proration Multiplier"
+                row_key: "Date Financial Eligibility Begins"
+                column_key: "Proration Multiplier"
+    versions:
+      - effective_from: '2001-10-01'
+        values:
+          1: 1
+          2: 0.97
+          3: 0.93
+          4: 0.90
+          5: 0.87
+          6: 0.83
+          7: 0.80
+          8: 0.77
+          9: 0.73
+          10: 0.70
+          11: 0.67
+          12: 0.63
+          13: 0.60
+          14: 0.57
+          15: 0.53
+          16: 0.50
+          17: 0.47
+          18: 0.43
+          19: 0.40
+          20: 0.37
+          21: 0.33
+          22: 0.30
+          23: 0.27
+          24: 0.23
+          25: 0.20
+          26: 0.17
+          27: 0.13
+          28: 0.10
+          29: 0.07
+          30: 0.03
+          31: 0.03
+
+  - name: tanf_first_month_grant_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Texas Works Handbook C-112, How to Prorate TANF Grants
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/c-110-tanf
+              excerpt: "Multiply the recommended grant amount from Step 1 by the multiplier from Step 2. Round the amount from Step 3 down to the next dollar."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-tx/manual/hhs/texas-works-handbook/c-110-tanf
+              excerpt: "One-Time TANF and One-Time TANF for Relatives payments are not prorated."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tx:policies/hhs/texas-works-handbook/c-110-tanf#tanf_proration_multiplier_by_financial_eligibility_begin_day
+              output: tanf_proration_multiplier_by_financial_eligibility_begin_day
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-tx:policies/hhs/texas-works-handbook/c-110-tanf#first_month_minimum_prorated_grant
+              output: first_month_minimum_prorated_grant
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          if tanf_payment_is_one_time_tanf_or_one_time_tanf_for_relatives_payment: recommended_tanf_grant_amount_for_month else: if floor(recommended_tanf_grant_amount_for_month * tanf_proration_multiplier_by_financial_eligibility_begin_day[date_financial_eligibility_begins_day]) < first_month_minimum_prorated_grant: 0 else: floor(recommended_tanf_grant_amount_for_month * tanf_proration_multiplier_by_financial_eligibility_begin_day[date_financial_eligibility_begins_day])
