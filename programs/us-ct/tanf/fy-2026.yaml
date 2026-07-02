@@ -1,0 +1,121 @@
+# Connecticut Temporary Family Assistance -- FY 2026
+#
+# This program spec composes the Connecticut General Statutes TFA standard-of-need,
+# payment-standard, housing-attribution, resource, income, child-support, and
+# high-earnings slices encoded under us-ct/statutes. Broader demographic,
+# immigration, time-limit, exemption, extension, and application-vs-recipient
+# eligibility gates remain incomplete at this top-level surface.
+
+program: us-ct/tanf
+period: 2026-01
+
+outputs:
+  - ct_tfa_need_standard
+  - ct_tfa_payment_standard
+  - ct_tfa_subsidized_housing_attributed_income
+  - ct_tfa_payment_standard_after_housing_attribution
+  - ct_tfa_resources_eligible
+  - ct_tfa_income_eligible
+  - ct_tfa_eligible
+  - ct_tfa
+
+acknowledged_incomplete:
+  - ct_tfa_income_eligible
+  - ct_tfa_eligible
+  - ct_tfa
+
+scope:
+  state:
+    - statutes/17b-104
+    - statutes/17b-112
+
+transformations:
+  - pattern: derived_formula
+    name: ct_tfa_need_standard
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ct/tanf/fy-2026 standard-of-need bridge
+    formula: temporary_family_assistance_standard_of_need
+
+  - pattern: derived_formula
+    name: ct_tfa_payment_standard
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ct/tanf/fy-2026 payment-standard bridge
+    formula: temporary_family_assistance_payment_standard
+
+  - pattern: derived_formula
+    name: ct_tfa_subsidized_housing_attributed_income
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ct/tanf/fy-2026 subsidized-housing attribution bridge
+    formula: subsidized_housing_attributed_income
+
+  - pattern: derived_formula
+    name: ct_tfa_payment_standard_after_housing_attribution
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ct/tanf/fy-2026 housing-attribution composition
+    formula: max(0, ct_tfa_payment_standard - ct_tfa_subsidized_housing_attributed_income)
+
+  - pattern: derived_formula
+    name: ct_tfa_resources_eligible
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-ct/tanf/fy-2026 resource eligibility bridge
+    formula: asset_eligibility
+
+  - pattern: derived_formula
+    name: ct_tfa_income_eligible
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-ct/tanf/fy-2026 income eligibility composition
+    formula: |-
+      if family_receiving_temporary_family_assistance: gross_earnings_eligibility else: ct_tfa_countable_income_at_application <= ct_tfa_need_standard
+
+  - pattern: derived_formula
+    name: monthly_award_before_high_earnings_reduction
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ct/tanf/fy-2026 pre-high-earnings award composition
+    formula: max(0, ct_tfa_payment_standard_after_housing_attribution - ct_tfa_countable_unearned_income)
+
+  - pattern: derived_formula
+    name: ct_tfa_eligible
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-ct/tanf/fy-2026 financial eligibility composition
+    formula: ct_tfa_resources_eligible and ct_tfa_income_eligible and child_support_cooperation_eligibility
+
+  - pattern: conditional_value
+    name: ct_tfa
+    effective_from: '2026-01-01'
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-ct/tanf/fy-2026 benefit amount composition
+    condition: ct_tfa_eligible
+    when_true: benefit_after_high_earnings_reduction
+    when_false: 0
