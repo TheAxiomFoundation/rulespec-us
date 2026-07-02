@@ -1,0 +1,155 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ct/policy/dss/upm/5520.10/block-1
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-ct:statutes/17b-600
+      rationale: Conn. Gen. Stat. 17b-600 provides higher-level authority for optional state supplementation and includes related SSI-benefit income-cap language, but UPM 5520.10 is the specific DSS policy source that states the AABD gross-income and applied-income eligibility tests encoded here.
+  summary: |-
+    5520.10 states that AABD income eligibility is determined by both gross income and applied income tests. For an individual needs group, gross monthly income is compared to "300% of the maximum SSI benefit"; for a spousal needs group, combined gross monthly income is compared to "600% of the maximum SSI benefit." If gross income exceeds the applicable limit, there is no eligibility. If gross income is equal to or less than the limit, applied income must be less than the applicable needs amount for the assistance unit member to be eligible.
+imports:
+  - us-ct:policies/dss/upm/5045-10#aabd_maabd_total_applied_income
+rules:
+  - name: aabd_individual_gross_income_limit_multiplier
+    kind: parameter
+    dtype: Rate
+    source: UPM 5520.10(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5520.10/block-1
+              excerpt: 300% of the maximum SSI benefit
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          3.00
+
+  - name: aabd_spousal_gross_income_limit_multiplier
+    kind: parameter
+    dtype: Rate
+    source: UPM 5520.10(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5520.10/block-1
+              excerpt: 600% of the maximum SSI benefit
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          6.00
+
+  - name: aabd_individual_gross_monthly_income_limit
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 5520.10(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5520.10/block-1
+              excerpt: 300% of the maximum SSI benefit for an individual who has no income and lives in his or her own home
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5520-10#aabd_individual_gross_income_limit_multiplier
+              output: aabd_individual_gross_income_limit_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          aabd_individual_gross_income_limit_multiplier * maximum_ssi_benefit_for_individual_with_no_income_living_in_own_home
+
+  - name: aabd_spousal_gross_monthly_income_limit
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 5520.10(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5520.10/block-1
+              excerpt: 600% of the maximum SSI benefit for an individual who has no income and lives in his or her own home
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5520-10#aabd_spousal_gross_income_limit_multiplier
+              output: aabd_spousal_gross_income_limit_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          aabd_spousal_gross_income_limit_multiplier * maximum_ssi_benefit_for_individual_with_no_income_living_in_own_home
+
+  - name: ct_ssp_income_eligible
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Judgment
+    period: Month
+    source: UPM 5520.10(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5520.10/block-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5045-10#aabd_maabd_total_applied_income
+              output: aabd_maabd_total_applied_income
+              hash: sha256:8cdf37f42751bed043ad36cf558d57e158d25dec5a222dee38e608f43d14471b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5520-10#aabd_individual_gross_monthly_income_limit
+              output: aabd_individual_gross_monthly_income_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5520-10#aabd_spousal_gross_monthly_income_limit
+              output: aabd_spousal_gross_monthly_income_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          (
+            needs_group_comprises_only_individual_applicant_or_recipient
+            and assistance_unit_total_gross_monthly_income <= aabd_individual_gross_monthly_income_limit
+            and aabd_maabd_total_applied_income < total_needs_of_individual
+          )
+          or (
+            needs_group_comprises_both_spouses
+            and total_gross_monthly_income_of_applicant_or_recipient_and_spouse <= aabd_spousal_gross_monthly_income_limit
+            and (
+              (
+                spouse_is_eligible
+                and aabd_maabd_total_applied_income < applicant_and_eligible_spouse_total_basic_and_special_needs
+              )
+              or (
+                spouse_is_ineligible
+                and aabd_maabd_total_applied_income < applicant_basic_and_special_needs_plus_ineligible_spouse_basic_needs
+              )
+            )
+          )
