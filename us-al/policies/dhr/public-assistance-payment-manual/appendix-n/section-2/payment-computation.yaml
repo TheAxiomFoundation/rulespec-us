@@ -1,0 +1,308 @@
+format: rulespec/v1
+imports:
+  - us-al:regulations/alabama-administrative-code/660/2/2/10-amount-of-assistance-payment#minimum_grant
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-al:regulations/alabama-administrative-code/660/2/2/10-amount-of-assistance-payment
+      rationale: The Alabama Administrative Code rule supplies the higher-authority assistance-payment deficit and minimum-grant framework, while this manual page supplies the detailed earned-income deductions, countable-income rounding, sanction/recoupment treatment, application-month proration, and added-member computation encoded here.
+  summary: |-
+    "Deduct work expenses from gross earnings of each wage earner in the following order: 1. 20% of gross earnings (round all fractions of a cent to nearest cent). 2. Child care or care of an incapacitated adult..." "Subtract the total countable earned and unearned income rounded to the nearest dollar from the payment standard." Deny or terminate if countable income equals or exceeds the payment standard or net entitlement is less than $10. Prorate the application-month money payment by days including and following application date over 30 days, rounding down.
+rules:
+  - name: earned_income_work_expense_rate
+    kind: parameter
+    dtype: Rate
+    source: Appendix N, Section 2, Payment Computation, paragraph B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "20% of gross earnings"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          0.20
+
+  - name: cent_rounding_unit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Appendix N, Section 2, Payment Computation, paragraph B.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: unit
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "fractions of a cent to nearest cent"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          0.01
+
+  - name: nearest_rounding_midpoint
+    kind: parameter
+    dtype: Decimal
+    source: Appendix N, Section 2, Payment Computation, paragraphs B.1 and D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "nearest cent ... nearest dollar"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          0.5
+
+  - name: application_proration_denominator_days
+    kind: parameter
+    dtype: Count
+    source: Appendix N, Section 2, Payment Computation, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "to 30 days"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          30
+
+  - name: application_month_last_day_special_case
+    kind: parameter
+    dtype: Count
+    source: Appendix N, Section 2, Payment Computation, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "If the date of the application is the 31st"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          31
+
+  - name: al_tanf_countable_earned_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          max(0, gross_earned_income - (floor(((gross_earned_income * earned_income_work_expense_rate) / cent_rounding_unit) + nearest_rounding_midpoint) * cent_rounding_unit) - child_or_incapacitated_adult_care_expenses)
+
+  - name: al_tanf_countable_income
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraphs C-D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "total countable earned and unearned income rounded to the nearest dollar"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          floor((al_tanf_countable_earned_income + countable_unearned_income) + nearest_rounding_midpoint)
+
+  - name: al_tanf_entitlement_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          max(0, payment_standard - al_tanf_countable_income)
+
+  - name: al_tanf_net_entitlement
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "When a sanction amount is being deducted, it is subtracted from the entitlement amount"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          max(0, al_tanf_entitlement_amount - sanction_amount)
+
+  - name: al_tanf_payment_eligible
+    kind: derived
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "net countable income is equal to or greater than the payment standard or if the net entitlement amount would be less than $10, deny or terminate"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-al:regulations/alabama-administrative-code/660/2/2/10-amount-of-assistance-payment#minimum_grant
+              output: minimum_grant
+              hash: sha256:ce1c23155dcaaf741a298ca788fa9f0ea6a8b74d9428cd9002e04fe31d9ccb01
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          al_tanf_countable_income < payment_standard
+          and al_tanf_net_entitlement >= minimum_grant
+
+  - name: al_tanf_deposit_after_recoupment
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "the recoupment amount is deducted from the entitlement amount before the benefits are deposited"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          if al_tanf_payment_eligible: max(0, al_tanf_net_entitlement - assistance_recoupment_for_prior_overpayment) else: 0
+
+  - name: application_proration_days
+    kind: derived
+    entity: TanfUnit
+    dtype: Count
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "subtracting the date of application from 30 and adding 1"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          if application_date_day == application_month_last_day_special_case: 1 else: application_proration_denominator_days - application_date_day + 1
+
+  - name: al_tanf_initial_month_payment
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "multiplying the net entitlement amount ... by the ratio ... to 30 days. Round the result down"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          floor((al_tanf_net_entitlement * application_proration_days) / application_proration_denominator_days)
+
+  - name: additional_household_member_monthly_grant_difference
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "subtracting the payment standard for the current household size from the payment standard for the new household size"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          max(0, new_household_size_payment_standard - current_household_size_payment_standard)
+
+  - name: additional_household_member_prorated_amount
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Appendix N, Section 2, Payment Computation, paragraph F
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/policy/dhr/public-assistance-payment-manual/appendix-n/section-2/page-20
+              excerpt: "prorate the additional amount due according to procedures outlined in E"
+    versions:
+      - effective_from: '2007-09-10'
+        formula: |-
+          if additional_member_application_made_after_first_day_of_month: floor((additional_household_member_monthly_grant_difference * application_proration_days) / application_proration_denominator_days) else: additional_household_member_monthly_grant_difference
