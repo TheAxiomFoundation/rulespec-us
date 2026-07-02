@@ -1,0 +1,127 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - Conn. Gen. Stat. 17b-600
+        - Conn. Gen. Stat. 17b-10
+        - Regulations of Connecticut State Agencies 17b-10-1
+        - Regulations of Connecticut State Agencies 17b-198-2
+      rationale: UPM 5050.13 is the specific DSS implementing source for Connecticut AABD/MAABD treatment of Social Security, SSI, and veterans' benefits after checking the upstream statutory and regulatory authority chain.
+  summary: |-
+    Social Security and veterans' benefits are unearned income in all programs and are subject to unearned-income disregards in AABD and MAABD. SSI is unearned income for State Supplement applicants and recipients and is reduced by unearned-income disregards for AABD eligibility and benefit calculations. A $90.00 personal needs allowance is used for veterans in LTCFs whose VA pension is reduced to $90.00 and, effective 10-1-92, for similarly situated spouses of deceased veterans. The part of a veteran's benefit representing an allowance for a surviving spouse who is permanently housebound because of disability is totally excluded in AABD and MAABD.
+imports:
+  - us-ct:policies/dss/upm/5030-15#ct_ssp_unearned_income_disregard
+rules:
+  - name: reduced_va_pension_personal_needs_allowance
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 5050.13(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: personal needs allowance of $90.00 is used
+    versions:
+      - effective_from: '1992-10-01'
+        formula: |-
+          90
+  - name: reduced_va_pension_personal_needs_allowance_applied
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 5050.13(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: veterans residing in LTCFs whose VA pension is reduced to $90.00
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: spouses of deceased veterans in LTCFs whose pension is similarly reduced
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5050-13#reduced_va_pension_personal_needs_allowance
+              output: reduced_va_pension_personal_needs_allowance
+              hash: sha256:local
+    versions:
+      - effective_from: '1992-10-01'
+        formula: |-
+          if veteran_resides_in_ltcf_and_va_pension_reduced_under_public_law_101_508 or spouse_of_deceased_veteran_resides_in_ltcf_and_va_pension_similarly_reduced_under_public_law_101_508_as_amended: reduced_va_pension_personal_needs_allowance else: 0
+  - name: aabd_maabd_excluded_surviving_spouse_housebound_veterans_allowance
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 5050.13(A)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: allowance for a surviving spouse based on his or her being permanently housebound because of a disability is totally excluded
+    versions:
+      - effective_from: '1999-02-01'
+        formula: |-
+          if determining_aabd_or_maabd_income_treatment: veterans_benefit_allowance_for_surviving_spouse_permanently_housebound_due_to_disability else: 0
+  - name: ct_ssp_countable_income
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 5050.13(A)(1)-(2), 5050.13(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: Income from these sources is treated as unearned income
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: SSI income is treated as unearned income for applicants or recipients of the State Supplement programs
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/5050.13/block-1
+              excerpt: allowance for a surviving spouse ... is totally excluded in the AABD and MAABD programs
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5030-15#ct_ssp_unearned_income_disregard
+              output: ct_ssp_unearned_income_disregard
+              hash: sha256:3c73d171a7948bf37c1d14c6f51da1b6a2ca186e0a2e2753376ac48ee6eb100b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/5050-13#aabd_maabd_excluded_surviving_spouse_housebound_veterans_allowance
+              output: aabd_maabd_excluded_surviving_spouse_housebound_veterans_allowance
+              hash: sha256:local
+    versions:
+      - effective_from: '1999-02-01'
+        formula: |-
+          if determining_aabd_state_supplement_eligibility_or_benefit: max(0, monthly_social_security_benefits + monthly_veterans_benefits + monthly_ssi_income - aabd_maabd_excluded_surviving_spouse_housebound_veterans_allowance - ct_ssp_unearned_income_disregard) else: 0
