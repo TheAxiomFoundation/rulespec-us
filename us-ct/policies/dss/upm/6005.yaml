@@ -1,0 +1,135 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-ct:statutes/17b-600
+      rationale: Conn. Gen. Stat. 17b-600 supplies higher-level Connecticut SSP authority, but UPM 6005 is the specific DSS policy source that states the benefit comparison and issuance calculations encoded here.
+  summary: |-
+    UPM 6005 states that benefits are calculated by comparing the assistance unit's applied income to total needs. AFDC uses Fill-the-Gap budgeting by subtracting applied income from the standard of need, multiplying the difference by 73%, adding eligible special needs, subtracting non-fill-the-gap income, and rounding down. AABD benefits subtract applied income from total needs, with spousal rules for combined needs and issuance. FS benefits multiply applied income by 30%, round that product up, and subtract it from the FS standard of assistance.
+rules:
+  - name: afdc_fill_the_gap_rate
+    kind: parameter
+    dtype: Rate
+    source: UPM 6005(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+              excerpt: multiplying this difference by 73%
+    versions:
+      - effective_from: '1995-07-01'
+        formula: |-
+          0.73
+
+  - name: fs_applied_income_rate
+    kind: parameter
+    dtype: Rate
+    source: UPM 6005(C)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+              excerpt: multiplying the assistance unit's applied income by 30%
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          0.30
+
+  - name: afdc_monthly_benefit
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 6005(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/6005#afdc_fill_the_gap_rate
+              output: afdc_fill_the_gap_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1995-07-01'
+        formula: |-
+          max(0, floor((afdc_standard_of_need - afdc_assistance_unit_applied_income) * afdc_fill_the_gap_rate + afdc_eligible_special_needs - afdc_non_fill_the_gap_income))
+
+  - name: aabd_monthly_benefit_determined
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 6005(B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+    versions:
+      - effective_from: '1995-07-01'
+        formula: |-
+          if aabd_unit_member_not_considered_living_with_spouse: max(0, aabd_unit_total_needs - aabd_unit_member_applied_income) else: if aabd_unit_member_living_with_spouse: max(0, (if aabd_spouse_is_eligible: aabd_applicant_and_eligible_spouse_basic_and_special_needs else: if aabd_spouse_is_ineligible: aabd_applicant_basic_and_special_needs_plus_ineligible_spouse_basic_needs else: 0) - aabd_applicant_or_recipient_applied_income_including_deemed_spouse) else: 0
+
+  - name: ct_ssp_person
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 6005(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          if aabd_unit_member_not_considered_living_with_spouse: max(0, aabd_unit_total_needs - aabd_unit_member_applied_income) else: if aabd_unit_member_living_with_spouse: if both_spouses_applying_and_eligible_for_aabd: max(0, (aabd_combined_needs_of_both_spouses - aabd_combined_applied_incomes_of_both_spouses) / 2) else: if only_one_spouse_applying_and_eligible_for_aabd: max(0, aabd_combined_needs_of_both_spouses - aabd_combined_applied_incomes_of_both_spouses) else: 0 else: 0
+
+  - name: fs_monthly_benefit
+    kind: derived
+    entity: AssistanceUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: UPM 6005(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/policy/dss/upm/6005/block-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/upm/6005#fs_applied_income_rate
+              output: fs_applied_income_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1988-07-01'
+        formula: |-
+          max(0, fs_standard_of_assistance_for_unit_size - ceil(fs_assistance_unit_applied_income * fs_applied_income_rate))
