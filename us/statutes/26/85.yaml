@@ -1,0 +1,181 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/85
+  summary: |-
+    Section 85 includes unemployment compensation in gross income for an
+    individual. Unemployment compensation is any amount received under a law of
+    the United States or of a State that is in the nature of unemployment
+    compensation. For taxable years beginning in 2020, if the taxpayer's
+    adjusted gross income determined under section 85(c)(1) is less than
+    $150,000, gross income excludes up to $10,200 of unemployment compensation
+    received by the taxpayer and, on a joint return, up to $10,200 received by
+    each spouse.
+rules:
+  - name: section_85_unemployment_compensation_recipient_of_tax_unit
+    kind: data_relation
+    data_relation:
+      predicate: section_85_unemployment_compensation_recipient_of_tax_unit
+      arity: 2
+      arguments:
+        - TaxUnit
+        - Person
+
+  - name: temporary_unemployment_exclusion_adjusted_gross_income_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 85(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: adjusted gross income of the taxpayer for such taxable year is less than $150,000
+    versions:
+      - effective_from: '2020-01-01'
+        formula: |-
+          150000
+
+  - name: temporary_unemployment_exclusion_cap_per_taxpayer_or_spouse
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 85(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: as does not exceed $10,200
+    versions:
+      - effective_from: '2020-01-01'
+        formula: |-
+          10200
+
+  - name: unemployment_compensation
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 85(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: any amount received under a law of the United States or of a State which is in the nature of unemployment compensation
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          amount_received_under_united_states_or_state_law_in_nature_of_unemployment_compensation
+
+  - name: section_85_unemployment_compensation_recipient_has_unemployment_compensation
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 85(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: unemployment compensation received by the taxpayer
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          unemployment_compensation > 0
+
+  - name: temporary_unemployment_compensation_exclusion_for_recipient
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 85(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: unemployment compensation received by the taxpayer as does not exceed $10,200
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          min(
+              max(0, unemployment_compensation),
+              temporary_unemployment_exclusion_cap_per_taxpayer_or_spouse
+          )
+
+  - name: temporary_unemployment_compensation_exclusion
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 85(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: gross income includes unemployment compensation
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: in the case of a joint return, the unemployment compensation received by each spouse
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          if taxable_year_begins_in_temporary_unemployment_exclusion_year and adjusted_gross_income_for_temporary_unemployment_exclusion < temporary_unemployment_exclusion_adjusted_gross_income_threshold:
+              sum_where(
+                  section_85_unemployment_compensation_recipient_of_tax_unit,
+                  temporary_unemployment_compensation_exclusion_for_recipient,
+                  section_85_unemployment_compensation_recipient_has_unemployment_compensation
+              )
+          else:
+              0
+
+  - name: unemployment_compensation_included_in_gross_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 85(a), 26 USC 85(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/85
+              excerpt: gross income includes unemployment compensation
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          max(
+              0,
+              sum_where(
+                  section_85_unemployment_compensation_recipient_of_tax_unit,
+                  unemployment_compensation,
+                  section_85_unemployment_compensation_recipient_has_unemployment_compensation
+              ) - temporary_unemployment_compensation_exclusion
+          )
