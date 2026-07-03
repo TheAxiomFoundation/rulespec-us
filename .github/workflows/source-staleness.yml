@@ -1,0 +1,217 @@
+name: Source staleness and reverse index
+
+# A5 of the Axiom platform plan: wire source-staleness checking into CI and
+# maintain the provision -> rules reverse index.
+#
+# Two independent concerns:
+#
+# 1. reverse-index (BLOCKING) - `.axiom/index/provisions_to_rules.json` is a
+#    generated artifact. This job regenerates it from the tracked RuleSpec YAML
+#    and fails if the committed copy is stale. It needs only PyYAML, so it is
+#    cheap and deterministic.
+#
+# 2. source-staleness (REPORT-ONLY) - recompute every
+#    `module.source_verification.source_sha256` pin against axiom-corpus@main
+#    and report drift. No checked-in module pins a source hash yet (see the
+#    A5 follow-up: pin stamping is blocked by the guard-generated signed-apply
+#    gate), so this job would be vacuous as a required check. It runs with
+#    continue-on-error so the drift report is always visible without blocking
+#    merges. Flip `continue-on-error` to false once pins exist repo-wide.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, aligned with the corpus/oracle cadence: catches corpus drift
+    # even when no rulespec PR is open.
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reverse-index:
+    name: reverse-index
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install PyYAML
+        run: python -m pip install --upgrade pip pyyaml
+
+      - name: Regenerate provision -> rules reverse index
+        run: python tests/generate_reverse_index.py
+
+      - name: Fail if the committed reverse index is stale
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code -- .axiom/index/provisions_to_rules.json; then
+            echo "::error::.axiom/index/provisions_to_rules.json is stale." >&2
+            echo "Run 'python tests/generate_reverse_index.py' and commit the result." >&2
+            exit 1
+          fi
+          echo "Reverse index is up to date."
+
+  source-staleness:
+    name: source-staleness (report-only)
+    runs-on: ubuntu-latest
+    # Report-only: pins do not exist yet, so a failure here must not block
+    # merges. Remove this line once source_sha256 pins are stamped repo-wide.
+    continue-on-error: true
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve pinned axiom-encode ref
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          encode_ref="main"
+          if [ -f .axiom/toolchain.toml ]; then
+            encode_ref="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path(".axiom/toolchain.toml").read_text())
+          table = data.get("toolchain", data)
+          print(table.get("axiom_encode_ref", "main"))
+          PY
+          )"
+          fi
+          echo "axiom_encode_ref=$encode_ref" >> "$GITHUB_OUTPUT"
+          echo "Pinned axiom-encode ref: $encode_ref"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.14"
+
+      # axiom-corpus is checked out at main on purpose: staleness detection
+      # must see the latest corpus text so it can flag pins that the corpus has
+      # since moved past.
+      - name: Checkout axiom-corpus @ main
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: main
+          path: _axiom/axiom-corpus
+
+      - name: Checkout axiom-encode (pinned)
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ steps.toolchain.outputs.axiom_encode_ref }}
+          path: _axiom/axiom-encode
+
+      - name: Install axiom-encode
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e _axiom/axiom-encode
+
+      - name: Report unpinned-module counts
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/staleness-report.txt"
+          python - "$report" <<'PY'
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+          repo = Path(".")
+          pinned = 0
+          unpinned = 0
+          grounded = 0
+          # Jurisdiction roots are top-level dirs like ``us`` and ``us-ca``.
+          module_paths = sorted(
+              {
+                  path
+                  for entry in repo.iterdir()
+                  if entry.is_dir() and entry.name.split("-")[0].isalpha()
+                  and len(entry.name.split("-")[0]) == 2
+                  and entry.name[0] != "."
+                  for pattern in ("*.yaml", "*.yml")
+                  for path in entry.rglob(pattern)
+              }
+          )
+          for path in module_paths:
+              name = path.name
+              if name.endswith((".test.yaml", ".test.yml")):
+                  continue
+              try:
+                  payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+              except (OSError, yaml.YAMLError):
+                  continue
+              if not isinstance(payload, dict):
+                  continue
+              module = payload.get("module")
+              if not isinstance(module, dict):
+                  continue
+              verification = module.get("source_verification")
+              if not isinstance(verification, dict):
+                  continue
+              grounded += 1
+              if str(verification.get("source_sha256") or "").strip():
+                  pinned += 1
+              else:
+                  unpinned += 1
+
+          lines = [
+              "# Source staleness report",
+              "",
+              f"- Modules with source_verification: {grounded}",
+              f"- Pinned (source_sha256 present): {pinned}",
+              f"- Unpinned (no source_sha256): {unpinned}",
+              "",
+          ]
+          if pinned == 0:
+              lines.append(
+                  "No modules pin source_sha256 yet, so the staleness check below "
+                  "is vacuous. Pin stamping is blocked by the guard-generated "
+                  "signed-apply gate; see the A5 follow-up issue."
+              )
+          Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines))
+          PY
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          echo "report_path=$report" >> "$GITHUB_OUTPUT"
+
+      - name: Run check-source-staleness (report-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '## check-source-staleness output' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          axiom-encode check-source-staleness \
+            --rulespec-root "$GITHUB_WORKSPACE" \
+            --corpus-root "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+            | tee -a "$RUNNER_TEMP/staleness-report.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "check-source-staleness exit status: $status"
+          # Surface the status for humans, but do not fail the job: this is the
+          # report-only phase. The job-level continue-on-error also guards this.
+          exit "$status"
+
+      - name: Upload staleness report artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: source-staleness-report
+          path: ${{ runner.temp }}/staleness-report.txt
+          if-no-files-found: warn
