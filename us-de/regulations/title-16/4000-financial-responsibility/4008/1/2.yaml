@@ -1,0 +1,159 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+  summary: Compare the gross income to 185% of the applicable standard of need. From
+    earned income subtract the standard work deduction ($90.00), the 30 plus 1/3 disregard
+    (if applicable), and child care. Subtract net income from the standard of need,
+    multiply the deficit by 50%, and grant the lesser of that remainder or the payment
+    standard.
+rules:
+- name: gross_income_limit_rate
+  kind: parameter
+  dtype: Rate
+  source: 16 DE Admin. Code 4008.1.2, Step 1
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+          excerpt: 185% of the applicable standard of need
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1.85'
+- name: standard_work_deduction
+  kind: parameter
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 16 DE Admin. Code 4008.1.2, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+          excerpt: standard work deduction ($90.00)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '90'
+- name: earned_income_disregard_base_amount
+  kind: parameter
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 16 DE Admin. Code 4008.1.2, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+          excerpt: the 30 plus 1/3 disregard
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '30'
+- name: earned_income_disregard_rate
+  kind: parameter
+  dtype: Rate
+  source: 16 DE Admin. Code 4008.1.2, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+          excerpt: the 30 plus 1/3 disregard
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 1 / 3
+- name: grant_deficit_remainder_rate
+  kind: parameter
+  dtype: Rate
+  source: 16 DE Admin. Code 4008.1.2, Step 3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+          excerpt: Multiply the deficit by 50%
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.50'
+- name: tanf_earner_countable_earned_income
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 16 DE Admin. Code 4008.1.2, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'max(0, earned_income - standard_work_deduction - (if thirty_plus_one_third_disregard_applies:
+      earned_income_disregard_base_amount + (earned_income_disregard_rate * max(0,
+      earned_income - standard_work_deduction - earned_income_disregard_base_amount))
+      else: 0) - child_care)'
+- name: earners
+  kind: data_relation
+  data_relation:
+    predicate: earners
+    arity: 2
+    arguments:
+    - name: earner
+      entity: Person
+    - name: tanf_unit
+      entity: TanfUnit
+- name: tanf_net_income
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 16 DE Admin. Code 4008.1.2, Step 2
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+  versions:
+  - effective_from: '0001-01-01'
+    formula: sum_where(earners, tanf_earner_countable_earned_income, person_is_earner)
+      + unearned_income
+- name: de_tanf
+  kind: derived
+  entity: TanfUnit
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 16 DE Admin. Code 4008.1.2, Steps 1-3
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.2
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if gross_income > gross_income_limit_rate * applicable_standard_of_need:
+      0 else: if tanf_net_income > applicable_standard_of_need: 0 else: min(max(0,
+      applicable_standard_of_need - tanf_net_income) * grant_deficit_remainder_rate,
+      payment_standard)'
