@@ -15,8 +15,14 @@ into runnable programs.
   (jurisdiction, program, period), consumed by `axiom-compose`. Absorbed
   from `axiom-programs` (US specs) with full history.
 - `tests/`: repository-wide validation — layout, companion-test pairing,
-  RuleSpec shape, derived-rule coverage, and program-spec scope auditing.
+  RuleSpec shape, derived-rule coverage, and program-spec scope auditing —
+  plus `generate_reverse_index.py`, which builds the provision→rules index.
 - `.axiom/toolchain.toml`: pinned validation toolchain (full commit SHAs).
+- `.axiom/index/provisions_to_rules.json`: generated reverse index mapping
+  each corpus citation path to the modules that depend on it (via module
+  `source_verification` and proof-atom sources). Regenerate with
+  `python tests/generate_reverse_index.py`; CI fails if it is stale. Do not
+  edit by hand.
 
 Durable ids are `<jurisdiction>:<path>#<rule>` — `us:statutes/7/2015/e`
 lives at `us/statutes/7/2015/e.yaml`, `us-ca:regulations/mpp/63-300/1` at
