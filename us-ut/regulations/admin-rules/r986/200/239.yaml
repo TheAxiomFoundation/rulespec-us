@@ -1,0 +1,138 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+  summary: |-
+    R986-200-239. To be eligible for financial assistance, the household's gross countable income must be less than or equal to 185% of the Standard Needs Budget for the household size. If gross countable income is less than or equal to 185% of the SNB, a $100 work expense allowance is allowed for each employed person in the household unit.
+rules:
+  - name: gross_countable_income_snb_percentage_limit
+    kind: parameter
+    dtype: Rate
+    period: Month
+    source: R986-200-239(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: less than or equal to 185% of the Standard Needs Budget
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          1.85
+
+  - name: work_expense_allowance_per_employed_person
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: R986-200-239(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: a work expense allowance of $100 for each person in the household unit who is employed
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          100
+
+  - name: financial_assistance_gross_countable_income_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: R986-200-239(1)(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ut:regulations/admin-rules/r986/200/239#gross_countable_income_snb_percentage_limit
+              output: gross_countable_income_snb_percentage_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: Standard Needs Budget or SNB means the budget level determined by the Department
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: 185% of the Standard Needs Budget for the size of the household
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          gross_countable_income_snb_percentage_limit * standard_needs_budget_for_household_size
+
+  - name: financial_assistance_gross_countable_income_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: R986-200-239(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ut:regulations/admin-rules/r986/200/239#financial_assistance_gross_countable_income_limit
+              output: financial_assistance_gross_countable_income_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: household's gross countable income must be less than or equal to 185% of the Standard Needs Budget
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          household_gross_countable_income <= financial_assistance_gross_countable_income_limit
+
+  - name: work_expense_allowance_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: R986-200-239(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ut:regulations/admin-rules/r986/200/239#financial_assistance_gross_countable_income_eligible
+              output: financial_assistance_gross_countable_income_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ut:regulations/admin-rules/r986/200/239#work_expense_allowance_per_employed_person
+              output: work_expense_allowance_per_employed_person
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: If the gross countable income is less than or equal to 185% of the SNB
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ut/regulation/admin-rules/r986/200/239
+              excerpt: $100 for each person in the household unit who is employed
+    versions:
+      - effective_from: '2022-10-24'
+        formula: |-
+          if financial_assistance_gross_countable_income_eligible: work_expense_allowance_per_employed_person * employed_person_count_in_household_unit else: 0
