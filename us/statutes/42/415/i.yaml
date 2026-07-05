@@ -1,7 +1,6 @@
 format: rulespec/v1
 imports:
   - us:statutes/42/415/a#primary_insurance_amount
-  - us:policies/ssa/cola/2026#social_security_cola_2026_applicable_increase_percentage
 module:
   proof_validation:
     required: true
@@ -11,7 +10,14 @@ module:
       - us/statute/42/415/i
       - us/statute/42/415/i/2
   summary: |-
-    When the Commissioner determines that a base quarter is a cost-of-living computation quarter, the primary insurance amount is increased effective with December by applying the applicable increase percentage. The resulting amount is decreased to the next lower multiple of $0.10 if needed. This module imports the 2026 SSA COLA percentage as an operational parameter.
+    When the Commissioner determines that a base quarter is a cost-of-living computation quarter, the primary insurance amount is increased effective with December by multiplying it by the applicable increase percentage, and the resulting amount is decreased to the next lower multiple of $0.10 if needed. Section 415(i)(2)(A)(i) directs the Commissioner to make this determination each year beginning with 1975, so the applicable increase percentage is a determination fixed per calendar year rather than a value stated in the statute. This module is therefore year-general: it takes the applicable increase percentage as a free input, and each determination year's percentage is supplied by its own policy module (for 2026, us/policies/ssa/cola/2026). A new determination year is a new policy file, not an edit to this statute module.
+
+    Input contract: cola_applicable_increase_percentage is the year's
+    applicable increase percentage fixed by the Commissioner's annual
+    determination under 415(i)(2)(A). Under lifetime execution it must be
+    supplied period-invariant (identical in every period) or wrapped in an
+    over-periods reduction; the engine rejects period-varying bare inputs
+    outside reductions.
 rules:
   - name: cola_pia_rounding_multiple
     kind: parameter
@@ -71,17 +77,11 @@ rules:
               target: us:statutes/42/415/a#primary_insurance_amount
               output: primary_insurance_amount
               hash: sha256:bf244b9460ead81724d135bb1f806a1ffb45ebc2e04bfdc33f1175ea28357221
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:policies/ssa/cola/2026#social_security_cola_2026_applicable_increase_percentage
-              output: social_security_cola_2026_applicable_increase_percentage
-              hash: sha256:5249208f72f03e3909eaa93bb59bf8a6bd6a68b89b5a4ddead2a6859b34af775
     versions:
       - effective_from: '1975-01-01'
         formula: |-
           primary_insurance_amount
-          * (1 + social_security_cola_2026_applicable_increase_percentage)
+          * (1 + cola_applicable_increase_percentage)
   - name: primary_insurance_amount_after_cost_of_living_increase
     kind: derived
     entity: Person
