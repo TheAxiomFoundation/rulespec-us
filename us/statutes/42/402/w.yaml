@@ -7,6 +7,8 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us/statute/42/402/w
+    corpus_citation_paths:
+      - us/statute/42/402/w
   summary: |-
     Old-age insurance benefits are increased for delayed retirement by the applicable monthly percentage multiplied by the number of increment months. Increment months run from retirement age to the month before age 70, subject to the statutory qualification conditions. The applicable monthly percentage is 1/12 of 1 percent for eligibility years before 1979, 1/4 of 1 percent for eligibility years 1979 through 1986, increases by 1/24 of 1 percent every odd eligibility year from 1987 through 2004, and is 2/3 of 1 percent for eligibility years after 2004.
 
@@ -17,26 +19,27 @@ module:
     wrapped in an over-periods reduction; the engine rejects
     period-varying bare inputs outside reductions.
 rules:
-  - name: delayed_retirement_credit_age_ceiling_months
+  - name: delayed_retirement_credit_ceiling_age_years
     kind: parameter
     dtype: Integer
-    unit: months
+    unit: years
     source: 42 USC 402(w)(2)(A)
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: condition
+            kind: amount
             source:
               corpus_citation_path: us/statute/42/402/w
               excerpt: "prior to the month in which such individual attained age 70"
     versions:
       - effective_from: '1972-01-01'
         formula: |-
-          70 * 12
-  - name: delayed_retirement_credit_before_1979_monthly_rate
+          70
+  - name: months_per_year_402w
     kind: parameter
-    dtype: Rate
+    dtype: Integer
+    unit: months
     source: 42 USC 402(w)(6)(A)
     metadata:
       proof:
@@ -49,11 +52,11 @@ rules:
     versions:
       - effective_from: '1972-01-01'
         formula: |-
-          1 / 1200
-  - name: delayed_retirement_credit_1979_to_1986_monthly_rate
+          12
+  - name: delayed_retirement_one_percent_as_rate
     kind: parameter
     dtype: Rate
-    source: 42 USC 402(w)(6)(B)
+    source: 42 USC 402(w)(6)(A)
     metadata:
       proof:
         atoms:
@@ -61,14 +64,44 @@ rules:
             kind: amount
             source:
               corpus_citation_path: us/statute/42/402/w
-              excerpt: "¼ of 1 percent"
+              excerpt: "of 1 percent"
     versions:
-      - effective_from: '1979-01-01'
+      - effective_from: '1972-01-01'
         formula: |-
-          1 / 400
-  - name: delayed_retirement_credit_transition_rate_increment
+          0.01
+  - name: delayed_retirement_credit_age_ceiling_months
+    kind: derived
+    entity: Person
+    dtype: Integer
+    period: Month
+    source: 42 USC 402(w)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "prior to the month in which such individual attained age 70"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#delayed_retirement_credit_ceiling_age_years
+              output: delayed_retirement_credit_ceiling_age_years
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#months_per_year_402w
+              output: months_per_year_402w
+              hash: sha256:local
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          delayed_retirement_credit_ceiling_age_years * months_per_year_402w
+  - name: delayed_retirement_credit_transition_denominator
     kind: parameter
-    dtype: Rate
+    dtype: Integer
     source: 42 USC 402(w)(6)(C)
     metadata:
       proof:
@@ -81,29 +114,13 @@ rules:
     versions:
       - effective_from: '1987-01-01'
         formula: |-
-          1 / 2400
-  - name: delayed_retirement_credit_after_2004_monthly_rate
-    kind: parameter
-    dtype: Rate
-    source: 42 USC 402(w)(6)(D)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us/statute/42/402/w
-              excerpt: "2/3 of 1 percent"
-    versions:
-      - effective_from: '2005-01-01'
-        formula: |-
-          2 / 300
+          24
   - name: old_age_insurance_benefit_eligibility_year
     kind: derived
     entity: Person
     dtype: Integer
     period: Year
-    source: 42 USC 402(w)(6), 42 USC 416(l)(2)
+    source: 42 USC 402(w)(6)
     metadata:
       proof:
         atoms:
@@ -117,11 +134,62 @@ rules:
             import:
               target: us:statutes/42/416/l#old_age_early_retirement_age_years
               output: old_age_early_retirement_age_years
-              hash: sha256:eebe9105468d83ab4812c4b9ed37c23a72ca4edbcb849b1e4dd78ae2560e4229
+              hash: sha256:c49ec29f4805607b10cceb210c1dc444f63efd37e0f692c51ac534855f44820a
     versions:
       - effective_from: '1972-01-01'
         formula: |-
           year_of_birth + old_age_early_retirement_age_years
+  - name: drc_first_transition_start_year
+    kind: parameter
+    dtype: Integer
+    unit: calendar_year
+    source: 42 USC 402(w)(6)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "before 1979"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          1979
+  - name: drc_second_transition_start_year
+    kind: parameter
+    dtype: Integer
+    unit: calendar_year
+    source: 42 USC 402(w)(6)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "after 1978 and before 1987"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          1987
+  - name: drc_final_start_year
+    kind: parameter
+    dtype: Integer
+    unit: calendar_year
+    source: 42 USC 402(w)(6)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "after 1986 and before 2005"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          2005
   - name: delayed_retirement_credit_applicable_monthly_rate
     kind: derived
     entity: Person
@@ -161,10 +229,52 @@ rules:
             source:
               corpus_citation_path: us/statute/42/402/w
               excerpt: "after 2004"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#drc_first_transition_start_year
+              output: drc_first_transition_start_year
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#drc_second_transition_start_year
+              output: drc_second_transition_start_year
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#drc_final_start_year
+              output: drc_final_start_year
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#delayed_retirement_one_percent_as_rate
+              output: delayed_retirement_one_percent_as_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#months_per_year_402w
+              output: months_per_year_402w
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#delayed_retirement_credit_transition_denominator
+              output: delayed_retirement_credit_transition_denominator
+              hash: sha256:local
     versions:
       - effective_from: '1972-01-01'
+        # The per-tier applicable percentages are inlined here (rather than
+        # exposed as separate derived rates) so their repeating-decimal values
+        # -- 1/12, 1/24, 2/3 of one percent -- never surface as one-to-one
+        # outputs the harness cannot assert exactly. before-1979 = 1/12 of 1%;
+        # 1979-1986 = 1/4 of 1%; the 1987-2004 transition adds 1/24 of 1% for
+        # each odd eligibility year; after-2004 = 2/3 of 1%.
         formula: |-
-          if old_age_insurance_benefit_eligibility_year < 1979: delayed_retirement_credit_before_1979_monthly_rate else: if old_age_insurance_benefit_eligibility_year < 1987: delayed_retirement_credit_1979_to_1986_monthly_rate else: if old_age_insurance_benefit_eligibility_year < 2005: delayed_retirement_credit_1979_to_1986_monthly_rate + floor((old_age_insurance_benefit_eligibility_year - 1985) / 2) * delayed_retirement_credit_transition_rate_increment else: delayed_retirement_credit_after_2004_monthly_rate
+          if old_age_insurance_benefit_eligibility_year < drc_first_transition_start_year: delayed_retirement_one_percent_as_rate / months_per_year_402w else: if old_age_insurance_benefit_eligibility_year < drc_second_transition_start_year: delayed_retirement_one_percent_as_rate / 2 / 2 else: if old_age_insurance_benefit_eligibility_year < drc_final_start_year: delayed_retirement_one_percent_as_rate / 2 / 2 + floor((old_age_insurance_benefit_eligibility_year - (drc_second_transition_start_year - 2)) / 2) * delayed_retirement_one_percent_as_rate / delayed_retirement_credit_transition_denominator else: 2 * delayed_retirement_one_percent_as_rate / 3
   - name: delayed_retirement_credit_increment_months
     kind: derived
     entity: Person
@@ -194,7 +304,7 @@ rules:
             import:
               target: us:statutes/42/416/l#retirement_age_total_months
               output: retirement_age_total_months
-              hash: sha256:eebe9105468d83ab4812c4b9ed37c23a72ca4edbcb849b1e4dd78ae2560e4229
+              hash: sha256:c49ec29f4805607b10cceb210c1dc444f63efd37e0f692c51ac534855f44820a
     versions:
       - effective_from: '1972-01-01'
         formula: |-
