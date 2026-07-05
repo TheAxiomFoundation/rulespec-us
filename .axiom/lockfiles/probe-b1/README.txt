@@ -14,7 +14,7 @@ content. Regenerated output lives under `.axiom/probes/b1/`.
 
 `<module_path with / → __, .yaml stripped>.lock.json`, plus:
 - `_index.json` — the 25-module manifest (n, module_path, lockfile, source_sha, citation, oracle, class).
-- `README.md` — this file.
+- `README.txt` — this file (`.txt` because `.axiom/**` disallows `.md` per `.axiom/repository-structure.yaml`).
 
 ## Lockfile key (`axiom/probe-b1-lockfile/v1`)
 
