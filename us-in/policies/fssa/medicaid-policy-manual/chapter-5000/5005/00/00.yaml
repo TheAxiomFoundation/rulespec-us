@@ -1,0 +1,109 @@
+format: rulespec/v1
+imports:
+  - us-in:statutes/12-15-32-6/5#facility_resident_supplement_eligible
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-in:statutes/12-15-32-6#medicaid_facility_resident_personal_allowance
+        - us-in:statutes/12-15-32-6/5#facility_resident_supplement_eligible
+      rationale: |-
+        Indiana statutory context supplies the facility-resident supplement eligibility and personal-allowance framework, but this manual section states the SAPN-specific operational qualifications, the $30 reduced SSI condition, month-after ineligibility rule, and death-month entitlement encoded here.
+  summary: |-
+    Eligible individuals must be receiving Medicaid, reside in a Medicaid-certified health care facility throughout the calendar month, and receive a $30 reduced SSI benefit. Ineligibility begins the month following the month any criterion is no longer met; a deceased SAPN recipient is entitled for the month of death.
+rules:
+  - name: sapn_reduced_ssi_benefit_amount
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: FSSA Medicaid Policy Manual 5005.00.00
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+              excerpt: $30 reduced SSI benefit
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+  - name: sapn_monthly_qualifications_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FSSA Medicaid Policy Manual 5005.00.00
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/12-15-32-6/5#facility_resident_supplement_eligible
+              output: facility_resident_supplement_eligible
+              hash: sha256:a474b131397d4a36529ec6603137e69ea2a0087134efee0862d85b1b3f0cd167
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+              excerpt: receiving Medicaid
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+              excerpt: residing in a Medicaid-certified health care facility throughout the calendar month
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+              excerpt: $30 reduced SSI benefit
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          facility_resident_supplement_eligible
+          and individual_receiving_medicaid
+          and individual_resides_in_medicaid_certified_health_care_facility_throughout_calendar_month
+          and reduced_ssi_benefit_amount == sapn_reduced_ssi_benefit_amount
+  - name: in_ssp_sapn_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: FSSA Medicaid Policy Manual 5005.00.00
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:policies/fssa/medicaid-policy-manual/chapter-5000/5005/00/00#sapn_monthly_qualifications_met
+              output: sapn_monthly_qualifications_met
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+              excerpt: ineligibility begins the month following the month in which any one of these criteria is no longer met
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-in/manual/fssa/medicaid-policy-manual/chapter-5000/5005.00.00
+              excerpt: A deceased SAPN recipient is entitled to payment for the month of the death
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          deceased_sapn_recipient_in_month
+          or (
+            not month_follows_month_in_which_sapn_criterion_no_longer_met
+            and (
+              sapn_monthly_qualifications_met
+              or sapn_recipient_no_longer_meets_criterion_during_calendar_month
+            )
+          )
