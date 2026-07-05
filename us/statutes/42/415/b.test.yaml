@@ -1,0 +1,76 @@
+# NOTE: average_indexed_monthly_earnings and
+# old_age_benefit_computation_year_earnings_total use the engine's
+# sum_top_n_over_periods over-periods reduction, which is valid only
+# under lifetime execution. The companion-test harness executes each
+# case per-period, so those two outputs cannot be asserted here (they
+# are listed in known-validation-gaps.yaml#uncovered_derived_rules,
+# tracked by TheAxiomFoundation/axiom-encode#1036). The full
+# raw-earnings -> 415(b)(3) indexing -> top-35 -> AIME arithmetic is
+# documented in the module and verified by hand: for the wage-indexed
+# 4-year worker, top 4 = 11,000 + 3 * 10,200 = 41,600 and
+# AIME = floor(41,600 / 48) = 866 (skipping 415(b)(3) gives 822;
+# round-half division gives 867). The per-period building blocks --
+# elapsed years, computation-year count, and single-year 415(b)(3)
+# indexing on both branches -- are asserted below.
+- name: old_age_elapsed_years_are_years_after_baseline_before_age_62
+  period:
+    period_kind: custom
+    name: calendar_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    us:statutes/42/415/b#input.year_of_death_or_later_sentinel: 9999
+    us:statutes/42/415/b#input.year_individual_attained_age_62: 2026
+    us:statutes/42/415/b#input.year_individual_attained_age_21: 1985
+    # Calendar years after age 21 (1985) and before age 62 (2026):
+    # 2026 - 1985 - 1 = 40 elapsed years; 40 - 5 dropout = 35
+    # benefit computation years.
+  output:
+    us:statutes/42/415/b#elapsed_years_for_old_age_benefit_computation: 40
+    us:statutes/42/415/b#old_age_benefit_computation_year_count: 35
+- name: old_age_benefit_computation_years_never_fewer_than_two
+  period:
+    period_kind: custom
+    name: calendar_year
+    start: '1984-01-01'
+    end: '1984-12-31'
+  input:
+    us:statutes/42/415/b#input.year_of_death_or_later_sentinel: 9999
+    us:statutes/42/415/b#input.year_individual_attained_age_62: 1984
+    us:statutes/42/415/b#input.year_individual_attained_age_21: 1981
+    # Elapsed years = 1984 - 1981 - 1 = 2; max(2, 2 - 5) = 2.
+  output:
+    us:statutes/42/415/b#elapsed_years_for_old_age_benefit_computation: 2
+    us:statutes/42/415/b#old_age_benefit_computation_year_count: 2
+- name: indexing_applies_through_the_aime_indexing_year
+  period:
+    period_kind: custom
+    name: calendar_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    # Base year at/through the indexing year takes the AWI ratio:
+    # 10,000 * 60,000 / 30,000 = 20,000.
+    us:statutes/42/415/b#input.computation_base_year: 2024
+    us:statutes/42/415/b#input.indexing_year_for_aime: 2024
+    us:statutes/42/415/b#input.creditable_earnings_for_computation_base_year: 10000
+    us:statutes/42/415/b#input.national_average_wage_index_for_indexing_year: 60000
+    us:statutes/42/415/b#input.national_average_wage_index_for_computation_base_year: 30000
+  output:
+    us:statutes/42/415/b#indexed_creditable_earnings_for_computation_base_year: 20000
+- name: post_indexing_year_earnings_are_unindexed
+  period:
+    period_kind: custom
+    name: calendar_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    # Base year after the indexing year: subsection (b)(3)(B) leaves
+    # earnings unadjusted, so the value passes through as 10,000.
+    us:statutes/42/415/b#input.computation_base_year: 2025
+    us:statutes/42/415/b#input.indexing_year_for_aime: 2024
+    us:statutes/42/415/b#input.creditable_earnings_for_computation_base_year: 10000
+    us:statutes/42/415/b#input.national_average_wage_index_for_indexing_year: 60000
+    us:statutes/42/415/b#input.national_average_wage_index_for_computation_base_year: 30000
+  output:
+    us:statutes/42/415/b#indexed_creditable_earnings_for_computation_base_year: 10000
