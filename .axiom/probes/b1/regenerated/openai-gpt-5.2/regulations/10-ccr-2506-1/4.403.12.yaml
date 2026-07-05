@@ -1,0 +1,192 @@
+format: rulespec/v1
+module:
+  summary: 'Self-employment income must be averaged over the period for which the
+    income is intended to cover.
+
+    When a household receives its annual support from self-employment income, average
+    over twelve (12) months.
+
+    For a self-employed farmer: if net farm losses occur, prorate losses over the
+    intended period and offset
+
+    first against other self-employment income, then against other earned income;
+    then add other income to
+
+    compare gross income to eligibility standards. A self-employed farmer is one who
+    receives or expects
+
+    gross annual farm income of $1,000 or more.'
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+rules:
+- name: self_employment_primary_support_averaging_months
+  kind: parameter
+  dtype: Integer
+  source: 10 CCR 2506-1, 4.403.12(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: averaged over twelve (12) months
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '12'
+- name: self_employed_farmer_gross_annual_income_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.12(E)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: gross annual income of one thousand dollars ($1,000) or more
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1000'
+- name: self_employed_farmer
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: considered a self-employed farmer if they receive or expect to
+            receive gross annual income of ... ($1,000) or more
+  versions:
+  - effective_from: '0001-01-01'
+    formula: farm_gross_annual_income >= self_employed_farmer_gross_annual_income_threshold
+- name: monthly_prorated_farm_net_loss
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: The net losses shall be prorated over the period intended and the
+            monthly prorated amount deducted from other monthly income.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if self_employed_farmer and (farm_net_income_after_expenses_over_intended_period
+      < 0): (0 - farm_net_income_after_expenses_over_intended_period) / farm_income_intended_coverage_months
+      else: 0'
+- name: farm_loss_deducted_from_other_self_employment_income
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(2)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: ordering
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: "The monthly prorated loss shall be deducted first from any other\
+            \ \u201Cself-employment\u201D income."
+  versions:
+  - effective_from: '0001-01-01'
+    formula: min(other_self_employment_income_monthly, monthly_prorated_farm_net_loss)
+- name: remaining_farm_loss_after_other_self_employment_offset
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(2)(a)-(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: Any remaining loss will then be deducted from other earned income
+            into the household.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: monthly_prorated_farm_net_loss - farm_loss_deducted_from_other_self_employment_income
+- name: other_self_employment_income_after_farm_loss_offset
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(2)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: "deducted first from any other \u201Cself-employment\u201D income"
+  versions:
+  - effective_from: '0001-01-01'
+    formula: other_self_employment_income_monthly - farm_loss_deducted_from_other_self_employment_income
+- name: other_earned_income_after_farm_loss_offset
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(2)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: Any remaining loss will then be deducted from other earned income
+            into the household.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: other_earned_income_monthly - remaining_farm_loss_after_other_self_employment_offset
+- name: household_gross_income_after_farm_loss_offsets
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, 4.403.12(E)(2)(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.12
+          excerpt: Finally, any other income shall be added, and this total shall
+            be the amount used to compare the household's gross income to income eligibility
+            standards
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'other_self_employment_income_after_farm_loss_offset
+
+      + other_earned_income_after_farm_loss_offset
+
+      + other_income_monthly'

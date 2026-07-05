@@ -1,0 +1,99 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.61
+  summary: |-
+    "Beginning October 1, 2016, the SMED is one hundred sixty-five dollars ($165). The SMED is used if the total verified medical expenses are greater than thirty-five dollars ($35) and less than or equal to the SMED. The household may claim actual expenses if the total verified expenses, after deducting the first thirty-five dollars ($35), exceed the SMED... The excess over thirty-five dollars ($35) per month is allowed as a monthly deduction."
+rules:
+  - name: standard_medical_expense_deduction_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1, 4.407.61(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.61
+              excerpt: "Beginning October 1, 2016, the SMED is one hundred sixty-five dollars ($165)."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          165
+
+  - name: medical_expense_deduction_first_dollars_not_deductible
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1, 4.407.61(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.61
+              excerpt: "greater than thirty-five dollars ($35)... after deducting the first thirty-five dollars ($35)... The excess over thirty-five dollars ($35) per month is allowed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          35
+
+  - name: medical_expense_change_amount_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 10 CCR 2506-1, 4.407.61(A) (Recertification change rule)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.61
+              excerpt: "There is a change in the monthly medical expense amount of more than twenty-five dollars ($25)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          25
+
+  - name: allowable_medical_expense_deduction_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 10 CCR 2506-1, 4.407.61(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.61
+              excerpt: "The SMED is used if the total verified medical expenses are greater than thirty-five dollars ($35) and less than or equal to the SMED. The household may claim actual expenses if the total verified expenses, after deducting the first thirty-five dollars ($35), exceed the SMED... The excess over thirty-five dollars ($35) per month is allowed as a monthly deduction."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if not household_has_member_eligible_for_medical_expense_deduction:
+            0
+          else:
+            if household_elects_standard_medical_expense_deduction:
+              if medical_expenses_verified_over_first_dollars_not_deductible
+                 and monthly_verified_medical_expenses <= standard_medical_expense_deduction_amount:
+                standard_medical_expense_deduction_amount
+              else:
+                0
+            else:
+              if verification_of_expenses_exceeding_smed_provided
+                 and (max(0, monthly_verified_medical_expenses - medical_expense_deduction_first_dollars_not_deductible) > standard_medical_expense_deduction_amount):
+                max(0, monthly_verified_medical_expenses - medical_expense_deduction_first_dollars_not_deductible)
+              else:
+                if medical_expenses_verified_over_first_dollars_not_deductible:
+                  standard_medical_expense_deduction_amount
+                else:
+                  0

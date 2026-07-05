@@ -1,0 +1,174 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/7/2017/a
+  summary: Allotment equals the cost of the thrifty food plan minus 30 percent of
+    household income, rounded down to the nearest whole dollar; for 1- and 2-person
+    households, a minimum allotment equals 8 percent of the 1-person thrifty food
+    plan cost, rounded to the nearest whole dollar.
+rules:
+- name: snap_household_food_contribution_rate
+  kind: parameter
+  dtype: Rate
+  source: 7 USC 2017(a), "30 per centum"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: "30 per centum of the household\u2019s income"
+  versions:
+  - effective_from: '2008-10-01'
+    formula: '0.30'
+- name: snap_minimum_allotment_rate
+  kind: parameter
+  dtype: Rate
+  source: 7 USC 2017(a), "8 percent"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: minimum allotment shall be 8 percent
+  versions:
+  - effective_from: '2008-10-01'
+    formula: '0.08'
+- name: snap_minimum_allotment_household_size_limit
+  kind: parameter
+  dtype: Count
+  source: 7 USC 2017(a), "households of one and two persons"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: households of one and two persons
+  versions:
+  - effective_from: '2008-10-01'
+    formula: '2'
+- name: snap_net_income_for_allotment
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 7 USC 2017(a), "income, as determined in accordance with section 2014(d)
+    and (e)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: income, as determined in accordance with section 2014(d) and (e)
+  versions:
+  - effective_from: '2008-10-01'
+    formula: max(0, snap_net_income)
+- name: snap_household_food_contribution
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: "7 USC 2017(a), \"an amount equal to 30 per centum of the household\u2019\
+    s income\""
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: "30 per centum of the household\u2019s income"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/7/2017/a#snap_household_food_contribution_rate
+          output: snap_household_food_contribution_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '2008-10-01'
+    formula: snap_net_income_for_allotment * snap_household_food_contribution_rate
+- name: snap_allotment_before_minimum
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 7 USC 2017(a), "cost ... of the thrifty food plan reduced ... rounded to
+    the nearest lower whole dollar"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: thrifty food plan reduced by an amount equal to 30 per centum ...
+            rounded to the nearest lower whole dollar
+  versions:
+  - effective_from: '2008-10-01'
+    formula: floor(max(0, snap_maximum_allotment - snap_household_food_contribution))
+- name: snap_minimum_monthly_allotment
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 7 USC 2017(a), proviso (households of one and two persons; minimum is 8%
+    of 1-person plan cost, rounded to nearest whole dollar)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: for households of one and two persons the minimum allotment shall
+            be 8 percent of the cost ... for a household containing 1 member ... rounded
+            to the nearest whole dollar increment
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/7/2017/a#snap_minimum_allotment_household_size_limit
+          output: snap_minimum_allotment_household_size_limit
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/7/2017/a#snap_minimum_allotment_rate
+          output: snap_minimum_allotment_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '2008-10-01'
+    formula: 'if household_size <= snap_minimum_allotment_household_size_limit: floor((snap_one_person_thrifty_food_plan_cost
+      * snap_minimum_allotment_rate) + 0.5) else: 0'
+- name: snap_monthly_allotment
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 7 USC 2017(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/7/2017/a
+          excerpt: State agencies shall be authorized to issue to any households certified
+            as eligible
+  versions:
+  - effective_from: '2008-10-01'
+    formula: 'if snap_eligible: max(snap_allotment_before_minimum, snap_minimum_monthly_allotment)
+      else: 0'

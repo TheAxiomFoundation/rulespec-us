@@ -1,0 +1,171 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+  summary: |-
+    Earned income includes: wages/salaries (with specified inclusions/exclusions), training allowances (with WIOA rules), Title I monies (with a cross-referenced exclusion), income of strikers (application-month comparison), self-employment income rules including rental property active management at least an average of twenty (20) hours per week, LLC/S-Corp owners treated as employees (not self-employed), and boarder income rules.
+  deferred_outputs:
+    - output: us-co:regulations/10-ccr-2506-1/4.403#title_i_vista_university_year_of_action_payments_are_earned_income
+      reason: Cannot compute the exclusion for "those households specified in Section 4.405.2" because Section 4.405.2 is not provided in context.
+rules:
+  - name: rental_property_active_management_hours_per_week_threshold
+    kind: parameter
+    dtype: Integer
+    source: 10 CCR 2506-1, Section 4.403(E)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "actively manages the property at least an average of twenty (20) hours per week"
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          20
+
+  - name: wioa_parental_control_age_limit
+    kind: parameter
+    dtype: Integer
+    source: 10 CCR 2506-1, Section 4.403(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "household members under nineteen (19) years of age who are under the parental control"
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          19
+
+  - name: rental_self_employment_income_is_earned_income
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, Section 4.403(E)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "income will be considered as earned income only if ... actively manages ... at least an average of twenty (20) hours per week"
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          person_has_rental_or_lease_self_employment_income
+          and (person_rental_property_management_hours_per_week >= rental_property_active_management_hours_per_week_threshold)
+
+  - name: wioa_on_the_job_training_earnings_are_earned_income
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, Section 4.403(B)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "Earned income will include earnings ... participating in the on-the-job training ... (WIOA). This provision does not apply to household members under nineteen (19) years of age who are under the parental control..."
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          person_participates_in_wioa_on_the_job_training
+          and not (
+            (person_age < wioa_parental_control_age_limit)
+            and person_is_under_parental_control_of_adult_household_member
+          )
+
+  - name: llc_or_s_corporation_owner_treated_as_employee_not_self_employed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, Section 4.403(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "owners of LLCs or S-Corporations are considered employees ... and, therefore, cannot be considered self-employed"
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          person_is_owner_of_llc_or_s_corporation
+
+  - name: vista_payments_excluded_from_earned_income
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, Section 4.403(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "VISTA payments are excluded if the client was receiving SNAP benefits when they joined VISTA."
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          person_is_vista_worker
+          and person_was_receiving_snap_when_joined_vista
+
+  - name: vista_payments_are_earned_income
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, Section 4.403(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "If the client was not receiving SNAP benefits when they joined VISTA, the VISTA payments shall count as earned income."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "VISTA payments are excluded if the client was receiving SNAP benefits when they joined VISTA."
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          person_is_vista_worker
+          and not vista_payments_excluded_from_earned_income
+
+  - name: title_i_vista_university_year_of_action_payments_are_earned_income
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, Section 4.403(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403
+              excerpt: "Payments received under Title I (VISTA-University Year of Action) ... shall be considered earned income ... excluding payments made to those households specified in Section 4.405.2."
+    versions:
+      - effective_from: "0001-01-01"
+        formula: |-
+          title_i_vista_university_year_of_action_payments_are_earned_income__unsupported_due_to_missing_section_4_405_2

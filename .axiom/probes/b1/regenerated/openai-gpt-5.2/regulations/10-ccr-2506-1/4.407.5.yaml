@@ -1,0 +1,95 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+  summary: |-
+    Household child support income exclusion: exclude legally binding child support paid to or for non-household members (including third-party payments per order) and amounts paid toward arrearage; alimony not allowed. Use average if 3+ months payment history, else estimate; exclusion not allowed if not reported/verified.
+rules:
+  - name: child_support_payment_history_months_for_averaging
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1, 4.407.5(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+              excerpt: "history of three (3) or more months of paying child support"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+              excerpt: "three (3)"
+          - path: versions[0].formula
+            kind: unit
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: snap_state_uses_child_support_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1, 4.407.5(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+              excerpt: "A household shall receive an exclusion from income for legally binding child support payments"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          true
+
+  - name: household_child_support_exclusion_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 10 CCR 2506-1, 4.407.5(A)-(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+              excerpt: "exclusion from income for legally binding child support payments ... If ... does not report and verify ... shall not be allowed ... three (3) or more months ... averaged ... less than a three (3) month record ... estimate ... A deduction for amounts paid toward arrearage will be allowed."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+              excerpt: "Alimony payments will not be allowed as an exclusion."
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.407.5
+              excerpt: "three (3) or more months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if household_reports_and_verifies_monthly_child_support_payment:
+            max(
+              0,
+              (
+                if household_child_support_payment_history_months >= child_support_payment_history_months_for_averaging:
+                  household_child_support_payment_average_amount
+                else:
+                  household_child_support_payment_estimated_amount
+              )
+              + household_child_support_arrearage_payment_amount
+            )
+          else:
+            0

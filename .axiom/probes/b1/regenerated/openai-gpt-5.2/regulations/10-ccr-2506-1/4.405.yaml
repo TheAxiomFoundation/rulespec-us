@@ -1,0 +1,381 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+  summary: "\u201CIncome from certain sources will be excluded for SNAP eligibility\
+    \ purposes under mandate of law. Only the following will not be considered as\
+    \ income: A. Irregular Income\u2026 not in excess of thirty dollars ($30) in three\
+    \ (3) months\u2026 C. Earnings of Children\u2026 under eighteen (18)\u2026 D.\
+    \ Recoupments\u2026 Only the net income\u2026 countable\u2026 [intentional failure\
+    \ carve-out]\u2026 E. Non-recurring Lump Sum Payments\u2026 F. Loans\u2026 G.\
+    \ In-Kind Benefits\u2026 H. Vendor Payments\u2026 I. Reimbursements\u2026 to the\
+    \ extent they do not exceed actual expenses\u2026 J. Verification\u2026\u201D"
+rules:
+- name: irregular_income_cap_amount_three_months
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 10 CCR 2506-1, Section 4.405(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: not in excess of thirty dollars ($30) in three (3) months
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '30'
+- name: child_earned_income_age_limit_years
+  kind: parameter
+  dtype: Integer
+  source: 10 CCR 2506-1, Section 4.405(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: under eighteen (18) years of age
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '18'
+- name: irregular_income_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: received too infrequently or irregularly to be reasonably anticipated,
+            but not in excess of thirty dollars ($30) in three (3) months
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if payment_is_irregular_income and payment_received_too_infrequently_or_irregularly_to_be_reasonably_anticipated
+      and payment_amount_received_in_three_months <= irregular_income_cap_amount_three_months:
+      payment_amount else: 0'
+- name: monies_intended_for_nonhousehold_member_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Monies received and used for the care and maintenance of a third-party
+            beneficiary who is not a household member... exclusion applied to the
+            non-household member's pro rata share or the amount actually used... whichever
+            is less.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if payment_is_monies_intended_for_nonhousehold_member:\n  if payment_nonhousehold_members_portion_readily_identified:\n\
+      \    min(payment_identifiable_nonhousehold_members_portion, payment_amount_actually_used_for_nonhousehold_members_care_and_maintenance)\n\
+      \  else:\n    min(payment_evenly_prorated_nonhousehold_members_pro_rata_share,\
+      \ payment_amount_actually_used_for_nonhousehold_members_care_and_maintenance)\n\
+      else:\n  0"
+- name: recoupment_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(D)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Only the net income received... countable income... [but] ... intentional
+            failure... shall not be exempted... gross income... countable
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if payment_is_recoupment_or_repayment_withheld_or_returned and not (payment_is_withheld_from_means_tested_program
+      and recoupment_resulted_from_intentional_failure_to_comply): max(0, payment_gross_amount
+      - payment_net_amount) else: 0'
+- name: title_iv_a_child_support_transferred_to_title_iv_d_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(D)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Child support payments received by Title IV-A participants that
+            the household must transfer to... Title IV-D... to maintain... Title IV-A
+            eligibility.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if payment_is_title_iv_a_child_support_that_must_be_transferred_to_title_iv_d:
+      payment_amount else: 0'
+- name: nonrecurring_lump_sum_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(E)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Money received in the form of non-recurring lump sum payments...
+            shall be excluded as [income].
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: State and county diversion payments under Colorado Works shall
+            be excluded... if the payment does not cover more than ninety (90) days
+            of expenses and is not expected to occur again in a twelve (12) month
+            period.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if payment_is_nonrecurring_lump_sum_payment:\n  payment_amount\nelse:\n\
+      \  if payment_is_state_or_county_diversion_payment_under_colorado_works\n  \
+      \  and diversion_payment_covers_no_more_than_ninety_days_of_expenses\n    and\
+      \ diversion_payment_not_expected_to_occur_again_within_twelve_months:\n    payment_amount\n\
+      \  else:\n    0"
+- name: loan_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(F)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: All loans... shall not be considered as income... Monies received
+            from a Reverse Annuity Mortgage (RAM) loan program should be treated as
+            a loan and excluded from income.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if payment_is_loan_from_private_individual_or_commercial_institution
+      or payment_is_reverse_annuity_mortgage_loan: payment_amount else: 0'
+- name: in_kind_benefit_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(G)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: An in-kind benefit is any gain or benefit received by the household
+            that is not in the form of money...
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if payment_is_in_kind_benefit_not_in_form_of_money: payment_amount else:
+      0'
+- name: vendor_payment_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(H)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: A payment made on behalf of a household shall be considered a vendor
+            payment whenever a person or organization outside of the household uses
+            its own funds to make a direct payment...
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Monies that are legally obligated and otherwise payable to the
+            household, but which are diverted... shall be counted as income and not
+            excluded as a vendor payment.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if payment_is_vendor_payment and vendor_payment_is_excludable and not
+      vendor_payment_is_legally_obligated_and_payable_to_household_but_diverted: payment_amount
+      else: 0'
+- name: reimbursement_excluded_amount
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(I)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Reimbursement... to the extent they do not exceed actual expenses,
+            and do not represent a gain or benefit... shall not be considered income.
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Reimbursements for normal household living expenses... are a gain
+            or benefit and, therefore, are not exempt.
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: reimbursements shall not be considered to exceed actual expenses
+            unless the provider or the household indicates the amount is excessive.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if payment_is_reimbursement\n  and reimbursement_is_specifically_provided_for_identified_expense_other_than_normal_living_expenses\n\
+      \  and reimbursement_used_for_intended_purpose\n  and not reimbursement_covers_normal_household_living_expenses:\n\
+      \  if reimbursement_provider_or_household_indicates_amount_is_excessive:\n \
+      \   min(payment_amount, reimbursement_actual_incurred_expense_amount)\n  else:\n\
+      \    payment_amount\nelse:\n  0"
+- name: snap_income_excluded_amount_under_4_405
+  kind: derived
+  entity: Payment
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: ordering
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: 'Only the following will not be considered as income: A... I...'
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "max(\n  irregular_income_excluded_amount,\n  max(\n    monies_intended_for_nonhousehold_member_excluded_amount,\n\
+      \    max(\n      recoupment_excluded_amount,\n      max(\n        title_iv_a_child_support_transferred_to_title_iv_d_excluded_amount,\n\
+      \        max(\n          nonrecurring_lump_sum_excluded_amount,\n          max(\n\
+      \            loan_excluded_amount,\n            max(\n              in_kind_benefit_excluded_amount,\n\
+      \              max(\n                vendor_payment_excluded_amount,\n     \
+      \           reimbursement_excluded_amount\n              )\n            )\n\
+      \          )\n        )\n      )\n    )\n  )\n)"
+- name: snap_income_excluded_under_4_405
+  kind: derived
+  entity: Payment
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: Only the following will not be considered as income
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+  versions:
+  - effective_from: '0001-01-01'
+    formula: snap_income_excluded_amount_under_4_405 > 0
+- name: child_earned_income_exclusion_applies_this_month
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: earned income of children who are under eighteen (18)... live with...
+            parent... or are under the parental control... and are students at least
+            half-time...
+      - path: versions[0].formula
+        kind: effective_period
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: If the student becomes eighteen (18) years of age in the month
+            of application... excluded for the month of application... counted the
+            following month. If... turns eighteen (18) during the certification period...
+            excluded until the month following...
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "person_is_student_at_least_half_time\nand person_lives_with_natural_adoptive_or_step_parent_or_under_parental_control_of_household_member\n\
+      and (\n  (person_age_years < child_earned_income_age_limit_years)\n  or\n  (person_turns_18_in_month_of_application\
+      \ and month_is_month_of_application)\n  or\n  (person_turns_18_during_certification_period\
+      \ and (not month_is_month_following_month_person_turns_18))\n)"
+- name: child_earned_income_excluded_under_4_405
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: will be considered exempt income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: child_earned_income_exclusion_applies_this_month
+- name: child_earned_income_excluded_amount_under_4_405
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.405(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.405
+          excerpt: earned income of children... will be considered exempt income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if child_earned_income_exclusion_applies_this_month: person_earned_income_amount
+      else: 0'

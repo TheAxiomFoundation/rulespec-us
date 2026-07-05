@@ -1,0 +1,246 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+  summary: "Persons paying a reasonable amount for room and board are excluded from\
+    \ the household for eligibility/benefit. For non-commercial boarding-house households,\
+    \ boarder payments are treated as self-employment income: include direct payments\
+    \ for room/meals (incl. shelter contributions), exclude shelter paid by boarders\
+    \ to third parties; subtract capped \u201Ccost of doing business\u201D (max allotment\
+    \ value for number of boarders, or higher documented actual cost; foster care\
+    \ payments fully disregarded); add monthly net self-employment to earned income\
+    \ and apply a 20% earned-income deduction; compute shelter costs actually incurred\
+    \ excluding any shelter paid directly by boarders to third parties."
+rules:
+- name: earned_income_deduction_rate
+  kind: parameter
+  dtype: Rate
+  source: 10 CCR 2506-1, 4.403.2(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: the twenty percent (20%) earned income deduction
+      - path: versions[0].formula
+        kind: unit
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.20'
+- name: person_is_boarder_paying_reasonable_amount
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, 4.403.2 (intro)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: predicate
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: Persons paying a reasonable amount for room and board
+  versions:
+  - effective_from: '0001-01-01'
+    formula: person_pays_reasonable_amount_for_room_and_board
+- name: person_excluded_from_household_for_eligibility_due_to_boarder_status
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, 4.403.2 (intro)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: shall be excluded from the household when determining the household's
+            eligibility and benefit level
+  versions:
+  - effective_from: '0001-01-01'
+    formula: person_is_boarder_paying_reasonable_amount
+- name: household_members_for_eligibility
+  kind: derived_relation
+  derived_relation:
+    arity: 2
+    source_relation: member_of_household
+    entity: HouseholdMembersForEligibility
+    member_relation: members
+    slot_entities:
+    - Person
+    - Household
+  source: 10 CCR 2506-1, 4.403.2 (intro)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: shall be excluded from the household when determining the household's
+            eligibility and benefit level
+  versions:
+  - effective_from: '0001-01-01'
+    formula: not person_excluded_from_household_for_eligibility_due_to_boarder_status
+- name: boarder_payments_treated_as_self_employment_income_applies
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, 4.403.2 (intro)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: The income of households owning and operating a commercial boarding
+            house shall be handled as described in Section 4.403.11. For all other
+            households, payments from the boarder shall be treated as self-employment
+            income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: not household_owns_and_operates_commercial_boarding_house
+- name: boarder_income_gross_includable
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.2(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: income from boarders shall include all direct payments ... for
+            room and meals, including contributions ... for shelter expenses
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: Shelter expenses paid directly by boarders to someone outside of
+            the household shall not be counted as income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if boarder_payments_treated_as_self_employment_income_applies: boarder_direct_payments_for_room_and_meals
+      + boarder_contributions_to_household_for_shelter_expenses else: 0'
+- name: cost_of_doing_business_before_cap
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.2(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: ordering
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: cost of doing business shall be equal to either ... (1) ... maximum
+            allotment ...; (2) the actual documented cost ... if the actual cost exceeds
+            ... maximum allotment; or, (3) If ... foster care payments, the entire
+            amount ... will be disregarded
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if boarder_payments_treated_as_self_employment_income_applies:\n  if\
+      \ boarder_income_is_from_foster_care_payments:\n    boarder_income_gross_includable\n\
+      \  else:\n    if boarder_actual_documented_cost_exceeds_max_allotment:\n   \
+      \   boarder_actual_documented_cost_of_providing_room_and_meals\n    else:\n\
+      \      maximum_allotment_value_for_household_size_equal_to_boarder_count\nelse:\n\
+      \  0"
+- name: cost_of_doing_business
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.2(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: amount allowed as a cost of doing business shall not exceed the
+            payment the household received from the boarder for lodging and meals
+  versions:
+  - effective_from: '0001-01-01'
+    formula: min(boarder_income_gross_includable, cost_of_doing_business_before_cap)
+- name: net_self_employment_income_from_boarders
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.2(B)-(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: monthly net income (after subtracting costs of doing business)
+            from self-employment
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, boarder_income_gross_includable - cost_of_doing_business)
+- name: net_self_employment_income_from_boarders_after_earned_income_deduction
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.2(C)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: the twenty percent (20%) earned income deduction shall be applied
+            to the total dollar amount
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+  versions:
+  - effective_from: '0001-01-01'
+    formula: net_self_employment_income_from_boarders * (1 - earned_income_deduction_rate)
+- name: shelter_costs_for_deduction_excluding_boarder_third_party_payments
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: 10 CCR 2506-1, 4.403.2(D)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.403.2
+          excerpt: Shelter costs the household actually incurs ... computed ... However,
+            the shelter costs shall not include any shelter expenses paid directly
+            by the boarder to a third party
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, household_shelter_costs_actually_incurred - boarder_shelter_expenses_paid_directly_to_third_party)

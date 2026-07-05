@@ -1,0 +1,178 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+  summary: 'Average monthly income: income intended to cover a specific period is
+    divided by the number of months it is intended to cover. Certain income is averaged/annualized
+    (e.g., self-employment and certain contract income over 12 months; educational
+    income prorated over intended period; other fluctuating income may be averaged
+    by election). These averaging/annualizing rules do not apply for destitute migrant
+    households.'
+rules:
+- name: annualization_months
+  kind: parameter
+  dtype: Integer
+  source: 10 CCR 2506-1, Section 4.402.2(A)(1)-(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: annualized over a twelve (12) month period
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '12'
+- name: income_averaging_disallowed_for_destitute_migrant_household
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2(A) (destitute migrant households)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: shall not be averaged or annualized for migrant households that
+            are destitute of income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'household_is_migrant_household
+
+      and household_is_destitute_of_income_under_section_4_406'
+- name: averaged_monthly_income_from_period_income
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2 (opening paragraph)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: income intended to cover a specific period of time is divided by
+            the number of months the income is intended to cover
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if income_averaging_disallowed_for_destitute_migrant_household: 0 else:
+      income_intended_to_cover_specific_period / months_income_intended_to_cover'
+- name: self_employment_income_monthly_annualized
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2(A)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: self-employment... income annualized over a twelve (12) month period
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if income_averaging_disallowed_for_destitute_migrant_household:\n  0\n\
+      else:\n  if household_derives_annual_income_from_self_employment:\n    annual_self_employment_income\
+      \ / annualization_months\n  else:\n    0"
+- name: contract_income_monthly_annualized
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2(A)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: contract income... averaged over a twelve (12) month period (not
+            applied to hourly or piecework basis)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if income_averaging_disallowed_for_destitute_migrant_household:\n  0\n\
+      else:\n  if household_derives_annual_income_from_contract_income and not contract_income_received_on_hourly_or_piecework_basis:\n\
+      \    annual_contract_income / annualization_months\n  else:\n    0"
+- name: educational_income_monthly_prorated
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2(A)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: educational income... prorated over the period of time it was intended
+            to cover
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if household_receives_educational_income_under_section_4_404_D and not
+      income_averaging_disallowed_for_destitute_migrant_household: educational_income_intended_to_cover_specific_period
+      / educational_income_months_intended_to_cover else: 0'
+- name: fluctuating_income_monthly_averaged_by_election
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2(A)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: may elect to have their fluctuating income averaged over the period
+            of time the income is intended to cover
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if income_averaging_disallowed_for_destitute_migrant_household:\n  0\n\
+      else:\n  if household_elects_to_average_fluctuating_income:\n    fluctuating_income_intended_to_cover_specific_period\
+      \ / fluctuating_income_months_intended_to_cover\n  else:\n    0"
+- name: monthly_income_for_snap_from_averaged_components
+  kind: derived
+  entity: Household
+  dtype: Money
+  unit: USD
+  period: Month
+  source: 10 CCR 2506-1, Section 4.402.2(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.402.2
+          excerpt: annualized or prorated, and added to other household income to
+            determine monthly income for SNAP
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'other_household_monthly_income
+
+      + self_employment_income_monthly_annualized
+
+      + contract_income_monthly_annualized
+
+      + educational_income_monthly_prorated
+
+      + fluctuating_income_monthly_averaged_by_election'
