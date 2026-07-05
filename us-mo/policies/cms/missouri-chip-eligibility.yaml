@@ -3,6 +3,7 @@ imports:
   - us:statutes/42/1397jj/c/1#child
   - us-mo:policies/cms/missouri-medicaid-chip-bhp-eligibility-levels#missouri_children_separate_chip_effective_fpl_limit
   - us-mo:policies/cms/missouri-medicaid-chip-bhp-eligibility-levels#missouri_pregnant_women_chip_fpl_limit
+  - us:policies/cms/medicaid-chip-bhp-eligibility-levels#magi_fpl_disregard_rate
 module:
   proof_validation:
     required: true
@@ -11,6 +12,10 @@ module:
       - us/form/cms/medicaid-chip-bhp-eligibility-levels
       - us/statute/42/1397jj/b/1
       - us/statute/42/1397ll/d/2
+      - us/policy/cms/chip-spa/mo/mo-15-0009/pdf/page-8
+      - us/statute/42/1397ll/f/1
+      - us/regulation/42/457/10
+      - us/regulation/42/435/603/d
     upstream_source_check:
       status: official_parameter_source
       checked_paths:
@@ -30,7 +35,7 @@ module:
         official current compiled source for the state-decided MAGI income
         levels and availability flags encoded in this module.
   summary: |-
-    Missouri CHIP eligibility composition applies the federal CHIP child and standard-pregnant eligibility framework to the CMS state eligibility-level outputs. It intentionally does not encode FCEP state income limits until primary state-plan or CMS source coverage is available.
+    Missouri CHIP eligibility composition applies the federal CHIP child and standard-pregnant eligibility framework to the CMS state eligibility-level outputs. It also applies the CMS CHIP FCEP SPA source for state-set coverage from conception to birth income eligibility.
 rules:
   - name: missouri_separate_chip_child_eligibility_available
     kind: derived
@@ -136,3 +141,90 @@ rules:
           and person_meets_chip_immigration_requirement
           and not found_eligible_for_medical_assistance_under_subchapter_xix
           and medicaid_income_level <= missouri_pregnant_women_chip_fpl_limit
+  - name: missouri_fcep_eligibility_available
+    kind: derived
+    dtype: Boolean
+    period: Year
+    source: CMS CHIP FCEP SPA source, Missouri
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/mo/mo-15-0009/pdf/page-8
+              excerpt: "Show-Me Healthy Babies Effective upon CMS approval, Missouri is establishing the Show-Me Healthy Babies Program for targeted low-income pregnant women and unborn children from conception to the date of birth with household incomes up to 300% of the FPL."
+    versions:
+      - effective_from: '2016-01-01'
+        formula: |-
+          true
+  - name: missouri_fcep_fpl_limit
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: CMS CHIP FCEP SPA source, Missouri
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/mo/mo-15-0009/pdf/page-8
+              excerpt: "Show-Me Healthy Babies Effective upon CMS approval, Missouri is establishing the Show-Me Healthy Babies Program for targeted low-income pregnant women and unborn children from conception to the date of birth with household incomes up to 300% of the FPL."
+    versions:
+      - effective_from: '2016-01-01'
+        formula: |-
+          3.00
+  - name: missouri_fcep_effective_fpl_limit
+    kind: derived
+    dtype: Rate
+    period: Year
+    source: CMS CHIP FCEP SPA source, Missouri, including the MAGI 5% FPL disregard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/cms/medicaid-chip-bhp-eligibility-levels#magi_fpl_disregard_rate
+              output: magi_fpl_disregard_rate
+              hash: sha256:ea0071602a4a4441e584a16bdbab3d8a3c36b40b7cea1151165533669423f5f5
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "5 percentage points of the Federal poverty level"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/mo/mo-15-0009/pdf/page-8
+              excerpt: "Show-Me Healthy Babies Effective upon CMS approval, Missouri is establishing the Show-Me Healthy Babies Program for targeted low-income pregnant women and unborn children from conception to the date of birth with household incomes up to 300% of the FPL."
+    versions:
+      - effective_from: '2016-01-01'
+        formula: |-
+          missouri_fcep_fpl_limit + magi_fpl_disregard_rate
+  - name: is_chip_fcep_eligible_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1397ll(f)(1), 42 CFR 457.10, and CMS CHIP FCEP SPA source for Missouri
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/mo/mo-15-0009/pdf/page-8
+              excerpt: "Show-Me Healthy Babies Effective upon CMS approval, Missouri is establishing the Show-Me Healthy Babies Program for targeted low-income pregnant women and unborn children from conception to the date of birth with household incomes up to 300% of the FPL."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1397ll/f/1
+              excerpt: "through the application of sections 457.10"
+    versions:
+      - effective_from: '2016-01-01'
+        formula: |-
+          person_is_pregnant
+          and not found_eligible_for_medical_assistance_under_subchapter_xix
+          and medicaid_income_level <= missouri_fcep_effective_fpl_limit

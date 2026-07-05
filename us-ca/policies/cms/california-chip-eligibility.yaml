@@ -1,6 +1,7 @@
 format: rulespec/v1
 imports:
   - us-ca:policies/cms/california-medicaid-chip-bhp-eligibility-levels#california_pregnant_women_chip_available
+  - us:policies/cms/medicaid-chip-bhp-eligibility-levels#magi_fpl_disregard_rate
 module:
   proof_validation:
     required: true
@@ -9,6 +10,10 @@ module:
       - us/form/cms/medicaid-chip-bhp-eligibility-levels
       - us/statute/42/1397jj/b/1
       - us/statute/42/1397ll/d/2
+      - us/policy/cms/chip-spa/ca/ca-21-0032/pdf/page-11
+      - us/statute/42/1397ll/f/1
+      - us/regulation/42/457/10
+      - us/regulation/42/435/603/d
     upstream_source_check:
       status: official_parameter_source
       checked_paths:
@@ -28,7 +33,7 @@ module:
         official current compiled source for the state-decided MAGI income
         levels and availability flags encoded in this module.
   summary: |-
-    California CHIP eligibility composition applies the federal CHIP child and standard-pregnant eligibility framework to the CMS state eligibility-level outputs. It intentionally does not encode FCEP state income limits until primary state-plan or CMS source coverage is available.
+    California CHIP eligibility composition applies the federal CHIP child and standard-pregnant eligibility framework to the CMS state eligibility-level outputs. It also applies the CMS CHIP FCEP SPA source for state-set coverage from conception to birth income eligibility.
 rules:
   - name: california_separate_chip_child_eligibility_available
     kind: derived
@@ -101,3 +106,90 @@ rules:
       - effective_from: '2023-12-01'
         formula: |-
           false
+  - name: california_fcep_eligibility_available
+    kind: derived
+    dtype: Boolean
+    period: Year
+    source: CMS CHIP FCEP SPA source, California
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/ca/ca-21-0032/pdf/page-11
+              excerpt: "Population 3 (MCAP), unborn children (pregnant women) with income from 208 up to 317 percent of the FPL, receive comprehensive healthcare from the effective date of coverage in MCAP until the last day of the month in which the 365th day following the end of the pregnancy occurs."
+    versions:
+      - effective_from: '2020-07-01'
+        formula: |-
+          true
+  - name: california_fcep_fpl_limit
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: CMS CHIP FCEP SPA source, California
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/ca/ca-21-0032/pdf/page-11
+              excerpt: "Population 3 (MCAP), unborn children (pregnant women) with income from 208 up to 317 percent of the FPL, receive comprehensive healthcare from the effective date of coverage in MCAP until the last day of the month in which the 365th day following the end of the pregnancy occurs."
+    versions:
+      - effective_from: '2020-07-01'
+        formula: |-
+          3.17
+  - name: california_fcep_effective_fpl_limit
+    kind: derived
+    dtype: Rate
+    period: Year
+    source: CMS CHIP FCEP SPA source, California, including the MAGI 5% FPL disregard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/cms/medicaid-chip-bhp-eligibility-levels#magi_fpl_disregard_rate
+              output: magi_fpl_disregard_rate
+              hash: sha256:ea0071602a4a4441e584a16bdbab3d8a3c36b40b7cea1151165533669423f5f5
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "5 percentage points of the Federal poverty level"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/ca/ca-21-0032/pdf/page-11
+              excerpt: "Population 3 (MCAP), unborn children (pregnant women) with income from 208 up to 317 percent of the FPL, receive comprehensive healthcare from the effective date of coverage in MCAP until the last day of the month in which the 365th day following the end of the pregnancy occurs."
+    versions:
+      - effective_from: '2020-07-01'
+        formula: |-
+          california_fcep_fpl_limit + magi_fpl_disregard_rate
+  - name: is_chip_fcep_eligible_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1397ll(f)(1), 42 CFR 457.10, and CMS CHIP FCEP SPA source for California
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/policy/cms/chip-spa/ca/ca-21-0032/pdf/page-11
+              excerpt: "Population 3 (MCAP), unborn children (pregnant women) with income from 208 up to 317 percent of the FPL, receive comprehensive healthcare from the effective date of coverage in MCAP until the last day of the month in which the 365th day following the end of the pregnancy occurs."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1397ll/f/1
+              excerpt: "through the application of sections 457.10"
+    versions:
+      - effective_from: '2020-07-01'
+        formula: |-
+          person_is_pregnant
+          and not found_eligible_for_medical_assistance_under_subchapter_xix
+          and medicaid_income_level <= california_fcep_effective_fpl_limit
