@@ -12,10 +12,11 @@ Encoding Social Security Title II benefit formulas from `ENCODE_BRIEF.md` on bra
   - `us/statutes/26/1/h.yaml`
   - `us/policies/ssa/pia-bend-points/2026.yaml`
 - Section 1: encoded `us/statutes/42/415/b.yaml` and companion test for AIME, old-age elapsed years/dropout years, highest-year selection, indexing, and whole-dollar AIME rounding.
+- Section 2: encoded `us/statutes/42/415/a.yaml` and companion test for the 90% / 32% / 15% PIA formula using the existing 2026 bend points.
 
 ## Next
 
-- Section 2: encode `us/statutes/42/415/a.yaml` for the 90% / 32% / 15% PIA formula using the existing 2026 PIA bend-point parameters.
+- Section 3: encode `us/statutes/42/415/i.yaml` for COLA application to PIA and source the 2026 COLA percentage like the bend-point policy module.
 
 ## Open Questions
 
