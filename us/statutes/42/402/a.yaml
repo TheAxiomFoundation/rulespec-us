@@ -1,0 +1,109 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/402/a
+    corpus_citation_paths:
+      - us/statute/42/402/a
+      - us/statute/42/402/a/1
+      - us/statute/42/402/a/2
+      - us/statute/42/402/a/3
+  summary: |-
+    Every individual who is a fully insured individual (as defined in section 414(a)), has attained age 62, and has filed application for old-age insurance benefits (or was entitled to disability insurance benefits for the month preceding the month in which the individual attained retirement age as defined in section 416(l)) is entitled to an old-age insurance benefit for each month. This module encodes that entitlement condition. The benefit amount (the primary insurance amount under section 415(a), as modified by subsections (q) and (w)) is computed in us/statutes/42/415/a, us/statutes/42/402/q, and us/statutes/42/402/w; this module is the entitlement predicate on which section 426(e) hospital-insurance conversion rules depend.
+
+    Input contract: the eligibility facts (fully-insured status under
+    the section 414(a) definition, whether an application for old-age
+    insurance benefits has been filed, and whether the individual was
+    entitled to disability insurance benefits for the month before
+    attaining retirement age) are free inputs. Section 414(a) (fully
+    insured) and section 423 (disability insurance benefits) are not yet
+    encoded, so those cross-references are leaf inputs rather than
+    imports. Under lifetime execution they must be supplied
+    period-invariant (identical in every period) or wrapped in an
+    over-periods reduction; the engine rejects period-varying bare
+    inputs outside reductions.
+  deferred_outputs:
+    - output: us:statutes/42/402/a#old_age_insurance_benefit_amount
+      reason: |-
+        This module encodes only the section 402(a) entitlement
+        predicate. The old-age insurance benefit amount is, per the
+        section 402(a) chapeau, equal to the primary insurance amount
+        (section 415(a)) "Except as provided in subsection (q) and
+        subsection (w)". That amount and its subsection (q) early-claiming
+        reduction and subsection (w) delayed-retirement-credit
+        modifications are computed in us/statutes/42/415/a,
+        us/statutes/42/402/q, and us/statutes/42/402/w, not here, so those
+        same-section carve-outs are deferred rather than modeled in this
+        entitlement module.
+      source_values:
+        - us:statutes/42/415/a#primary_insurance_amount
+        - us:statutes/42/402/q#old_age_insurance_benefit_after_early_claiming_reduction
+        - us:statutes/42/402/w#old_age_insurance_benefit_after_delayed_retirement_credit
+rules:
+  - name: old_age_insurance_benefit_minimum_age_years
+    kind: parameter
+    dtype: Integer
+    unit: years
+    source: 42 USC 402(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/42/402/a/2
+              excerpt: "has attained age 62"
+    versions:
+      - effective_from: '1961-01-01'
+        formula: |-
+          62
+  - name: individual_is_entitled_to_old_age_insurance_benefit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 USC 402(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/a/1
+              excerpt: "is a fully insured individual (as defined in section 414(a) of this title )"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/a/2
+              excerpt: "has attained age 62"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/a/3
+              excerpt: "has filed application for old-age insurance benefits"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/a/3
+              excerpt: "was entitled to disability insurance benefits for the month preceding the month in which he attained retirement age"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/402/a
+              excerpt: "shall be entitled to an old-age insurance benefit for each month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/a#old_age_insurance_benefit_minimum_age_years
+              output: old_age_insurance_benefit_minimum_age_years
+              hash: sha256:local
+    versions:
+      - effective_from: '1961-01-01'
+        formula: |-
+          individual_is_fully_insured
+          and age >= old_age_insurance_benefit_minimum_age_years
+          and (
+            individual_has_filed_application_for_old_age_insurance_benefits
+            or individual_was_entitled_to_disability_insurance_benefits_for_month_before_attaining_retirement_age
+          )
