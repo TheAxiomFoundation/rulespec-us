@@ -15,10 +15,11 @@ Encoding Social Security Title II benefit formulas from `ENCODE_BRIEF.md` on bra
 - Section 2: encoded `us/statutes/42/415/a.yaml` and companion test for the 90% / 32% / 15% PIA formula using the existing 2026 bend points.
 - Section 3: encoded `us/statutes/42/415/i.yaml`, added `us/policies/ssa/cola/2026.yaml`, and tested 2.8% COLA application with dime rounding.
 - Section 4: encoded `us/statutes/42/416/l.yaml` and companion test for the retirement age schedule from age 65 to 67.
+- Section 5: encoded `us/statutes/42/402/q.yaml` and companion test for old-age early claiming reductions, including the 36-month tier break and dime rounding up.
 
 ## Next
 
-- Section 5: encode `us/statutes/42/402/q.yaml` for early claiming reductions.
+- Section 6: encode `us/statutes/42/402/w.yaml` for delayed retirement credits through age 70.
 
 ## Open Questions
 
