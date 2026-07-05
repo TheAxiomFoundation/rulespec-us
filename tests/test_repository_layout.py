@@ -49,6 +49,7 @@ def allowed_yaml_roots() -> set[str]:
         ".github",
         "programs",
         "known-dangling.yaml",
+        "known-missing-money-atoms.yaml",
         "known-validation-gaps.yaml",
         *(d.name for d in jurisdiction_dirs()),
     }

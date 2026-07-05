@@ -36,8 +36,15 @@ pre-consolidation layout; only file locations changed.
 - `known-validation-gaps.yaml`: pre-existing content debt surfaced when
   repository-wide discipline first ran across all jurisdictions
   (rulespec-us#394).
+- `known-missing-money-atoms.yaml`: policy-bearing monetary values
+  (currency parameters, currency parameter-table cells, and currency
+  literals in derived formulas) that still lack a proof atom citing a
+  provision. Seeded from the current backlog measured by
+  `axiom-encode proof-validate --emit-ratchet`; the org
+  `validate-rulespec` workflow's money-atom step reads it so CI blocks any
+  new atom-less monetary value while the existing 151 are burned down.
 
-Both lists fail CI on new entries AND on listed entries that get fixed
+These lists fail CI on new entries AND on listed entries that get fixed
 without being removed, so they only shrink.
 
 Do not add singular rule roots, separate parameter/test fixture files, or
