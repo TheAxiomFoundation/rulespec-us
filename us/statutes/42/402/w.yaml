@@ -1,0 +1,278 @@
+format: rulespec/v1
+imports:
+  - us:statutes/42/416/l#old_age_early_retirement_age_years
+  - us:statutes/42/416/l#retirement_age_total_months
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/402/w
+  summary: |-
+    Old-age insurance benefits are increased for delayed retirement by the applicable monthly percentage multiplied by the number of increment months. Increment months run from retirement age to the month before age 70, subject to the statutory qualification conditions. The applicable monthly percentage is 1/12 of 1 percent for eligibility years before 1979, 1/4 of 1 percent for eligibility years 1979 through 1986, increases by 1/24 of 1 percent every odd eligibility year from 1987 through 2004, and is 2/3 of 1 percent for eligibility years after 2004.
+rules:
+  - name: delayed_retirement_credit_age_ceiling_months
+    kind: parameter
+    dtype: Integer
+    unit: months
+    source: 42 USC 402(w)(2)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "prior to the month in which such individual attained age 70"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          70 * 12
+  - name: delayed_retirement_credit_before_1979_monthly_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 402(w)(6)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: rate
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "1/12 of 1 percent"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          1 / 1200
+  - name: delayed_retirement_credit_1979_to_1986_monthly_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 402(w)(6)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: rate
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "¼ of 1 percent"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          1 / 400
+  - name: delayed_retirement_credit_transition_rate_increment
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 402(w)(6)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: rate
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "plus 1/24 of 1 percent"
+    versions:
+      - effective_from: '1987-01-01'
+        formula: |-
+          1 / 2400
+  - name: delayed_retirement_credit_after_2004_monthly_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 402(w)(6)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: rate
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "2/3 of 1 percent"
+    versions:
+      - effective_from: '2005-01-01'
+        formula: |-
+          2 / 300
+  - name: old_age_insurance_benefit_eligibility_year
+    kind: derived
+    entity: Person
+    dtype: Integer
+    period: Year
+    unit: calendar_year
+    source: 42 USC 402(w)(6), 42 USC 416(l)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "first becomes eligible for an old-age insurance benefit"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/416/l#old_age_early_retirement_age_years
+              output: old_age_early_retirement_age_years
+              hash: sha256:eebe9105468d83ab4812c4b9ed37c23a72ca4edbcb849b1e4dd78ae2560e4229
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          year_of_birth + old_age_early_retirement_age_years
+  - name: delayed_retirement_credit_applicable_monthly_rate
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Year
+    source: 42 USC 402(w)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "the \"applicable percentage\" is"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "in any calendar year before 1979"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "after 1978 and before 1987"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "after 1986 and before 2005"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "if the calendar year in which that particular individual first becomes eligible for such benefit is not evenly divisible by 2"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "after 2004"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          if old_age_insurance_benefit_eligibility_year < 1979: delayed_retirement_credit_before_1979_monthly_rate else: if old_age_insurance_benefit_eligibility_year < 1987: delayed_retirement_credit_1979_to_1986_monthly_rate else: if old_age_insurance_benefit_eligibility_year < 2005: delayed_retirement_credit_1979_to_1986_monthly_rate + floor((old_age_insurance_benefit_eligibility_year - 1985) / 2) * delayed_retirement_credit_transition_rate_increment else: delayed_retirement_credit_after_2004_monthly_rate
+  - name: delayed_retirement_credit_increment_months
+    kind: derived
+    entity: Person
+    dtype: Integer
+    period: Month
+    unit: months
+    source: 42 USC 402(w)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "the number of increment months for any individual shall be a number equal to the total number of the months"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "after the month before the month in which such individual attained retirement age"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "prior to the month in which such individual attained age 70"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/416/l#retirement_age_total_months
+              output: retirement_age_total_months
+              hash: sha256:eebe9105468d83ab4812c4b9ed37c23a72ca4edbcb849b1e4dd78ae2560e4229
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          max(
+              0,
+              min(
+                  old_age_benefit_entitlement_age_total_months,
+                  delayed_retirement_credit_age_ceiling_months
+              )
+              - retirement_age_total_months
+          )
+  - name: delayed_retirement_credit_total_rate
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 USC 402(w)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "the applicable percentage ... multiplied by"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "the number (if any) of the increment months"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          delayed_retirement_credit_applicable_monthly_rate
+          * delayed_retirement_credit_increment_months
+  - name: delayed_retirement_credit_increase_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 USC 402(w)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "shall be increased by"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "of such amount"
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          old_age_insurance_benefit_before_delayed_retirement_credit
+          * delayed_retirement_credit_total_rate
+  - name: old_age_insurance_benefit_after_delayed_retirement_credit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 USC 402(w)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/402/w
+              excerpt: "The amount of an old-age insurance benefit ... shall be increased"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/402/w#delayed_retirement_credit_increase_amount
+              output: delayed_retirement_credit_increase_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '1972-01-01'
+        formula: |-
+          old_age_insurance_benefit_before_delayed_retirement_credit
+          + delayed_retirement_credit_increase_amount
