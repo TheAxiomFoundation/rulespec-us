@@ -28,8 +28,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -177,10 +179,18 @@ def main() -> int:
     unexpected_successes: list[str] = []
     engine_version = "unknown"
 
+    # Compose and compile in a neutral temp directory OUTSIDE the repo: the
+    # engine discovers additional rulespec repos by walking up from the module
+    # path, so building inside the checkout lets stray sibling checkouts leak
+    # modules into the artifact (observed: a legacy per-state repo resolving an
+    # import the pinned corpus cannot). Neutral cwd keeps local builds
+    # byte-identical to CI.
+    workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-"))
+
     for build in builds:
         spec_rel = str(build.spec_path)
-        module_path = dist / f"{build.artifact_name}.rulespec.yaml"
-        artifact_path = dist / f"{build.artifact_name}.compiled.json"
+        module_path = workdir / f"{build.artifact_name}.rulespec.yaml"
+        artifact_path = workdir / f"{build.artifact_name}.compiled.json"
         try:
             compose_spec(root, build, module_path)
             engine_version = engine_compile(root, module_path, artifact_path, engine_bin)
@@ -204,6 +214,9 @@ def main() -> int:
             "engine_version": engine_version,
         }
         stamp_provenance(artifact_path, provenance)
+
+        shutil.copy2(module_path, dist / module_path.name)
+        artifact_path = Path(shutil.copy2(artifact_path, dist / artifact_path.name))
 
         program = json.loads(artifact_path.read_text())["program"]
         manifest_programs.append(
