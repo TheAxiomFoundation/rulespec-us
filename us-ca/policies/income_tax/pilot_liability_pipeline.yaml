@@ -1,0 +1,122 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ca/statute/rtc/17041
+      - us-ca/statute/rtc/17054
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ca/statute/rtc/17041
+        - us-ca/statute/rtc/17054
+      rationale: |-
+        This pipeline computes the RTC 17041 progressive bracket tax and
+        subtracts the RTC 17054 personal exemption credit to reach the core
+        California personal income-tax liability for the ordinary resident
+        wage-earner slice. Section 17041 requires the Franchise Tax Board to
+        recompute the bracket thresholds each year by the California Consumer
+        Price Index (subdivision (h)); the encoded RTC 17041 module carries the
+        statutory subdivision (a)/(c) 2021 base tables and 1 through 9.3 per cent
+        rates but defers the indexed bracket thresholds and the resident tax
+        output, and the encoded RTC 17054 module carries the statutory 52/104/227
+        dollar base credits and defers the indexed personal exemption credit.
+        Because the Franchise Tax Board had not published a tax-year-2026
+        schedule at the time of authoring (its 2026 Form 540 booklet issues near
+        the end of the tax year), every indexed amount this pipeline needs is a
+        declared caller-supplied input: the bracket floors and their rates, the
+        standard deduction, and the per-filer personal exemption credit. The
+        operative 2026 values used in the companion tests are the Franchise Tax
+        Board tax-year-2025 published schedule (the latest available authority)
+        carried one further year forward under the subdivision (h) indexation;
+        the oracle disposition records this indexation vintage against TAXSIM's
+        2024 law year. The pipeline adds no numeric literals of its own; it wires
+        the progressive-tax mechanics only.
+  summary: |-
+    Composed California personal income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    California adjusted gross income into the RTC 17041 progressive bracket tax
+    less the RTC 17054 personal exemption credit, so an end-to-end comparison
+    against PolicyEngine (ca_income_tax) and TAXSIM (siitax) does not require the
+    caller to supply the section 17041 bracket-application or section 17054
+    credit stage boundaries. It wires: California taxable income (AGI less the
+    supplied standard deduction); the progressive tax as the marginal sum across
+    the first six brackets (1, 2, 4, 6, 8, and 9.3 per cent), which cover the
+    entire ordinary-wage grid up to the 379,897-dollar single / 759,795-dollar
+    joint 10.3 per cent bracket floor; and the RTC 17041 tax less the supplied
+    personal exemption credit. It deliberately excludes the RTC 17041(a)(2)
+    temporary 0.25-point increase (expired after 2010), the head-of-household
+    schedule, the mental-health-services 1 per cent surcharge on income above one
+    million dollars, the section 17041(g) child-unearned-income treatment, the
+    RTC 17053.5 renter's credit and other section 17053 credits, and itemized
+    deductions, all of which are supplied as zero or omitted for this slice.
+    California AGI, filing status, the bracket floors and rates, the standard
+    deduction, and the personal exemption credit are supplied inputs; the
+    Franchise Tax Board indexes the brackets, standard deduction, and credit each
+    year, so this 2026 pipeline is compared against PolicyEngine at 2026 and
+    against TAXSIM's latest 2024 law year with the indexation vintage
+    dispositioned.
+rules:
+  - name: ca_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: RTC 17041, California taxable income after the supplied standard deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17041
+              excerpt: "taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ca_pit_pilot_adjusted_gross_income - ca_pit_pilot_supplied_standard_deduction)
+  - name: ca_pit_pilot_bracket_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: RTC 17041(a)(1), progressive tax as the marginal sum across the supplied bracket floors and rates
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17041
+              excerpt: "subdivision (a)(1) taxable income tax table"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_2) - ca_pit_pilot_supplied_bracket_floor_1) * ca_pit_pilot_supplied_bracket_rate_1
+          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_3) - ca_pit_pilot_supplied_bracket_floor_2) * ca_pit_pilot_supplied_bracket_rate_2
+          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_4) - ca_pit_pilot_supplied_bracket_floor_3) * ca_pit_pilot_supplied_bracket_rate_3
+          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_5) - ca_pit_pilot_supplied_bracket_floor_4) * ca_pit_pilot_supplied_bracket_rate_4
+          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_6) - ca_pit_pilot_supplied_bracket_floor_5) * ca_pit_pilot_supplied_bracket_rate_5
+          + max(0, ca_pit_pilot_taxable_income - ca_pit_pilot_supplied_bracket_floor_6) * ca_pit_pilot_supplied_bracket_rate_6
+  - name: ca_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: RTC 17041 tax less the RTC 17054 personal exemption credit, before other section 17053 credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17054
+              excerpt: "credits for personal exemption may be deducted from the tax imposed under Section 17041"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ca_pit_pilot_bracket_tax - ca_pit_pilot_supplied_personal_exemption_credit)
