@@ -1,0 +1,134 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ma/statute/62/6
+  deferred_outputs:
+    - output: us-ma:statutes/62/6/e#lead_paint_credit
+      reason: Requires dwelling-unit compliance, interim-control, licensed-inspector certification, and chapter 111 lead-abatement statuses not supplied as executable RuleSpec context; retained source-stated scalar limits separately.
+  summary: |-
+    6(e) allows a residential premises owner a lead paint containment, abatement, removal, or window replacement credit, generally limited to the lesser of cost or $3,000 per dwelling unit for full compliance, or one-half cost or $1,000 per dwelling unit for interim control, with seven-year carryforward. 6(h) allows a Massachusetts earned income credit for a taxpayer who qualified for and claimed the federal earned income credit; the credit equals 40 per cent of the federal credit, is prorated for part-year nonresidents by Massachusetts resident days over taxable-year days, is unavailable to full-year nonresidents, is applied last, and excess is treated as an overpayment.
+rules:
+  - name: lead_full_compliance_credit_unit_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 6(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "$3,000 per dwelling unit, whichever is less"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          3000
+
+  - name: lead_interim_control_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 6(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "one-half the cost"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.50
+
+  - name: lead_interim_control_credit_unit_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 6(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "$1,000 per dwelling unit, whichever is less"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          1000
+
+  - name: lead_credit_carryforward_years
+    kind: parameter
+    dtype: Count
+    source: 6(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "succeeding seven taxable years"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          7
+
+  - name: ma_earned_income_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 6(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "shall equal 40 per cent of the federal credit"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.40
+
+  - name: ma_earned_income_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 6(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "if that person qualified for and claimed the earned income credit allowed under section 32"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "limited to 40 per cent of the federal credit multiplied by a fraction"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ma/statute/62/6
+              excerpt: "A person who is a nonresident for the entire taxable year shall not be allowed the credit."
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          if taxpayer_qualified_for_and_claimed_federal_earned_income_credit and not nonresident_for_entire_taxable_year:
+            if nonresident_for_part_of_taxable_year:
+              max(0, federal_earned_income_credit_received) * ma_earned_income_credit_rate * days_resided_in_commonwealth / days_in_taxable_year
+            else:
+              max(0, federal_earned_income_credit_received) * ma_earned_income_credit_rate
+          else:
+            0
