@@ -1,0 +1,314 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/11
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/11/c/3#snap_ineligible_alien_income_and_expense_treatment
+      blocked_by:
+        - us:regulations/7-cfr/273/11/c#snap_nonhousehold_member_treatment_context
+      reason: >-
+        Paragraph (c)(3) gives the State agency discretion to count all or all
+        but a pro rata share of an ineligible alien's income and deductible
+        expenses, with carve-outs keyed to INA immigration statuses (lawful
+        permanent residents, asylees, refugees, parolees). Encoding it requires
+        the state-option layer and the immigration-status concepts of
+        7 CFR 273.4; this module encodes the federal member-level treatment in
+        paragraphs (c)(1) and (c)(2).
+  summary: |-
+    7 CFR 273.11(c) sets the treatment of income and resources of certain
+    nonhousehold members while a household member cannot participate.
+    Paragraph (c)(1) requires that the income and resources of members
+    disqualified for an intentional Program violation, a felony drug
+    conviction, fleeing felon status, noncompliance with a work requirement of
+    273.7, a workfare sanction, or 273.11(s) felon status continue to count in
+    their entirety, while the member is excluded from household size for
+    benefit-level, standard deduction, income-standard, and resource-limit
+    purposes, and the allotment may not increase as a result of the exclusion.
+    Paragraph (c)(2) requires that for members ineligible for SSN refusal,
+    the ABAWD time limit, or disqualification under paragraphs (k), (o), (p),
+    or (q), resources count in their entirety but only a pro rata share of
+    income counts: allowable exclusions are subtracted, the income is divided
+    evenly among all household members including the ineligible members, and
+    all but the ineligible members' share counts to the remaining members. The
+    20 percent earned income deduction applies to the attributed prorated
+    earned income, and deductible expenses paid by or billed to the ineligible
+    members are divided evenly with all but their share counted. Paragraph
+    (c)(3) state-option treatment of ineligible aliens is deferred.
+imports:
+  - us:regulations/7-cfr/273/10
+  - us:regulations/7-cfr/273/24
+rules:
+  - name: snap_nonhousehold_member_treatment_context
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: the eligibility and benefit level of any remaining household members shall be determined in accordance with the procedures outlined in this section
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          household_contains_member_ineligible_under_section_273_11
+
+  - name: snap_member_income_counted_in_entirety
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: disqualification for an intentional Program violation, a felony drug conviction, their fleeing felon status, noncompliance with a work requirement of § 273.7
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          member_disqualified_for_intentional_program_violation
+          or member_ineligible_for_felony_drug_conviction
+          or member_ineligible_as_fleeing_felon
+          or member_sanctioned_for_noncompliance_with_work_requirement_of_section_273_7
+          or member_sanctioned_while_participating_in_household_disqualified_for_workfare_noncompliance
+          or member_convicted_felon_ineligible_under_section_273_11_s
+
+  - name: snap_member_income_prorated
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(c)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: ineligible for refusal to obtain or provide an SSN, for meeting the time limit for able-bodied adults without dependents or for being disqualified under paragraphs (k), (o), (p), or (q) of this section
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/24#snap_member_abawd_time_limit_eligible
+              output: snap_member_abawd_time_limit_eligible
+              hash: sha256:956c2c20b9311eec7bdfba8559662b5b5fe23af90fb34aa8f7d3f61e78b37501
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          not snap_member_income_counted_in_entirety
+          and (
+            member_refused_to_obtain_or_provide_ssn
+            or not snap_member_abawd_time_limit_eligible
+            or member_disqualified_under_section_273_11_paragraph_k
+            or member_disqualified_under_section_273_11_paragraph_o
+            or member_disqualified_under_section_273_11_paragraph_p
+            or member_disqualified_under_section_273_11_paragraph_q
+          )
+
+  - name: snap_full_count_ineligible_members_countable_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: The income and resources of the ineligible household member(s) shall continue to count in their entirety
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          income_of_members_counted_in_entirety
+
+  - name: snap_full_count_ineligible_members_countable_resources
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: The income and resources of the ineligible household member(s) shall continue to count in their entirety
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          resources_of_members_counted_in_entirety
+
+  - name: snap_household_size_excluding_ineligible_members
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 7 CFR 273.11(c)(1)(ii), (c)(2)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: "The ineligible member shall not be included when determining the household's size for the purposes of:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: Such ineligible members shall not be included when determining their households' sizes
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(
+            0,
+            household_member_count_including_ineligible_members
+            - member_count_subject_to_full_income_count
+            - member_count_subject_to_income_proration
+          )
+
+  - name: snap_allotment_not_increased_by_member_exclusion
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(c)(1)(ii)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: The State agency shall ensure that no household's coupon allotment is increased as a result of the exclusion of one or more household members.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_monthly_allotment_with_ineligible_members_excluded <= snap_monthly_allotment_before_member_exclusion
+
+  - name: snap_prorated_ineligible_members_countable_resources
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: The resources of such ineligible members shall continue to count in their entirety to the remaining household members.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          resources_of_members_subject_to_proration
+
+  - name: snap_prorated_ineligible_members_countable_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(c)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: This pro rata share is calculated by first subtracting the allowable exclusions from the ineligible member's income and dividing the income evenly among the household members, including the ineligible members.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: All but the ineligible members' share is counted as income for the remaining household members.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if household_member_count_including_ineligible_members > 0:
+            income_after_allowable_exclusions_of_members_subject_to_proration
+            * max(0, household_member_count_including_ineligible_members - member_count_subject_to_income_proration)
+            / household_member_count_including_ineligible_members
+          else: 0
+
+  - name: snap_earned_income_deduction_on_attributed_prorated_earned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(c)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: The 20 percent earned income deduction shall apply to the prorated income earned by such ineligible members which is attributed to their households.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_earned_income_deduction_rate_for_net_income
+              output: snap_earned_income_deduction_rate_for_net_income
+              hash: sha256:1920fcef44cef1a5d4c1a2df49e3680ff00fdc80ed0f07109e6e047dcc475945
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if household_member_count_including_ineligible_members > 0:
+            snap_earned_income_deduction_rate_for_net_income
+            * earned_income_after_allowable_exclusions_of_members_subject_to_proration
+            * max(0, household_member_count_including_ineligible_members - member_count_subject_to_income_proration)
+            / household_member_count_including_ineligible_members
+          else: 0
+
+  - name: snap_prorated_ineligible_members_countable_deductible_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(c)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: divided evenly among the households' members including the ineligible members.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: All but the ineligible members' share is counted as a deductible child support payment, shelter or dependent care expense for the remaining household members.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if household_member_count_including_ineligible_members > 0:
+            deductible_expenses_paid_by_or_billed_to_members_subject_to_proration
+            * max(0, household_member_count_including_ineligible_members - member_count_subject_to_income_proration)
+            / household_member_count_including_ineligible_members
+          else: 0
