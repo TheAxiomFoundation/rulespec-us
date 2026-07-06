@@ -1,0 +1,133 @@
+format: rulespec/v1
+imports:
+  - us-il:statutes/35/5/204#joint_federal_return_agi_exemption_limit
+  - us-il:statutes/35/5/204#other_taxpayer_agi_exemption_limit
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-il/statute/35/5/201
+      - us-il/statute/35/5/204
+    upstream_source_check:
+      status: composed_from_grounded_modules
+      checked_paths:
+        - us-il/statute/35/5/201
+        - us-il/statute/35/5/204
+      rationale: |-
+        The operative flat 4.95 per cent individual rate is a declared caller-
+        supplied input (il_pit_pilot_supplied_income_tax_rate) rather than an
+        import, because the 35 ILCS 5/201(b) encoding carries that rate alongside
+        the 7 per cent corporate rate and the July 2017 effective-date boundary
+        in a single section, which a flat-rate application would strand; the
+        encoded section 201(b) 4.95 per cent individual rate is the cited
+        authority for the supplied value, and Illinois taxes net income at that
+        single flat rate with no brackets, so applying it to the base income
+        remaining after exemptions is faithful to section 201. The
+        subsection 204(g) adjusted-gross-income exemption limits (250,000 dollars
+        for non-joint filers, 500,000 dollars for joint filers) are imported from
+        the grounded 35 ILCS 5/204 module. The per-person standard exemption
+        amount is a declared caller-supplied input
+        (il_pit_pilot_supplied_personal_exemption), because the operative amount
+        is the section 204(d-5) cost-of-living-adjusted figure that the statute
+        defers to an annual Department of Revenue computation rather than stating
+        directly (the encoded section 204 retains only the 2,050-dollar statutory
+        base and defers il_standard_exemption); the operative tax-year-2026
+        amount is 2,925 dollars per allowable exemption, published by the
+        Illinois Department of Revenue in Informational Bulletin FY 2026-15
+        (December 2025). The 2026 liability equals the 4.95 per cent rate on base
+        income after the total standard exemption, with the exemption removed
+        entirely when adjusted gross income exceeds the subsection 204(g) limit.
+  summary: |-
+    Composed Illinois individual income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    Illinois base income (a completed-return, base-income-level input) into the
+    35 ILCS 5/201 liability so an end-to-end comparison against PolicyEngine
+    (il_income_tax) and TAXSIM (siitax) does not require the caller to supply the
+    section 201 rate or the section 204 exemption stage boundaries. It wires: the
+    section 204(b)-(d) standard exemption as the supplied per-person amount times
+    a supplied allowable-exemption count, subject to the subsection 204(g)
+    adjusted-gross-income cutoff; base income remaining after that exemption; and
+    the flat 4.95 per cent section 201(b) rate. It deliberately excludes the
+    section 201 investment, enterprise-zone, research, remediation, education,
+    River Edge, and pass-through-entity credits (deferred in the section 201
+    encoding), the section 212 earned income credit, the section 203
+    additions/subtractions beyond the supplied base income, and the age-65 and
+    blindness additional exemptions, all of which are supplied as zero or omitted
+    for the ordinary wage-earner slice. Base income, the allowable-exemption
+    count, adjusted gross income, and the per-person exemption amount are
+    supplied inputs; the 4.95 per cent flat rate and the 2,925-dollar 2026
+    exemption have been stable within tax year 2026, so this pipeline compares
+    directly against PolicyEngine at 2026, while TAXSIM's latest 2024 law year
+    uses the smaller 2024 exemption (2,775 dollars), a documented indexation
+    vintage difference.
+rules:
+  - name: il_pit_pilot_standard_exemption
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 35 ILCS 5/204(b)-(d), (g), total standard exemption removed above the subsection (g) AGI limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/statute/35/5/204
+              excerpt: "no exemption ... if the taxpayer's adjusted gross income ... exceeds"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:statutes/35/5/204#joint_federal_return_agi_exemption_limit
+              output: joint_federal_return_agi_exemption_limit
+              hash: sha256:b57a0c95367b7c4bb5f04501250128217eb71beacb418450cd99b2c6531d04be
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:statutes/35/5/204#other_taxpayer_agi_exemption_limit
+              output: other_taxpayer_agi_exemption_limit
+              hash: sha256:b57a0c95367b7c4bb5f04501250128217eb71beacb418450cd99b2c6531d04be
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if il_pit_pilot_filing_status_joint: (if il_pit_pilot_adjusted_gross_income > joint_federal_return_agi_exemption_limit: 0 else: il_pit_pilot_supplied_personal_exemption * il_pit_pilot_allowable_exemption_count) else: (if il_pit_pilot_adjusted_gross_income > other_taxpayer_agi_exemption_limit: 0 else: il_pit_pilot_supplied_personal_exemption * il_pit_pilot_allowable_exemption_count)
+  - name: il_pit_pilot_net_income_after_exemption
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 35 ILCS 5/203, base income remaining after the standard exemption
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/statute/35/5/204
+              excerpt: "the standard exemption allowed by this Section"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, il_pit_pilot_supplied_base_income - il_pit_pilot_standard_exemption)
+  - name: il_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 35 ILCS 5/201(b), supplied operative flat 4.95 per cent rate on net income, before section 201/212 credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/statute/35/5/201
+              excerpt: "for taxable years beginning on or after July 1, 2017, an amount equal to 4.95%"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          il_pit_pilot_net_income_after_exemption * il_pit_pilot_supplied_income_tax_rate
