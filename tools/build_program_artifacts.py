@@ -89,7 +89,9 @@ def git_output(root: Path, *args: str) -> str:
 
 def corpus_provenance(root: Path) -> dict:
     sha = git_output(root, "rev-parse", "HEAD")
-    dirty = bool(git_output(root, "status", "--porcelain"))
+    # Untracked files (e.g. a previous dist/) don't affect what compiles;
+    # only tracked modifications make the corpus state unreproducible.
+    dirty = bool(git_output(root, "status", "--porcelain", "--untracked-files=no"))
     origin = ""
     try:
         origin = git_output(root, "remote", "get-url", "origin")
