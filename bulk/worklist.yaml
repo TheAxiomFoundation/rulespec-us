@@ -1,218 +1,150 @@
-# Bulk-encoding worklist for the durable queue -> runner -> PR dispatcher.
-#
-# This file is the committed queue that .github/workflows/bulk-encode.yml
-# matrixes over. Each entry is one atomic RuleSpec module the encoder will
-# produce with `axiom-encode encode <citation> --apply`. The runner never
-# invents values; the encoder and the CI gate battery own quality. This file
-# only decides *which* already-ingested provisions to encode and tracks their
-# status.
-#
-# How the pilot was derived (mechanically, not hand-curated):
-#   1. Enumerate section-level provisions per target statute family from the
-#      public Axiom corpus endpoint (corpus.current_provisions PostgREST view;
-#      the same endpoint `axiom-encode` resolves against as a Supabase fallback
-#      when a provision is absent from the local axiom-corpus checkout).
-#   2. Cross-reference each provision's citation_path against the encoded YAML
-#      already on rulespec-us main (has_rulespec in the view is stale post-merge,
-#      so the check is done against the actual `<state>/statutes/**` files).
-#   3. Keep only un-encoded, non-empty, self-contained rate / credit / deduction
-#      / exemption / withholding-credit sections. Score cross-reference density
-#      from the provision body; prefer 0-1 external Section references.
-#   4. SKIP cross-reference-heavy sections (they trip encode#1058's self-import
-#      bug) and the known gate-held sections
-#      (CA RTC 17043 / 17045 / 17073.5, NY Tax 606 / 616).
-#
-# Family inventory at derivation time (un-encoded / total section provisions):
-#   us-il  35 ILCS 5      : 239 / 242 pending
-#   us-ma  G.L. c.62      :  64 /  67 pending
-#   us-ca  RTC (Part 10)  : 797 / 800 pending  (RTC as a whole; Part 10 = 17xxx)
-#   us-ny  Tax Law Art 22 : 102 / 104 pending
-#
-# Statuses (see bulk/README.md for the full taxonomy):
-#   pending        - queued; the next dispatch may pick it up.
-#   in-progress    - a run is currently encoding it (set transiently by the job).
-#   needs-fixtures - encoded + applied, but the gpt-5.5 companion fixtures failed
-#                    the #1060 ceiling; a follow-up fixture pass must be run.
-#   pr-open        - a PR exists and is set to auto-merge on green.
-#   merged         - the module's PR merged to main. Terminal success.
-#   failed         - the encode or a gate failed for a non-fixture reason; needs
-#                    human triage. Never auto-retried, never merged.
-#
-# Extending the worklist: append entries in the same shape. `citation` is the
-# corpus citation path the encoder resolves (jurisdiction/statute/<path>). Keep
-# `batch` so a dispatch can target a subset. Run
-# `python bulk/compute_matrix.py --status pending` to preview what a dispatch
-# would encode.
-
 version: 1
-
 defaults:
   backend: openai
   model: gpt-5.5
-
 entries:
-  # ---------------------------------------------------------------------------
-  # Batch A - first pilot dispatch (8). Highest-confidence, self-contained.
-  # ---------------------------------------------------------------------------
-  - citation: us-il/statute/35/5/402
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "Methods of accounting"
-    class: mechanics
-    note: "Self-contained; base/net income accounting method follows federal. No external Section refs."
-
-  - citation: us-il/statute/35/5/306
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "Allocation or apportionment of income by estates and trusts"
-    class: allocation
-    note: "Self-contained pro-rata allocation; refers to 301-304 descriptively."
-
-  - citation: us-il/statute/35/5/707
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "Governmental employers (withholding return)"
-    class: withholding
-    note: "Self-contained withholding-return rule for governmental employers."
-
-  - citation: us-ma/statute/62/64
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "Optional tax table"
-    class: rate
-    note: "Self-contained optional tax-table election; no external cross-references."
-
-  - citation: us-ma/statute/62/11a
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "Income from pooled income funds and charitable remainder trusts"
-    class: withholding-credit
-    note: "Withhold-and-credit mechanics; one IRC definitional ref (642(c)(5)/664(d))."
-
-  - citation: us-ny/statute/TAX/613
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "New York deduction of a resident individual"
-    class: deduction
-    note: "Standard-vs-itemized election; part-internal refs (614/615/611) only."
-
-  - citation: us-ny/statute/TAX/673
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "Credit for tax withheld"
-    class: credit
-    note: "Self-contained credit for withheld tax. Verified end-to-end: apply + full gate battery green (~31s)."
-
-  - citation: us-ny/statute/TAX/611
-    repo: rulespec-us
-    batch: A
-    status: pending
-    heading: "New York taxable income of a resident individual"
-    class: rate-base
-    note: "Taxable income = AGI - deduction - exemptions; part-internal structure only."
-
-  # ---------------------------------------------------------------------------
-  # Batch B - second pilot dispatch (12). Includes the modest, vetted CA set.
-  # ---------------------------------------------------------------------------
-  - citation: us-il/statute/35/5/506.5
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Returns based on substitute W-2 forms"
-    class: withholding
-    note: "Self-contained presumption rule for substitute W-2 withholding."
-
-  - citation: us-il/statute/35/5/404
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Reallocation of items"
-    class: allocation
-    note: "Self-contained Director reallocation authority."
-
-  - citation: us-il/statute/35/5/206
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Tax credits for coal research and coal utilization equipment"
-    class: credit
-    note: "Defines its own 20%/5% credit rates against Section 201 tax; self-contained amounts."
-
-  - citation: us-il/statute/35/5/605
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Section 605 (Article 6 - credits/withholding)"
-    class: credit
-    note: "Class-keyword match in Article 6; low cross-reference density."
-
-  - citation: us-ma/statute/62/62
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Methods of accounting; fiscal years"
-    class: mechanics
-    note: "Self-contained accounting-method/fiscal-year rule."
-
-  - citation: us-ma/statute/62/6l
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Application and refund of certain credits"
-    class: credit
-    note: "Credit application/refund ordering; moderate cross-reference to c.62 credit sections."
-
-  - citation: us-ny/statute/TAX/601-A
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Cost of living adjustment"
-    class: indexing
-    note: "Self-contained COLA arithmetic over its own subsection (b) amounts."
-
-  - citation: us-ny/statute/TAX/620-A
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Credit against separate tax"
-    class: credit
-    note: "Resident credit against the separate tax on lump-sum distributions."
-
-  - citation: us-ny/statute/TAX/672
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Information statement for employee"
-    class: withholding
-    note: "Self-contained employer information-statement rule."
-
-  - citation: us-ca/statute/rtc/17053.6
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Credit for wages paid to prisoners (10 percent)"
-    class: credit
-    note: "RTC Part 10 credit; defines its own 10% rate against net tax (17039 definitional ref only)."
-
-  - citation: us-ca/statute/rtc/17054.7
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Credit for qualified senior head of household (2 percent)"
-    class: credit
-    note: "RTC Part 10 credit; self-contained 2% rate with in-section definitions."
-
-  - citation: us-ca/statute/rtc/17061
-    repo: rulespec-us
-    batch: B
-    status: pending
-    heading: "Credit for unemployment insurance refund"
-    class: credit
-    note: "RTC Part 10 credit against tax for a UI-code refund; self-contained amount."
+- citation: us-il/statute/35/5/402
+  repo: rulespec-us
+  batch: A
+  status: pending
+  heading: Methods of accounting
+  class: mechanics
+  note: Self-contained; base/net income accounting method follows federal. No external
+    Section refs.
+- citation: us-il/statute/35/5/306
+  repo: rulespec-us
+  batch: A
+  status: pending
+  heading: Allocation or apportionment of income by estates and trusts
+  class: allocation
+  note: Self-contained pro-rata allocation; refers to 301-304 descriptively.
+- citation: us-il/statute/35/5/707
+  repo: rulespec-us
+  batch: A
+  status: pending
+  heading: Governmental employers (withholding return)
+  class: withholding
+  note: Self-contained withholding-return rule for governmental employers.
+- citation: us-ma/statute/62/64
+  repo: rulespec-us
+  batch: A
+  status: pending
+  heading: Optional tax table
+  class: rate
+  note: Self-contained optional tax-table election; no external cross-references.
+- citation: us-ma/statute/62/11a
+  repo: rulespec-us
+  batch: A
+  status: pr-open
+  heading: Income from pooled income funds and charitable remainder trusts
+  class: withholding-credit
+  note: Withhold-and-credit mechanics; one IRC definitional ref (642(c)(5)/664(d)).
+- citation: us-ny/statute/TAX/613
+  repo: rulespec-us
+  batch: A
+  status: merged
+  heading: New York deduction of a resident individual
+  class: deduction
+  note: Standard-vs-itemized election; part-internal refs (614/615/611) only.
+- citation: us-ny/statute/TAX/673
+  repo: rulespec-us
+  batch: A
+  status: pr-open
+  heading: Credit for tax withheld
+  class: credit
+  note: 'Self-contained credit for withheld tax. Verified end-to-end: apply + full
+    gate battery green (~31s).'
+- citation: us-ny/statute/TAX/611
+  repo: rulespec-us
+  batch: A
+  status: pr-open
+  heading: New York taxable income of a resident individual
+  class: rate-base
+  note: Taxable income = AGI - deduction - exemptions; part-internal structure only.
+- citation: us-il/statute/35/5/506.5
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Returns based on substitute W-2 forms
+  class: withholding
+  note: Self-contained presumption rule for substitute W-2 withholding.
+- citation: us-il/statute/35/5/404
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Reallocation of items
+  class: allocation
+  note: Self-contained Director reallocation authority.
+- citation: us-il/statute/35/5/206
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Tax credits for coal research and coal utilization equipment
+  class: credit
+  note: Defines its own 20%/5% credit rates against Section 201 tax; self-contained
+    amounts.
+- citation: us-il/statute/35/5/605
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Section 605 (Article 6 - credits/withholding)
+  class: credit
+  note: Class-keyword match in Article 6; low cross-reference density.
+- citation: us-ma/statute/62/62
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Methods of accounting; fiscal years
+  class: mechanics
+  note: Self-contained accounting-method/fiscal-year rule.
+- citation: us-ma/statute/62/6l
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Application and refund of certain credits
+  class: credit
+  note: Credit application/refund ordering; moderate cross-reference to c.62 credit
+    sections.
+- citation: us-ny/statute/TAX/601-A
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Cost of living adjustment
+  class: indexing
+  note: Self-contained COLA arithmetic over its own subsection (b) amounts.
+- citation: us-ny/statute/TAX/620-A
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Credit against separate tax
+  class: credit
+  note: Resident credit against the separate tax on lump-sum distributions.
+- citation: us-ny/statute/TAX/672
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Information statement for employee
+  class: withholding
+  note: Self-contained employer information-statement rule.
+- citation: us-ca/statute/rtc/17053.6
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Credit for wages paid to prisoners (10 percent)
+  class: credit
+  note: RTC Part 10 credit; defines its own 10% rate against net tax (17039 definitional
+    ref only).
+- citation: us-ca/statute/rtc/17054.7
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Credit for qualified senior head of household (2 percent)
+  class: credit
+  note: RTC Part 10 credit; self-contained 2% rate with in-section definitions.
+- citation: us-ca/statute/rtc/17061
+  repo: rulespec-us
+  batch: B
+  status: pending
+  heading: Credit for unemployment insurance refund
+  class: credit
+  note: RTC Part 10 credit against tax for a UI-code refund; self-contained amount.
