@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Daily full-matrix validation: the honesty backstop for shard-on-demand.
+    # Scoped pull requests validate only the one jurisdiction they touch, so
+    # this scheduled run re-validates every shard against main to catch any
+    # cross-shard drift a scoped PR could not see. 06:13 UTC.
+    - cron: "13 6 * * *"
+  workflow_dispatch:
 
 jobs:
   validate:
@@ -12,3 +19,40 @@ jobs:
     secrets: inherit
     with:
       validate-roots: auto
+
+  drift-alarm:
+    # Red-main alarm. A full validation runs on every push to main and on the
+    # daily schedule; if either goes red, open (or refresh) a tracking issue so
+    # cross-shard drift that a scoped PR let through can never accumulate
+    # silently. Never fires for pull requests.
+    needs: validate
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.validate.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or refresh the red-main validation alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          title="Scheduled full RuleSpec validation is red on main"
+          body="The full-matrix validation run failed on main (${EVENT_NAME}): ${RUN_URL}
+
+          Shard-on-demand validates only the touched jurisdiction on pull
+          requests, so a red full run on main is the signal that cross-shard
+          drift reached main. Investigate the failing shard(s) in the run above,
+          then close this issue once main is green again."
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still red on $(date -u +%Y-%m-%dT%H:%MZ) (${EVENT_NAME}): ${RUN_URL}"
+            echo "Refreshed alarm issue #$existing"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+            echo "Opened new alarm issue"
+          fi
