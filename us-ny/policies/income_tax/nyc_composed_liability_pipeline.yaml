@@ -1,0 +1,299 @@
+format: rulespec/v1
+imports:
+  - us-ny:statutes/NYC/11-1701#subdivision_a_joint_or_surviving_spouse_tax
+  - us-ny:statutes/NYC/11-1701#subdivision_a_head_of_household_tax
+  - us-ny:statutes/NYC/11-1701#subdivision_a_other_resident_tax
+  - us-ny:statutes/NYC/11-1704/1#general_joint_or_surviving_spouse_additional_tax
+  - us-ny:statutes/NYC/11-1704/1#general_head_of_household_additional_tax
+  - us-ny:statutes/NYC/11-1704/1#general_other_resident_additional_tax
+  - us-ny:policies/tax/it-216-instructions/nyc-child-dependent-care-credit#form_it216_line_24_nyc_child_dependent_care_credit
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ny/statute/NYC/11-1701
+      - us-ny/statute/NYC/11-1704.1
+      - us-ny/statute/NYC/11-1706
+      - us-ny/form/tax/it-216-instructions/page-6
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-ny/statute/NYC/11-1701
+        - us-ny/statute/NYC/11-1704.1
+        - us-ny/statute/NYC/11-1706
+        - us-ny/form/tax/it-216-instructions/page-6
+      rationale: |-
+        This pipeline composes the already-encoded New York City resident
+        personal income-tax components into a PolicyEngine-comparable final
+        liability. NYC Administrative Code section 11-1701 supplies the base
+        resident tax, section 11-1704.1 supplies the pre-2027 fourteen-percent
+        additional tax that current Form IT-201 schedules fold into the displayed
+        NYC rates, and section 11-1706 supplies the credit/overpayment
+        framework. The current IT-216 instruction module supplies the encoded
+        child/dependent-care credit amount. Household credit, unincorporated
+        business tax credit, school tax credit, and NYC earned income credit are
+        declared caller-supplied amounts because their full current-year
+        eligibility and amount surfaces remain deferred in the copied RuleSpec
+        context or encoded as separate, not-yet-composed modules. The caller
+        also supplies the filing-status selector and city taxable income to the
+        imported section 11-1701 module; this pipeline adds no new tax-rate or
+        threshold authority of its own.
+  summary: |-
+    Composed NYC resident personal income-tax liability pipeline for the oracle
+    slice. It selects the section 11-1701 resident tax by supplied filing-status
+    flags, adds the section 11-1704.1 fourteen-percent additional tax for
+    pre-2027 tax years, subtracts supplied nonrefundable NYC household and
+    unincorporated-business credits but not below zero, and then subtracts
+    refundable credits consisting of the encoded IT-216 NYC child/dependent-care
+    credit, supplied school tax credit, and supplied NYC earned income credit.
+    It deliberately does not encode New York taxable-income construction,
+    household-credit tables, school-credit eligibility and amount selection,
+    UBT-credit mechanics, NYC EITC eligibility, part-year residency allocation
+    beyond the imported IT-216 amount, or the post-2026 section 11-1701(b) rate
+    schedule selector.
+rules:
+  - name: nyc_pit_composed_section_1701_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1701(a), resident personal income tax selected by supplied filing-status flags
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1701
+              excerpt: "city resident individual, estate and trust"
+          - path: versions[0].formula
+            kind: formula
+            import:
+              target: us-ny:statutes/NYC/11-1701#subdivision_a_joint_or_surviving_spouse_tax
+              output: subdivision_a_joint_or_surviving_spouse_tax
+              hash: sha256:7bbba6387ec0ff1a813fdf9abc738f1f3c0588bea7ebdc16202520cbcbec50a7
+          - path: versions[0].formula
+            kind: formula
+            import:
+              target: us-ny:statutes/NYC/11-1701#subdivision_a_head_of_household_tax
+              output: subdivision_a_head_of_household_tax
+              hash: sha256:7bbba6387ec0ff1a813fdf9abc738f1f3c0588bea7ebdc16202520cbcbec50a7
+          - path: versions[0].formula
+            kind: formula
+            import:
+              target: us-ny:statutes/NYC/11-1701#subdivision_a_other_resident_tax
+              output: subdivision_a_other_resident_tax
+              hash: sha256:7bbba6387ec0ff1a813fdf9abc738f1f3c0588bea7ebdc16202520cbcbec50a7
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if nyc_pit_composed_joint_or_surviving_spouse_return:
+            subdivision_a_joint_or_surviving_spouse_tax
+          else:
+            if nyc_pit_composed_head_of_household_return:
+              subdivision_a_head_of_household_tax
+            else:
+              subdivision_a_other_resident_tax
+
+  - name: nyc_pit_composed_pre_2027_fourteen_percent_section_1704_1_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1704.1(a)(1)(ii), fourteen percent additional tax selected by supplied filing-status flags
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1704.1
+              excerpt: "there is hereby imposed for each taxable year"
+          - path: versions[0].formula
+            kind: formula
+            import:
+              target: us-ny:statutes/NYC/11-1704/1#general_joint_or_surviving_spouse_additional_tax
+              output: general_joint_or_surviving_spouse_additional_tax
+              hash: sha256:b3083732c31dbf3e3af434c2b76e62dd1db7c18fa80d3f1044c64964386a237b
+          - path: versions[0].formula
+            kind: formula
+            import:
+              target: us-ny:statutes/NYC/11-1704/1#general_head_of_household_additional_tax
+              output: general_head_of_household_additional_tax
+              hash: sha256:b3083732c31dbf3e3af434c2b76e62dd1db7c18fa80d3f1044c64964386a237b
+          - path: versions[0].formula
+            kind: formula
+            import:
+              target: us-ny:statutes/NYC/11-1704/1#general_other_resident_additional_tax
+              output: general_other_resident_additional_tax
+              hash: sha256:b3083732c31dbf3e3af434c2b76e62dd1db7c18fa80d3f1044c64964386a237b
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          if nyc_pit_composed_joint_or_surviving_spouse_return:
+            general_joint_or_surviving_spouse_additional_tax
+          else:
+            if nyc_pit_composed_head_of_household_return:
+              general_head_of_household_additional_tax
+            else:
+              general_other_resident_additional_tax
+
+  - name: nyc_pit_composed_income_tax_before_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code §§ 11-1701 and 11-1704.1, base resident tax plus pre-2027 additional tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1701
+              excerpt: "A tax is hereby imposed"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1704.1
+              excerpt: "additional tax"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/nyc_composed_liability_pipeline#nyc_pit_composed_section_1701_tax
+              output: nyc_pit_composed_section_1701_tax
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/nyc_composed_liability_pipeline#nyc_pit_composed_pre_2027_fourteen_percent_section_1704_1_tax
+              output: nyc_pit_composed_pre_2027_fourteen_percent_section_1704_1_tax
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          nyc_pit_composed_section_1701_tax + nyc_pit_composed_pre_2027_fourteen_percent_section_1704_1_tax
+
+  - name: nyc_pit_composed_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1706, NYC credits that reduce tax before refundable credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1706
+              excerpt: "credits against the tax imposed"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          max(0, nyc_pit_composed_supplied_household_credit)
+          + max(0, nyc_pit_composed_supplied_unincorporated_business_tax_credit)
+
+  - name: nyc_pit_composed_income_tax_before_refundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1706, nonrefundable credits reduce NYC tax but do not create an overpayment at this stage
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1706
+              excerpt: "credits against the tax imposed"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          max(0, nyc_pit_composed_income_tax_before_credits - nyc_pit_composed_nonrefundable_credits)
+
+  - name: nyc_pit_composed_school_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1706, supplied NYC school tax credit amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1706
+              excerpt: "state school tax reduction credit"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          max(0, nyc_pit_composed_supplied_school_tax_credit)
+
+  - name: nyc_pit_composed_refundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1706, refundable NYC credits treated as overpayments or refundable amounts
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1706
+              excerpt: "household and dependent care credit"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/tax/it-216-instructions/nyc-child-dependent-care-credit#form_it216_line_24_nyc_child_dependent_care_credit
+              output: form_it216_line_24_nyc_child_dependent_care_credit
+              hash: sha256:b519fb659046c5a112a1740f57d093b2c4db939e701e88fcdabb68b22f9a231e
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/nyc_composed_liability_pipeline#nyc_pit_composed_school_tax_credit
+              output: nyc_pit_composed_school_tax_credit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1706
+              excerpt: "earned income tax credit"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          form_it216_line_24_nyc_child_dependent_care_credit
+          + nyc_pit_composed_school_tax_credit
+          + max(0, nyc_pit_composed_supplied_earned_income_tax_credit)
+
+  - name: nyc_pit_composed_income_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NYC Admin. Code § 11-1706, final NYC income tax after nonrefundable and refundable credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/NYC/11-1706
+              excerpt: "the excess shall be treated as an overpayment"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          nyc_pit_composed_income_tax_before_refundable_credits - nyc_pit_composed_refundable_credits
