@@ -122,3 +122,27 @@ def test_committed_index_is_up_to_date():
     # The committed file must be valid JSON with the declared schema.
     parsed = json.loads(committed)
     assert parsed["schema"] == "axiom.rulespec.provisions_to_rules/v1"
+    # The repo-global counts header must stay out of the committed artifact:
+    # it is the one region every concurrent encoding PR would rewrite, so
+    # keeping it here would re-serialize bulk merges on a guaranteed conflict.
+    assert "counts" not in parsed, (
+        "The committed reverse index must not carry the repo-global counts "
+        "block; it re-introduces the shared line every PR rewrites."
+    )
+
+
+def test_render_index_omits_counts_but_build_reports_them(tmp_path):
+    """Counts stay available to humans via build_index, absent from the file."""
+    (tmp_path / "us" / "statutes").mkdir(parents=True)
+    _write(
+        tmp_path / "us" / "statutes" / "a.yaml",
+        "module:\n  source_verification:\n    corpus_citation_path: us/statute/26/a\n",
+    )
+    index = gen.build_index(tmp_path)
+    # build_index still surfaces counts for the CLI summary and callers.
+    assert index["counts"]["modules"] == 1
+    # ... but they are not serialized into the committed artifact.
+    parsed = json.loads(gen.render_index(index))
+    assert "counts" not in parsed
+    assert parsed["schema"] == "axiom.rulespec.provisions_to_rules/v1"
+    assert "us/statute/26/a" in parsed["provisions"]
