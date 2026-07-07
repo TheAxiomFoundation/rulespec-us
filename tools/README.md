@@ -20,6 +20,14 @@ Consumers (axiom-api) pin a release tag and per-file sha256s instead of
 vendoring artifacts. To admit a program: land its spec here, wait for the
 release, then bump the consumer's pin.
 
+The workflow also signs GitHub build-provenance attestations for
+`manifest.json` and every `*.compiled.json`. Consumers can verify a
+downloaded artifact was built by this workflow from this repo:
+
+```bash
+gh attestation verify manifest.json --repo TheAxiomFoundation/rulespec-us
+```
+
 Run locally:
 
 ```bash
