@@ -240,10 +240,15 @@ jobs:
           echo "wall_seconds=$((end - start))" >> "$GITHUB_OUTPUT"
           echo "Encode wall time: $((end - start))s"
 
-          # Locate the applied module path from the git worktree.
+          # Locate the applied module path from the git worktree. Restrict to
+          # jurisdiction directories (two-letter code, optional -suffix) so the
+          # sibling checkouts under _axiom/ and any build artifacts are never
+          # picked up.
           slug='${{ matrix.item.slug }}'
           mapfile -t applied < <(git -C "$GITHUB_WORKSPACE" status --porcelain \
-            | awk '{print $2}' | grep -E '\.yaml$' | grep -v '\.test\.yaml$' | grep -vE '^rulespec-us$' || true)
+            | sed 's/^...//' \
+            | grep -E '^[a-z]{2}(-[a-z0-9-]+)?/(statutes|regulations|policies)/.*\.yaml$' \
+            | grep -v '\.test\.yaml$' || true)
 
           if [ "$apply_status" -ne 0 ] || [ "${#applied[@]}" -eq 0 ]; then
             echo "status=failed" >> "$GITHUB_OUTPUT"
@@ -253,13 +258,28 @@ jobs:
 
           module="${applied[0]}"
           test_file="${module%.yaml}.test.yaml"
+          juris="${module%%/*}"
+          # The apply manifest mirrors the module's path under the jurisdiction's
+          # .axiom/encoding-manifests/ -- e.g. us-il/statutes/35/5/306.yaml ->
+          # us-il/.axiom/encoding-manifests/statutes/35/5/306.json. Strip only
+          # the jurisdiction prefix (keep the statutes/regulations/policies bucket).
+          rest="${module#"$juris"/}"
+          manifest_rel="$juris/.axiom/encoding-manifests/${rest%.yaml}.json"
+          # Fall back to a basename search if the direct manifest path guess misses.
+          if [ ! -f "$GITHUB_WORKSPACE/$manifest_rel" ]; then
+            manifest_rel="$(cd "$GITHUB_WORKSPACE" && find "$juris/.axiom/encoding-manifests" -name "$(basename "${module%.yaml}").json" 2>/dev/null | head -1)"
+          fi
           echo "module=$module" >> "$GITHUB_OUTPUT"
           echo "test_file=$test_file" >> "$GITHUB_OUTPUT"
           echo "Applied module: $module"
+          echo "Applied manifest: $manifest_rel"
 
           # --- Gate battery (fail-closed pre-check; mirrors PR CI order) ---
           # 1. guard-generated: applied files must carry a valid signed manifest.
-          git -C "$GITHUB_WORKSPACE" add -A
+          # Stage ONLY the applied module, its companion test, and its signed
+          # manifest -- never `git add -A`, which would commit the _axiom/
+          # sibling checkouts and build artifacts.
+          git -C "$GITHUB_WORKSPACE" add -- "$module" "$test_file" "$manifest_rel"
           git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
             -c user.name="bulk-encode" commit -q -m "wip: $CITATION"
           axiom-encode guard-generated \
