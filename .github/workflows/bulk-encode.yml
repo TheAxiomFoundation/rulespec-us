@@ -340,7 +340,16 @@ jobs:
 
       - name: Assemble PR body
         id: prbody
-        if: ${{ always() && steps.encode.outputs.module != '' }}
+        # Only assemble/open a PR when the local gate battery actually passed.
+        # `status` is written `green`/`needs-fixtures` only after guard-generated
+        # + validate + proof-validate run; an apply failure writes `failed` and a
+        # guard/validate/proof failure exits the encode step BEFORE `status` is
+        # written, so in every non-passing case this condition is false and no PR
+        # body is assembled. (`needs-fixtures` is a soft companion-test fail and
+        # still opens the PR by design.) Replaces an `always() && module != ''`
+        # guard that assembled and pushed gate-failing generations
+        # (rulespec-uk#104 D2 / rulespec-us#605).
+        if: ${{ steps.encode.outputs.status == 'green' || steps.encode.outputs.status == 'needs-fixtures' }}
         shell: bash
         env:
           CITATION: ${{ matrix.item.citation }}
@@ -393,7 +402,13 @@ jobs:
           echo "path=$body" >> "$GITHUB_OUTPUT"
 
       - name: Open PR and enable auto-merge
-        if: ${{ always() && steps.encode.outputs.module != '' }}
+        # Same gate-battery guard as "Assemble PR body": never force-push the
+        # bulk branch, open a PR, or arm auto-merge for an encode whose gate
+        # battery did not pass. Under the old `always() && module != ''` guard a
+        # guard/validate/proof failure (which sets `module` but leaves `status`
+        # unwritten) still force-pushed the broken commit and armed auto-merge
+        # (rulespec-uk#104 D2 / rulespec-us#605).
+        if: ${{ steps.encode.outputs.status == 'green' || steps.encode.outputs.status == 'needs-fixtures' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.BULK_ENCODE_TOKEN }}
