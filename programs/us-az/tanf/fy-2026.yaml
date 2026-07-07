@@ -18,6 +18,12 @@ outputs:
 
 acknowledged_incomplete:
   - az_tanf_prospectively_eligible
+  # az_tanf_eligible_no_pay aliases the corpus rule ca_eligible_no_pay_case,
+  # which already embeds prospective eligibility via
+  # ca_prospective_eligibility_requirements_met; the coverage analyzer cannot
+  # see that the spec-level alias az_tanf_prospectively_eligible covers the
+  # same corpus rule, so the output is acknowledged rather than double-gated.
+  - az_tanf_eligible_no_pay
   - az_tanf
 
 scope:
@@ -66,6 +72,30 @@ transformations:
     source: axiom-programs/us-az/tanf/fy-2026 eligible-no-pay bridge
     formula: ca_eligible_no_pay_case
 
+  # conditional_value requires `condition` and `when_true` to be bare RuleSpec
+  # identifiers, so the payable judgment and the monthly-payment bridge are
+  # named transformations of their own (semantics unchanged: pay the monthly
+  # net unrounded payment when prospectively eligible and not an
+  # eligible-no-pay case).
+  - pattern: derived_formula
+    name: az_tanf_payable
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-az/tanf/fy-2026 payable-case composition
+    formula: az_tanf_prospectively_eligible and not az_tanf_eligible_no_pay
+
+  - pattern: derived_formula
+    name: az_tanf_monthly_unrounded_payment
+    effective_from: '2026-01-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-az/tanf/fy-2026 monthly-payment bridge
+    formula: ca_payment_standard_net_unrounded_payment / 12
+
   - pattern: conditional_value
     name: az_tanf
     effective_from: '2026-01-01'
@@ -74,6 +104,6 @@ transformations:
     period: Month
     unit: USD
     source: axiom-programs/us-az/tanf/fy-2026 benefit amount composition
-    condition: az_tanf_prospectively_eligible and not az_tanf_eligible_no_pay
-    when_true: ca_payment_standard_net_unrounded_payment / 12
+    condition: az_tanf_payable
+    when_true: az_tanf_monthly_unrounded_payment
     when_false: 0
