@@ -274,12 +274,21 @@ jobs:
           echo "Applied module: $module"
           echo "Applied manifest: $manifest_rel"
 
+          # Regenerate the provision -> rules reverse index so the committed
+          # .axiom/index/provisions_to_rules.json reflects the new module; the
+          # reverse-index CI check fails on a stale index. This is a generated
+          # artifact (not guarded RuleSpec), safe to write here.
+          index_file=".axiom/index/provisions_to_rules.json"
+          if [ -f "$GITHUB_WORKSPACE/tests/generate_reverse_index.py" ]; then
+            (cd "$GITHUB_WORKSPACE" && python tests/generate_reverse_index.py)
+          fi
+
           # --- Gate battery (fail-closed pre-check; mirrors PR CI order) ---
           # 1. guard-generated: applied files must carry a valid signed manifest.
-          # Stage ONLY the applied module, its companion test, and its signed
-          # manifest -- never `git add -A`, which would commit the _axiom/
-          # sibling checkouts and build artifacts.
-          git -C "$GITHUB_WORKSPACE" add -- "$module" "$test_file" "$manifest_rel"
+          # Stage ONLY the applied module, its companion test, its signed
+          # manifest, and the regenerated reverse index -- never `git add -A`,
+          # which would commit the _axiom/ sibling checkouts and build artifacts.
+          git -C "$GITHUB_WORKSPACE" add -- "$module" "$test_file" "$manifest_rel" "$index_file"
           git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
             -c user.name="bulk-encode" commit -q -m "wip: $CITATION"
           axiom-encode guard-generated \
@@ -401,16 +410,23 @@ jobs:
             title="Encode $CITATION (bulk, needs-fixtures)"
           fi
 
-          # Create the PR if one does not already exist for this branch.
-          if ! gh pr view "$branch" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          # Reconcile the PR for this branch across all states. A prior run may
+          # have left a CLOSED PR for the same bulk/<slug> branch; auto-merge
+          # cannot be enabled on a closed PR, so reopen it before proceeding.
+          pr_state="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
+          if [ -z "$pr_state" ]; then
             gh pr create --repo "$GITHUB_REPOSITORY" \
               --base "$DEFAULT_BRANCH" --head "$branch" \
               --title "$title" \
               --body-file "${{ steps.prbody.outputs.path }}" \
               --label bulk-encode
           else
+            if [ "$pr_state" = "CLOSED" ]; then
+              gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY"
+            fi
             gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
-              --title "$title" --body-file "${{ steps.prbody.outputs.path }}"
+              --title "$title" --body-file "${{ steps.prbody.outputs.path }}" \
+              --add-label bulk-encode
           fi
 
           # Enable auto-merge on green. Never admin, never bypass red. If the
