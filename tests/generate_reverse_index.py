@@ -12,7 +12,9 @@ emits ``.axiom/index/provisions_to_rules.json``: for each corpus citation path
 referenced anywhere, the sorted list of module paths that depend on it, plus the
 kinds of reference (``module`` and/or ``proof_atom``). The output is fully
 deterministic (sorted keys, sorted module lists) so CI can regenerate it and
-diff against the committed copy.
+diff against the committed copy. The serialized file deliberately omits the
+repo-global ``counts`` header (still printed for humans) so concurrent encoding
+PRs no longer collide on a shared summary line; see ``render_index``.
 
 The index is read-only tooling metadata. It does not participate in RuleSpec
 validation and nothing in the engine binds to it; it exists so that a change to
@@ -183,8 +185,22 @@ def build_index(repo_root: Path) -> dict[str, Any]:
 
 
 def render_index(index: dict[str, Any]) -> str:
-    """Serialize the index deterministically with a trailing newline."""
-    return json.dumps(index, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
+    """Serialize the index deterministically with a trailing newline.
+
+    The ``counts`` block is intentionally omitted from the serialized file.
+    It is a repo-global summary that every module addition rewrites, so
+    committing it made those few lines the one region that *every* concurrent
+    encoding PR touched -- a guaranteed merge conflict that serialized bulk
+    merges. Counts are still computed and printed for humans (see ``main``);
+    only the on-disk artifact drops them, so two PRs adding modules under
+    different provisions no longer collide on a shared header. The remaining
+    ``provisions`` map stays deterministic (sorted keys and module lists), so a
+    git three-way merge of two disjoint insertions reproduces the canonical
+    output byte-for-byte and the up-to-date check passes without a manual
+    regenerate/rebase.
+    """
+    serializable = {key: value for key, value in index.items() if key != "counts"}
+    return json.dumps(serializable, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
