@@ -52,6 +52,7 @@ def allowed_yaml_roots() -> set[str]:
         "known-dangling.yaml",
         "known-missing-money-atoms.yaml",
         "known-validation-gaps.yaml",
+        "oracle-coverage-pending.yaml",
         *(d.name for d in jurisdiction_dirs()),
     }
 

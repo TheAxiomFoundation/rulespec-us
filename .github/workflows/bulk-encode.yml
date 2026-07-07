@@ -283,12 +283,26 @@ jobs:
             (cd "$GITHUB_WORKSPACE" && python tests/generate_reverse_index.py)
           fi
 
+          # --- Oracle-coverage pending lane (dispatcher step) ---
+          # Declare this repo's currently-unmapped outputs so the gate
+          # reclassifies them to pending_classification (accountable, not
+          # silently unmapped) instead of blocking on a per-output cross-repo
+          # pin dance. The classification sweep drains them into real mappings
+          # and the ratchet forces stale declarations out. See bulk/README.md.
+          axiom-encode oracle-coverage-pending sync \
+            --root "$GITHUB_WORKSPACE/.." \
+            --repo rulespec-us \
+            --source bulk
+
           # --- Gate battery (fail-closed pre-check; mirrors PR CI order) ---
           # 1. guard-generated: applied files must carry a valid signed manifest.
           # Stage ONLY the applied module, its companion test, its signed
-          # manifest, and the regenerated reverse index -- never `git add -A`,
-          # which would commit the _axiom/ sibling checkouts and build artifacts.
-          git -C "$GITHUB_WORKSPACE" add -- "$module" "$test_file" "$manifest_rel" "$index_file"
+          # manifest, the regenerated reverse index, and the pending
+          # declaration -- never `git add -A`, which would commit the _axiom/
+          # sibling checkouts and build artifacts.
+          git -C "$GITHUB_WORKSPACE" add -- \
+            "$module" "$test_file" "$manifest_rel" "$index_file" \
+            oracle-coverage-pending.yaml
           git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
             -c user.name="bulk-encode" commit -q -m "wip: $CITATION"
           axiom-encode guard-generated \
