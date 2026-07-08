@@ -76,6 +76,18 @@ scripts/sync_rulespec_roots.sh        # rsyncs ~/rulespec-us/us-XX/ -> ~/.axiom-
 cargo build --manifest-path ~/axiom-rules-engine/Cargo.toml --bin axiom-rules-engine --release
 ```
 
+**Required secrets (throughput gate — verify before planning a wave):**
+- `AXIOM_ENCODE_APPLY_SIGNING_KEY` — needed for `axiom-encode encode --apply`
+  (Step 2). Without it you cannot write a signed encoding manifest and CI
+  `guard-generated` rejects the leaf module. Observed **absent** in the wave-1
+  scout environment → any state whose benefit leaf is not already encoded was
+  un-provable there. Provision this (plus codex auth) on every encode lane.
+- `AXIOM_CORPUS_INGEST_PRIVATE_KEY` (+ `_PUBLIC_KEY`) — needed for Step 1
+  `sign-ingest-manifest` / `guard-ingested`. Also absent in the scout env → fresh
+  corpus ingest was un-provable there; only already-ingested states were workable.
+- codex auth (`~/.codex/auth.json` or `$OPENAI_API_KEY`) — present in the scout
+  env, but useless for `--apply` without the encode signing key above.
+
 Pins that must stay coherent (do not drift):
 - Oracle runner PE pins (`scripts/run_comparison.py::_PE_ORACLE_PINS`):
   `policyengine==4.18.9`, `policyengine-us==1.752.2`, `policyengine-core==3.28.0`.
@@ -324,10 +336,27 @@ One row per uncovered PE-simulated state. Fill from the candidate table:
   notes: <e.g. "GA CAPS+SSP manuals also present; PDF manual via article.doc selector">
 ```
 
-Ready-now (corpus + leaves may exist): **AL (done, this PR), GA, DE, ME, HI**.
-Then simplest-PE-module-first through the no-corpus set (MS, ND, NC, SD before
-TX/MT/IL). Skip IN (another lane holds it) and non-simulated states (file as
-`in_scope: false`).
+**Leaf-completeness gate (wave-1 finding).** "Ready-now" splits finer than
+"corpus ingested". AL was a ~30-min proof only because a prior parity sweep had
+already encoded its **complete** benefit leaf (Appendix N §2: disregard +
+deficit + eligibility), so the scout only had to compose+oracle+register. Most
+already-ingested states carry **partial** leaves and still need Step 2:
+- **GA** — TANF manual ingested, but eligibility/appendix leaves only, **no
+  payment-standard/benefit leaf** → needs encode.
+- **ME** — one leaf (standard-of-need + max-grant tables), **no income/disregard
+  or final-benefit leaf** → needs encode.
+- **DE, HI** — corpus ingested, benefit leaves not yet encoded → needs encode.
+- **FL** — `fl_tca` benefit leaves exist but as a page-by-page ESS-manual
+  encoding with no clean `fl_tca_*` outputs and no composition module; treat as a
+  hard compose (reverse-engineer the 2600 pages), not a quick win.
+
+So under the scout env (no encode signing key), **AL was the only fully
+provable new state**; every other candidate is gated on either the signing key
+(fresh encode) or a heavy compose (FL). Wave-2 sequencing: provision the signing
+key first, then simplest-PE-module-first — **AL (done)**, then encode-and-compose
+GA/DE/ME/HI, then the no-corpus set (MS, ND, NC, SD before TX/MT/IL). Skip IN
+(another lane holds it — it already has `bridges/mappings/us.yaml` entries) and
+non-simulated states (file as `in_scope: false`, `suite: null`).
 
 ## Oracle-repo merge discipline
 
