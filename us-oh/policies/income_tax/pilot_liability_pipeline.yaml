@@ -1,0 +1,131 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-oh/statute/5747.02
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-oh/statute/5747.02
+      rationale: |-
+        This pipeline computes the Ohio Revised Code 5747.02 individual
+        nonbusiness income-tax liability for the ordinary resident wage-earner
+        slice at the 2026 tax year. Division (A)(3)(c) provides that, for taxable
+        years beginning in 2026 and thereafter, the tax on Ohio taxable
+        nonbusiness income is "$332.00 plus 2.75% of the amount in excess of
+        $26,050", and division (A)(3) provides that where that income is equal to
+        or less than $26,050 no tax is imposed. The encoded us-oh/statutes/5747/02
+        module carries those operative 2026 values as parameters
+        (individual_nonbusiness_income_tax_base_amount = 332,
+        individual_nonbusiness_income_tax_excess_rate = 0.0275,
+        individual_income_tax_no_tax_threshold = 26050); this pipeline supplies
+        the same three amounts as declared caller-supplied current-authority
+        inputs so the marginal application runs end to end without importing the
+        encoded parameters. Division (A)(5) directs the tax commissioner to index
+        the $26,050 bracket and the base amount to the GDP deflator each year and
+        round to the nearest fifty dollars; the operative 2026 values used here
+        are the statutory 2026-and-thereafter figures in (A)(3)(c), which the
+        commissioner had not yet re-indexed at authoring, so they are supplied
+        rather than derived. The pipeline adds no numeric literals of its own; it
+        wires the two-tier nonbusiness-tax mechanics only.
+  deferred_outputs:
+  - output: us-oh:statutes/5747.02/b#excess_exemptions_deductible_from_taxable_business_income
+    reason: |-
+      Division (A)(4)(b) redirects any personal exemptions that exceed Ohio
+      adjusted gross income less taxable business income against taxable
+      business income before the division (A)(4)(a) three-per-cent
+      business-income tax. This composed slice models the ordinary resident
+      wage earner with no taxable business income, so the division (A)(4)
+      business-income tax and its (b) excess-exemption offset are supplied zero
+      and excluded from this before-credits nonbusiness core; the executable
+      (b) surface is carried by the encoded us-oh/statutes/5747/02 module.
+  summary: |-
+    Composed Ohio individual nonbusiness income-tax liability pipeline for the
+    oracle slice at the 2026 tax year. It exposes a TaxUnit-level path from a
+    supplied Ohio adjusted gross income into the ORC 5747.02(A)(3)(c) two-tier
+    nonbusiness tax, so an end-to-end comparison against PolicyEngine
+    (oh_income_tax_before_non_refundable_credits) and TAXSIM (siitax) does not
+    require the caller to supply the section 5747.02 bracket-application
+    boundary. It wires: Ohio taxable nonbusiness income (AGI less the supplied
+    personal exemptions); the nonbusiness income tax, which is zero when taxable
+    nonbusiness income does not exceed the $26,050 no-tax threshold and otherwise
+    the $332.00 base plus 2.75 per cent of the amount in excess of $26,050; and
+    the liability as that nonbusiness income tax. PolicyEngine reaches the same
+    value through an implied first-bracket average rate (0.0127448) applied to
+    the first $26,050, which reproduces the $332.00 statutory base to within
+    0.00204 dollars, so the composed liability equals PolicyEngine's
+    before-non-refundable-credits value to the cent. It deliberately excludes the
+    5747.02(A)(4) taxable-business-income tax (supplied zero for the wage-earner
+    slice), the 5747.02(A)(5) annual re-indexation, the estate rates in
+    5747.02(A)(2), the $20 per-exemption credit and joint-filing credit and every
+    other 5747.05 through 5747.98 credit (all non-refundable and excluded from
+    this before-credits core), and the 5747.71 earned income credit. Ohio
+    adjusted gross income, filing status, the personal exemptions, the no-tax
+    threshold, the base amount, and the excess rate are supplied inputs; the tax
+    commissioner indexes the threshold and base each year, so this 2026 pipeline
+    is compared against PolicyEngine at 2026 and against TAXSIM's latest 2024 law
+    year with the indexation vintage dispositioned. PolicyEngine's exemption
+    threshold treats taxable income strictly below $26,050 as exempt, so the two
+    agree at every income except the measure-zero point of exactly $26,050.
+rules:
+  - name: oh_pit_pilot_taxable_nonbusiness_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: ORC 5747.02(A)(3), Ohio taxable nonbusiness income after the supplied personal exemptions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+              excerpt: "the exemptions allowed to an individual under division (A)(3) of this section ... the taxpayer's Ohio adjusted gross income less taxable business income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, oh_pit_pilot_adjusted_gross_income - oh_pit_pilot_supplied_personal_exemptions)
+  - name: oh_pit_pilot_nonbusiness_income_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: ORC 5747.02(A)(3)(c), the $332.00 base plus 2.75 per cent of taxable nonbusiness income in excess of $26,050, and no tax at or below the threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+              excerpt: "For taxable years beginning in 2026 and thereafter, $332.00 plus 2.75% of the amount in excess of $26,050"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if oh_pit_pilot_taxable_nonbusiness_income > oh_pit_pilot_supplied_no_tax_threshold
+          : oh_pit_pilot_supplied_base_amount + oh_pit_pilot_supplied_excess_rate * max(0, oh_pit_pilot_taxable_nonbusiness_income - oh_pit_pilot_supplied_no_tax_threshold)
+          else : 0
+  - name: oh_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: ORC 5747.02(A) nonbusiness income tax, before the section 5747.05 through 5747.98 credits, for the wage-earner slice with no taxable business income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+              excerpt: "the tax imposed by this section ... on income not otherwise taxed under division (A)(4) of this section"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          oh_pit_pilot_nonbusiness_income_tax
