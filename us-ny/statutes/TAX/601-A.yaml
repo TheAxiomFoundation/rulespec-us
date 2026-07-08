@@ -1,0 +1,131 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ny/statute/TAX/601-A
+  summary: |-
+    "The following amounts shall be indexed by the cost of living adjustment"; the adjustment is the percentage by which the average CPI for the twelve-month period ending June thirtieth of the year immediately preceding the tax year exceeds the prior comparable twelve-month average, and "such increase shall be rounded to the next lowest multiple of fifty dollars."
+rules:
+  - name: cost_of_living_rounding_multiple
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.Y. Tax Law § 601-a(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "rounded to the next lowest multiple of fifty dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          50
+
+  - name: nonindexed_fraction_numerator_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.Y. Tax Law § 601-a(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "that is not fifty thousand dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          50000
+
+  - name: cost_of_living_adjustment
+    kind: derived
+    entity: TaxYearAdjustment
+    dtype: Rate
+    period: Year
+    source: N.Y. Tax Law § 601-a(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "the percentage if any, by which the average monthly value of the consumer price index ... exceeds the average monthly value ... for the twelve month period ending on June thirtieth of the year immediately preceding the adjustment year"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "consumer price index means the consumer price index for all urban consumers published by the United States department of labor"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if adjustment_year_average_monthly_consumer_price_index > preceding_adjustment_year_average_monthly_consumer_price_index: (adjustment_year_average_monthly_consumer_price_index - preceding_adjustment_year_average_monthly_consumer_price_index) / preceding_adjustment_year_average_monthly_consumer_price_index else: 0
+
+  - name: rounded_cost_of_living_increase
+    kind: derived
+    entity: TaxYearAdjustment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.Y. Tax Law § 601-a(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "If the product of the amounts in subsection (b) and subsection (c) of this section is not a multiple of fifty dollars, such increase shall be rounded to the next lowest multiple of fifty dollars."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:statutes/TAX/601-A#cost_of_living_adjustment
+              output: cost_of_living_adjustment
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:statutes/TAX/601-A#cost_of_living_rounding_multiple
+              output: cost_of_living_rounding_multiple
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          floor((amount_specified_in_subsection_b_for_tax_year * cost_of_living_adjustment) / cost_of_living_rounding_multiple) * cost_of_living_rounding_multiple
+
+  - name: cost_of_living_adjusted_amount
+    kind: derived
+    entity: TaxYearAdjustment
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.Y. Tax Law § 601-a(a), (d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "shall multiply the amounts specified in subsection (b) ... by one plus the cost of living adjustment"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601-A
+              excerpt: "such increase shall be rounded to the next lowest multiple of fifty dollars"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:statutes/TAX/601-A#rounded_cost_of_living_increase
+              output: rounded_cost_of_living_increase
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          amount_specified_in_subsection_b_for_tax_year + rounded_cost_of_living_increase
