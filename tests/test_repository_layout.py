@@ -52,6 +52,13 @@ def allowed_yaml_roots() -> set[str]:
         "known-dangling.yaml",
         "known-missing-money-atoms.yaml",
         "known-validation-gaps.yaml",
+        # Declared oracle-coverage debt lane, written at the repo root by
+        # `axiom-encode oracle-coverage-pending sync`. The changed-file oracle
+        # coverage gate reclassifies these outputs from unmapped to
+        # pending_classification; the bulk-encode dispatcher (and bulk/
+        # local_drain.py) sync it for every new-state module so the required
+        # validate check passes instead of hanging on `... : unmapped`.
+        "oracle-coverage-pending.yaml",
         *(d.name for d in jurisdiction_dirs()),
     }
 

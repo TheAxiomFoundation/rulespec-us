@@ -205,6 +205,33 @@ jobs:
           ln -sfn "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" "$GITHUB_WORKSPACE/../axiom-rules-engine"
           ln -sfn "$GITHUB_WORKSPACE/_axiom/axiom-corpus" "$GITHUB_WORKSPACE/../axiom-corpus"
 
+      # The oracle-coverage-pending lane (the fix for new-state bulk PRs failing
+      # the changed-file PolicyEngine oracle-coverage gate) is a *newer* encoder
+      # feature than the pinned validate toolchain: the pinned axiom-encode has
+      # no `oracle-coverage-pending` subcommand, and the CI coverage classifier
+      # deliberately runs axiom-encode@main so new mappings unblock generated PRs
+      # (validate-rulespec.yml `oracle-coverage-axiom-encode-ref`, default main).
+      # Install that same classifier in an isolated venv so the sync step below
+      # declares a new module's unmapped outputs exactly as the CI gate reads
+      # them. Without this, every new-state module opens a PR that fails the
+      # required validate check on `... : unmapped` and auto-merge hangs forever
+      # (rulespec-us #614-616, #619-636 etc.).
+      - name: Checkout oracle-coverage classifier (axiom-encode main)
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: main
+          path: _axiom/axiom-encode-oracle-coverage
+
+      - name: Install oracle-coverage classifier (isolated venv)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/cov-venv"
+          "$RUNNER_TEMP/cov-venv/bin/pip" install --quiet --upgrade pip
+          "$RUNNER_TEMP/cov-venv/bin/pip" install --quiet -e _axiom/axiom-encode-oracle-coverage
+          echo "COV_AE=$RUNNER_TEMP/cov-venv/bin/axiom-encode" >> "$GITHUB_ENV"
+
       - name: Encode --apply and run the gate battery
         id: encode
         shell: bash
@@ -289,12 +316,42 @@ jobs:
             (cd "$GITHUB_WORKSPACE" && python tests/generate_reverse_index.py)
           fi
 
+          # Declare the module's unmapped executable outputs in the
+          # oracle-coverage pending lane, using the axiom-encode@main classifier
+          # installed above. The changed-file oracle-coverage gate reclassifies
+          # declared outputs from `unmapped` to `pending_classification`, so this
+          # is what lets a new-state module's PR pass the required validate check
+          # instead of hanging on `... : unmapped`. `sync` rewrites
+          # oracle-coverage-pending.yaml to exactly the repo's current unmapped
+          # set; it is a no-op when the module's outputs are already mapped.
+          pending_file="oracle-coverage-pending.yaml"
+          "$COV_AE" oracle-coverage-pending sync \
+            --root "$GITHUB_WORKSPACE/.." \
+            --repo rulespec-us \
+            --source bulk || {
+              echo "::error::oracle-coverage-pending sync failed for $CITATION." >&2
+              exit 1
+            }
+
           # --- Gate battery (fail-closed pre-check; mirrors PR CI order) ---
           # 1. guard-generated: applied files must carry a valid signed manifest.
           # Stage ONLY the applied module, its companion test, its signed
-          # manifest, and the regenerated reverse index -- never `git add -A`,
-          # which would commit the _axiom/ sibling checkouts and build artifacts.
+          # manifest, the regenerated reverse index, and the pending-lane
+          # declaration -- never `git add -A`, which would commit the _axiom/
+          # sibling checkouts and build artifacts.
           git -C "$GITHUB_WORKSPACE" add -- "$module" "$test_file" "$manifest_rel" "$index_file"
+          # Keep the pending declaration only when it has entries (a new unmapped
+          # output) or is already tracked. A fully-mapped module syncs an empty
+          # declaration; committing that empty repo-root file would needlessly
+          # flip the PR to full-matrix validation, so drop it and stay scoped.
+          if [ -f "$GITHUB_WORKSPACE/$pending_file" ]; then
+            if grep -q -- '- legal_id:' "$GITHUB_WORKSPACE/$pending_file" \
+               || git -C "$GITHUB_WORKSPACE" ls-files --error-unmatch "$pending_file" >/dev/null 2>&1; then
+              git -C "$GITHUB_WORKSPACE" add -- "$pending_file"
+            else
+              rm -f "$GITHUB_WORKSPACE/$pending_file"
+            fi
+          fi
           git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
             -c user.name="bulk-encode" commit -q -m "wip: $CITATION"
           axiom-encode guard-generated \
