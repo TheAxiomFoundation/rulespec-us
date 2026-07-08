@@ -56,8 +56,11 @@ encoded surface covers PE's components (else note gaps to ledger #757). Expected
 supplied-rate slices (rate schedule absent from the encoded surface, supplied as
 current authority, anchored to the imposition section), mirroring the CA pattern:
 - **wv** — 11-21-3 (imposition) + 11-21-10 (taxable income) + 11-21-16
-  (exemptions); rate schedule 11-21-4e not encoded → supplied. Credits 11-21-21/23
-  excluded from #763.
+  (exemptions) in #763; the 2026 rate schedule is §11-21-4j (SB 392 2026), a
+  5-bracket filing-status-specific grid (single/joint/HoH/separate rates
+  0.0211/0.0281/0.0316/0.0422/0.0458), NOT in #763 → supply as current authority
+  anchored to §11-21-3, mirroring CA. PE target wv_income_tax_before_non_refundable_credits.
+  Credits 11-21-21/23 excluded from #763 (name collision, PRs #629/#632 open).
 - **or** 316.037/316.085, **ri** 44-30-2.6, **ut** 59-10-104, **va** 58.1-320/321,
   **hi** 235-51 — compose as their sections land.
 
@@ -72,4 +75,11 @@ at a time; rebase immediately before merge; verify after; no admin-merge.
   validating lane A's us-ca pipeline (validate/proof/test green).
 - us-oh: authored pipeline + suite, PE-probed the 2026 grid on pinned PE-US
   (policyengine[us]==4.18.9) for penny-exact inputs, signed manifest, regen index,
-  committed. PR opened.
+  committed. rulespec-us PR #768.
+- us-oh oracle side (axiom-oracles PR #246, branch laneb-oh-oracles): concept
+  mapping (PE oh_income_tax_before_non_refundable_credits + TAXSIM siitax), grid
+  runner (SOI 36), report, 6 dispositions. PE 6/6 penny-exact; TAXSIM-2024 0/6
+  (2024 $360.69 base + 3.5% top bracket vs 2026 H.B. 96 flat). 56 oracle tests pass.
+- Foreground-polling #763 (132-module train, 53 validate shards pending) for the
+  wv/hi/ut/va/or/ri fan-out. #763 is not lane B's to merge (no admin-merge); it
+  lands via the drain lane. Fan-out composes the moment it hits origin/main.
