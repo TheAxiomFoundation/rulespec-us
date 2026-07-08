@@ -1,0 +1,169 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mi/statute/206.272
+  summary: |-
+    Sec. 272(1) allows a taxpayer to credit specified percentages of the credit allowed under section 32 of the internal revenue code: 10%, 20%, 6%, and 30% for stated tax-year start periods. Sec. 272(2) gives an additional 24% credit for the 2022 tax year only. Sec. 272(3) refunds any excess credit over tax liability without interest, except as provided in MCL 205.30.
+rules:
+  - name: earned_income_tax_credit_percentage
+    kind: parameter
+    dtype: Rate
+    source: Sec. 272(1)(a)-(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "For tax years that begin after December 31, 2007 and before January 1, 2009, 10%."
+          - path: versions[1].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "For tax years that begin after December 31, 2008 and before January 1, 2012, 20%."
+          - path: versions[2].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "For tax years that begin after December 31, 2011 and before January 1, 2023, 6%."
+          - path: versions[3].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "For tax years that begin after December 31, 2022, 30%."
+    versions:
+      - effective_from: '2008-01-01'
+        formula: |-
+          0.10
+      - effective_from: '2009-01-01'
+        formula: |-
+          0.20
+      - effective_from: '2012-01-01'
+        formula: |-
+          0.06
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.30
+
+  - name: additional_credit_percentage_for_tax_year
+    kind: parameter
+    dtype: Rate
+    source: Sec. 272(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: default
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+          - path: versions[1].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "For the 2022 tax year only ... an additional credit in an amount equal to 24%"
+          - path: versions[2].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "For the 2022 tax year only"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0
+      - effective_from: '2022-01-01'
+        formula: |-
+          0.24
+      - effective_from: '2023-01-01'
+        formula: |-
+          0
+
+  - name: earned_income_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Sec. 272(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "A taxpayer may credit ... an amount equal to the specified percentages of the credit the taxpayer is allowed to claim as a credit under section 32"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+    versions:
+      - effective_from: '2008-01-01'
+        formula: |-
+          max(0, federal_earned_income_credit_claimed_on_federal_return * earned_income_tax_credit_percentage)
+
+  - name: additional_earned_income_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Sec. 272(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "a taxpayer that claims a credit under this section ... is entitled to an additional credit in an amount equal to 24%"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if taxpayer_claims_credit_under_this_section: max(0, federal_earned_income_credit_claimed_on_federal_return * additional_credit_percentage_for_tax_year) else: 0
+
+  - name: total_earned_income_tax_credit_allowed
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Sec. 272(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "may credit ... specified percentages ... additional credit in an amount equal to 24%"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          earned_income_tax_credit + additional_earned_income_tax_credit
+
+  - name: earned_income_tax_credit_refund
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Sec. 272(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: "If the credit allowed by this section exceeds the tax liability of the taxpayer for the tax year, the state treasurer shall refund the excess"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, total_earned_income_tax_credit_allowed - tax_liability)

@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/statute/43-1041
+  summary: |-
+    A taxpayer may elect a standard deduction: $12,200 for single or married filing separately, $18,350 for head of household, and $24,400 for a married couple filing jointly, subject to inflation adjustment for taxable years beginning after December 31, 2019. The standard deduction is in lieu of itemized deductions, is not allowed in certain spouse and short-tax-year cases, and is increased by 25% of charitable deductions that would have been allowed if itemized; for taxable years beginning after December 31, 2021 the department adjusts that percentage, capped at 100%.
+  deferred_outputs:
+    - output: us-az:statutes/43-1041#standard_deduction_under_subsection_a
+      reason: The subsection A standard deduction amount depends on the taxpayer's filing-status legal classification and on subsection H inflation adjustments. No source-backed filing-status output or current inflation-adjusted Arizona amount authority is supplied in this prompt, and local filing-status inputs are prohibited.
+      source_values:
+        - us-az:statutes/43-1041#single_or_married_filing_separately_statutory_standard_deduction
+        - us-az:statutes/43-1041#head_of_household_statutory_standard_deduction
+        - us-az:statutes/43-1041#married_joint_return_statutory_standard_deduction
+rules:
+  - name: single_or_married_filing_separately_statutory_standard_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: A.R.S. § 43-1041(A)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "single person or a married person filing separately, the standard deduction is $12,200"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12200
+
+  - name: head_of_household_statutory_standard_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: A.R.S. § 43-1041(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "single person who is a head of a household, the standard deduction is $18,350"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          18350
+
+  - name: married_joint_return_statutory_standard_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: A.R.S. § 43-1041(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "married couple filing a joint return, the standard deduction is $24,400"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          24400
+
+  - name: initial_charitable_deduction_increase_percentage
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: A.R.S. § 43-1041(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "increased by the amount equal to twenty-five percent of the total amount of a taxpayer's charitable deductions"
+    versions:
+      - effective_from: '2019-01-01'
+        formula: |-
+          0.25
+
+  - name: charitable_deduction_increase_percentage_cap
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: A.R.S. § 43-1041(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "the adjusted percentage may not exceed one hundred percent"
+    versions:
+      - effective_from: '2022-01-01'
+        formula: |-
+          1
+
+  - name: applicable_charitable_deduction_increase_percentage
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: A.R.S. § 43-1041(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "twenty-five percent ... For taxable years beginning from and after December 31, 2021, the department shall adjust the percentage ... may not exceed one hundred percent"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:statutes/43-1041#initial_charitable_deduction_increase_percentage
+              output: initial_charitable_deduction_increase_percentage
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:statutes/43-1041#charitable_deduction_increase_percentage_cap
+              output: charitable_deduction_increase_percentage_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-01-01'
+        formula: |-
+          if taxable_year_subject_to_department_percentage_adjustment: min(department_adjusted_charitable_standard_deduction_percentage, charitable_deduction_increase_percentage_cap) else: initial_charitable_deduction_increase_percentage
+
+  - name: charitable_standard_deduction_increase
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    source: A.R.S. § 43-1041(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/statute/43-1041
+              excerpt: "standard deduction allowed under subsection A ... shall be increased by the amount equal to ... percent of the total amount of a taxpayer's charitable deductions"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:statutes/43-1041#applicable_charitable_deduction_increase_percentage
+              output: applicable_charitable_deduction_increase_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-01-01'
+        formula: |-
+          if taxpayer_elects_standard_deduction: applicable_charitable_deduction_increase_percentage * max(0, charitable_deductions_that_would_have_been_allowed_if_itemized) else: 0

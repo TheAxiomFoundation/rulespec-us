@@ -1,0 +1,84 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ny/statute/TAX/621
+  summary: |-
+    A resident beneficiary of a trust whose New York adjusted gross income includes all or part of an accumulation distribution shall be allowed credits for specified trust taxes, but the credits shall not reduce the beneficiary's tax below the amount due if the accumulation distribution were excluded.
+rules:
+  - name: resident_beneficiary_receiving_accumulation_distribution
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: N.Y. Tax Law § 621(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/statute/TAX/621
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          resident_beneficiary_of_trust
+          and new_york_adjusted_gross_income_includes_accumulation_distribution_by_trust
+
+  - name: trust_new_york_tax_accumulation_distribution_credit_before_limitation
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.Y. Tax Law § 621(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/621
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if resident_beneficiary_receiving_accumulation_distribution: max(0, proportionate_part_of_trust_new_york_tax_not_payable_if_timely_distributed) else: 0
+
+  - name: trust_other_jurisdiction_income_tax_credit_before_limitation
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.Y. Tax Law § 621(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/621
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if resident_beneficiary_receiving_accumulation_distribution and beneficiary_total_new_york_income > 0: min(max(0, trust_other_jurisdiction_income_tax_imposed_on_qualifying_income), max(0, max(0, tax_otherwise_due_under_this_article) * max(0, portion_of_income_taxable_to_trust_in_other_jurisdiction_and_to_beneficiary_under_this_article) / beneficiary_total_new_york_income)) else: 0
+
+  - name: accumulation_distribution_credit_after_limitation
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.Y. Tax Law § 621(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/621
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(max(0, trust_new_york_tax_accumulation_distribution_credit_before_limitation + trust_other_jurisdiction_income_tax_credit_before_limitation), max(0, tax_otherwise_due_under_this_article - tax_due_if_accumulation_distribution_excluded_from_new_york_adjusted_gross_income))

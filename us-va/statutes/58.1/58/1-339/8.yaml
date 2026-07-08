@@ -1,0 +1,263 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-va/statute/58.1/58.1-339.8
+  summary: "For taxable years beginning on and after January 1, 2000, qualifying individuals\
+    \ or joint filers whose family Virginia adjusted gross income does not exceed\
+    \ 100 percent of the applicable poverty guideline amount are allowed a nonrefundable\
+    \ $300 credit for the individual, spouse, and dependents. For taxable years beginning\
+    \ on and after January 1, 2006, taxpayers eligible for the federal \xA7 32 credit\
+    \ may instead claim a nonrefundable credit equal to 20 percent of that federal\
+    \ credit. For taxable years beginning on and after January 1, 2022, but before\
+    \ January 1, 2026, they may instead claim a refundable credit equal to 15 percent\
+    \ of the federal \xA7 32 credit. The B 1 and B 2 credits, and B 3 for nonresidents\
+    \ or persons subject to \xA7 58.1-303, may not exceed Virginia income tax liability.\
+    \ No subsection B credit is allowed when listed Virginia subtractions or deductions\
+    \ are claimed."
+rules:
+- name: poverty_guideline_percentage_limit
+  kind: parameter
+  dtype: Rate
+  source: "Va. Code \xA7 58.1-339.8(B)(1)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: does not exceed 100 percent of the poverty guideline amount
+  versions:
+  - effective_from: '2000-01-01'
+    formula: '1'
+- name: low_income_credit_amount_per_counted_person
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: "Va. Code \xA7 58.1-339.8(B)(1)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: in an amount equal to $300 each
+  versions:
+  - effective_from: '2000-01-01'
+    formula: '300'
+- name: federal_eitc_nonrefundable_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: "Va. Code \xA7 58.1-339.8(B)(2)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: an amount equal to 20 percent of the credit claimed
+  versions:
+  - effective_from: '2006-01-01'
+    formula: '0.20'
+- name: federal_eitc_refundable_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: "Va. Code \xA7 58.1-339.8(B)(3)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: an amount equal to 15 percent of the credit claimed
+  versions:
+  - effective_from: '2022-01-01'
+    formula: '0.15'
+- name: disqualifying_subtraction_or_deduction_claimed
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: "Va. Code \xA7 58.1-339.8(D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+  versions:
+  - effective_from: '2000-01-01'
+    formula: 'subtraction_under_section_58_1_322_02_subdivision_8_claimed
+
+      or subtraction_under_section_58_1_322_02_subdivision_15_claimed
+
+      or subtraction_under_section_58_1_322_02_subdivision_16_claimed
+
+      or additional_personal_exemption_for_blind_or_aged_taxpayers_claimed
+
+      or deduction_under_section_58_1_322_03_subdivision_5_claimed'
+- name: low_income_credit_allowed
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: "Va. Code \xA7 58.1-339.8(B)(1), (D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+  versions:
+  - effective_from: '2000-01-01'
+    formula: 'family_virginia_adjusted_gross_income <= poverty_guideline_percentage_limit
+      * poverty_guideline_amount_for_household_size
+
+      and separate_married_returns_claim_this_credit_on_only_one_return
+
+      and not taxpayer_is_dependent_of_another_individual_or_married_individuals
+
+      and not disqualifying_subtraction_or_deduction_claimed'
+- name: low_income_nonrefundable_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "Va. Code \xA7 58.1-339.8(B)(1), (C), (D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: $300 each
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: "shall not exceed the individual\u2019s or married individuals\u2019\
+            \ Virginia income tax liability"
+  versions:
+  - effective_from: '2000-01-01'
+    formula: |-
+      if household_claims_subdivision_1_credit and low_income_credit_allowed and not household_claims_subdivision_2_credit and not household_claims_subdivision_3_credit: min(max(0, virginia_income_tax_liability), max(0, low_income_credit_amount_per_counted_person * counted_individual_spouse_and_dependent_count)) else: 0
+- name: earned_income_nonrefundable_credit_allowed
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: "Va. Code \xA7 58.1-339.8(B)(2), (D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+  versions:
+  - effective_from: '2006-01-01'
+    formula: 'eligible_for_federal_credit_pursuant_to_section_32
+
+      and not disqualifying_subtraction_or_deduction_claimed'
+- name: earned_income_nonrefundable_credit
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "Va. Code \xA7 58.1-339.8(B)(2), (C), (D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: 20 percent of the credit claimed
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: "shall not exceed the individual\u2019s or married individuals\u2019\
+            \ Virginia income tax liability"
+  versions:
+  - effective_from: '2006-01-01'
+    formula: |-
+      if household_claims_subdivision_2_credit and earned_income_nonrefundable_credit_allowed and not household_claims_subdivision_1_credit and not household_claims_subdivision_3_credit: min(max(0, virginia_income_tax_liability), federal_eitc_nonrefundable_credit_rate * federal_section_32_credit_claimed) else: 0
+- name: earned_income_refundable_credit_allowed
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: "Va. Code \xA7 58.1-339.8(B)(3), (D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: on and after January 1, 2022, but before January 1, 2026
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+  versions:
+  - effective_from: '2022-01-01'
+    formula: 'taxable_year_is_in_refundable_eitc_credit_effective_window
+
+      and eligible_for_federal_credit_pursuant_to_section_32
+
+      and not disqualifying_subtraction_or_deduction_claimed'
+- name: earned_income_refundable_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "Va. Code \xA7 58.1-339.8(B)(3), (C), (D)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: 15 percent of the credit claimed
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-va/statute/58.1/58.1-339.8
+          excerpt: "in the case of a nonresident or a person to which \xA7 58.1-303\
+            \ applies, subdivision B 3"
+  versions:
+  - effective_from: '2022-01-01'
+    formula: |-
+      if household_claims_subdivision_3_credit and earned_income_refundable_credit_allowed and not household_claims_subdivision_1_credit and not household_claims_subdivision_2_credit:
+        if nonresident_or_person_to_which_section_58_1_303_applies:
+          min(max(0, virginia_income_tax_liability), federal_eitc_refundable_credit_rate * federal_section_32_credit_claimed)
+        else:
+          federal_eitc_refundable_credit_rate * federal_section_32_credit_claimed
+      else:
+        0

@@ -1,0 +1,96 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-de/statute/30/1117
+  summary: |-
+    Resident individual Delaware earned income credit: before January 1, 2022, 20% of the corresponding federal earned income credit, nonrefundable; on or after January 1, 2022, either 20% not exceeding tax otherwise due or 4.5% with excess refundable. Separate Delaware spouses using a joint federal return may use the credit only for the spouse with greater tax otherwise due.
+rules:
+  - name: delaware_earned_income_credit_nonrefundable_rate
+    kind: parameter
+    dtype: Rate
+    source: 30 Del. C. § 1117(a)(1), (a)(2)a
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1117
+              excerpt: "20% of the corresponding federal earned income credit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+  - name: delaware_earned_income_credit_refundable_rate
+    kind: parameter
+    dtype: Rate
+    source: 30 Del. C. § 1117(a)(2)b
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1117
+              excerpt: "4.5% of the corresponding federal earned income tax credit"
+    versions:
+      - effective_from: '2022-01-01'
+        formula: |-
+          0.045
+  - name: delaware_earned_income_credit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 30 Del. C. § 1117(a)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-de/statute/30/1117
+              excerpt: "an individual who is a resident of this State may receive"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1117
+              excerpt: "may claim either of the following amounts"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1117
+              excerpt: "not to exceed the tax otherwise due under this chapter"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-de/statute/30/1117
+              excerpt: "may only be used by the spouse with the greater tax otherwise due"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-de:statutes/30/1117#delaware_earned_income_credit_nonrefundable_rate
+              output: delaware_earned_income_credit_nonrefundable_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-de:statutes/30/1117#delaware_earned_income_credit_refundable_rate
+              output: delaware_earned_income_credit_refundable_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if individual_is_resident_of_this_state and (not spouses_elect_to_determine_delaware_taxes_separately_after_joint_federal_return or spouse_has_greater_tax_otherwise_due_computed_without_this_credit):
+            if taxable_year_begins_before_refundable_credit_option_effective_date:
+              min(tax_otherwise_due_under_this_chapter, max(0, delaware_earned_income_credit_nonrefundable_rate * max(0, corresponding_federal_earned_income_credit)))
+            else:
+              if individual_claims_refundable_earned_income_credit_option:
+                delaware_earned_income_credit_refundable_rate * max(0, corresponding_federal_earned_income_credit)
+              else:
+                min(tax_otherwise_due_under_this_chapter, max(0, delaware_earned_income_credit_nonrefundable_rate * max(0, corresponding_federal_earned_income_credit)))
+          else:
+            0

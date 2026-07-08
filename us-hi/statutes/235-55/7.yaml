@@ -1,0 +1,263 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-hi/statute/235-55.7
+  summary: 'Hawaii resident taxpayer renter credit: definitions include adjusted gross
+    income under section 235-1, qualified exemptions for persons physically residing
+    in the State for more than nine months, and rent paid in cash for occupancy of
+    a principal residence in the State. Eligible resident taxpayers who occupy and
+    pay rent for non-real-property-tax-exempt Hawaii real property, are not claimable
+    as dependents, and file an individual return may claim the credit. Taxpayers with
+    AGI less than $30,000 and more than $1,000 rent may claim $50 times qualified
+    exemptions, doubled for taxpayers age sixty-five or over; refundable excess is
+    not paid for amounts less than $1.'
+  deferred_outputs:
+  - output: us-hi:statutes/235-55/7/d#rent_paid_pro_rata_share
+    reason: Subsection (d) requires allocating rent pro rata among multiple qualifying
+      claimants occupying the same rental unit; faithful encoding requires claimant-level
+      co-occupancy and rent-payment relation mechanics not supplied by this source
+      slice.
+    source_values:
+    - us:statutes/235-55/7#rental_unit_multiple_occupancy_minimum_individuals
+  - output: us-hi:statutes/235-55/7/e#separate_spouses_joint_return_credit_limit
+    reason: Subsection (e) limits spouses filing separate returns to the credits they
+      would have received on a joint return; faithful encoding requires cross-return
+      spouse aggregation and hypothetical joint-return computation outside the local
+      tax-unit surface.
+  - output: us-hi:statutes/235-55/7/h#credit_claim_timely
+    reason: Subsection (h) sets a filing deadline for claims and amended claims; runtime
+      date-of-claim filing timeliness is outside this annual credit amount encoding.
+    source_values:
+    - us:statutes/235-55/7#claim_deadline_months_after_taxable_year
+rules:
+- name: qualified_exemption_state_residence_months_threshold
+  kind: parameter
+  dtype: Decimal
+  source: 235-55.7(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: physically resided in the State for more than nine months during
+            the taxable year
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '9'
+- name: adjusted_gross_income_credit_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 235-55.7(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: adjusted gross income of less than $30,000
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '30000'
+- name: rent_paid_credit_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 235-55.7(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: paid more than $1,000 in rent during the taxable year
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1000'
+- name: credit_amount_per_qualified_exemption
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 235-55.7(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: a tax credit of $50 multiplied by the number of qualified exemptions
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '50'
+- name: senior_double_credit_age_threshold
+  kind: parameter
+  dtype: Integer
+  source: 235-55.7(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: sixty-five years of age or over may claim double the tax credit
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '65'
+- name: refundable_payment_minimum
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 235-55.7(e)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: no refunds or payments ... shall be made for amounts less than
+            $1
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1'
+- name: rental_unit_multiple_occupancy_minimum_individuals
+  kind: parameter
+  dtype: Count
+  source: 235-55.7(d)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: occupied by two or more individuals
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '2'
+- name: claim_deadline_months_after_taxable_year
+  kind: parameter
+  dtype: Count
+  source: 235-55.7(h)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: on or before the end of the twelfth month following the taxable
+            year
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '12'
+- name: qualified_exemption_count
+  kind: derived
+  entity: TaxUnit
+  dtype: Count
+  period: Year
+  source: 235-55.7(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+  versions:
+  - effective_from: '0001-01-01'
+    formula: qualified_exemptions_permitted_under_chapter_for_persons_residing_more_than_threshold_months_without_multiple_disability_exemptions
+- name: renter_credit_claimant_eligible
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 235-55.7(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'resident_taxpayer
+
+      and occupies_and_pays_rent_for_real_property_within_state_as_residence_or_immediate_family_residence
+
+      and rented_real_property_is_not_partially_or_wholly_exempt_from_real_property_tax
+
+      and not eligible_to_be_claimed_as_dependent_for_federal_or_state_income_taxes_by_another
+
+      and files_individual_net_income_tax_return'
+- name: renter_credit_income_and_rent_test_met
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 235-55.7(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: adjusted gross income of less than $30,000 who has paid more than
+            $1,000 in rent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'adjusted_gross_income < adjusted_gross_income_credit_threshold
+
+      and rent_paid > rent_paid_credit_threshold'
+- name: renter_credit_before_tax_liability
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 235-55.7(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: $50 multiplied by the number of qualified exemptions ... sixty-five
+            years of age or over may claim double
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if renter_credit_claimant_eligible and renter_credit_income_and_rent_test_met:
+      credit_amount_per_qualified_exemption * qualified_exemption_count * (if taxpayer_age
+      >= senior_double_credit_age_threshold: 2 else: 1) else: 0'
+- name: renter_credit_refundable_payment
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 235-55.7(e)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-hi/statute/235-55.7
+          excerpt: excess of credits over payments due shall be refunded ... no refunds
+            or payments ... less than $1
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if max(0, renter_credit_before_tax_liability - individual_net_income_tax_payments_due)
+      < refundable_payment_minimum: 0 else: max(0, renter_credit_before_tax_liability
+      - individual_net_income_tax_payments_due)'

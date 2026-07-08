@@ -1,0 +1,229 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-in/statute/6-3-2-10
+  summary: |-
+    "Eligible unemployment compensation" means unemployment compensation included in federal gross income plus unemployment compensation excluded under IRC 85(c), excluding amounts not taxable under 45 U.S.C. 352. An individual is entitled to a deduction equal to the greater of zero or eligible unemployment compensation minus excess adjusted gross income. For joint-return spouses, the deduction is computed on combined eligible unemployment compensation and no more than one deduction is permitted.
+rules:
+  - name: excess_adjusted_gross_income_fraction
+    kind: parameter
+    dtype: Rate
+    source: 6-3-2-10(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+              excerpt: "one-half (1/2)"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          1 / 2
+
+  - name: joint_return_excess_adjusted_gross_income_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(a)(3)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+              excerpt: "Eighteen thousand dollars ($18,000)"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          18000
+
+  - name: married_separate_nonapart_excess_adjusted_gross_income_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(a)(3)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+              excerpt: "Zero dollars ($0)"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          0
+
+  - name: other_individual_excess_adjusted_gross_income_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(a)(3)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+              excerpt: "Twelve thousand dollars ($12,000)"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          12000
+
+  - name: one_joint_deduction_limit
+    kind: parameter
+    dtype: Count
+    source: 6-3-2-10(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+              excerpt: "more than one (1) deduction"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          1
+
+  - name: eligible_unemployment_compensation
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+              excerpt: "does not include amounts not taxable under this article as a result of 45 U.S.C. 352"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, unemployment_compensation_included_in_federal_gross_income + unemployment_compensation_excluded_from_federal_gross_income_under_section_85_c - unemployment_compensation_not_taxable_under_45_usc_352)
+
+  - name: excess_adjusted_gross_income_threshold
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if individual_files_joint_return_with_spouse: joint_return_excess_adjusted_gross_income_threshold else: if individual_is_married_at_close_of_taxable_year and not individual_lived_apart_from_spouse_at_all_times_during_taxable_year: married_separate_nonapart_excess_adjusted_gross_income_threshold else: other_individual_excess_adjusted_gross_income_threshold
+
+  - name: excess_adjusted_gross_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-10#excess_adjusted_gross_income_fraction
+              output: excess_adjusted_gross_income_fraction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-10#excess_adjusted_gross_income_threshold
+              output: excess_adjusted_gross_income_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, excess_adjusted_gross_income_fraction * (adjusted_gross_income_or_combined_adjusted_gross_income_if_joint + unemployment_compensation_excluded_from_federal_gross_income_under_section_85_c - excess_adjusted_gross_income_threshold))
+
+  - name: unemployment_compensation_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-10#eligible_unemployment_compensation
+              output: eligible_unemployment_compensation
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-10#excess_adjusted_gross_income
+              output: excess_adjusted_gross_income
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, eligible_unemployment_compensation - excess_adjusted_gross_income)
+
+  - name: joint_return_unemployment_compensation_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 6-3-2-10(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-10
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-10#one_joint_deduction_limit
+              output: one_joint_deduction_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if individual_and_spouse_are_described_in_subsection_a_3_A and one_joint_deduction_limit == 1: max(0, combined_eligible_unemployment_compensation_of_individual_and_spouse - joint_return_excess_adjusted_gross_income) else: 0

@@ -1,0 +1,121 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-de/statute/30/1110
+  summary: |-
+    Resident personal exemption was $1,250 per federal exemption for tax years ending before January 1, 1996, with one additional personal exemption for resident persons age 60 or over. For tax years beginning after December 31, 1995, resident individuals receive a $110 personal credit per federal personal exemption plus an additional $110 for each resident person age 60 or over, capped at tax otherwise due.
+rules:
+  - name: pre_1996_personal_exemption_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 30 Del. C. § 1110(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "$1,250 for each exemption"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1250
+
+  - name: post_1995_personal_credit_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 30 Del. C. § 1110(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "$110 for each personal exemption"
+    versions:
+      - effective_from: '1996-01-01'
+        formula: |-
+          110
+
+  - name: resident_personal_exemption_before_1996
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 30 Del. C. § 1110(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "$1,250 for each exemption"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "age 60 or over shall be allowed one additional personal exemption"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          pre_1996_personal_exemption_amount * federal_personal_exemption_count + (if resident_person_age_60_or_over: pre_1996_personal_exemption_amount else: 0)
+
+  - name: resident_personal_credit_before_cap
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 30 Del. C. § 1110(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "$110 for each personal exemption"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "additional $110 in the case of each resident person age 60 or over"
+    versions:
+      - effective_from: '1996-01-01'
+        formula: |-
+          post_1995_personal_credit_amount * federal_personal_exemption_count + (if resident_person_age_60_or_over: post_1995_personal_credit_amount else: 0)
+
+  - name: resident_personal_credit
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 30 Del. C. § 1110(b)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "credit allowed under subsection (b)"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "shall ... exceed the tax otherwise due"
+    versions:
+      - effective_from: '1996-01-01'
+        formula: |-
+          min(resident_personal_credit_before_cap, max(0, tax_otherwise_due_under_chapter))

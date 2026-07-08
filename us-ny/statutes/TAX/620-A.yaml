@@ -1,0 +1,137 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ny/statute/TAX/620-A
+  summary: |-
+    "A resident shall be allowed a credit against the separate tax otherwise due under section six hundred three" for income tax imposed by another state, political subdivision, the District of Columbia, or a Canadian province on the ordinary income portion of a lump sum distribution, subject to the apportionment rule and limitations in subdivisions (a) and (b).
+rules:
+  - name: other_jurisdiction_tax_on_ordinary_income_portion
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NY Tax Law § 620-A(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "the portion of the tax on such income ... shall be an amount bearing the same ratio to the entire tax paid"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if ordinary_income_portion_is_not_separately_taxed_by_other_jurisdiction_but_is_included_in_income_taxed_by_that_jurisdiction: other_jurisdiction_entire_tax_paid * ordinary_income_portion_included_in_income_subject_to_other_jurisdiction_tax / all_income_subject_to_other_jurisdiction_tax else: income_tax_imposed_by_other_jurisdiction_on_ordinary_income_portion
+
+  - name: other_jurisdiction_tax_allowed_after_canadian_federal_claim
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NY Tax Law § 620-A(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "for income tax imposed by a province of Canada shall be allowed for that portion of the provincial tax not claimed for federal purposes"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if income_tax_is_imposed_by_province_of_canada: max(0, other_jurisdiction_tax_on_ordinary_income_portion - provincial_tax_claimed_for_federal_purposes_for_taxable_year_or_preceding_taxable_year) else: other_jurisdiction_tax_on_ordinary_income_portion
+
+  - name: credit_limit_by_double_taxed_income_ratio
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NY Tax Law § 620-A(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "shall not exceed the percentage of the tax otherwise due under section six hundred three determined by dividing"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if total_ordinary_income_portion_of_lump_sum_distribution_taxable_under_section_603 > 0: tax_otherwise_due_under_section_603 * ordinary_income_portion_taxable_both_under_section_603_and_other_jurisdiction / total_ordinary_income_portion_of_lump_sum_distribution_taxable_under_section_603 else: 0
+
+  - name: credit_limit_by_exclusion_comparison
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NY Tax Law § 620-A(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "shall not reduce the tax otherwise due under section six hundred three to an amount less than would have been due"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, tax_otherwise_due_under_section_603 - tax_due_under_section_603_if_double_taxed_ordinary_income_portion_were_excluded)
+
+  - name: credit_against_separate_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NY Tax Law § 620-A(a), (b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "A resident shall be allowed a credit against the separate tax otherwise due under section six hundred three"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "The credit under this section shall not exceed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if taxpayer_is_resident and other_jurisdiction_is_state_political_subdivision_district_of_columbia_or_canadian_province and ordinary_income_portion_of_lump_sum_distribution_is_derived_from_other_jurisdiction_and_subject_to_section_603: max(0, min(min(other_jurisdiction_tax_allowed_after_canadian_federal_claim, credit_limit_by_double_taxed_income_ratio), credit_limit_by_exclusion_comparison)) else: 0
+
+  - name: provincial_credit_addback_for_succeeding_year
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: NY Tax Law § 620-A(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/620-A
+              excerpt: "to the extent the provincial tax is claimed for federal purposes for a succeeding taxable year, the credit under this section must be added back"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if provincial_tax_claimed_for_federal_purposes_for_succeeding_taxable_year: credit_under_this_section_previously_allowed_for_that_provincial_tax else: 0

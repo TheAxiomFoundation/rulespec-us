@@ -1,0 +1,155 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-md/statute/gtg/10-105
+  summary: (a) State income tax rate schedules for individuals, including spouses
+    filing jointly, surviving spouses, and heads of household; an additional 2% tax
+    on net capital gain for individuals with federal adjusted gross income in excess
+    of $350,000, subject to listed exceptions. (b) Corporation rate is 8.25%. (d)
+    Nonresident tax is apportioned by a fraction using Maryland taxable income with
+    and without specified subtractions.
+  deferred_outputs:
+  - output: us-md:statutes/gtg/10-105#individual_state_income_tax
+    reason: The source requires selecting between filing-status groups and cross-referenced
+      federal classifications; no executable upstream filing-status RuleSpec output
+      is supplied in context, and local filing-status inputs are prohibited.
+  - output: us-md:statutes/gtg/10-105#additional_capital_gain_tax
+    reason: The source depends on federally determined net capital gain and enumerated
+      exempt capital-gain categories, including cross-referenced retirement arrangements
+      and federal adjusted gross income. This mixed surface is not encoded as a final
+      individual tax without the required upstream classifications.
+rules:
+- name: corporation_income_tax_rate
+  kind: parameter
+  dtype: Rate
+  source: "Md. Code, Tax-General \xA7 10-105(b)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: The State income tax rate for a corporation is 8.25% of Maryland
+            taxable income.
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.0825'
+- name: corporation_state_income_tax
+  kind: derived
+  entity: Corporation
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "Md. Code, Tax-General \xA7 10-105(b)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: 8.25% of Maryland taxable income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, maryland_taxable_income) * corporation_income_tax_rate
+- name: additional_capital_gain_tax_rate
+  kind: parameter
+  dtype: Rate
+  source: "Md. Code, Tax-General \xA7 10-105(a)(3)(i)2"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: an additional 2% of the amount of net capital gain
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.02'
+- name: additional_capital_gain_tax_federal_agi_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: "Md. Code, Tax-General \xA7 10-105(a)(4)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: federal adjusted gross income in excess of $350,000
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '350000'
+- name: primary_residence_sale_price_limit_for_capital_gain_exception
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: "Md. Code, Tax-General \xA7 10-105(a)(3)(ii)1"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: any residential dwelling sold for less than $1,500,000
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1500000'
+- name: livestock_holding_period_for_capital_gain_exception
+  kind: parameter
+  dtype: Count
+  source: "Md. Code, Tax-General \xA7 10-105(a)(3)(ii)3"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: held for more than 12 months
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '12'
+- name: farming_or_ranching_gross_income_share_threshold
+  kind: parameter
+  dtype: Rate
+  source: "Md. Code, Tax-General \xA7 10-105(a)(3)(ii)3"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: more than 50% of the individual's gross income
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.50'
+- name: nonresident_state_income_tax
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "Md. Code, Tax-General \xA7 10-105(d)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-md/statute/gtg/10-105
+          excerpt: multiplied times a fraction
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if nonresident_maryland_taxable_income_without_specified_subtractions
+      > 0: state_income_tax_on_nonresident_income_without_specified_subtractions *
+      nonresident_maryland_taxable_income_with_specified_subtractions / nonresident_maryland_taxable_income_without_specified_subtractions
+      else: 0'

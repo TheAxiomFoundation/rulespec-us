@@ -1,0 +1,89 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-in/statute/6-3.1-21-6
+  summary: |-
+    Sec. 6. (a) Except as provided by subsections (b), (d), and (e), an individual eligible for and claiming the federal earned income tax credit is eligible for an Indiana credit equal to ten percent (10%) of that federal credit. Subsection (b) prorates the credit for nonresidents and part-year residents by Indiana taxable income over total income. Subsection (c) refunds excess credit. Subsection (d) treats a proper federal Bipartisan Budget Act of 2018 election as made for this chapter. Subsection (e) subjects minimum earned income and phaseout thresholds to the same cost of living adjustments provided in the Internal Revenue Code.
+rules:
+  - name: earned_income_credit_percentage
+    kind: parameter
+    dtype: Rate
+    source: Ind. Code § 6-3.1-21-6(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3.1-21-6
+              excerpt: "equal to ten percent (10%)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.10
+
+  - name: indiana_earned_income_credit_before_refund
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Ind. Code § 6-3.1-21-6(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3.1-21-6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3/1-21-6#earned_income_credit_percentage
+              output: earned_income_credit_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if taxpayer_is_nonresident_or_part_year_resident: earned_income_credit_percentage * federal_earned_income_tax_credit_claimed_for_taxable_year * income_taxable_in_indiana / total_income else: earned_income_credit_percentage * federal_earned_income_tax_credit_claimed_for_taxable_year
+
+  - name: indiana_earned_income_credit_refund
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Ind. Code § 6-3.1-21-6(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3.1-21-6
+              excerpt: "If the credit amount exceeds the taxpayer's adjusted gross income tax liability"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, indiana_earned_income_credit_before_refund - adjusted_gross_income_tax_liability)
+
+  - name: bipartisan_budget_act_election_treated_as_made_for_indiana_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Ind. Code § 6-3.1-21-6(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-in/statute/6-3.1-21-6
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          taxpayer_properly_elects_bipartisan_budget_act_earned_income_treatment_for_federal_credit
+          and taxable_year_begins_after_federal_bipartisan_budget_act_election_start

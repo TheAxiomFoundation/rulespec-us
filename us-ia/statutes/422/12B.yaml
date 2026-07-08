@@ -1,0 +1,119 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ia/statute/422.12B
+  summary: |-
+    Taxes imposed under this subchapter less credits allowed under section 422.12 are reduced by an earned income credit equal to fourteen percent of the federal earned income credit for tax year 2013 and fifteen percent for tax years beginning on or after January 1, 2014. Any excess credit is refundable. Taxpayers affected by section 422.8 allocation provisions may deduct only the amount fairly and equitably allocable to Iowa.
+rules:
+  - name: earned_income_credit_percentage
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Iowa Code section 422.12B(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "For the tax year beginning in the 2013 calendar year, fourteen percent."
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "For tax years beginning on or after January 1, 2014, fifteen percent."
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          0.14
+      - effective_from: '2014-01-01'
+        formula: |-
+          0.15
+
+  - name: earned_income_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.12B(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "earned income credit equal to the following percentage of the federal earned income credit"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "fourteen percent... fifteen percent"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          earned_income_credit_percentage * max(0, federal_earned_income_credit)
+
+  - name: earned_income_credit_tax_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.12B(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "The taxes imposed under this subchapter less the credits allowed under section 422.12 shall be reduced by an earned income credit"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          min(max(0, taxes_imposed_under_this_subchapter_less_credits_allowed_under_section_422_12), earned_income_credit)
+
+  - name: refundable_earned_income_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.12B(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "Any credit in excess of the tax liability is refundable."
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          max(0, earned_income_credit - max(0, taxes_imposed_under_this_subchapter_less_credits_allowed_under_section_422_12))
+
+  - name: allocated_earned_income_credit_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.12B(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.12B
+              excerpt: "permitted a deduction for the credit only in the amount fairly and equitably allocable to Iowa"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if taxpayer_affected_by_allocation_provisions_of_section_422_8: max(0, earned_income_credit_fairly_and_equitably_allocable_to_iowa_under_director_rules) else: 0

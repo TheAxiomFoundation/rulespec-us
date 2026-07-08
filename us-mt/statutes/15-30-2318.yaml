@@ -1,0 +1,102 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mt/statute/15-30-2318
+  summary: |-
+    Resident taxpayer credit equals 20% of the federal earned income credit; credit is reduced for earned income treated as a dividend received by a member of an IRC 501(d) agricultural organization. The excess over tax liability is refundable.
+  deferred_outputs:
+    - output: us-mt:statutes/15-30-2318/a#earned_income
+      reason: Earned income is defined by cross-reference to section 32 of the Internal Revenue Code, and that federal definition is not supplied in this source unit.
+rules:
+  - name: state_earned_income_tax_credit_percentage
+    kind: parameter
+    dtype: Rate
+    source: 15-30-2318(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2318
+              excerpt: "20% of the amount of the credit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+
+  - name: reduction_percentage
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 15-30-2318(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2318
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if earned_income == 0: 0 else: earned_income_disallowed_under_subsection_3 / earned_income
+
+  - name: montana_earned_income_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 15-30-2318(1)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2318
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-mt:statutes/15-30-2318#state_earned_income_tax_credit_percentage
+              output: state_earned_income_tax_credit_percentage
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-mt:statutes/15-30-2318#reduction_percentage
+              output: reduction_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if taxpayer_is_resident: max(0, federal_earned_income_credit * state_earned_income_tax_credit_percentage * max(0, 1 - reduction_percentage)) else: 0
+
+  - name: montana_earned_income_tax_credit_refund
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 15-30-2318(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2318
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-mt:statutes/15-30-2318#montana_earned_income_tax_credit
+              output: montana_earned_income_tax_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, montana_earned_income_tax_credit - tax_liability_under_this_chapter)

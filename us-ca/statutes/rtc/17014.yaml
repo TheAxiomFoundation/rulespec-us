@@ -1,0 +1,171 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ca/statute/rtc/17014
+  summary: |-
+    "Resident" includes individuals in California for other than a temporary or transitory purpose, California domiciliaries temporarily outside the state, and residents temporarily absent. California domiciliaries in specified federal offices or staff roles are treated as outside California temporarily. For taxable years beginning on or after January 1, 1994, certain California domiciliaries absent at least 546 consecutive days under an employment-related contract are treated as outside California for other than a temporary or transitory purpose, subject to return-day, intangible-income, spousal-accompaniment, and tax-avoidance rules.
+rules:
+  - name: employment_contract_absence_day_threshold
+    kind: parameter
+    dtype: Count
+    source: 17014(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+              excerpt: "at least 546 consecutive days"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          546
+
+  - name: california_return_day_disregard_limit
+    kind: parameter
+    dtype: Count
+    source: 17014(d)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+              excerpt: "not more than 45 days during a taxable year"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          45
+
+  - name: intangible_personal_property_income_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 17014(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+              excerpt: "in excess of two hundred thousand dollars ($200,000)"
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          200000
+
+  - name: federal_executive_appointive_office_qualifies_for_temporary_absence
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 17014(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          holds_appointive_office_in_federal_executive_branch
+          and appointment_was_by_president
+          and appointment_was_subject_to_senate_confirmation
+          and tenure_is_at_pleasure_of_president
+          and not holds_armed_forces_office
+          and not is_career_appointee_in_united_states_foreign_service
+
+  - name: california_domiciliary_outside_state_for_temporary_or_transitory_purpose_due_to_federal_service
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 17014(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          domiciled_in_california
+          and (
+            holds_elective_office_of_united_states_government
+            or employed_on_staff_of_united_states_legislative_branch_elective_officer
+            or federal_executive_appointive_office_qualifies_for_temporary_absence
+            or spouse_has_qualifying_federal_service_under_this_subdivision
+          )
+
+  - name: employment_contract_intangible_income_exception_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 17014(d)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          income_from_intangible_personal_property > intangible_personal_property_income_limit
+
+  - name: outside_state_for_other_than_temporary_or_transitory_purpose_under_employment_contract
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 17014(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          domiciled_in_california
+          and absent_from_california_under_employment_related_contract
+          and consecutive_absence_days >= employment_contract_absence_day_threshold
+          and california_return_days_during_taxable_year <= california_return_day_disregard_limit
+          and not employment_contract_intangible_income_exception_applies
+          and not principal_purpose_of_absence_is_to_avoid_tax_imposed_by_this_part
+
+  - name: spouse_outside_state_for_other_than_temporary_or_transitory_purpose_under_employment_contract
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 17014(d)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ca/statute/rtc/17014
+    versions:
+      - effective_from: '1994-01-01'
+        formula: |-
+          absent_from_california_to_accompany_spouse
+          and spouse_is_considered_outside_state_for_other_than_temporary_or_transitory_purpose_under_this_subdivision
+          and consecutive_absence_days >= employment_contract_absence_day_threshold
+          and california_return_days_during_taxable_year <= california_return_day_disregard_limit
+          and not employment_contract_intangible_income_exception_applies
+          and not principal_purpose_of_absence_is_to_avoid_tax_imposed_by_this_part

@@ -1,0 +1,217 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-id/statute/63-3024A
+  summary: Resident individuals filing Idaho income tax returns are allowed refundable
+    grocery tax credits for the taxpayer, spouse, and dependents. The flat credit
+    is $100 for tax year 2022, $120 for tax years 2023 and 2024, and $155 for tax
+    year 2025 and thereafter. A resident taxpayer may instead elect actual Idaho sales
+    tax paid on qualifying food purchases, capped at $250 per person, with receipt
+    submission required; no subsection (9) election is available if subsection (5)
+    food stamp proration applies.
+  deferred_outputs:
+  - output: us-id:statutes/63-3024A/a#qualifying_food_for_actual_sales_tax_credit
+    reason: The definition of food incorporates 7 U.S.C. 2012 as it existed on January
+      1, 2025 and enumerates product exclusions; a faithful item-level food classification
+      ontology is outside this artifact.
+  - output: us-id:statutes/63-3024A/b#candy_and_soda_definitions_for_actual_sales_tax_credit
+    reason: The candy and soda definitions are item/product classifications used by
+      subsection (9)(a); a faithful food-item ontology is outside this artifact.
+rules:
+- name: flat_credit_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 63-3024A(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+          excerpt: For tax year 2022, the credit is one hundred dollars ($100).
+      - path: versions[1].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+          excerpt: For tax years 2023 and 2024, the credit is one hundred twenty dollars
+            ($120).
+      - path: versions[2].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+          excerpt: For tax year 2025 and each year thereafter, the credit is one hundred
+            fifty-five dollars ($155).
+  versions:
+  - effective_from: '2022-01-01'
+    formula: '100'
+  - effective_from: '2023-01-01'
+    formula: '120'
+  - effective_from: '2025-01-01'
+    formula: '155'
+- name: actual_food_sales_tax_credit_cap_per_person
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 63-3024A(9)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+          excerpt: up to a maximum of two hundred fifty dollars ($250) per person
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '250'
+- name: taxpayer_may_claim_flat_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 63-3024A(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'taxpayer_is_resident_individual
+
+      and taxpayer_required_to_file_idaho_income_tax_return
+
+      and taxpayer_has_filed_idaho_income_tax_return'
+- name: taxpayer_may_elect_actual_food_sales_tax_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 63-3024A(9)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'taxpayer_is_resident_individual
+
+      and taxpayer_elects_actual_sales_tax_paid_on_food_purchases
+
+      and taxpayer_indicates_election_on_return_or_application
+
+      and taxpayer_submits_scanned_sales_tax_receipts
+
+      and not taxpayer_meets_subsection_5_food_stamp_proration_qualification'
+- name: flat_credit_for_person
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 63-3024A(1), 63-3024A(3), 63-3024A(5), 63-3024A(6), 63-3024A(7), 63-3024A(8)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+          excerpt: the credit is one hundred fifty-five dollars ($155)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if individual_residing_illegally_in_united_states: 0 else: flat_credit_amount
+      * idaho_domicile_year_fraction * no_food_stamp_assistance_year_fraction * not_incarcerated_year_fraction'
+- name: actual_food_sales_tax_credit_for_person
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 63-3024A(9)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+          excerpt: up to a maximum of two hundred fifty dollars ($250) per person
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if individual_residing_illegally_in_united_states: 0 else: min(max(0,
+      idaho_sales_tax_paid_on_qualifying_food_purchases), actual_food_sales_tax_credit_cap_per_person)'
+- name: flat_credit_persons
+  kind: data_relation
+  data_relation:
+    predicate: flat_credit_persons
+    arity: 2
+    arguments:
+    - name: flat_credit_person
+      entity: Person
+    - name: tax_unit
+      entity: TaxUnit
+- name: refundable_flat_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 63-3024A(1), 63-3024A(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if taxpayer_may_claim_flat_credit: sum_where(flat_credit_persons, flat_credit_for_person,
+      person_credit_not_claimed_by_another_taxpayer_or_subsection) else: 0'
+- name: actual_food_sales_tax_credit_persons
+  kind: data_relation
+  data_relation:
+    predicate: actual_food_sales_tax_credit_persons
+    arity: 2
+    arguments:
+    - name: actual_food_sales_tax_credit_person
+      entity: Person
+    - name: tax_unit
+      entity: TaxUnit
+- name: refundable_actual_food_sales_tax_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 63-3024A(9)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024A
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if taxpayer_may_elect_actual_food_sales_tax_credit: sum_where(actual_food_sales_tax_credit_persons,
+      actual_food_sales_tax_credit_for_person, person_credit_not_claimed_by_another_taxpayer_or_subsection)
+      else: 0'

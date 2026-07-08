@@ -1,0 +1,139 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-in/statute/6-3-2-6
+  summary: |-
+    Each taxable year, an individual who rents a dwelling for use as the individual's principal place of residence may deduct the lesser of rent paid or $3,000. A married couple filing jointly may not claim more than $3,000, a married individual filing separately may not claim more than $1,500, and the deduction does not apply to a dwelling exempt from Indiana property tax.
+rules:
+  - name: renter_deduction_general_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: IC 6-3-2-6(a), (b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+              excerpt: "three thousand dollars ($3,000)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3000
+
+  - name: renter_deduction_married_separate_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: IC 6-3-2-6(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+              excerpt: "one thousand five hundred dollars ($1,500)"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1500
+
+  - name: dwelling_for_renter_deduction
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: IC 6-3-2-6(a), (c), (d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_rents_dwelling_for_principal_place_of_residence
+          and not dwelling_is_exempt_from_indiana_property_tax
+
+  - name: renter_deduction_cap
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IC 6-3-2-6(a), (b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+              excerpt: "may not claim a deduction under this section of more than three thousand dollars ($3,000)"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+              excerpt: "more than one thousand five hundred dollars ($1,500)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-6#renter_deduction_general_cap
+              output: renter_deduction_general_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-6#renter_deduction_married_separate_cap
+              output: renter_deduction_married_separate_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if married_individual_filing_separate_return_for_taxable_year: renter_deduction_married_separate_cap else: renter_deduction_general_cap
+
+  - name: renter_deduction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IC 6-3-2-6(a), (b), (c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-6
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-6#dwelling_for_renter_deduction
+              output: dwelling_for_renter_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-6#renter_deduction_cap
+              output: renter_deduction_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if dwelling_for_renter_deduction: min(max(0, rent_paid_with_respect_to_dwelling_during_taxable_year), renter_deduction_cap) else: 0

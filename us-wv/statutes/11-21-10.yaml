@@ -1,0 +1,201 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-wv/statute/11-21-10
+  summary: Allows an eligible taxpayer a deduction from federal adjusted gross income
+    for earned income included therein, capped at $10,000, or $5,000 per separate
+    return for spouses filing separately. Eligible taxpayers are unmarried individuals
+    or joint-return spouses with federal adjusted gross income of $10,000 or less,
+    and separate-return spouses with federal adjusted gross income of $5,000 or less.
+    Earned income includes wages, salaries, tips, other employee compensation, and
+    net earnings from self-employment, excluding pensions, annuities, and inmate-services
+    amounts.
+rules:
+- name: annual_earned_income_exclusion_cap
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-10(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: not to exceed $10,000
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '10000'
+- name: separate_return_earned_income_exclusion_cap
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-10(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: when a husband and wife file separate returns ... shall not exceed
+            $5,000 per separate return
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '5000'
+- name: temporary_initial_year_exclusion_fraction
+  kind: parameter
+  dtype: Rate
+  source: 11-21-10(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: for the taxable year beginning January 1, 1996 ... shall not exceed
+            fifty percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.50'
+- name: eligible_taxpayer_joint_or_unmarried_federal_adjusted_gross_income_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-10(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: unmarried individual and any husband and wife filing a joint return
+            ... federal adjusted gross income of $10,000 or less
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '10000'
+- name: eligible_taxpayer_separate_return_federal_adjusted_gross_income_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-10(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: husband or wife filing a separate return ... federal adjusted gross
+            income of $5,000 or less
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '5000'
+- name: earned_income_for_section
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-10(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, wages_salaries_tips_and_other_employee_compensation + net_earnings_from_self_employment_determined_with_section_164_deduction
+      - pension_or_annuity_amount_otherwise_included_in_earned_income - penal_institution_services_amount_otherwise_included_in_earned_income)
+- name: eligible_taxpayer
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 11-21-10(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: unmarried individual and any husband and wife filing a joint return
+            ... $10,000 or less
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: husband or wife filing a separate return ... $5,000 or less
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '((taxpayer_is_unmarried_individual or husband_and_wife_file_joint_return_under_this_article)
+      and federal_adjusted_gross_income <= eligible_taxpayer_joint_or_unmarried_federal_adjusted_gross_income_threshold)
+
+      or (husband_or_wife_files_separate_return_under_this_article and federal_adjusted_gross_income
+      <= eligible_taxpayer_separate_return_federal_adjusted_gross_income_threshold)'
+- name: earned_income_exclusion_cap
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-10(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: not to exceed $10,000, except that when a husband and wife file
+            separate returns ... not exceed $5,000
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: for the taxable year beginning January 1, 1996 ... not exceed fifty
+            percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if taxable_year_is_initial_partial_exclusion_year:\n  temporary_initial_year_exclusion_fraction\
+      \ * (if husband_or_wife_files_separate_return_under_this_article: separate_return_earned_income_exclusion_cap\
+      \ else: annual_earned_income_exclusion_cap)\nelse:\n  if husband_or_wife_files_separate_return_under_this_article:\
+      \ separate_return_earned_income_exclusion_cap else: annual_earned_income_exclusion_cap"
+- name: earned_income_exclusion_deduction
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-10(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: there shall be allowed as a deduction from federal adjusted gross
+            income the amount of his or her earned income included therein
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-wv/statute/11-21-10
+          excerpt: no credit shall be allowed ... taxable year covering a period of
+            less than twelve months
+  versions:
+  - effective_from: '0001-01-01'
+    formula: |-
+      if eligible_taxpayer and (taxable_year_covers_full_twelve_months or taxable_year_closed_by_reason_of_death_of_taxpayer): min(max(0, earned_income_included_in_federal_adjusted_gross_income), max(0, earned_income_exclusion_cap)) else: 0
