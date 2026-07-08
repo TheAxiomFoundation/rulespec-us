@@ -91,19 +91,26 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 
+# The checkout to drain. Defaults to the checkout this file lives in, but
+# ``DRAIN_CHECKOUT`` lets one durable copy of this script drain any rulespec-*
+# checkout (US/UK/BE) without being copied into each one.
+CHECKOUT = Path(os.environ.get(
+    "DRAIN_CHECKOUT", Path(__file__).resolve().parent.parent)).resolve()
+HERE = CHECKOUT / "bulk"
+
+
 def _derive_repo() -> tuple[str, str]:
-    """(owner/name, name) for the checkout this script lives in.
+    """(owner/name, name) for the checkout being drained.
 
     Auto-derives from the git ``origin`` remote so the same file works unchanged
-    when copied into any ``rulespec-*`` checkout (US/UK/BE/...). Env overrides:
+    against any ``rulespec-*`` checkout (US/UK/BE/...). Env overrides:
     ``DRAIN_REPO`` (owner/name) and ``DRAIN_REPO_NAME``.
     """
     repo = os.environ.get("DRAIN_REPO", "")
     if not repo:
         try:
             url = subprocess.run(
-                ["git", "-C", str(Path(__file__).resolve().parent.parent),
-                 "remote", "get-url", "origin"],
+                ["git", "-C", str(CHECKOUT), "remote", "get-url", "origin"],
                 capture_output=True, text=True).stdout.strip()
             m = re.search(r"[:/]([^/:]+/[^/]+?)(?:\.git)?$", url)
             repo = m.group(1) if m else "TheAxiomFoundation/rulespec-us"
@@ -114,8 +121,6 @@ def _derive_repo() -> tuple[str, str]:
 
 
 REPO, REPO_NAME = _derive_repo()
-HERE = Path(__file__).resolve().parent           # <checkout>/bulk
-CHECKOUT = HERE.parent                            # this checkout root
 
 # --- toolchain / workspace resolution ---------------------------------------
 DRAIN_BASE = Path(
