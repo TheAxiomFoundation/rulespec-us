@@ -1,0 +1,696 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mn/statute/290.06
+  summary: 'Subdivision 1: corporation franchise tax is computed by applying 9.8 percent
+    to taxable income. Subdivision 2c states income tax rate schedules for individuals,
+    estates, and trusts, subject to inflation adjustment under subdivision 2d. Subdivisions
+    2g, 2h, 22, 23, 23a, 27, 28, 33, 35, 37, 38, 39, and 40 state additional taxes,
+    credits, refunds, limits, carryovers, and refundability rules.'
+  deferred_outputs:
+  - output: us-mn:statutes/290/06#individual_income_tax
+    reason: Filing-status classifications for married filing jointly, surviving spouse,
+      unmarried individual, head of household, married filing separately, estates,
+      and trusts depend on cited definitions and upstream filing-status sources not
+      provided in context; subdivision 2d also requires annual inflation-adjusted
+      brackets under section 270C.22.
+    source_values:
+    - us-mn:statutes/290/06#joint_return_bracket_lower_bound
+    - us-mn:statutes/290/06#joint_return_bracket_upper_bound
+    - us-mn:statutes/290/06#joint_return_bracket_rate
+    - us-mn:statutes/290/06#unmarried_bracket_lower_bound
+    - us-mn:statutes/290/06#unmarried_bracket_upper_bound
+    - us-mn:statutes/290/06#unmarried_bracket_rate
+    - us-mn:statutes/290/06#head_of_household_bracket_lower_bound
+    - us-mn:statutes/290/06#head_of_household_bracket_upper_bound
+    - us-mn:statutes/290/06#head_of_household_bracket_rate
+rules:
+- name: corporation_franchise_tax_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 1
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: rate of 9.8 percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.098'
+- name: corporation_franchise_tax
+  kind: derived
+  entity: Corporation
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 1
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: computed by applying to their taxable income the rate of 9.8 percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, corporate_taxable_income) * corporation_franchise_tax_rate
+- name: joint_return_bracket_selector
+  kind: derived
+  entity: TaxUnit
+  dtype: Integer
+  period: Year
+  source: Minn. Stat. 290.06, subd. 2c(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: On the first $38,770 ... over $38,770, but not over $154,020 ...
+            over $154,020, but not over $269,010 ... over $269,010
+  versions:
+  - effective_from: '2019-01-01'
+    formula: 'if taxable_net_income <= joint_return_bracket_upper_bound[0]: 0 else:
+      if taxable_net_income <= joint_return_bracket_upper_bound[1]: 1 else: if taxable_net_income
+      <= joint_return_bracket_upper_bound[2]: 2 else: 3'
+- name: joint_return_bracket_lower_bound
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: joint_return_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: married individuals filing joint returns and surviving spouses
+              rate schedule
+            row_key: bracket
+            column_key: lower_bound
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 0
+      1: 38770
+      2: 154020
+      3: 269010
+- name: joint_return_bracket_upper_bound
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: joint_return_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: married individuals filing joint returns and surviving spouses
+              rate schedule
+            row_key: bracket
+            column_key: upper_bound
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 38770
+      1: 154020
+      2: 269010
+      3: 0
+- name: joint_return_bracket_rate
+  kind: parameter
+  dtype: Rate
+  indexed_by: joint_return_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: married individuals filing joint returns and surviving spouses
+              rate schedule
+            row_key: bracket
+            column_key: rate
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 0.0535
+      1: 0.068
+      2: 0.0785
+      3: 0.0985
+- name: unmarried_bracket_selector
+  kind: derived
+  entity: TaxUnit
+  dtype: Integer
+  period: Year
+  source: Minn. Stat. 290.06, subd. 2c(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: On the first $26,520 ... over $26,520, but not over $87,110 ...
+            over $87,110, but not over $161,720 ... over $161,720
+  versions:
+  - effective_from: '2019-01-01'
+    formula: 'if taxable_net_income <= unmarried_bracket_upper_bound[0]: 0 else: if
+      taxable_net_income <= unmarried_bracket_upper_bound[1]: 1 else: if taxable_net_income
+      <= unmarried_bracket_upper_bound[2]: 2 else: 3'
+- name: unmarried_bracket_lower_bound
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: unmarried_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: unmarried individuals rate schedule
+            row_key: bracket
+            column_key: lower_bound
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 0
+      1: 26520
+      2: 87110
+      3: 161720
+- name: unmarried_bracket_upper_bound
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: unmarried_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: unmarried individuals rate schedule
+            row_key: bracket
+            column_key: upper_bound
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 26520
+      1: 87110
+      2: 161720
+      3: 0
+- name: unmarried_bracket_rate
+  kind: parameter
+  dtype: Rate
+  indexed_by: unmarried_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: unmarried individuals rate schedule
+            row_key: bracket
+            column_key: rate
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 0.0535
+      1: 0.068
+      2: 0.0785
+      3: 0.0985
+- name: head_of_household_bracket_selector
+  kind: derived
+  entity: TaxUnit
+  dtype: Integer
+  period: Year
+  source: Minn. Stat. 290.06, subd. 2c(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: On the first $32,650 ... over $32,650, but not over $131,190 ...
+            over $131,190, but not over $214,980 ... over $214,980
+  versions:
+  - effective_from: '2019-01-01'
+    formula: 'if taxable_net_income <= head_of_household_bracket_upper_bound[0]: 0
+      else: if taxable_net_income <= head_of_household_bracket_upper_bound[1]: 1 else:
+      if taxable_net_income <= head_of_household_bracket_upper_bound[2]: 2 else: 3'
+- name: head_of_household_bracket_lower_bound
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: head_of_household_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: head of household rate schedule
+            row_key: bracket
+            column_key: lower_bound
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 0
+      1: 32650
+      2: 131190
+      3: 214980
+- name: head_of_household_bracket_upper_bound
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: head_of_household_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: head of household rate schedule
+            row_key: bracket
+            column_key: upper_bound
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 32650
+      1: 131190
+      2: 214980
+      3: 0
+- name: head_of_household_bracket_rate
+  kind: parameter
+  dtype: Rate
+  indexed_by: head_of_household_bracket_selector
+  source: Minn. Stat. 290.06, subd. 2c(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          table:
+            header: head of household rate schedule
+            row_key: bracket
+            column_key: rate
+  versions:
+  - effective_from: '2019-01-01'
+    values:
+      0: 0.0535
+      1: 0.068
+      2: 0.0785
+      3: 0.0985
+- name: section_529_credit_recapture_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 2h(b)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: 50 percent of the product of the credit ratio and the amount of
+            the distribution
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.50'
+- name: section_529_subtraction_recapture_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 2h(b)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: ten percent of the product of the subtraction ratio and the amount
+            of the distribution
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.10'
+- name: section_529_plan_recapture_additional_tax
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 2h(b)-(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: If a distribution from a qualified account is used for a purpose
+            other than to pay for qualified higher education expenses
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: does not apply to any portion of a distribution that is subject
+            to the additional tax under section 529(c)(6)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if qualified_account_distribution_used_for_nonqualified_purpose: (section_529_credit_recapture_rate
+      * credit_ratio * max(0, distribution_amount_not_subject_to_federal_529_c_6_tax))
+      + (section_529_subtraction_recapture_rate * subtraction_ratio * max(0, distribution_amount_not_subject_to_federal_529_c_6_tax))
+      else: 0'
+- name: transit_pass_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 28
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: equal to 30 percent of the expense incurred
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.30'
+- name: transit_pass_credit
+  kind: derived
+  entity: Employer
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 28
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: If the taxpayer purchases the transit passes from the transit system
+            operator, and resells them to the employees, the credit is based on the
+            amount of the difference
+  versions:
+  - effective_from: '0001-01-01'
+    formula: transit_pass_credit_rate * max(0, transit_pass_expense_for_minnesota_employee_use)
+- name: corporate_bovine_testing_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 33(a)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: for corporate filers ... 25 percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.25'
+- name: noncorporate_bovine_testing_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 33(a)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: for all other filers, one-half
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.50'
+- name: bovine_testing_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 33(a), (d)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: Expenses incurred in a calendar year in which tuberculosis testing
+            of cattle in Minnesota is not federally required are not allowed
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if tuberculosis_testing_of_cattle_in_minnesota_is_federally_required:
+      (if corporate_filer_for_bovine_testing_credit: corporate_bovine_testing_credit_rate
+      * max(0, cattle_tuberculosis_testing_expenses) else: noncorporate_bovine_testing_credit_rate
+      * max(0, cattle_tuberculosis_testing_expenses)) else: 0'
+- name: seed_capital_investment_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: Minn. Stat. 290.06, subd. 35(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: The credit equals 45 percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.45'
+- name: seed_capital_investment_credit_cap
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 35(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: must not exceed $112,500
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '112500'
+- name: seed_capital_investment_credit_carryover_years
+  kind: parameter
+  dtype: Count
+  source: Minn. Stat. 290.06, subd. 35(h)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: four succeeding taxable years
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '4'
+- name: seed_capital_investment_credit
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 35(a), (d), (f)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: An individual, estate, or trust is allowed a credit ... for investments
+            in a qualifying business
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: A taxpayer who owns a controlling interest ... is not entitled
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if seed_capital_investment_is_eligible and not taxpayer_disqualified_from_seed_capital_credit:
+      min(seed_capital_investment_credit_cap, seed_capital_investment_credit_rate
+      * max(0, qualified_seed_capital_investment_amount)) else: 0'
+- name: beginning_farmer_incentive_credit_carryover_years
+  kind: parameter
+  dtype: Count
+  source: Minn. Stat. 290.06, subd. 37(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: 15 succeeding taxable years
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '15'
+- name: beginning_farmer_incentive_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 37(a)-(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: limited to the amount stated on the certificate
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: limited to the liability for tax
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if beginning_farmer_incentive_credit_approved_and_certified: min(max(0,
+      beginning_farmer_incentive_credit_certificate_amount), max(0, tax_liability_before_beginning_farmer_incentive_credit))
+      else: 0'
+- name: beginning_farmer_management_credit_carryover_years
+  kind: parameter
+  dtype: Count
+  source: Minn. Stat. 290.06, subd. 38(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: three succeeding taxable years
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '3'
+- name: beginning_farmer_management_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 38(a)-(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: may take a credit ... for participation in a financial management
+            program
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: limited to the liability for tax
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if beginning_farmer_management_credit_approved_and_certified: min(max(0,
+      beginning_farmer_management_credit_amount), max(0, tax_liability_before_beginning_farmer_management_credit))
+      else: 0'
+- name: film_production_credit_carryover_years
+  kind: parameter
+  dtype: Count
+  source: Minn. Stat. 290.06, subd. 39(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: five succeeding taxable years
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '5'
+- name: film_production_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 39(a)-(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: equal to the amount certified on a credit certificate
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: limited to the liability for tax
+  versions:
+  - effective_from: '0001-01-01'
+    formula: min(max(0, film_production_credit_certificate_amount), max(0, tax_liability_before_film_production_credit))
+- name: pass_through_entity_tax_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Minn. Stat. 290.06, subd. 40(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-mn/statute/290.06
+          excerpt: equal to the amount of the owner's tax liability as calculated
+            under section 289A.08
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if qualifying_owner_of_qualifying_entity_electing_pass_through_entity_tax:
+      max(0, owner_tax_liability_calculated_for_pass_through_entity_tax) else: 0'
