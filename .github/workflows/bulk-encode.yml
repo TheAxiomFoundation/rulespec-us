@@ -420,15 +420,22 @@ jobs:
           set -euo pipefail
           branch="bulk/$SLUG"
 
-          # Push the applied commit onto the bulk branch.
-          git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
-            -c user.name="bulk-encode" commit --amend -q \
-            -m "Encode $CITATION via bulk dispatcher" \
-            -m "" \
-            -m "Produced by axiom-encode encode $CITATION --apply (backend ${{ matrix.item.backend }}, model ${{ matrix.item.model }})." \
-            -m "" \
-            -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
-          git -C "$GITHUB_WORKSPACE" push -f origin "HEAD:$branch"
+          # Retry a command through transient GitHub API failures (the PR
+          # mutations below occasionally hit a 502/503 from the GraphQL API; an
+          # unattended weekly drain must self-heal rather than drop the module
+          # until the next run). Backs off; not applied to `gh pr reopen`, whose
+          # failure is a meaningful signal (orphaned head -> fresh-PR fallback).
+          retry() {
+            local n=1 max=5 delay=5
+            until "$@"; do
+              if [ "$n" -ge "$max" ]; then
+                echo "::error::\`$*\` failed after $max attempts." >&2
+                return 1
+              fi
+              echo "attempt $n/$max failed; retrying in ${delay}s: $*" >&2
+              sleep "$delay"; n=$((n + 1)); delay=$((delay * 2))
+            done
+          }
 
           # Ensure the bulk-encode label exists.
           gh label create bulk-encode --repo "$GITHUB_REPOSITORY" \
@@ -439,21 +446,45 @@ jobs:
             title="Encode $CITATION (bulk, needs-fixtures)"
           fi
 
-          # Reconcile the PR for this branch across all states. A prior run may
-          # have left a CLOSED PR for the same bulk/<slug> branch; auto-merge
-          # cannot be enabled on a closed PR, so reopen it before proceeding.
+          # Reconcile the PR for this branch BEFORE touching the branch. A prior
+          # run may have left a CLOSED PR for bulk/<slug>. auto-merge cannot be
+          # enabled on a closed PR, so it must be reopened -- but GitHub pins a
+          # closed PR to its head SHA and refuses to reopen once that head has
+          # been force-updated (`reopenPullRequest` returns "Could not open the
+          # pull request"). The force-push therefore MUST happen after the reopen,
+          # not before, so the closed head still matches the branch at reopen
+          # time. If the branch was already orphaned by an earlier failed run,
+          # reopen is impossible; open a fresh PR instead -- GitHub permits a new
+          # PR from a branch whose prior PR is closed.
           pr_state="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
+          if [ "$pr_state" = "CLOSED" ]; then
+            if gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
+              echo "Reopened closed PR for $branch."
+            else
+              echo "::warning::Closed PR for $branch cannot be reopened (head orphaned by a prior force-push); opening a fresh PR." >&2
+              pr_state=""
+            fi
+          fi
+
+          # Push the applied commit onto the bulk branch. This updates the open or
+          # just-reopened PR, or stages the branch for a fresh PR below.
+          git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
+            -c user.name="bulk-encode" commit --amend -q \
+            -m "Encode $CITATION via bulk dispatcher" \
+            -m "" \
+            -m "Produced by axiom-encode encode $CITATION --apply (backend ${{ matrix.item.backend }}, model ${{ matrix.item.model }})." \
+            -m "" \
+            -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+          git -C "$GITHUB_WORKSPACE" push -f origin "HEAD:$branch"
+
           if [ -z "$pr_state" ]; then
-            gh pr create --repo "$GITHUB_REPOSITORY" \
+            retry gh pr create --repo "$GITHUB_REPOSITORY" \
               --base "$DEFAULT_BRANCH" --head "$branch" \
               --title "$title" \
               --body-file "${{ steps.prbody.outputs.path }}" \
               --label bulk-encode
           else
-            if [ "$pr_state" = "CLOSED" ]; then
-              gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY"
-            fi
-            gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
+            retry gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
               --title "$title" --body-file "${{ steps.prbody.outputs.path }}" \
               --add-label bulk-encode
           fi
@@ -462,6 +493,6 @@ jobs:
           # module is needs-fixtures, auto-merge is still enabled but the red
           # companion-test-derived required check holds the merge until a
           # follow-up fixture pass turns it green.
-          gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto --squash
+          retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto --squash
 
           echo "PR ready for $CITATION on branch $branch (status: $ENC_STATUS, auto-merge on green)."
