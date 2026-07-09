@@ -122,4 +122,29 @@ axiom-oracles PR (merge ONE at a time, rebase first): add state to
 `conformance_scoreboard.py` → add to `tests/test_conformance.py`.
 
 ### Status
-- [ ] AL  [ ] ID  [ ] KY  [ ] MD  [ ] DE  [ ] ME  [ ] MN  [ ] CT
+- [x] **AL** — pipeline rus#773 (armed); oracle **or#254 MERGED** (us-pe covered 32→35). 6/6 PE-exact.
+- [x] **ID** — pipeline rus#773 (armed); oracle or#254 MERGED. 6/6 PE-exact.
+- [x] **KY** — pipeline rus#773 (armed); oracle or#254 MERGED. 6/6 PE-exact.
+- [ ] MD  [ ] DE  [ ] ME  [ ] MN  [ ] CT — remaining composable; calibration data below.
+
+### Remaining-state calibration (PE 2026 `_before_refundable/credits`, from calibrate run)
+
+Multi-bracket (need per-case bracket floor + cumulative base + marginal, like OH):
+- **DE** `de_income_tax_before_refundable_credits` (fixed brackets, no indexation):
+  single 30k/60k/150k = 988.125 / 2653.125 / 8559.0; married = 2362.75 / 6254.5 / 18134.5.
+  taxable = 26750/56750/146750 (s), 53500/113500/293500 (m). Brackets 0/2.2/3.9/4.8/5.2/5.55/6.6%.
+- **MD** `md_income_tax_before_refundable_credits` (state only; county tax is a separate PE var):
+  single = 1059 / 2484 / 7039.5; married = 2168.125 / 5018.125 / 14695.75.
+  taxable = 23400/53400/145800 (s), 46750/106750/293150 (m). Brackets 2/3/4/4.75/5/5.25/5.5/5.75%.
+- **ME** `me_income_tax_before_refundable_credits` (indexed — read PE 2026 brackets):
+  single = 565.5 / 2428.52 / 9483.72; married = 1131.0 / 4857.05 / 18966.73.
+- **MN** `mn_income_tax_before_refundable_credits` (indexed): single = 789.125 / 2560.00 / 8946.08;
+  married = 1575.57 / 5376.45 / 18727.88.
+- **CT** `ct_income_tax_before_refundable_credits` — HARDEST (3% phase-out + exemption phase-out +
+  tax recapture): single = 361.25 / 2317.5 / 8225.0; married = 1494.0 / 5300.0 / 16450.0. Do last.
+
+TAXSIM SOI codes for these: DE=8 MD=21 ME=20 MN=24 CT=7. Same recipe; add to
+`_TAXSIM_STATE`/`_PE_VAR`/`_TOL`, author pipeline+test, `axiom-encode test`, sign,
+oracle suite. Signing key: `agent-secret get agent/axiom-encode-apply-signing-key`
+→ export `AXIOM_ENCODE_APPLY_SIGNING_KEY`. Generator needs UT/VA `.test.yaml` from
+`origin/laneb-slice` present locally (untracked) until lane B's rulespec PR lands.
