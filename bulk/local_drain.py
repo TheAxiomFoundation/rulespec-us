@@ -784,6 +784,42 @@ def batch_pytest(leaf: Path) -> tuple[bool, set[str], str]:
     return False, {m.group(0) for m in _MOD_PATH_RE.finditer(out)}, out[-1400:]
 
 
+def batch_oracle_coverage(leaf: Path, modules: set[str]) -> tuple[bool, set[str], str]:
+    """Mirror CI's changed-file PolicyEngine oracle-coverage gate (a workflow
+    step, not a repo pytest, so it's not covered by ``batch_pytest``): a changed
+    output that is ``unmapped`` (undeclared) or ``comparable`` but not covered by
+    a companion test fails. Skipped for rulespec-be (EUROMOD household surface).
+    Returns (ok, offending module rel-paths, detail)."""
+    if REPO_NAME == "rulespec-be":
+        return True, set(), "(be uses EUROMOD; skipped)"
+    parent = leaf.parent
+    us_link = parent / "rulespec-us"      # cross-jurisdiction resolution
+    if not us_link.exists():
+        try:
+            us_link.symlink_to(Path.home() / "TheAxiomFoundation/rulespec-us")
+        except OSError:
+            pass
+    env = {"PATH": f"{GATE_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
+    rc, out = run([str(GATE_AE), "oracle-coverage", "--root", str(parent), "--json"],
+                  cwd=leaf, env=env)
+    try:
+        items = json.loads(out).get("items", [])
+    except json.JSONDecodeError:
+        return True, set(), "(oracle-coverage produced no json; skipped)"
+    offenders, detail = set(), []
+    for it in items:
+        f = it.get("file", "")                      # "<repo>/<module-path>.yaml"
+        rel = f.split("/", 1)[1] if "/" in f else f
+        if rel not in modules:
+            continue
+        st = it.get("status")
+        if st == "unmapped" or (st == "comparable" and not it.get("tested")):
+            offenders.add(rel)
+            detail.append(f"{it.get('legal_id')}: "
+                          + (st if st == "unmapped" else "comparable/untested"))
+    return (not offenders), offenders, "; ".join(detail[:5])
+
+
 def find_open_batch_branch(group: str) -> str | None:
     suffix = REPO_NAME.replace("rulespec-", "")
     prefix = f"bulk/batch-{suffix}-{group}-"
@@ -845,12 +881,22 @@ def assemble_batch(group: str, metas: list[dict], seq: str, wait: bool = False,
                     bad.append((m, "validate"))
             if not bad:
                 ok, offenders, tail = batch_pytest(leaf)
-                if ok:
+                if not ok:
+                    bad = [(m, "pytest") for m in metas if m["module"] in offenders]
+                    if not bad:
+                        result["detail"] = ("batch pytest failed with no attributable "
+                                            f"module; aborting.\n{tail[-300:]}")
+                        return result
+            if not bad:                    # CI's PolicyEngine oracle-coverage gate
+                okc, off_c, det_c = batch_oracle_coverage(
+                    leaf, {m["module"] for m in metas})
+                if okc:
                     break
-                bad = [(m, "pytest") for m in metas if m["module"] in offenders]
+                bad = [(m, "oracle-coverage") for m in metas if m["module"] in off_c]
+                log(f"[batch {group}] oracle-coverage flagged: {det_c}")
                 if not bad:
-                    result["detail"] = ("batch pytest failed with no attributable "
-                                        f"module; aborting.\n{tail[-300:]}")
+                    result["detail"] = ("batch oracle-coverage failed with no "
+                                        f"attributable module; aborting.\n{det_c}")
                     return result
             for m, why in bad:
                 for rel in _meta_artifacts(m):
