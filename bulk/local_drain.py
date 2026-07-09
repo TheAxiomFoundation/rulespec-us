@@ -168,6 +168,18 @@ STAGE_ROOT = DRAIN_BASE / "staged"
 BACKEND = os.environ.get("DRAIN_BACKEND", "codex")
 MODEL = os.environ.get("DRAIN_MODEL", "gpt-5.5")
 
+# Some fragment-split federal citations (IRC 219(b)/(g), 1402(a)/(b), 223(b))
+# make the model stochastically over-expand the dependency closure -- emitting
+# 30-45 modules instead of the single target -- and the multi-file ``--apply``
+# then fails (rc=1), benching an otherwise-good module. ``--apply-target-only``
+# installs ONLY the generated target file (the one module the worklist entry is
+# for), so an over-expanded generation still yields a clean single-module apply
+# the gate battery validates. Opt-in per re-drive via DRAIN_APPLY_TARGET_ONLY=1
+# so the default closure-apply path (needed by modules with genuine companion
+# dependents) stays unchanged.
+APPLY_TARGET_ONLY = os.environ.get(
+    "DRAIN_APPLY_TARGET_ONLY", "").strip().lower() not in ("", "0", "false", "no")
+
 # Batch-PR (merge-train-style) config.
 BATCH_MAX = int(os.environ.get("DRAIN_BATCH_MAX", "25"))
 BATCH_MIN = int(os.environ.get("DRAIN_BATCH_MIN", "15"))
@@ -660,13 +672,15 @@ def generate_module(item: dict, pool: AccountPool, deadline: float) -> dict:
             # resolves axiom-encode git provenance via the on-PATH entrypoint.
             "PATH": f"{GEN_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}",
         }
-        rc, out = run(
-            [str(GEN_AE), "encode", citation, "--backend", BACKEND, "--model", MODEL,
-             "--policy-repo-path", str(leaf),
-             "--axiom-rules-engine-path", str(ENGINE),
-             "--corpus-path", str(CORPUS),
-             "--output", str(tmp), "--apply", "--no-sync"],
-            cwd=leaf, env=env, timeout=3600)
+        encode_cmd = [
+            str(GEN_AE), "encode", citation, "--backend", BACKEND, "--model", MODEL,
+            "--policy-repo-path", str(leaf),
+            "--axiom-rules-engine-path", str(ENGINE),
+            "--corpus-path", str(CORPUS),
+            "--output", str(tmp), "--apply", "--no-sync"]
+        if APPLY_TARGET_ONLY:
+            encode_cmd.append("--apply-target-only")
+        rc, out = run(encode_cmd, cwd=leaf, env=env, timeout=3600)
         if LIMIT_SIGNS.search(out):
             limited = True
             res["status"], res["detail"] = "deferred", f"codex limit on {account.name}"
@@ -826,8 +840,15 @@ def find_open_batch_branch(group: str) -> str | None:
     prefix = f"bulk/batch-{suffix}-{group}-"
     data = gh_json(["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
                     "--json", "headRefName"]) or []
-    return next((p["headRefName"] for p in data
-                 if p.get("headRefName", "").startswith(prefix)), None)
+    # The branch is ``…-{group}-{seq}`` where seq is a ``%H%M%S[-N]`` timestamp
+    # (leading digit). Group names never start with a digit, so requiring the
+    # char after the prefix to be a digit stops the "us" prefix from also
+    # matching "us-mi"/"us-nc" branches (which would clobber that batch).
+    for p in data:
+        ref = p.get("headRefName", "")
+        if ref.startswith(prefix) and ref[len(prefix):][:1].isdigit():
+            return ref
+    return None
 
 
 def _meta_artifacts(m: dict) -> list[str]:
