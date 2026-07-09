@@ -1,0 +1,232 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-wv/statute/11-21-21
+  summary: |-
+    Low-income means federal adjusted gross income not more than 150% of the applicable federal poverty guideline based on family-unit size. For tax years beginning on or after January 1, 2007, taxes paid means regular, excess, and bond levies extended against not more than $20,000 of taxable assessed homestead value and paid during the calendar year after early-payment discounts and before late-payment penalties or interest. The refundable credit equals qualifying ad valorem property taxes paid, but is not refunded if less than $10, and current-year federal AMT liability disqualifies the taxpayer for tax years beginning on and after January 1, 2009.
+rules:
+  - name: homestead_exemption_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11-21-21(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "$20,000 homestead exemption"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          20000
+
+  - name: post_2007_taxable_assessed_value_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11-21-21(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "not more than $20,000 of the taxable assessed value of a homestead"
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          20000
+
+  - name: pre_2007_taxable_assessed_value_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11-21-21(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "not more than $10,000 of the taxable assessed value of a homestead"
+    versions:
+      - effective_from: '2003-01-01'
+        formula: |-
+          10000
+
+  - name: low_income_federal_poverty_guideline_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 11-21-21(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "one hundred fifty percent or less of the federal poverty guideline"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.50
+
+  - name: minimum_refundable_credit_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11-21-21(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "may not be refunded if less than $10"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: refund_claim_deadline_years_after_return_due_date
+    kind: parameter
+    dtype: Count
+    source: 11-21-21(a)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "within three years after the due date"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: eligible_taxable_assessed_value_for_taxes_paid
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 11-21-21(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "levies extended against not more than $20,000 of the taxable assessed value of a homestead"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-21#post_2007_taxable_assessed_value_cap
+              output: post_2007_taxable_assessed_value_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2007-01-01'
+        formula: |-
+          min(taxable_assessed_value_of_homestead, post_2007_taxable_assessed_value_cap)
+
+  - name: low_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 11-21-21(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "federal adjusted gross income ... one hundred fifty percent or less of the federal poverty guideline"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-21#low_income_federal_poverty_guideline_multiplier
+              output: low_income_federal_poverty_guideline_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          federal_adjusted_gross_income <= low_income_federal_poverty_guideline_multiplier * federal_poverty_guideline_for_family_unit
+
+  - name: homestead_property_tax_refundable_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 11-21-21(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "shall be allowed a refundable credit ... equal to the amount of ad valorem property taxes paid"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "required to pay the federal alternative minimum income tax ... is disqualified"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "may not be refunded if less than $10"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-21#minimum_refundable_credit_amount
+              output: minimum_refundable_credit_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-21#low_income
+              output: low_income
+              hash: sha256:local
+    versions:
+      - effective_from: '2009-01-01'
+        formula: |-
+          if low_income and allowed_homestead_exemption_under_section_11_6B_3 and not required_to_pay_federal_alternative_minimum_income_tax:
+            if ad_valorem_property_taxes_paid_as_defined < minimum_refundable_credit_amount:
+              0
+            else:
+              ad_valorem_property_taxes_paid_as_defined
+          else:
+            0
+
+  - name: credit_calculated_before_section_23_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 11-21-21(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-wv/statute/11-21-21
+              excerpt: "taxpayers must calculate the credit authorized in this section prior to calculating the credit authorized in section twenty-three"
+    versions:
+      - effective_from: '2012-01-01'
+        formula: |-
+          this_section_credit_is_calculated_prior_to_section_twenty_three_credit
