@@ -681,23 +681,17 @@ def generate_module(item: dict, pool: AccountPool, deadline: float) -> dict:
         module = applied[0]
         juris = module.split("/", 1)[0]
         test_file = module[:-5] + ".test.yaml"
-        # The signed apply manifest's canonical home is the repo-root
-        # ``.axiom/encoding-manifests/<module-path>.json`` (the #1082 relocation).
-        # Capture whatever apply wrote there; if only a co-located
-        # ``<juris>/.axiom`` copy exists (pre-#1082 encoder), relocate it so the
-        # layout gate -- which only allows ``.json`` under repo-root ``.axiom`` --
-        # accepts it.
+        # Capture the signed manifest wherever the pinned encoder placed it, and
+        # do NOT relocate. The #1082 relocation (>= be 1188 / uk 1190) already
+        # moves it to repo-root ``.axiom/encoding-manifests/<juris>/`` where uk/be's
+        # layout gate requires it; rulespec-us (1184, which allows ``.json`` under
+        # the content root) keeps it co-located at ``<juris>/.axiom/encoding-
+        # manifests/``, which is exactly what US ``guard-generated`` expects.
+        # Relocating US manifests to repo-root breaks that gate.
         manifests = [f for f in changed
-                     if f.startswith(".axiom/encoding-manifests/")
+                     if ("/.axiom/encoding-manifests/" in f
+                         or f.startswith(".axiom/encoding-manifests/"))
                      and f.endswith(".json")]
-        if not manifests:
-            for f in [c for c in changed if "/.axiom/encoding-manifests/" in c
-                      and c.endswith(".json")]:
-                pre, post = f.split("/.axiom/encoding-manifests/", 1)
-                dest = f".axiom/encoding-manifests/{pre}/{post}"
-                (leaf / dest).parent.mkdir(parents=True, exist_ok=True)
-                (leaf / f).replace(leaf / dest)
-                manifests.append(dest)
         artifacts = [module]
         if (leaf / test_file).exists():
             artifacts.append(test_file)
@@ -799,8 +793,15 @@ def batch_oracle_coverage(leaf: Path, modules: set[str]) -> tuple[bool, set[str]
             us_link.symlink_to(Path.home() / "TheAxiomFoundation/rulespec-us")
         except OSError:
             pass
-    env = {"PATH": f"{GATE_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
-    rc, out = run([str(GATE_AE), "oracle-coverage", "--root", str(parent), "--json"],
+    # CI runs the changed-file oracle-coverage workflow step with the arbiter
+    # axiom-encode ``main`` (``oracle-coverage-axiom-encode-ref``), which owns
+    # the pending lane. The pinned 1184 encoder (GATE_AE for rulespec-us) has no
+    # ``oracle-coverage-pending`` subcommand and does NOT apply
+    # oracle-coverage-pending.yaml, so every declared-pending output falsely
+    # reads ``unmapped`` -- benching good federal modules the >=1190 CI would
+    # pass. Use COV_AE (the >=1190 cov/main encoder, pending-aware) to mirror CI.
+    env = {"PATH": f"{COV_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
+    rc, out = run([str(COV_AE), "oracle-coverage", "--root", str(parent), "--json"],
                   cwd=leaf, env=env)
     try:
         items = json.loads(out).get("items", [])
