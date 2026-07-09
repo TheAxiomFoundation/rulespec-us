@@ -1,0 +1,119 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nd/statute/57/57-38-01.28
+  summary: A married couple filing a joint return under section 57-38-30.3 is allowed
+    a credit not to exceed three hundred dollars per couple. The credit is the difference
+    between the tax on joint North Dakota taxable income under joint rates and the
+    sum of two single-rate tax amounts. For nonresidents or part-year residents, the
+    credit must be adjusted by the percentage calculated under section 57-38-30.3(1)(f).
+    Qualifying income includes earned income and retirement pension, profit-sharing,
+    stock bonus, or annuity plan income to the extent included in North Dakota taxable
+    income.
+rules:
+- name: statutory_married_couple_credit_maximum
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: "N.D. Cent. Code \xA7 57-38-01.28(1)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+          excerpt: not to exceed three hundred dollars per couple
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '300'
+- name: qualifying_income
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "N.D. Cent. Code \xA7 57-38-01.28(4)(a)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'earned_income_included_in_north_dakota_taxable_income
+
+      + retirement_plan_income_included_in_north_dakota_taxable_income'
+- name: qualifying_income_of_lesser_earning_spouse
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "N.D. Cent. Code \xA7 57-38-01.28(4)(b)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+          excerpt: 'minus the sum of: (1) The amount for one exemption ...; and (2)
+            One-half of the amount of the standard deduction'
+  versions:
+  - effective_from: '0001-01-01'
+    formula: max(0, lesser_spouse_qualifying_income - amount_for_one_exemption_under_section_151_d
+      - (standard_deduction_amount_under_section_63_c_2_a_4 / 2))
+- name: married_couple_joint_return_credit_before_residency_adjustment
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "N.D. Cent. Code \xA7 57-38-01.28(1)-(2)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+          excerpt: not to exceed three hundred dollars per couple
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if married_couple_filing_joint_return_under_section_57_38_30_3: min(
+      maximum_credit_adjusted_by_tax_commissioner, max(0, tax_on_joint_north_dakota_taxable_income_under_joint_rates
+      - (tax_on_qualified_income_of_lesser_earning_spouse_under_single_rates + tax_on_joint_income_minus_qualified_income_of_lesser_earning_spouse_under_single_rates))
+      ) else: 0'
+- name: married_couple_joint_return_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "N.D. Cent. Code \xA7 57-38-01.28(1)-(3)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-nd/statute/57/57-38-01.28
+          excerpt: For a nonresident or part-year resident, the credit under this
+            section must be adjusted based on the percentage
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if nonresident_or_part_year_resident: married_couple_joint_return_credit_before_residency_adjustment
+      * percentage_calculated_under_section_57_38_30_3_1_f else: married_couple_joint_return_credit_before_residency_adjustment'
