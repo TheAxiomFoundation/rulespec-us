@@ -1,0 +1,158 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-de/statute/30/1109
+  summary: |-
+    Resident individual itemized deductions are federal itemized deductions in lieu of the standard deduction, reduced by specified state and other taxes/credits, and increased by specified charitable mileage, self-employed medical insurance, temporary 12% amount, and labor organization membership amounts. Spouses required to file may itemize only if both elect to do so. State and credited other-state income-tax itemized deduction amounts are deemed reduced by the IRC § 68(a) percentage.
+  deferred_outputs:
+    - output: us-de:statutes/30/1109/c#income_tax_itemized_deduction_amount_after_section_68_reduction
+      reason: The formula depends on the percentage determined under Internal Revenue Code section 68(a), and no exact imported RuleSpec output for that percentage is supplied in context.
+rules:
+  - name: self_employment_gross_income_share_threshold
+    kind: parameter
+    dtype: Rate
+    source: 1109(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+              excerpt: "gross income is more than ½ derived from a trade, business or profession"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1 / 2
+
+  - name: temporary_itemized_deduction_increase_rate
+    kind: parameter
+    dtype: Rate
+    source: 1109(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+              excerpt: "before January 1, 1988, an amount equal to 12%"
+    versions:
+      - effective_from: '1987-01-01'
+        formula: |-
+          0.12
+
+  - name: labor_organization_membership_cost_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 1109(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+              excerpt: "not to exceed $500"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          500
+
+  - name: self_employed_taxpayer
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 1109(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-de:statutes/30/1109#self_employment_gross_income_share_threshold
+              output: self_employment_gross_income_share_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          gross_income_share_derived_from_trade_business_or_profession > self_employment_gross_income_share_threshold
+          and not gross_income_is_derived_as_employee
+          and not income_is_interest_dividends_or_other_investment_income
+
+  - name: self_employed_medical_insurance_itemized_deduction_increase
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 1109(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-de:statutes/30/1109#self_employed_taxpayer
+              output: self_employed_taxpayer
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if self_employed_taxpayer and total_cost_of_health_care_insurance <= gross_income_from_trade_business_or_profession: max(0, health_care_insurance_paid - deduction_allowed_under_section_162_l) else: 0
+
+  - name: labor_organization_membership_itemized_deduction_increase
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 1109(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-de:statutes/30/1109#labor_organization_membership_cost_cap
+              output: labor_organization_membership_cost_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if resident_individual_is_active_member_of_labor_organization and not federal_return_deducted_any_labor_organization_membership_cost: min(annual_cost_to_maintain_labor_organization_membership, labor_organization_membership_cost_cap) - employee_benefit_pension_or_similar_labor_organization_payments - lobbying_political_settlement_investigatory_or_government_assessment_labor_organization_payments else: 0
+
+  - name: spouses_may_itemize_deductions
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 1109(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-de/statute/30/1109
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not both_spouses_are_required_to_file_returns
+          or both_spouses_elect_to_itemize_deductions
