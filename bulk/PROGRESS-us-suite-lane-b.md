@@ -60,7 +60,20 @@ composable when those rate sections land in a later train; not a permanent gap.
    (behind lane A + tanf). Mirror or#245.
 5. Re-scan main for any newly-landed N–W rate sections (WV/OR/RI/HI) and compose.
 
+## Oracle side — SHIPPED decoupled from the train
+
+axiom-oracles PR #251 (branch laneb-slice-oracles, off origin/main): VA + UT
+concept mappings + suites + reports + dispositions + conformance covered rows +
+scoreboard regen. Mirrors or#245 (which merged OH's oracle side while OH's
+rulespec pipeline #769 was still open — proving the oracle side is independent of
+the rulespec merge train). PE 6/6 exact both states; TAXSIM-2024 dispositioned
+(VA std-deduction vintage; UT rate vintage + taxpayer-credit scope). 134 oracle
+tests + apply_dispositions/scoreboard/vacuous-gate --checks pass locally. Merge
+one-at-a-time behind lane A + tanf (or#248 GA); rebase just before merge.
+
 ## Log
 - Verified my slice not on origin/main (still 9f2709e0); sections live in unmerged
   #763 (BLOCKED, throttled runners). Composed VA + UT off the #763 head.
 - PE-probed both on pinned PE-US (policyengine[us]==4.18.9) for penny-exact inputs.
+- rulespec VA+UT committed on laneb-slice (held for #763 rebase). Oracle side
+  opened as #251; freshness.json regen fixed the vacuous-gate CI check.
