@@ -1,0 +1,128 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ct/statute/12-700
+      - us-ct/statute/12-704e
+      - us-ct/statute/12-704i
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ct/statute/12-700
+        - us-ct/statute/12-704e
+        - us-ct/statute/12-704i
+      rationale: |-
+        This pipeline computes the Connecticut section 12-700 individual
+        income-tax liability for the ordinary resident wage-earner slice: the
+        graduated tax on Connecticut taxable income (Connecticut adjusted gross
+        income less the section 12-702 personal exemption) less the net of the
+        section 12-703 personal credit and the section 12-700(b) three-per-cent
+        phase-out (benefit recapture). The section 12-700 resident tax SCHEDULE is
+        carried on main as a deferred output (its bracket table depends on upstream
+        filing-status sources not yet imported), so this pipeline supplies the
+        operative 2026 schedule directly — the 3, 5, 5.5, 6, 6.5, 6.9, and 6.99 per
+        cent brackets — exactly as the Ohio pilot supplies its indexed schedule.
+        Because the six-case grid crosses several brackets, each case supplies the
+        cumulative tax at its bracket floor, that floor, and the bracket marginal
+        rate, so the schedule reproduces the graduated tax as the supplied
+        cumulative base plus the supplied marginal rate on taxable income above the
+        floor. To reach a liability comparable to PolicyEngine ct_income_tax to the
+        cent, the amounts this pipeline needs are declared caller-supplied inputs:
+        the section 12-702 personal exemption (15,000 single / 24,000 joint,
+        phased out one dollar per dollar over the threshold, so the supplied
+        subtraction is zero in the higher-income cases), the per-case bracket
+        floor, the cumulative base tax at that floor, the bracket marginal rate,
+        and a single supplied credit standing for the NET of the section 12-703
+        personal credit (which reduces the tax at lower income) and the section
+        12-700(b) three-per-cent phase-out and tax recapture (which ADD to the tax
+        at higher income) — so the supplied credit is positive where the personal
+        credit dominates and negative where the recapture dominates. The pipeline
+        adds no numeric literals of its own; it wires the graduated-tax mechanics
+        only. The section 12-702 exemption and the section 12-703 credit / section
+        12-700(b) recapture are supplied here pending their own executable
+        encodings, mirroring the California pilot's supplied standard deduction and
+        personal exemption credit.
+  summary: |-
+    Composed Connecticut individual income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    Connecticut adjusted gross income into the section 12-700 graduated tax on
+    Connecticut taxable income, so an end-to-end comparison against PolicyEngine
+    (ct_income_tax_before_refundable_credits) and TAXSIM (siitax) does not require
+    the caller to supply the 12-700 bracket application, the section 12-703
+    personal credit, or the section 12-700(b) recapture. It wires: Connecticut
+    taxable income (Connecticut AGI less the supplied section 12-702 personal
+    exemption); the graduated tax as the supplied cumulative base tax at the
+    case's bracket floor plus the supplied marginal rate on taxable income above
+    that floor, which reproduces the statutory 3/5/5.5/6/6.5/6.9/6.99-per-cent
+    schedule for filers above the floor; and that tax less the supplied credit —
+    the net of the section 12-703 personal credit and the section 12-700(b)
+    three-per-cent phase-out / tax recapture, hence positive at lower income and
+    negative (a net addition) at higher income — floored at zero. It deliberately
+    models only the ordinary resident wage earner and excludes the property-tax
+    and earned-income credits, all zero for the childless wage-earner grid.
+    Connecticut AGI, filing status, the personal exemption, the bracket floor,
+    base, and marginal rate, and the net credit are supplied inputs; the exemption
+    and credit thresholds are indexed, so this 2026 pipeline is compared against
+    PolicyEngine at 2026 and against TAXSIM's latest 2024 law year with the
+    indexation vintage dispositioned.
+rules:
+  - name: ct_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-700 and 12-702, Connecticut taxable income after the supplied personal exemption
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-700
+              excerpt: "Connecticut taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_supplied_standard_deduction)
+  - name: ct_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-700, graduated tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-700
+              excerpt: "the tax shall be"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ct_pit_pilot_supplied_bracket_base
+          + ct_pit_pilot_supplied_marginal_rate * max(0, ct_pit_pilot_taxable_income - ct_pit_pilot_supplied_bracket_floor)
+  - name: ct_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-700 graduated tax less the supplied net 12-703 credit / 12-700(b) recapture, floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "credit against the tax"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ct_pit_pilot_schedule_tax - ct_pit_pilot_supplied_nonrefundable_credit)
