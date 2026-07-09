@@ -126,9 +126,39 @@ REPO, REPO_NAME = _derive_repo()
 DRAIN_BASE = Path(
     os.environ.get("DRAIN_BASE", Path.home() / "TheAxiomFoundation" / "_bulk_drain")
 ).resolve()
-GEN_AE = Path(os.environ.get("DRAIN_GEN_AE", DRAIN_BASE / ".venv/bin/axiom-encode"))
 COV_AE = Path(os.environ.get("DRAIN_COV_AE", DRAIN_BASE / ".venv-cov/bin/axiom-encode"))
 COV_PY = Path(os.environ.get("DRAIN_COV_PY", DRAIN_BASE / ".venv-cov/bin/python"))
+
+
+def _toolchain_pin() -> str:
+    tf = CHECKOUT / ".axiom/toolchain.toml"
+    try:
+        return (tomllib.loads(tf.read_text()).get("toolchain", {})
+                .get("axiom_encode_version", "")) or ""
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+
+
+# Per-repo toolchain venv, matched to the checkout's pinned axiom_encode_version.
+# CI installs the pinned encoder and runs validate + the repo ``tests/`` pytest
+# with it, so generation, the gate battery, and the batch pytest all use this
+# same pinned venv. Crucially the manifest-relocation fix (#1082, >= 0.2.1188)
+# must be present, or the signed apply manifest lands under ``<juris>/.axiom``
+# where the layout gate rejects ``.json`` (only repo-root ``.axiom/**`` allows it)
+# -- the exact "Repository layout does not match" red that the shared 1184 venv
+# produced. Unknown pins fall back to the cov/main venv. Build a pin's venv once
+# in the workspace (``uv venv .venv-<x> && uv pip install -e axiom-encode-<x>``).
+_VENV_BY_PIN = {
+    "0.2.1184": DRAIN_BASE / ".venv",       # rulespec-us
+    "0.2.1188": DRAIN_BASE / ".venv-be",    # rulespec-be (relocation release)
+    "0.2.1190": DRAIN_BASE / ".venv-cov",   # rulespec-uk == cov/main
+}
+_PIN_VENV = _VENV_BY_PIN.get(_toolchain_pin(), DRAIN_BASE / ".venv-cov")
+GEN_AE = Path(os.environ.get("DRAIN_GEN_AE") or _PIN_VENV / "bin/axiom-encode")
+# Gate battery + batch pytest use the SAME pinned venv CI installs, so a check
+# that only the pinned encoder enforces fails closed here, not in CI.
+GATE_AE = Path(os.environ.get("DRAIN_GATE_AE") or _PIN_VENV / "bin/axiom-encode")
+GATE_PY = Path(os.environ.get("DRAIN_GATE_PY") or _PIN_VENV / "bin/python")
 ENGINE = Path(os.environ.get("DRAIN_ENGINE", DRAIN_BASE / "axiom-rules-engine"))
 CORPUS = Path(os.environ.get("DRAIN_CORPUS", DRAIN_BASE / "axiom-corpus"))
 ENGINE_BIN = ENGINE / "target" / "debug"
@@ -579,6 +609,26 @@ def mark_batched(slugs: list[str], pr) -> None:
         _stage_index_path().write_text(json.dumps(idx, indent=2, sort_keys=True))
 
 
+def unstage_module(slug: str, reason: str = "") -> None:
+    """Drop a staged module so it no longer batches, and bench its citation in
+    ``drain_failed`` (fail-closed) so a re-drain doesn't loop on it. Used when the
+    CI-faithful batch gate rejects a module's quality."""
+    with _stage_lock:
+        idx = load_staged()
+        meta = idx.pop(slug, None)
+        _stage_index_path().write_text(json.dumps(idx, indent=2, sort_keys=True))
+    sd = _stage_dir(slug)
+    if sd.exists():
+        shutil.rmtree(sd, ignore_errors=True)
+    if meta and meta.get("citation"):
+        fp = DRAIN_BASE / "drain_failed.json"
+        failed = set(json.loads(fp.read_text())) if fp.exists() else set()
+        failed.add(meta["citation"])
+        fp.write_text(json.dumps(sorted(failed), indent=1))
+    if reason:
+        log(f"[stage] fail-closed {slug} ({reason})")
+
+
 def generate_module(item: dict, pool: AccountPool, deadline: float) -> dict:
     """Encode + apply + gate ONE entry in an isolated worktree on a rotated
     account, then stage the passing artifacts for batch assembly. Opens no PR.
@@ -622,56 +672,74 @@ def generate_module(item: dict, pool: AccountPool, deadline: float) -> dict:
             res["status"], res["detail"] = "deferred", f"codex limit on {account.name}"
             return res
         _, st = run(["git", "-C", str(leaf), "status", "--porcelain", "-uall"])
-        applied = [ln[3:] for ln in st.splitlines()
-                   if MODULE_RE.match(ln[3:]) and not ln[3:].endswith(".test.yaml")]
+        changed = [ln[3:] for ln in st.splitlines() if ln[3:].strip()]
+        applied = [f for f in changed
+                   if MODULE_RE.match(f) and not f.endswith(".test.yaml")]
         if rc != 0 or not applied:
             res["detail"] = f"encode/apply failed (rc={rc}); see {tmp}"
             return res
         module = applied[0]
-        test_file = module[:-5] + ".test.yaml"
         juris = module.split("/", 1)[0]
-        rest = module[len(juris) + 1:]
-        manifest = f"{juris}/.axiom/encoding-manifests/{rest[:-5]}.json"
-        if not (leaf / manifest).exists():
-            hits = list((leaf / juris / ".axiom/encoding-manifests").rglob(
-                Path(module).stem + ".json"))
-            manifest = str(hits[0].relative_to(leaf)) if hits else manifest
+        test_file = module[:-5] + ".test.yaml"
+        # The signed apply manifest's canonical home is the repo-root
+        # ``.axiom/encoding-manifests/<module-path>.json`` (the #1082 relocation).
+        # Capture whatever apply wrote there; if only a co-located
+        # ``<juris>/.axiom`` copy exists (pre-#1082 encoder), relocate it so the
+        # layout gate -- which only allows ``.json`` under repo-root ``.axiom`` --
+        # accepts it.
+        manifests = [f for f in changed
+                     if f.startswith(".axiom/encoding-manifests/")
+                     and f.endswith(".json")]
+        if not manifests:
+            for f in [c for c in changed if "/.axiom/encoding-manifests/" in c
+                      and c.endswith(".json")]:
+                pre, post = f.split("/.axiom/encoding-manifests/", 1)
+                dest = f".axiom/encoding-manifests/{pre}/{post}"
+                (leaf / dest).parent.mkdir(parents=True, exist_ok=True)
+                (leaf / f).replace(leaf / dest)
+                manifests.append(dest)
+        artifacts = [module]
+        if (leaf / test_file).exists():
+            artifacts.append(test_file)
+        artifacts += [m for m in manifests if (leaf / m).exists()]
 
         # commit locally so guard-generated can diff against origin/main
-        run(["git", "-C", str(leaf), "add", "--", module, test_file, manifest])
+        run(["git", "-C", str(leaf), "add", "-A"])
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", f"wip: {citation}"])
         roots = subprocess.run([str(COV_PY), str(leaf / "bulk/roots_for.py"), module],
                                capture_output=True, text=True).stdout.strip() or "us"
+        # Gate battery runs with the CI arbiter (axiom-encode main / cov), not the
+        # generation pin, so main-only quality checks fail closed here, not in CI.
+        gate_env = {**env, "PATH": f"{GATE_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
         for gate in (
-            [str(GEN_AE), "guard-generated", "--repo", str(leaf),
+            [str(GATE_AE), "guard-generated", "--repo", str(leaf),
              "--base-ref", "origin/main", "--head-ref", "HEAD", "--roots", roots],
-            [str(GEN_AE), "validate", str(leaf / module), "--skip-reviewers"],
-            [str(GEN_AE), "proof-validate", str(leaf / module)],
+            [str(GATE_AE), "validate", str(leaf / module), "--skip-reviewers"],
+            [str(GATE_AE), "proof-validate", str(leaf / module)],
         ):
-            grc, gout = run(gate, cwd=leaf, env=env)
+            grc, gout = run(gate, cwd=leaf, env=gate_env)
             if grc != 0:
                 res["detail"] = f"gate failed: {gate[1]}\n{gout[-400:]}"
                 return res
-        trc, _ = run([str(GEN_AE), "test", "--root", str(leaf),
+        trc, _ = run([str(GATE_AE), "test", "--root", str(leaf),
                       "--axiom-rules-engine-path", str(ENGINE), str(leaf / test_file)],
-                     cwd=leaf, env=env)
+                     cwd=leaf, env=gate_env)
         gate_status = "green" if trc == 0 else "needs-fixtures"
 
-        # stage the module + test + manifest (durable) for batch assembly
+        # stage all apply artifacts (module + test + canonical manifest) durably
         sd = _stage_dir(slug)
         if sd.exists():
             shutil.rmtree(sd)
-        for rel in (module, test_file, manifest):
+        for rel in artifacts:
             src = leaf / rel
             if src.exists():
                 dst = sd / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
         record_staged(slug, {"citation": citation, "module": module,
-                             "test": test_file, "manifest": manifest,
-                             "group": juris, "gate": gate_status,
-                             "account": account.name,
+                             "artifacts": artifacts, "group": juris,
+                             "gate": gate_status, "account": account.name,
                              "staged_at": datetime.now(timezone.utc).isoformat()})
         res["status"] = gate_status
         res["module"], res["group"] = module, juris
@@ -697,52 +765,109 @@ def hold_blocked() -> tuple[bool, str]:
     return False, ""
 
 
-def assemble_batch(group: str, metas: list[dict], seq: str, wait: bool = False) -> dict:
+_MOD_PATH_RE = re.compile(
+    r"[a-z]{2}(?:-[a-z0-9-]+)?/(?:statutes|regulations|policies)/[^\s'\"#\]]+\.yaml")
+
+
+def batch_pytest(leaf: Path) -> tuple[bool, set[str], str]:
+    """Run the repo's ``tests/`` pytest with the CI arbiter (cov/main + pytest),
+    exactly as CI's ``run-pytest`` step does. Returns (passed, offending module
+    rel-paths, tail). Offenders are the module paths named in failing assertions,
+    so a bad module can be dropped from the batch (fail-closed)."""
+    if not (leaf / "tests").is_dir():
+        return True, set(), "(no tests dir)"
+    env = {"PATH": f"{GATE_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
+    rc, out = run([str(GATE_PY), "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                   "tests"], cwd=leaf, env=env)
+    if rc == 0:
+        return True, set(), out[-200:]
+    return False, {m.group(0) for m in _MOD_PATH_RE.finditer(out)}, out[-1400:]
+
+
+def find_open_batch_branch(group: str) -> str | None:
+    suffix = REPO_NAME.replace("rulespec-", "")
+    prefix = f"bulk/batch-{suffix}-{group}-"
+    data = gh_json(["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
+                    "--json", "headRefName"]) or []
+    return next((p["headRefName"] for p in data
+                 if p.get("headRefName", "").startswith(prefix)), None)
+
+
+def _meta_artifacts(m: dict) -> list[str]:
+    """Repo-relative artifact paths for a staged module (module + test +
+    canonical manifest). Prefers the stored ``artifacts`` list; falls back to the
+    older module/test/manifest keys for entries staged before that field."""
+    arts = m.get("artifacts")
+    if arts:
+        return list(arts)
+    return [x for x in (m.get("module"), m.get("test"), m.get("manifest")) if x]
+
+
+def assemble_batch(group: str, metas: list[dict], seq: str, wait: bool = False,
+                   branch: str | None = None) -> dict:
     """Build ONE merge-train-style batch PR from staged modules: copy all
     artifacts onto a fresh origin/main branch, ONE oracle-coverage-pending sync,
-    ONE reverse-index regen, ONE validation over the whole set, push, auto-merge.
-    Disjoint modules each carry their own signed apply manifest."""
-    slugs = [m["slug"] for m in metas]
+    ONE reverse-index regen, then the CI-faithful gate (per-module validate + the
+    repo ``tests/`` pytest, both cov/main). Modules the gate rejects are dropped
+    (fail-closed) and the batch is rebuilt without them; the rest are pushed +
+    auto-merged. ``branch`` reuses an existing batch PR head (force-push updates
+    that PR in place)."""
     suffix = REPO_NAME.replace("rulespec-", "")
-    branch = f"bulk/batch-{suffix}-{group}-{seq}"
-    result = {"branch": branch, "slugs": slugs, "status": "failed",
-              "pr": None, "detail": ""}
+    branch = branch or f"bulk/batch-{suffix}-{group}-{seq}"
+    result = {"branch": branch, "slugs": [m["slug"] for m in metas],
+              "status": "failed", "pr": None, "detail": "", "dropped": []}
     leaf = make_worktree(f"batch-{group}-{seq}", "origin/main")
     staged_root = STAGE_ROOT / REPO_NAME
+    gate_env = {"PATH": f"{GATE_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
+    dropped: list[str] = []
     try:
         run(["git", "-C", str(leaf), "checkout", "-B", branch], check=True)
-        copied = []
-        for m in metas:
-            for rel in (m.get("module"), m.get("test"), m.get("manifest")):
-                if not rel:
-                    continue
+        for m in metas:                                    # copy all artifacts in
+            for rel in _meta_artifacts(m):
                 src = staged_root / m["slug"] / rel
                 if src.exists():
                     dst = leaf / rel
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
-                    copied.append(rel)
-        if not copied:
-            result["detail"] = "no staged artifacts found on disk"
+        summary = "(no output)"
+        while metas:
+            run(["git", "-C", str(leaf), "add", "-A"])
+            summary = sync_pending(leaf)
+            finalize_pending(leaf)
+            regen_index(leaf)
+            run(["git", "-C", str(leaf), "add", "-A"])
+            # CI-faithful gate: per-module schema validate + repo pytest (cov/main)
+            bad: list[tuple[dict, str]] = []
+            for m in metas:
+                grc, _ = run([str(GATE_AE), "validate", str(leaf / m["module"]),
+                              "--skip-reviewers"], cwd=leaf, env=gate_env)
+                if grc != 0:
+                    bad.append((m, "validate"))
+            if not bad:
+                ok, offenders, tail = batch_pytest(leaf)
+                if ok:
+                    break
+                bad = [(m, "pytest") for m in metas if m["module"] in offenders]
+                if not bad:
+                    result["detail"] = ("batch pytest failed with no attributable "
+                                        f"module; aborting.\n{tail[-300:]}")
+                    return result
+            for m, why in bad:
+                for rel in _meta_artifacts(m):
+                    if (leaf / rel).exists():
+                        run(["git", "-C", str(leaf), "rm", "-q", "-f",
+                             "--ignore-unmatch", rel])
+                unstage_module(m["slug"], reason=f"batch {why} reject")
+                dropped.append(m["slug"])
+            drop_set = {m["slug"] for m, _ in bad}
+            log(f"[batch {group}] dropped {len(drop_set)} module(s) "
+                f"({bad[0][1]}): {sorted(drop_set)}")
+            metas = [m for m in metas if m["slug"] not in drop_set]
+        result["dropped"] = dropped
+        if not metas:
+            result["detail"] = "all modules rejected by CI-faithful gate"
             return result
-        run(["git", "-C", str(leaf), "add", "--", *copied])
-        # ONE sync + ONE index regen for the whole batch
-        summary = sync_pending(leaf)
-        keep_pending = finalize_pending(leaf)
-        regen_index(leaf)
-        add_files = [*copied, ".axiom/index/provisions_to_rules.json"]
-        if keep_pending:
-            add_files.append("oracle-coverage-pending.yaml")
-        run(["git", "-C", str(leaf), "add", "--", *add_files])
-        # fail-closed local validation: every module must validate before PR
-        env = {"PATH": f"{GEN_AE.parent}:{ENGINE_BIN}:{os.environ['PATH']}"}
-        for m in metas:
-            grc, gout = run([str(GEN_AE), "validate", str(leaf / m["module"]),
-                             "--skip-reviewers"], cwd=leaf, env=env)
-            if grc != 0:
-                result["detail"] = (f"batch validate failed on {m['module']}; "
-                                    "aborting batch (staged modules preserved)")
-                return result
+        run(["git", "-C", str(leaf), "add", "-A"])
         n = len(metas)
         needs_fx = sum(1 for m in metas if m.get("gate") == "needs-fixtures")
         title = (f"Batch-encode {n} {group} RuleSpec module(s) (bulk)"
@@ -750,10 +875,11 @@ def assemble_batch(group: str, metas: list[dict], seq: str, wait: bool = False) 
         body_lines = [
             f"## Batch-encoded {n} module(s) - {group}", "",
             "Merge-train-style consolidation: one `oracle-coverage-pending sync`, "
-            "one reverse-index regen, one validation, auto-merge. Modules are "
-            "disjoint by construction; each carries its own signed apply manifest.",
-            "", f"- {summary}",
-            f"- Local gate: {n - needs_fx} green, {needs_fx} needs-fixtures", "",
+            "one reverse-index regen, and the CI-faithful gate (per-module "
+            "validate + the repo `tests/` pytest, cov/main). Disjoint modules each "
+            "carry their own signed apply manifest.", "", f"- {summary}",
+            f"- Local gate: {n - needs_fx} green, {needs_fx} needs-fixtures"
+            + (f", {len(dropped)} dropped (quality)" if dropped else ""), "",
             "| citation | module | gate |", "| --- | --- | --- |"]
         for m in metas:
             body_lines.append(
@@ -770,18 +896,25 @@ def assemble_batch(group: str, metas: list[dict], seq: str, wait: bool = False) 
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,
              "--color", "1f6feb", "-d", "Opened by the bulk-encode dispatcher"])
-        bf = leaf.parent / "pr-body.md"
-        bf.write_text("\n".join(body_lines))
-        _, pr_out = run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
-                         "--head", branch, "--title", title,
-                         "--body-file", str(bf), "--label", "bulk-encode"])
+        existing = gh_json(["pr", "view", branch, "--repo", REPO,
+                            "--json", "number,state"])
+        if existing and existing.get("state") == "OPEN":
+            prnum = existing["number"]                     # force-push updated it
+        else:
+            bf = leaf.parent / "pr-body.md"
+            bf.write_text("\n".join(body_lines))
+            _, pr_out = run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
+                             "--head", branch, "--title", title,
+                             "--body-file", str(bf), "--label", "bulk-encode"])
+            mm = re.search(r"/pull/(\d+)", pr_out or "")
+            prnum = int(mm.group(1)) if mm else None
         run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
-        mm = re.search(r"/pull/(\d+)", pr_out or "")
-        prnum = int(mm.group(1)) if mm else None
-        mark_batched(slugs, prnum)
+        mark_batched([m["slug"] for m in metas], prnum)
         result["status"] = "opened"
         result["pr"] = prnum
-        result["detail"] = f"PR #{prnum} on {branch}: {n} modules; {summary}"
+        result["detail"] = (f"PR #{prnum} on {branch}: {n} module(s)"
+                            + (f", {len(dropped)} dropped" if dropped else "")
+                            + f"; {summary}")
         if wait and prnum:
             result["detail"] += "; " + wait_for_merge(branch)
         return result
@@ -789,36 +922,46 @@ def assemble_batch(group: str, metas: list[dict], seq: str, wait: bool = False) 
         drop_worktree(leaf)
 
 
-def assemble_ready(wait: bool = False, flush: bool = False,
-                   force: bool = False) -> list[dict]:
-    """Consolidate unbatched staged modules into batch PRs, grouped by
-    jurisdiction. Emits full batches (>= BATCH_MIN, up to BATCH_MAX); a trailing
-    partial is emitted only when ``flush``. Held while HOLD_UNTIL_PR is open
-    unless ``force``."""
-    staged = unbatched_staged()
-    if not staged:
+def assemble_ready(wait: bool = False, flush: bool = False, force: bool = False,
+                   update_existing: bool = False) -> list[dict]:
+    """Consolidate staged modules into batch PRs, grouped by jurisdiction. Emits
+    full batches (>= BATCH_MIN, up to BATCH_MAX); a trailing partial only when
+    ``flush``. Held while HOLD_UNTIL_PR is open unless ``force``. With
+    ``update_existing``, rebuilds any open ``bulk/batch-<group>`` PR in place from
+    all its group's staged modules -- used to re-drive a red batch through the
+    CI-faithful gate."""
+    pool = (list(load_staged().values()) if update_existing
+            else unbatched_staged())
+    if not pool:
         return []
     held, why = hold_blocked()
     if held and not force:
-        log(f"holding batch PRs ({why}); {len(staged)} module(s) staged & "
-            "durable -- they batch-PR once the train merges "
-            "(`local_drain.py assemble --flush`).")
+        log(f"holding batch PRs ({why}); {len(pool)} module(s) staged & durable -- "
+            "they batch-PR once the train merges (`assemble --flush`).")
         return []
     by_group = collections.defaultdict(list)
-    for m in staged:
+    for m in pool:
         by_group[m.get("group", "us")].append(m)
     out = []
     seq_base = datetime.now().strftime("%H%M%S")
     for group, metas in sorted(by_group.items()):
         metas.sort(key=lambda m: m.get("module", ""))
+        existing = find_open_batch_branch(group) if update_existing else None
+        if existing:
+            log(f"rebuilding open batch {existing}: {len(metas)} module(s) "
+                "through the CI-faithful gate")
+            out.append(assemble_batch(group, metas, f"{seq_base}-{len(out) + 1}",
+                                      wait=wait, branch=existing))
+            continue
         i = 0
         while i < len(metas):
             chunk = metas[i:i + BATCH_MAX]
             if len(chunk) < BATCH_MIN and not flush:
                 break
-            seq = f"{seq_base}-{len(out) + 1}"
-            log(f"assembling batch {group} #{seq}: {len(chunk)} module(s)")
-            out.append(assemble_batch(group, chunk, seq, wait=wait))
+            log(f"assembling batch {group} #{seq_base}-{len(out) + 1}: "
+                f"{len(chunk)} module(s)")
+            out.append(assemble_batch(group, chunk, f"{seq_base}-{len(out) + 1}",
+                                      wait=wait))
             i += BATCH_MAX
     return out
 
@@ -929,14 +1072,20 @@ def cmd_doctor(_args) -> int:
     if not any_live:
         print("  !! no live ChatGPT-sub account -> nothing to drain "
               "(API billing is refused).")
-    for label, ae, want_pending in (("gen encoder (pin)", GEN_AE, False),
-                                    ("cov encoder (main)", COV_AE, True)):
-        has_pending = ae.exists() and run(
-            [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
-        ok = ae.exists() and (has_pending == want_pending)
-        print(f"{label:20s}: {'OK' if ok else 'CHECK'} "
-              f"(oracle-coverage-pending {'present' if has_pending else 'absent'})")
-    print(f"pinned encoder ver   : {tc.get('axiom_encode_version')}")
+    def _ver(ae: Path) -> str:
+        if not ae.exists():
+            return "MISSING"
+        _, out = run([str(ae), "--version"])
+        m = re.search(r"[Vv]ersion:?\s*([0-9.]+)", out)
+        return m.group(1) if m else "?"
+    pin = tc.get("axiom_encode_version")
+    print(f"gen encoder          : {_ver(GEN_AE)}  {GEN_AE}")
+    print(f"gate encoder (CI ref): {_ver(GATE_AE)}  {GATE_AE}")
+    print(f"cov encoder (pending): {_ver(COV_AE)}  {COV_AE}")
+    pytest_ok = GATE_PY.exists() and run([str(GATE_PY), "-c", "import pytest"])[0] == 0
+    print(f"gate pytest (CI arb) : {'OK' if pytest_ok else 'MISSING -> pip install '
+          'pytest pyyaml into the cov venv'}")
+    print(f"pinned encoder ver   : {pin} (gen==pin: {_ver(GEN_AE) == pin})")
     print(f"engine bin           : {'OK' if ENGINE_BIN.exists() else 'MISSING'} {ENGINE_BIN}")
     print(f"corpus               : {'OK' if CORPUS.exists() else 'MISSING'} {CORPUS}")
     try:
@@ -1082,17 +1231,20 @@ def cmd_drain(args) -> int:
 
 def cmd_assemble(args) -> int:
     """Consolidate staged modules into batch PRs on demand (e.g. once the train
-    merges). Use --force to override the HOLD_UNTIL_PR gate."""
-    staged = unbatched_staged()
+    merges). --force overrides the HOLD_UNTIL_PR gate; --update-existing rebuilds
+    open batch PRs in place (re-drives a red batch through the CI-faithful gate)."""
+    staged = (load_staged().values() if args.update_existing
+              else unbatched_staged())
     if not staged:
-        print("No unbatched staged modules.")
+        print("No staged modules to assemble.")
         return 0
-    out = assemble_ready(wait=args.wait, flush=args.flush, force=args.force)
+    out = assemble_ready(wait=args.wait, flush=args.flush, force=args.force,
+                         update_existing=args.update_existing)
     for b in out:
         log(f"{b['branch']}: {b['status']} - {b.get('detail', '')}")
     if not out:
-        log(f"{len(staged)} staged module(s) not assembled (held or below "
-            f"BATCH_MIN={BATCH_MIN}; use --flush/--force).")
+        log(f"{len(list(staged))} staged module(s) not assembled (held or below "
+            f"BATCH_MIN={BATCH_MIN}; use --flush/--force/--update-existing).")
     return 0
 
 
@@ -1152,6 +1304,9 @@ def main() -> int:
     a = sub.add_parser("assemble", help="Consolidate staged modules into batch PRs.")
     a.add_argument("--flush", action="store_true", help="Include partial batches.")
     a.add_argument("--force", action="store_true", help="Override the HOLD_UNTIL_PR gate.")
+    a.add_argument("--update-existing", action="store_true",
+                   help="Rebuild open batch PRs in place through the CI-faithful "
+                   "gate (re-drive a red batch, dropping quality-rejected modules).")
     a.add_argument("--wait", action="store_true", help="Poll each batch PR to merge.")
     a.set_defaults(func=cmd_assemble)
     ss = sub.add_parser("stage-status", help="Show staged/unbatched module counts.")
