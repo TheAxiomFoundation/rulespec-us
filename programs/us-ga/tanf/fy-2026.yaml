@@ -1,0 +1,89 @@
+# Georgia TANF (Temporary Assistance for Needy Families) -- FY 2026, recipient-month benefit.
+#
+# Mirrors the encoded Georgia DFCS slice in rulespec-us/us-ga:
+#   - policies/dfcs/tanf/appendix-a
+#       (PAMMS Appendix A financial standards by AU size 1..11: gross income
+#        ceiling, standard of need, family maximum, and the +44/+24/+17
+#        each-additional-member increments)
+#   - policies/dfcs/tanf/1605/block-3, block-4, block-14
+#       (PAMMS 1605 budgeting: gross countable income, net countable income,
+#        the GIC / SON financial-eligibility tests, and the Step 11-13 benefit
+#        min(SON deficit, family maximum))
+# and adds the oracle-suite plumbing: the household-membership data relation and
+# a benefit gated on the demographic fact PolicyEngine's ga_tanf requires (a
+# minor child or pregnant member) so the comparison never pays childless units
+# PE's ga_tanf would not. The 1605 standard-of-need budgeting consumes the AU
+# earned-income deduction (PAMMS 1615 standard $250 work deduction) supplied at
+# household scope by the populace input mapping.
+#
+# Target oracle surface: PolicyEngine ga_tanf (SPMUnit, MONTH):
+#   min(max(standard_of_need - countable_income, 0), family_maximum),
+#   defined_for ga_tanf_eligible. The annualized output mirrors the covered
+#   al/co/az convention; the compare framework annualizes PE's monthly ga_tanf.
+
+program: us-ga/tanf
+period: 2026-01
+
+outputs:
+  - ga_tanf_annual_benefit
+
+acknowledged_incomplete:
+  - ga_tanf_annual_benefit
+
+scope:
+  state:
+    - policies/dfcs/tanf/1605/block-14
+
+transformations:
+  - pattern: data_relation
+    name: member_of_household
+    arity: 2
+    source: axiom-oracles ECPS projection household membership
+
+  # The appendix-A financial-standard charts are indexed_by au_size, and the
+  # engine requires an INTEGER parameter key. Unlike Alabama's assistance_unit_size
+  # (statically inferred Count from its >= / <= comparisons against Count params),
+  # GA's au_size is only ever used as a chart subscript, so the compiler would
+  # infer it as decimal and the chart lookup fails ("parameter key must be an
+  # integer"). Declare it Count here, bound to the AU member count supplied by the
+  # populace input mapping.
+  - pattern: derived_formula
+    name: au_size
+    effective_from: '2019-12-01'
+    entity: TanfUnit
+    dtype: Count
+    source: axiom-oracles programs/us-ga/tanf assistance-unit size (integer chart key)
+    formula: assistance_unit_member_count
+
+  # The 1605 block-4 net-countable-income free input
+  # `allowable_earned_income_deductions` is supplied directly at HOUSEHOLD scope
+  # by the populace input mapping as min(monthly AU earned income, 250) --
+  # PolicyEngine's ga_tanf standard $250 work deduction (PAMMS 1615). It is NOT
+  # aggregated from a per-person leaf here: the ECPS composed-program bridge does
+  # not reliably materialise person entities for zero-earner assistance units, so
+  # a per-person sum_where collapses to an empty (None) sum for the non-employed
+  # units that make up most of the TANF caseload. The household projection is
+  # exact for the 0- and 1-earner units that dominate the caseload and diverges
+  # only for the rare multi-earner unit (each earner's $250 cap), dispositioned.
+
+  - pattern: derived_formula
+    name: ga_tanf_monthly_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-ga/tanf demographic-gated monthly benefit
+    formula: |-
+      if household_has_minor_or_pregnant_member: cash_assistance_benefit_amount_after_financial_eligibility else: 0
+
+  - pattern: derived_formula
+    name: ga_tanf_annual_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Year
+    unit: USD
+    source: axiom-oracles programs/us-ga/tanf program output
+    formula: |-
+      ga_tanf_monthly_benefit * 12
