@@ -1,0 +1,171 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-il/statute/35/5/206
+  summary: |-
+    Until January 1, 2005, each corporation subject to the Act was entitled to credits against Section 201(a) and (b) tax equal to 20% of amounts donated to the Illinois Center for Research on Sulfur in Coal and 5% of amounts spent on qualifying Illinois-coal utilization equipment. The equipment amount is the federal depreciation basis. Excess credit may be carried forward to the 5 taxable years following the excess credit year, applied to the earliest liability year and with earlier credits applied first.
+  deferred_outputs:
+    - output: us-il:statutes/35/5/206#coal_credit_applied_against_tax_liability
+      reason: The final application of credits against Section 201 tax liability depends on original or amended tax liability for the credit year, excess-credit carryforward tracking across the 5 following taxable years, earliest-liability-year ordering, and ordering among credits from multiple tax years. Those multi-year liability and ordering mechanics are not representable as a faithful single-period formula here.
+      source_values:
+        - us-il:statutes/35/5/206#coal_credit_carryforward_year_limit
+        - us-il:statutes/35/5/206#coal_research_donation_credit_rate
+        - us-il:statutes/35/5/206#coal_utilization_equipment_credit_rate
+rules:
+  - name: coal_research_donation_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 206(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "a credit ... in an amount equal to 20% of the amount donated"
+          - path: versions[1].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "Until January 1, 2005"
+    versions:
+      - effective_from: '1987-12-31'
+        formula: |-
+          0.20
+      - effective_from: '2005-01-01'
+        formula: |-
+          0
+
+  - name: coal_utilization_equipment_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 206(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "a credit ... in an amount equal to 5% of the amount spent"
+          - path: versions[1].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "Until January 1, 2005"
+    versions:
+      - effective_from: '1987-12-31'
+        formula: |-
+          0.05
+      - effective_from: '2005-01-01'
+        formula: |-
+          0
+
+  - name: coal_credit_carryforward_year_limit
+    kind: parameter
+    dtype: Count
+    source: 206
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "carried forward and applied to the tax liability of the 5 taxable years"
+    versions:
+      - effective_from: '1987-12-31'
+        formula: |-
+          5
+
+  - name: coal_research_donation_credit
+    kind: derived
+    entity: Corporation
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 206(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "each corporation subject to this Act shall be entitled to a credit ... equal to 20% of the amount donated"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:statutes/35/5/206#coal_research_donation_credit_rate
+              output: coal_research_donation_credit_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1987-12-31'
+        formula: |-
+          if corporation_subject_to_act: max(0, amount_donated_to_illinois_center_for_research_on_sulfur_in_coal * coal_research_donation_credit_rate) else: 0
+
+  - name: coal_utilization_equipment_credit
+    kind: derived
+    entity: Corporation
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 206(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "amount spent on qualifying equipment shall be defined as the basis of the equipment used to compute the depreciation deduction for federal income tax purposes"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "equipment purchased for the purpose of maintaining or increasing the use of Illinois coal"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:statutes/35/5/206#coal_utilization_equipment_credit_rate
+              output: coal_utilization_equipment_credit_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '1987-12-31'
+        formula: |-
+          if corporation_subject_to_act and equipment_is_qualifying_direct_coal_combustion_or_necessary_pollution_control_equipment and equipment_purchased_for_maintaining_or_increasing_illinois_coal_use_at_corporation_illinois_facility and equipment_placed_in_service_for_credit_year: max(0, qualifying_equipment_federal_depreciation_basis * coal_utilization_equipment_credit_rate) else: 0
+
+  - name: total_generated_coal_credit
+    kind: derived
+    entity: Corporation
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 206(a), 206(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-il/statute/35/5/206
+              excerpt: "credit ... equal to 20% of the amount donated ... credit ... equal to 5% of the amount spent"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:statutes/35/5/206#coal_research_donation_credit
+              output: coal_research_donation_credit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:statutes/35/5/206#coal_utilization_equipment_credit
+              output: coal_utilization_equipment_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '1987-12-31'
+        formula: |-
+          max(0, coal_research_donation_credit + coal_utilization_equipment_credit)

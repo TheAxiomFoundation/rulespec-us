@@ -1,0 +1,94 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-me/statute/36/5219-S
+  summary: Resident, nonresident, and part-year resident eligible individuals are
+    allowed Maine earned income tax credits based on percentages of the federal earned
+    income credit. For tax years beginning 2022 or after, the percentage is 50% for
+    eligible individuals without a qualifying child and 25% for all other eligible
+    individuals; nonresident and part-year resident credits are multiplied by Maine-to-federal
+    adjusted gross income ratios. The credit may not reduce Maine income tax below
+    zero, except credits under subsections 1, 1-A, 3 and 3-A are refundable for tax
+    years beginning on or after January 1, 2016.
+rules:
+- name: eligible_without_qualifying_child_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: "36 M.R.S. \xA7 5219-S(1-A), (2-A), (3-A)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-me/statute/36/5219-S
+          excerpt: 50% of the federal earned income credit
+  versions:
+  - effective_from: '2022-01-01'
+    formula: '0.50'
+- name: other_eligible_individual_credit_rate
+  kind: parameter
+  dtype: Rate
+  source: "36 M.R.S. \xA7 5219-S(1-A), (2-A), (3-A)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-me/statute/36/5219-S
+          excerpt: 25% of the federal earned income credit
+  versions:
+  - effective_from: '2022-01-01'
+    formula: '0.25'
+- name: maine_earned_income_credit_before_limitation
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "36 M.R.S. \xA7 5219-S(1-A), (2-A), (3-A)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-me/statute/36/5219-S
+          excerpt: multiplied by the ratio of the individual's Maine adjusted gross
+            income ... to the individual's entire federal adjusted gross income
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-me/statute/36/5219-S
+          excerpt: resident individual ... 50% ... without a qualifying child and
+            25% ... all other
+  versions:
+  - effective_from: '2022-01-01'
+    formula: 'if individual_is_eligible_individual: federal_earned_income_credit *
+      (if individual_does_not_have_qualifying_child: eligible_without_qualifying_child_credit_rate
+      else: other_eligible_individual_credit_rate) * (if individual_files_as_nonresident:
+      maine_adjusted_gross_income_ratio else: if individual_files_as_part_year_resident:
+      part_year_maine_adjusted_gross_income_ratio else: 1) else: 0'
+- name: maine_earned_income_credit
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: "36 M.R.S. \xA7 5219-S(4)"
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-me/statute/36/5219-S
+          excerpt: may not reduce the Maine income tax to less than zero, except that
+            ... subsections 1, 1-A, 3 and 3-A is refundable
+  versions:
+  - effective_from: '2022-01-01'
+    formula: |-
+      if individual_files_as_nonresident: min(max(0, maine_earned_income_credit_before_limitation), max(0, maine_income_tax_otherwise_due)) else: maine_earned_income_credit_before_limitation
