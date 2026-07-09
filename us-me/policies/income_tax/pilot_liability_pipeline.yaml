@@ -1,0 +1,121 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-me/statute/36/5111
+      - us-me/statute/36/5124-C
+      - us-me/statute/36/5126-A
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-me/statute/36/5111
+        - us-me/statute/36/5124-C
+        - us-me/statute/36/5126-A
+      rationale: |-
+        This pipeline computes the Maine section 5111 individual income-tax
+        liability for the ordinary resident wage-earner slice: the graduated tax
+        on Maine taxable income (Maine adjusted gross income less the section
+        5124-C standard deduction and the section 5126-A personal exemption). The
+        encoded 5111 module carries the statutory rate tables — for tax years
+        beginning on or after January 1, 2017 a three-bracket schedule of 5.8,
+        6.75, and 7.15 per cent — but section 5111 subsection 1-F requires the
+        Assessor to adjust the bracket dollar amounts each year for inflation, so
+        the operative 2026 bracket boundaries are indexed values PolicyEngine
+        projects (26,800 / 63,450 single; 53,600 / 126,900 joint). Because the
+        six-case grid crosses all three brackets, each case supplies the
+        cumulative tax at its bracket floor, that floor, and the bracket marginal
+        rate, so the schedule reproduces the graduated tax as the supplied
+        cumulative base plus the supplied marginal rate on taxable income above the
+        floor. To reach a liability comparable to PolicyEngine me_income_tax to the
+        cent, the amounts this pipeline needs are declared caller-supplied inputs:
+        the section 5124-C standard deduction plus the section 5126-A personal
+        exemption (both indexed and both phased out at higher income, so the
+        supplied subtraction shrinks in the top cases), the per-case bracket floor,
+        the cumulative base tax at that floor, and the bracket marginal rate. Maine
+        applies no per-exemption tax credit on this childless grid, so the supplied
+        credit is zero. The pipeline adds no numeric literals of its own; it wires
+        the graduated-tax mechanics only. The section 5124-C deduction and section
+        5126-A exemption amounts are supplied here pending their own executable
+        encodings, mirroring the California pilot's supplied standard deduction.
+  summary: |-
+    Composed Maine individual income-tax liability pipeline for the oracle slice
+    at the 2026 tax year. It exposes a TaxUnit-level path from a supplied Maine
+    adjusted gross income into the section 5111 graduated tax on Maine taxable
+    income, so an end-to-end comparison against PolicyEngine
+    (me_income_tax_before_refundable_credits) and TAXSIM (siitax) does not require
+    the caller to supply the 5111 bracket application. It wires: Maine taxable
+    income (Maine AGI less the supplied section 5124-C standard deduction and
+    section 5126-A personal exemption); the graduated tax as the supplied
+    cumulative base tax at the case's bracket floor plus the supplied marginal
+    rate on taxable income above that floor, which reproduces the statutory
+    5.8/6.75/7.15-per-cent schedule for filers above the floor; and that tax less
+    the supplied credit (zero for Maine on this grid), floored at zero. It
+    deliberately models only the ordinary resident wage earner and excludes the
+    property-tax-fairness and other refundable credits, all zero for the childless
+    wage-earner grid. Maine AGI, filing status, the deduction/exemption
+    subtraction, the bracket floor, base, and marginal rate, and the credit are
+    supplied inputs; the Assessor indexes the brackets and the deduction/exemption
+    each year, so this 2026 pipeline is compared against PolicyEngine at 2026 and
+    against TAXSIM's latest 2024 law year with the indexation vintage
+    dispositioned.
+rules:
+  - name: me_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 5111 and 5124-C/5126-A, Maine taxable income after the supplied standard deduction and personal exemption
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/statute/36/5124-C
+              excerpt: "the standard deduction of a resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, me_pit_pilot_adjusted_gross_income - me_pit_pilot_supplied_standard_deduction)
+  - name: me_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 5111, graduated tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/statute/36/5111
+              excerpt: "imposes individual income tax tables"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          me_pit_pilot_supplied_bracket_base
+          + me_pit_pilot_supplied_marginal_rate * max(0, me_pit_pilot_taxable_income - me_pit_pilot_supplied_bracket_floor)
+  - name: me_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 5111 graduated tax less the supplied credit (zero for Maine on this grid), floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/statute/36/5111
+              excerpt: "the tax imposed by this section"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, me_pit_pilot_schedule_tax - me_pit_pilot_supplied_nonrefundable_credit)

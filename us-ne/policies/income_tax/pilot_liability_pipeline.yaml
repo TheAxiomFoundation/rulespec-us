@@ -1,0 +1,123 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ne/statute/77/77-2715.03
+      - us-ne/statute/77/77-2716.01
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ne/statute/77/77-2715.03
+        - us-ne/statute/77/77-2716.01
+      rationale: |-
+        This pipeline computes the Neb. Rev. Stat. section 77-2715.03 progressive
+        bracket tax on Nebraska taxable income for the ordinary resident
+        wage-earner slice at the 2026 tax year. Section 77-2715.03 imposes a
+        four-rate schedule; for taxable years beginning in 2026 the first two
+        statutory rates are 2.46 per cent and 3.51 per cent and the third and
+        fourth rates are both 4.55 per cent (the L.B. 754 rate compression phases
+        the top two rates down to a common 4.55 per cent in 2026 and to 3.99 per
+        cent thereafter), applied across dollar brackets that section 77-2715.03
+        indexes for inflation each year. These bracket floors and rates are
+        carried by the encoded us-ne/statute/77/77-2715.03 module. This pipeline
+        supplies the four operative 2026 single or married-filing-jointly bracket
+        floors and rates as declared caller-supplied current-authority inputs so
+        the marginal application runs end to end without importing the encoded
+        bracket rules. Nebraska taxable income is Nebraska adjusted gross income
+        (federal adjusted gross income adjusted by the section 77-2716 additions
+        and subtractions, none of which apply to the wage slice) less the section
+        77-2716.01 standard deduction; the operative 2026 standard deduction
+        ($8,750 single / $17,550 married filing jointly) is supplied as a declared
+        input rather than derived, because that amount sits in the filing-status
+        and inflation mechanics the flat slice does not carry. The Nebraska
+        personal exemption is a post-tax credit under section 77-2716.01 (the
+        section 77-2715.03 tax is imposed before it), so it is excluded from this
+        before-credits core. The pipeline adds no numeric literals of its own; it
+        wires the progressive-tax mechanics only.
+  summary: |-
+    Composed Nebraska individual income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    Nebraska adjusted gross income into the section 77-2715.03 progressive
+    bracket tax, so an end-to-end comparison against PolicyEngine
+    (ne_income_tax_before_credits) and TAXSIM (siitax) does not require the
+    caller to supply the section 77-2715.03 bracket-application stage boundaries.
+    It wires: Nebraska taxable income (adjusted gross income less the supplied
+    section 77-2716.01 standard deduction); the progressive tax as the marginal
+    sum across the four supplied brackets (2.46, 3.51, 4.55, and 4.55 per cent at
+    the supplied 2026 floors); and the liability as that bracket tax. Because the
+    2026 third and fourth statutory rates are both 4.55 per cent, the top two
+    brackets form a single effective 4.55 per cent band, but the pipeline retains
+    the four-bracket shape of the statutory schedule. It deliberately excludes the
+    section 77-2716.01 personal exemption credit (a post-tax nonrefundable credit
+    that PolicyEngine nets into ne_income_tax_before_refundable_credits, which
+    this before-credits core excludes), the section 77-2715.07 credits, the
+    section 77-2715.07 refundable credits (Nebraska EITC, child, stillborn), and
+    itemized deductions. Nebraska adjusted gross income, filing status, the
+    standard deduction, and the bracket floors and rates are supplied inputs; the
+    2026 floors are the section 77-2715.03 inflation-indexed amounts, so this 2026
+    pipeline is compared against PolicyEngine at 2026 and against TAXSIM's latest
+    2024 law year with the bracket and standard-deduction indexation vintage
+    dispositioned.
+rules:
+  - name: ne_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Neb. Rev. Stat. 77-2716.01, Nebraska taxable income after the supplied standard deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ne/statute/77/77-2716.01
+              excerpt: "the Nebraska standard deduction"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ne_pit_pilot_adjusted_gross_income - ne_pit_pilot_supplied_deductions)
+  - name: ne_pit_pilot_bracket_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Neb. Rev. Stat. 77-2715.03, progressive tax as the marginal sum across the supplied bracket floors and rates
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ne/statute/77/77-2715.03
+              excerpt: "There is hereby imposed a tax on the Nebraska taxable income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, min(ne_pit_pilot_taxable_income, ne_pit_pilot_supplied_bracket_floor_2) - ne_pit_pilot_supplied_bracket_floor_1) * ne_pit_pilot_supplied_bracket_rate_1
+          + max(0, min(ne_pit_pilot_taxable_income, ne_pit_pilot_supplied_bracket_floor_3) - ne_pit_pilot_supplied_bracket_floor_2) * ne_pit_pilot_supplied_bracket_rate_2
+          + max(0, min(ne_pit_pilot_taxable_income, ne_pit_pilot_supplied_bracket_floor_4) - ne_pit_pilot_supplied_bracket_floor_3) * ne_pit_pilot_supplied_bracket_rate_3
+          + max(0, ne_pit_pilot_taxable_income - ne_pit_pilot_supplied_bracket_floor_4) * ne_pit_pilot_supplied_bracket_rate_4
+  - name: ne_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Neb. Rev. Stat. 77-2715.03 bracket tax, before the section 77-2716.01 personal exemption credit and the section 77-2715.07 credits, for the wage-earner slice
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ne/statute/77/77-2715.03
+              excerpt: "There is hereby imposed a tax on the Nebraska taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ne_pit_pilot_bracket_tax
