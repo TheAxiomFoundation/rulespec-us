@@ -1,0 +1,178 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-id/statute/63-3024
+  summary: Tax is imposed on every individual, trust, or estate required to file a
+    return. The tax is 5.3% of taxable income over $2,500, or over $5,000 for joint
+    returns; surviving spouse and head of household returns are treated as joint returns.
+    The state tax commission annually prescribes an inflation factor for the thresholds.
+rules:
+- name: individual_trust_estate_tax_rate
+  kind: parameter
+  dtype: Rate
+  source: Idaho Code section 63-3024(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: five and three-tenths percent (5.3%)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.053'
+- name: statutory_non_joint_taxable_income_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: Idaho Code section 63-3024(2)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: taxable income over two thousand five hundred dollars ($2,500)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '2500'
+- name: statutory_joint_taxable_income_threshold
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: Idaho Code section 63-3024(2)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: taxable income over five thousand dollars ($5,000)
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '5000'
+- name: adjusted_non_joint_taxable_income_threshold
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Idaho Code section 63-3024(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: 'The Idaho tax thresholds shall be adjusted as follows: multiply
+            the last threshold amount by the percentage'
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3024#statutory_non_joint_taxable_income_threshold
+          output: statutory_non_joint_taxable_income_threshold
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: statutory_non_joint_taxable_income_threshold * idaho_income_tax_threshold_inflation_factor
+- name: adjusted_joint_taxable_income_threshold
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Idaho Code section 63-3024(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: 'The Idaho tax thresholds shall be adjusted as follows: multiply
+            the last threshold amount by the percentage'
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3024#statutory_joint_taxable_income_threshold
+          output: statutory_joint_taxable_income_threshold
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: statutory_joint_taxable_income_threshold * idaho_income_tax_threshold_inflation_factor
+- name: idaho_income_tax_threshold
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Idaho Code section 63-3024(2)-(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: For taxpayers filing a joint return ... a return of a surviving
+            spouse ... and a head of household ... shall be treated as a joint return.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3024#adjusted_non_joint_taxable_income_threshold
+          output: adjusted_non_joint_taxable_income_threshold
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3024#adjusted_joint_taxable_income_threshold
+          output: adjusted_joint_taxable_income_threshold
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if return_is_joint_or_treated_as_joint_for_section_63_3024: adjusted_joint_taxable_income_threshold
+      else: adjusted_non_joint_taxable_income_threshold'
+- name: idaho_individual_trust_estate_income_tax
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Idaho Code section 63-3024(1)-(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: imposed upon every individual, trust, or estate required by this
+            chapter to file a return
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3024
+          excerpt: computed at the rate of five and three-tenths percent (5.3%) of
+            taxable income over
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3024#individual_trust_estate_tax_rate
+          output: individual_trust_estate_tax_rate
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3024#idaho_income_tax_threshold
+          output: idaho_income_tax_threshold
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if required_to_file_return_under_this_chapter: individual_trust_estate_tax_rate
+      * max(0, idaho_taxable_income - idaho_income_tax_threshold) else: 0'

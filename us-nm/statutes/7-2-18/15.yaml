@@ -1,0 +1,158 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nm/statute/7-2-18.15
+  summary: |-
+    A resident taxpayer filing an individual New Mexico income tax return may claim the working families tax credit equal to twenty percent for taxable years beginning on or after January 1, 2021, and twenty-five percent for taxable years beginning on or after January 1, 2023, of the federal earned income tax credit for which the taxpayer is eligible or would have been eligible but for specified identification-number or age requirements; the age path applies if the taxpayer is at least eighteen but has not reached twenty-five. Excess credit over income tax liability is refunded.
+rules:
+  - name: working_families_tax_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: Subsections A and B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "twenty percent for taxable years beginning on or after January 1, 2021"
+          - path: versions[1].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "twenty-five percent for taxable years beginning on or after January 1, 2023"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          0.20
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.25
+
+  - name: age_exception_minimum_age
+    kind: parameter
+    dtype: Integer
+    source: Subsection B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "at least eighteen years of age"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          18
+
+  - name: age_exception_exclusive_maximum_age
+    kind: parameter
+    dtype: Integer
+    source: Subsection B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "has not reached the age of twenty-five"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          25
+
+  - name: taxpayer_qualifies_for_working_families_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Subsections A and B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "at least eighteen years of age but has not reached the age of twenty-five"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          taxpayer_is_resident
+          and taxpayer_files_individual_new_mexico_income_tax_return
+          and (
+            taxpayer_is_eligible_for_federal_earned_income_tax_credit
+            or taxpayer_would_be_eligible_for_federal_earned_income_tax_credit_but_for_identification_number_requirement
+            or (
+              taxpayer_would_be_eligible_for_federal_earned_income_tax_credit_but_for_age_requirement
+              and taxpayer_age >= age_exception_minimum_age
+              and taxpayer_age < age_exception_exclusive_maximum_age
+            )
+          )
+
+  - name: working_families_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    source: Subsections A, B, and E
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "of the federal earned income tax credit for which that taxpayer is eligible for the same taxable year"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nm:statutes/7-2-18/15#working_families_tax_credit_rate
+              output: working_families_tax_credit_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nm:statutes/7-2-18/15#taxpayer_qualifies_for_working_families_tax_credit
+              output: taxpayer_qualifies_for_working_families_tax_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          if taxpayer_qualifies_for_working_families_tax_credit: working_families_tax_credit_rate * max(0, federal_earned_income_tax_credit_amount_for_same_taxable_year) else: 0
+
+  - name: working_families_tax_credit_refund
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    source: Subsection D
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nm/statute/7-2-18.15
+              excerpt: "If the credit exceeds the individual's income tax liability for the taxable year, the excess shall be refunded"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nm:statutes/7-2-18/15#working_families_tax_credit
+              output: working_families_tax_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          max(0, working_families_tax_credit - income_tax_liability)

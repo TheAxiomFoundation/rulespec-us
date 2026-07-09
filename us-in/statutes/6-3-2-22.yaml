@@ -1,0 +1,128 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-in/statute/6-3-2-22
+  summary: Sec. 22. "Dependent child" means an individual who is eligible to receive
+    a free elementary or high school education in an Indiana school corporation, qualifies
+    as a dependent under IRC section 152, and is the taxpayer's natural or adopted
+    child or court appointed guardian/custodian child. A taxpayer who makes an unreimbursed
+    education expenditure during the taxable year is entitled to a deduction against
+    adjusted gross income. The deduction is $1,000 multiplied by the number of dependent
+    children for whom education expenditures were made. A husband and wife are entitled
+    to only one deduction.
+rules:
+- name: education_expenditure_deduction_amount_per_child
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: IC 6-3-2-22(d)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-in/statute/6-3-2-22
+          excerpt: one thousand dollars ($1,000)
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '1000'
+- name: dependent_child_for_education_expenditure_deduction
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Year
+  source: IC 6-3-2-22(a)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-in/statute/6-3-2-22
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'child_eligible_for_free_indiana_elementary_or_high_school_education
+
+      and child_qualifies_as_taxpayer_dependent_under_section_152
+
+      and (child_is_taxpayer_natural_or_adopted_child or taxpayer_has_court_awarded_guardianship_or_custody_of_child)
+
+      and taxpayer_is_parent_eligible_to_take_exemption_if_parents_divorced'
+- name: private_elementary_or_high_school_education_program
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Year
+  source: IC 6-3-2-22(a)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-in/statute/6-3-2-22
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'child_attends_indiana_nonpublic_school_satisfying_compulsory_attendance
+
+      and not instructional_service_delivered_in_home_setting_to_child_enrolled_in_school_corporation_or_charter_school'
+- name: unreimbursed_education_expenditure_for_dependent_child
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Year
+  source: IC 6-3-2-22(a)(2), (c), (d)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-in/statute/6-3-2-22
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'dependent_child_for_education_expenditure_deduction
+
+      and private_elementary_or_high_school_education_program
+
+      and taxpayer_made_unreimbursed_education_expenditure_for_child_during_taxable_year'
+- name: education_expenditure_dependent_children
+  kind: data_relation
+  data_relation:
+    predicate: education_expenditure_dependent_children
+    arity: 2
+    arguments:
+    - name: education_expenditure_dependent_child
+      entity: Person
+    - name: tax_unit
+      entity: TaxUnit
+- name: education_expenditure_deduction
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: IC 6-3-2-22(c), (d), (e)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-in/statute/6-3-2-22
+          excerpt: $1,000; multiplied by ... the number of the taxpayer's dependent
+            children
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-in:statutes/6-3-2-22#education_expenditure_deduction_amount_per_child
+          output: education_expenditure_deduction_amount_per_child
+          hash: sha256:local
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'if taxpayer_claims_deduction_on_annual_state_tax_return: education_expenditure_deduction_amount_per_child
+      * count_where(education_expenditure_dependent_children, unreimbursed_education_expenditure_for_dependent_child)
+      else: 0'
