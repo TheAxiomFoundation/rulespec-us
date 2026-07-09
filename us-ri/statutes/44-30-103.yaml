@@ -1,0 +1,227 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ri/statute/44-30-103
+  summary: |-
+    Defines “child” as an individual eighteen years of age or under as of December 31, 2021, and “eligible taxpayer” by Rhode Island domicile, timely 2021 personal income tax filing, filing category, and federal adjusted gross income thresholds of $100,000 or $200,000. Provides a $250 rebate for each validly claimed child dependent, up to three children; amended filings after August 31, 2022 do not determine the rebate; fraudulent dependent claims incur a $10,000 penalty per dependent plus repayment.
+  deferred_outputs:
+    - output: us-ri:statutes/44-30-103/a#eligible_taxpayer
+      reason: Eligibility depends on Rhode Island personal income tax filing-status classifications and timely return filing mechanics not supplied as executable upstream RuleSpec context; filing status cannot be modeled as a local input under the RuleSpec filing-status protocol.
+    - output: us-ri:statutes/44-30-103/b#rebate_payment_issuance_and_payee
+      reason: The administrative issuance/payee and no-offset/no-income/no-interest treatment clauses are not a scalar taxpayer computation in the supported schema; the executable rebate amount is encoded separately.
+rules:
+  - name: child_maximum_age
+    kind: parameter
+    dtype: Integer
+    source: 44-30-103(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "“child” means an individual who is eighteen years of age or under as of December 31, 2021"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          18
+
+  - name: single_separate_head_widow_agi_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 44-30-103(a)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "federal adjusted gross income of $100,000.00 or less"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          100000
+
+  - name: joint_agi_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 44-30-103(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "Married filing jointly with a federal adjusted gross income of $200,000.00 or less"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          200000
+
+  - name: rebate_amount_per_child
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 44-30-103(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "a rebate payment in the amount of two hundred fifty dollars for each child"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          250
+
+  - name: maximum_rebate_children
+    kind: parameter
+    dtype: Count
+    source: 44-30-103(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "up to a maximum of three children"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: fraudulent_dependent_penalty_per_dependent
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 44-30-103(b)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "a ten thousand dollar ($10,000) penalty for each dependent fraudulently claimed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10000
+
+  - name: child_for_rebate
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 44-30-103(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "“child” means an individual who is eighteen years of age or under as of December 31, 2021"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ri:statutes/44-30-103#child_maximum_age
+              output: child_maximum_age
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          age_as_of_rebate_child_reference_date <= child_maximum_age
+
+  - name: rebate_child_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Count
+    period: Year
+    source: 44-30-103(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "for each child, up to a maximum of three children, whom the eligible taxpayer validly claims as a dependent"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ri:statutes/44-30-103#maximum_rebate_children
+              output: maximum_rebate_children
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(validly_claimed_child_dependent_count, maximum_rebate_children)
+
+  - name: rebate_payment_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 44-30-103(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "An eligible taxpayer will be issued a rebate payment in the amount of two hundred fifty dollars for each child, up to a maximum of three children"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ri:statutes/44-30-103#rebate_amount_per_child
+              output: rebate_amount_per_child
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ri:statutes/44-30-103#rebate_child_count
+              output: rebate_child_count
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if taxpayer_is_eligible_taxpayer_under_subsection_a: rebate_amount_per_child * rebate_child_count else: 0
+
+  - name: fraudulent_dependent_claim_penalty
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 44-30-103(b)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ri/statute/44-30-103
+              excerpt: "shall pay a ten thousand dollar ($10,000) penalty for each dependent fraudulently claimed"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ri:statutes/44-30-103#fraudulent_dependent_penalty_per_dependent
+              output: fraudulent_dependent_penalty_per_dependent
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          fraudulent_dependent_penalty_per_dependent * fraudulently_claimed_dependent_count
