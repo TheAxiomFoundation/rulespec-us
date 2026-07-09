@@ -1,0 +1,110 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ky/statute/141.020
+      - us-ky/statute/141.081
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ky/statute/141.020
+        - us-ky/statute/141.081
+      rationale: |-
+        This pipeline computes the Kentucky section 141.020 individual
+        income-tax liability for the ordinary resident wage-earner slice: the
+        flat tax on Kentucky taxable income (Kentucky adjusted gross income less
+        the section 141.081 standard deduction). The encoded 141.020 levy carries
+        the statutory single-rate structure, but KRS 141.020(2)(d) steps the rate
+        down by legislation when the budget-reserve conditions are met (from 5 per
+        cent to 4 per cent to 3.5 per cent) and section 141.081 indexes the
+        standard deduction each year, so the operative 2026 rate (3.5 per cent)
+        and standard deduction ($3,344) are the current values PolicyEngine
+        applies. To reach a liability comparable to PolicyEngine ky_income_tax to
+        the cent, every amount this pipeline needs is a declared caller-supplied
+        input: the 3.5-per-cent rate and the section 141.081 standard deduction
+        supplied as the AGI-to-taxable-income subtraction. Kentucky has no
+        per-exemption tax credit for these cases (the family-size tax credit is
+        zero above its income ceiling), so the supplied nonrefundable exemption
+        credit is zero, and Kentucky imposes the flat rate from the first dollar
+        of taxable income, so the supplied no-tax threshold is zero. The pipeline
+        adds no numeric literals of its own; it wires the flat-rate mechanics only.
+  summary: |-
+    Composed Kentucky individual income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    Kentucky adjusted gross income into the section 141.020 flat tax on Kentucky
+    taxable income, so an end-to-end comparison against PolicyEngine
+    (ky_income_tax_before_refundable_credits) and TAXSIM (siitax) does not require
+    the caller to supply the 141.020 rate application. It wires: Kentucky taxable
+    income (Kentucky AGI less the supplied section 141.081 standard deduction);
+    the tax as the supplied 3.5-per-cent rate on all Kentucky taxable income (the
+    supplied no-tax threshold is zero, Kentucky having no zero bracket); and that
+    tax less the supplied nonrefundable exemption credit (zero; the family-size
+    tax credit is zero above its income ceiling), floored at zero. It deliberately
+    models only the ordinary resident wage earner and excludes the family-size
+    and other nonrefundable credits, all zero for the childless wage grid.
+    Kentucky AGI, filing status, the no-tax threshold, the rate, the standard
+    deduction, and the exemption credit are supplied inputs; the rate steps by
+    legislation and the standard deduction is indexed, so this 2026 pipeline is
+    compared against PolicyEngine at 2026 and against TAXSIM's latest 2024 law
+    year with the 2024-to-2026 rate-step and deduction vintage dispositioned.
+rules:
+  - name: ky_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 141.081, Kentucky taxable income after the supplied standard deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ky/statute/141.081
+              excerpt: "optional standard deduction"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ky_pit_pilot_adjusted_gross_income - ky_pit_pilot_supplied_personal_exemption)
+  - name: ky_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 141.020, flat tax as the supplied rate on Kentucky taxable income above the supplied no-tax threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ky/statute/141.020
+              excerpt: "A tax at the rate provided in this subsection is hereby imposed"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ky_pit_pilot_supplied_first_bracket_rate * min(ky_pit_pilot_taxable_income, ky_pit_pilot_supplied_no_tax_threshold)
+          + ky_pit_pilot_supplied_excess_rate * max(0, ky_pit_pilot_taxable_income - ky_pit_pilot_supplied_no_tax_threshold)
+  - name: ky_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 141.020 flat tax less the supplied nonrefundable exemption credit, floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ky/statute/141.020
+              excerpt: "the tax imposed by this section"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ky_pit_pilot_schedule_tax - ky_pit_pilot_supplied_exemption_credit)
