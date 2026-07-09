@@ -279,7 +279,8 @@ def unstick_pr(branch: str, wait: bool) -> str:
                "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
-        run(["git", "-C", str(leaf), "push", "-f", "origin", f"HEAD:{branch}"], check=True)
+        run(["git", "-C", str(leaf), "push", "-f", "origin",
+             f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
         result = f"rebuilt+pushed {branch}: {summary}"
         if wait:
@@ -318,6 +319,15 @@ def already_handled(slug: str) -> bool:
     pr = gh_json(["pr", "list", "--repo", REPO, "--head", f"bulk/{slug}",
                   "--state", "all", "--json", "number,state"])
     return bool(pr)
+
+
+def handled_slugs() -> set:
+    """All bulk/<slug> that already have a PR (any state), in one gh call, so a
+    drain chunk skips already-PR'd entries without a per-entry API round-trip."""
+    data = gh_json(["pr", "list", "--repo", REPO, "--state", "all", "--limit", "400",
+                    "--json", "headRefName"]) or []
+    return {p["headRefName"].split("/", 1)[1] for p in data
+            if p.get("headRefName", "").startswith("bulk/")}
 
 
 def encode_entry(item: dict) -> dict:
@@ -413,7 +423,8 @@ def encode_entry(item: dict) -> dict:
                       "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "--amend", "-m", commit_msg])
-        run(["git", "-C", str(leaf), "push", "-f", "origin", f"HEAD:{branch}"], check=True)
+        run(["git", "-C", str(leaf), "push", "-f", "origin",
+             f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,
              "--color", "1f6feb", "-d", "Opened by the bulk-encode dispatcher"])
         body = (f"## Locally bulk-encoded module\n\n- Citation: `{citation}`\n"
@@ -454,7 +465,7 @@ def flip_statuses(updates: dict) -> None:
              "Flip drained worklist statuses (bulk)\n\n"
              "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"])
         run(["git", "-C", str(leaf), "push", "-f", "origin",
-             "HEAD:bulk/worklist-status-flip"], check=True)
+             "HEAD:refs/heads/bulk/worklist-status-flip"], check=True)
         run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
              "--head", "bulk/worklist-status-flip", "--title",
              "Flip drained worklist statuses (bulk)", "--body",
@@ -532,36 +543,81 @@ def cmd_drain(args) -> int:
          *(["--batch", args.batch] if args.batch else []),
          *(["--limit", str(args.limit)] if args.limit else [])],
         capture_output=True, text=True, cwd=CHECKOUT).stdout)["include"]
+    handled = handled_slugs()
+    failed_path = DRAIN_BASE / "drain_failed.json"
+    failed = set(json.loads(failed_path.read_text())) if failed_path.exists() else set()
+    matrix = [it for it in matrix
+              if it["slug"] not in handled and it["citation"] not in failed]
     if args.max_entries:
         matrix = matrix[: args.max_entries]
-    log(f"drain {len(matrix)} entr(ies), concurrency={args.concurrency}")
+    log(f"drain: {len(handled)} already PR'd, {len(failed)} known-failed -> "
+        f"{len(matrix)} to attempt; concurrency={args.concurrency}, "
+        f"max_seconds={args.max_seconds}")
     results, flips = [], {}
     deadline = time.time() + args.max_seconds
+    # Rolling bounded pool: keep `concurrency` encodes in flight; stop launching
+    # NEW work once the chunk deadline passes or a limit signal pauses us, then
+    # let in-flight finish. already_handled() skips already-PR'd entries fast, so
+    # the window advances past done work without re-encoding it.
+    it = iter(matrix)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as ex:
-        futs = {}
-        for item in matrix:
-            if time.time() > deadline or _PAUSE.is_set():
-                break
-            futs[ex.submit(encode_entry, item)] = item
-        for fut in concurrent.futures.as_completed(futs):
-            r = fut.result()
-            results.append(r)
-            log(f"{r['citation']}: {r['status']} - {r['detail'].splitlines()[0] if r['detail'] else ''}")
-            if r["status"] in ("green", "needs-fixtures"):
-                flips[r["citation"]] = "pr-open" if r["status"] == "green" else "needs-fixtures"
-            elif r["status"] == "failed":
-                flips[r["citation"]] = "failed"
+        inflight = set()
+        for _ in range(args.concurrency):
+            item = next(it, None)
+            if item is not None:
+                inflight.add(ex.submit(encode_entry, item))
+        while inflight:
+            done, inflight = concurrent.futures.wait(
+                inflight, return_when=concurrent.futures.FIRST_COMPLETED)
+            for fut in done:
+                r = fut.result()
+                results.append(r)
+                log(f"{r['citation']}: {r['status']} - "
+                    f"{r['detail'].splitlines()[0] if r['detail'] else ''}")
+                if r["status"] in ("green", "needs-fixtures"):
+                    flips[r["citation"]] = ("pr-open" if r["status"] == "green"
+                                            else "needs-fixtures")
+                elif r["status"] == "failed":
+                    flips[r["citation"]] = "failed"
+                if not _PAUSE.is_set() and time.time() < deadline:
+                    item = next(it, None)
+                    if item is not None:
+                        inflight.add(ex.submit(encode_entry, item))
     remaining = int(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
          "--status", "pending", "--format", "count"],
         capture_output=True, text=True, cwd=CHECKOUT).stdout or 0)
     write_progress(results, remaining, _PAUSE.is_set())
-    try:
-        flip_statuses(flips)
-    except Exception as exc:  # noqa: BLE001
-        log(f"worklist flip deferred: {exc}")
-    log(f"chunk done: {len(results)} handled, {remaining} pending remain, "
-        f"paused={_PAUSE.is_set()}")
+    # Persist flips durably to a file and batch them into ONE worklist PR later
+    # (`local_drain.py flip`), instead of a per-chunk PR that would thrash under
+    # rapid draining. already_handled() provides idempotency regardless.
+    if flips:
+        flip_path = DRAIN_BASE / "drain_flips.json"
+        existing = json.loads(flip_path.read_text()) if flip_path.exists() else {}
+        existing.update(flips)
+        flip_path.write_text(json.dumps(existing, indent=2, sort_keys=True))
+    new_failed = {r["citation"] for r in results if r["status"] == "failed"}
+    if new_failed:
+        failed |= new_failed
+        failed_path.write_text(json.dumps(sorted(failed), indent=1))
+    log(f"chunk done: opened/gated={sum(1 for r in results if r['status'] in ('green','needs-fixtures'))} "
+        f"failed={len(new_failed)} attempted={len(results)}, paused={_PAUSE.is_set()}")
+    return 0
+
+
+def cmd_flip(_args) -> int:
+    """Batch the accumulated drain status flips into one worklist PR."""
+    flip_path = DRAIN_BASE / "drain_flips.json"
+    if not flip_path.exists():
+        print("No accumulated flips.")
+        return 0
+    flips = json.loads(flip_path.read_text())
+    if not flips:
+        print("No accumulated flips.")
+        return 0
+    log(f"flipping {len(flips)} worklist statuses in one PR")
+    flip_statuses(flips)
+    flip_path.write_text("{}")
     return 0
 
 
@@ -583,6 +639,8 @@ def main() -> int:
     u.set_defaults(func=cmd_unstick)
     doc = sub.add_parser("doctor", help="Verify toolchain, auth, signing key.")
     doc.set_defaults(func=cmd_doctor)
+    fl = sub.add_parser("flip", help="Batch accumulated drain status flips into one PR.")
+    fl.set_defaults(func=cmd_flip)
     args = ap.parse_args()
     return args.func(args)
 
