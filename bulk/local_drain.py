@@ -1206,7 +1206,13 @@ def cmd_drain(args) -> int:
          *(["--batch", args.batch] if args.batch else []),
          *(["--limit", str(args.limit)] if args.limit else [])],
         capture_output=True, text=True, cwd=CHECKOUT).stdout)["include"]
-    handled = handled_slugs()
+    # ``handled_slugs`` scans PRs in ALL states, so a slug whose only PR is
+    # CLOSED (e.g. a stale pre-batch single we closed to re-encode into a batch)
+    # still counts as handled and is skipped. DRAIN_IGNORE_HANDLED=1 re-drains it.
+    handled = (set()
+               if os.environ.get("DRAIN_IGNORE_HANDLED", "").strip().lower()
+               not in ("", "0", "false", "no")
+               else handled_slugs())
     staged_now = set(load_staged().keys())
     failed_path = DRAIN_BASE / "drain_failed.json"
     failed = set(json.loads(failed_path.read_text())) if failed_path.exists() else set()
