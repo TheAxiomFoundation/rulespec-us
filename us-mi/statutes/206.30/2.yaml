@@ -1,0 +1,102 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mi/statute/206.30/2
+  summary: |-
+    Except as otherwise provided in subsection (7), and section 30a, a personal exemption of $3,700.00 multiplied by the number of personal and dependency exemptions shall be subtracted. Each taxpayer may claim 1 personal exemption; a spouse may be claimed on a non-joint return if the spouse has no gross income and is not another taxpayer's dependent; dependency and stillbirth-certificate exemptions may also be claimed.
+  deferred_outputs:
+    - output: us-mi:statutes/206.30/2#personal_exemption_subtraction
+      reason: The final subtraction is expressly subject to subsection (7) and section 30a. No copied context provides the exact operative displacement or modification rules for those cited provisions, so the final after-exception subtraction is deferred. This module encodes the source-stated baseline amount, exemption-count mechanics, and pre-exception calculation.
+rules:
+  - name: personal_exemption_base_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: MCL 206.30(2), opening sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+              excerpt: "a personal exemption of $3,700.00"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3700
+
+  - name: spouse_personal_exemption_may_be_claimed
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: MCL 206.30(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          taxpayer_has_spouse
+          and joint_return_not_made_by_taxpayer_and_spouse
+          and spouse_has_no_gross_income_for_calendar_year
+          and not spouse_is_dependent_of_another_taxpayer
+
+  - name: personal_and_dependency_exemption_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Count
+    period: Year
+    source: MCL 206.30(2)(a)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          taxpayer_count
+          + (if spouse_personal_exemption_may_be_claimed: 1 else: 0)
+          + dependents_of_taxpayer_count_for_tax_year
+          + (if taxpayer_has_certificate_of_stillbirth_for_tax_year: 1 else: 0)
+
+  - name: personal_exemption_subtraction_before_exceptions
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: MCL 206.30(2), opening sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-mi:statutes/206.30/2#personal_exemption_base_amount
+              output: personal_exemption_base_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-mi:statutes/206.30/2#personal_and_dependency_exemption_count
+              output: personal_and_dependency_exemption_count
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          personal_exemption_base_amount * personal_and_dependency_exemption_count
