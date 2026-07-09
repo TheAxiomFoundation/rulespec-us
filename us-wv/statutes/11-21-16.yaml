@@ -1,0 +1,233 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-wv/statute/11-21-16
+  summary: 'Resident individuals are allowed a West Virginia exemption for each federal
+    exemption: $600 before 1983, $700 for taxable years beginning in 1983, $800 for
+    taxable years beginning on or after 1984, and $2,000 for taxable years beginning
+    on or after 1987. For taxable years beginning after December 31, 1986, a surviving
+    spouse is allowed one additional $2,000 exemption for the two taxable years beginning
+    after the year of the deceased spouse''s death; "surviving spouse" means a taxpayer
+    whose spouse died during the prior taxable year and who has not remarried before
+    the end of the taxable year. Certain dependents with zero federal exemption amount
+    by virtue of IRC section 151(d)(2) receive a single $500 West Virginia exemption.'
+rules:
+- name: west_virginia_exemption_per_federal_exemption
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-16(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: taxable year prior to January 1, 1983 ... exemption of $600
+      - path: versions[1].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: taxable year beginning on or after January 1, 1983, and prior to
+            January 1, 1984 ... $700
+      - path: versions[2].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: taxable year beginning on or after January 1, 1984 ... $800
+      - path: versions[3].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: taxable year beginning on or after January 1, 1987 ... $2,000
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '600'
+  - effective_from: '1983-01-01'
+    formula: '700'
+  - effective_from: '1984-01-01'
+    formula: '800'
+  - effective_from: '1987-01-01'
+    formula: '2000'
+- name: surviving_spouse_additional_exemption_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-16(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: a surviving spouse shall be allowed one additional exemption of
+            $2,000
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: For taxable years beginning after December 31, 1986
+  versions:
+  - effective_from: '1987-01-01'
+    formula: '2000'
+- name: certain_dependent_single_exemption_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 11-21-16(d)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: shall be allowed a single West Virginia exemption in the amount
+            of $500
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: for taxable years beginning after December 31, 1986
+  versions:
+  - effective_from: '1987-01-01'
+    formula: '500'
+- name: resident_individual_exemption
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-16(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: a resident individual shall be allowed a West Virginia exemption
+            ... for each exemption for which he is entitled to a deduction ... for
+            federal income tax purposes
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wv:statutes/11-21-16#west_virginia_exemption_per_federal_exemption
+          output: west_virginia_exemption_per_federal_exemption
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if resident_individual: west_virginia_exemption_per_federal_exemption
+      * federal_exemption_count else: 0'
+- name: separately_determined_spouse_exemption
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-16(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: If the West Virginia income taxes of a husband and wife are separately
+            determined but their federal income tax is determined on a joint return,
+            each of them shall be separately entitled ... for each federal exemption
+            to which he would be separately entitled
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wv:statutes/11-21-16#west_virginia_exemption_per_federal_exemption
+          output: west_virginia_exemption_per_federal_exemption
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if west_virginia_income_taxes_separately_determined_and_federal_income_tax_joint_return:
+      west_virginia_exemption_per_federal_exemption * separate_return_federal_exemption_count
+      else: 0'
+- name: surviving_spouse
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 11-21-16(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: a surviving spouse means a taxpayer whose spouse died during the
+            taxable year prior to the taxable year ... and who has not remarried
+  versions:
+  - effective_from: '1987-01-01'
+    formula: 'spouse_died_during_taxable_year_prior_to_return_year
+
+      and not remarried_before_end_of_taxable_year'
+- name: surviving_spouse_additional_exemption
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-16(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: a surviving spouse shall be allowed one additional exemption of
+            $2,000 for the two taxable years beginning after the year of death
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wv:statutes/11-21-16#surviving_spouse_additional_exemption_amount
+          output: surviving_spouse_additional_exemption_amount
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wv:statutes/11-21-16#surviving_spouse
+          output: surviving_spouse
+          hash: sha256:local
+  versions:
+  - effective_from: '1987-01-01'
+    formula: 'if surviving_spouse and taxable_year_is_one_of_two_taxable_years_beginning_after_year_of_death:
+      surviving_spouse_additional_exemption_amount else: 0'
+- name: certain_dependent_single_exemption
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 11-21-16(d)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-wv/statute/11-21-16
+          excerpt: a resident individual whose exemption amount for federal tax purposes
+            is zero by virtue of section 151(d)(2) ... shall be allowed a single West
+            Virginia exemption ... $500
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-wv:statutes/11-21-16#certain_dependent_single_exemption_amount
+          output: certain_dependent_single_exemption_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '1987-01-01'
+    formula: 'if resident_individual and federal_exemption_amount_is_zero_by_virtue_of_section_151_d_2:
+      certain_dependent_single_exemption_amount else: 0'

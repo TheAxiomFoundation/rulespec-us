@@ -1,0 +1,120 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-md/statute/gtg/10-105
+      - us-md/statute/gtg/10-211
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-md/statute/gtg/10-105
+        - us-md/statute/gtg/10-211
+      rationale: |-
+        This pipeline computes the Maryland Tax-General section 10-105 STATE
+        individual income-tax liability for the ordinary resident wage-earner
+        slice: the graduated state tax on Maryland taxable income (Maryland
+        adjusted gross income less the standard deduction and the section 10-211
+        personal exemptions). The encoded 10-105 module carries the statutory
+        state rate schedule — 2 per cent on the first 1,000 dollars, 3 per cent to
+        2,000, 4 per cent to 3,000, 4.75 per cent to 100,000 (single) / 150,000
+        (joint), then 5, 5.25, 5.5, and 5.75 per cent bands above. Because the
+        six-case grid crosses several brackets, each case supplies the cumulative
+        state tax at its bracket floor, that floor, and the bracket marginal rate,
+        so the schedule reproduces the graduated state tax as the supplied
+        cumulative base plus the supplied marginal rate on taxable income above the
+        floor. This pipeline models the STATE tax only: the county income tax
+        (Tax-General section 10-103, a separate PolicyEngine variable md_county_tax)
+        is out of scope, so the target is PolicyEngine
+        md_income_tax_before_refundable_credits (the state analog) and no county
+        rate is supplied. To reach a liability comparable to that variable to the
+        cent, the amounts this pipeline needs are declared caller-supplied inputs:
+        the standard-deduction-plus-section-10-211-exemption subtraction (which
+        the section 10-211 exemption phase-out reduces at higher income), the
+        per-case bracket floor, the cumulative base tax at that floor, and the
+        bracket marginal rate. Maryland allows no per-exemption state tax credit on
+        this grid, so the supplied credit is zero. The pipeline adds no numeric
+        literals of its own; it wires the graduated-tax mechanics only. The
+        standard deduction and section 10-211 exemption amounts are supplied here
+        pending their own executable encodings, mirroring the California pilot's
+        supplied standard deduction.
+  summary: |-
+    Composed Maryland STATE individual income-tax liability pipeline for the
+    oracle slice at the 2026 tax year. It exposes a TaxUnit-level path from a
+    supplied Maryland adjusted gross income into the section 10-105 graduated
+    state tax on Maryland taxable income, so an end-to-end comparison against
+    PolicyEngine (md_income_tax_before_refundable_credits) and TAXSIM (siitax)
+    does not require the caller to supply the 10-105 bracket application. It
+    wires: Maryland taxable income (Maryland AGI less the supplied standard
+    deduction and section 10-211 exemptions); the graduated state tax as the
+    supplied cumulative base tax at the case's bracket floor plus the supplied
+    marginal rate on taxable income above that floor, which reproduces the
+    statutory 2/3/4/4.75/5/5.25/5.5/5.75-per-cent state schedule for filers above
+    the floor; and that tax less the supplied credit (zero for Maryland), floored
+    at zero. It deliberately models only the resident wage earner and the STATE
+    tax; the county income tax (section 10-103) and refundable credits are
+    excluded. Maryland AGI, filing status, the deduction/exemption subtraction,
+    the bracket floor, base, and marginal rate, and the credit are supplied
+    inputs; PolicyEngine is compared at the 2026 tax year and TAXSIM at its latest
+    2024 law year, with the 2024-to-2026 vintage and TAXSIM's inclusion of the
+    Maryland local tax dispositioned rather than absorbed by tolerance.
+rules:
+  - name: md_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 10-105 and 10-211, Maryland taxable income after the supplied deduction and exemptions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-211
+              excerpt: "An individual may deduct exemptions for the taxpayer"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, md_pit_pilot_adjusted_gross_income - md_pit_pilot_supplied_standard_deduction)
+  - name: md_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 10-105, graduated state tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "State income tax rate schedules for individuals"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          md_pit_pilot_supplied_bracket_base
+          + md_pit_pilot_supplied_marginal_rate * max(0, md_pit_pilot_taxable_income - md_pit_pilot_supplied_bracket_floor)
+  - name: md_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 10-105 graduated state tax less the supplied credit (zero for Maryland), floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "the State income tax is the sum of"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, md_pit_pilot_schedule_tax - md_pit_pilot_supplied_nonrefundable_credit)

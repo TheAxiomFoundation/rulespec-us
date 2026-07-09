@@ -1,0 +1,178 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-id/statute/63-3025D
+  summary: A resident individual maintaining a household with immediate family members
+    residing there who are age 65 or older or have developmental disabilities, and
+    receive more than one-half support from that individual, is entitled to $100 for
+    each such member, capped at three payments per calendar year. A person with a
+    developmental disability filing his own tax return is allowed a $100 credit.
+rules:
+- name: family_member_payment_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: Idaho Code section 63-3025D(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+          excerpt: one hundred dollars ($100) for each such elderly member of the
+            family or family member with a developmental disability
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '100'
+- name: self_filing_developmental_disability_credit_amount
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: Idaho Code section 63-3025D(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+          excerpt: A credit of one hundred dollars ($100) shall be allowed
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '100'
+- name: elderly_family_member_age_threshold
+  kind: parameter
+  dtype: Integer
+  source: Idaho Code section 63-3025D(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+          excerpt: sixty-five (65) years of age or older
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '65'
+- name: household_payment_support_fraction_threshold
+  kind: parameter
+  dtype: Rate
+  source: Idaho Code section 63-3025D(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+          excerpt: more than one-half (1/2) of his or her support
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 1 / 2
+- name: maximum_household_member_payments_per_calendar_year
+  kind: parameter
+  dtype: Count
+  source: Idaho Code section 63-3025D(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+          excerpt: No more than three (3) such payments
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '3'
+- name: household_family_member_qualifies_for_payment
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Year
+  source: Idaho Code section 63-3025D(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3025D#elderly_family_member_age_threshold
+          output: elderly_family_member_age_threshold
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3025D#household_payment_support_fraction_threshold
+          output: household_payment_support_fraction_threshold
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'family_member_is_immediate_member_residing_in_household
+
+      and family_member_receives_support_from_household_maintainer > household_payment_support_fraction_threshold
+
+      and (family_member_age >= elderly_family_member_age_threshold or family_member_has_developmental_disability_as_defined_in_section_66_402_5)'
+- name: household_member_payment
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Idaho Code section 63-3025D(1)-(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3025D#family_member_payment_amount
+          output: family_member_payment_amount
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3025D#maximum_household_member_payments_per_calendar_year
+          output: maximum_household_member_payments_per_calendar_year
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if resident_individual_maintains_household and individual_makes_application_as_prescribed_by_state_tax_commission:
+      family_member_payment_amount * min(maximum_household_member_payments_per_calendar_year,
+      qualifying_household_family_member_count) else: 0'
+- name: self_filing_developmental_disability_credit
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: Idaho Code section 63-3025D(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-id/statute/63-3025D
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-id:statutes/63-3025D#self_filing_developmental_disability_credit_amount
+          output: self_filing_developmental_disability_credit_amount
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if person_has_developmental_disability_as_defined_in_section_66_402_5
+      and person_files_own_tax_return: self_filing_developmental_disability_credit_amount
+      else: 0'
