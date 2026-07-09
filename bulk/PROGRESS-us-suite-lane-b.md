@@ -18,10 +18,17 @@ are encoded on main. Rate-only or ded-only → gap (oracle #757), not shipped.
 | --- | --- | --- | --- | --- | --- | --- |
 | VA | 58.1-320 rate + 322.03 ded + 321 exempt | yes | DONE | 7 cases | va_income_tax_before_non_refundable_credits | penny-exact 6/6 (zero residual) |
 | UT | 59-10-104 rate + 59-10-1018 credit | yes (flat) | DONE | 6 cases | ut_income_tax_before_credits | exact 6/6 |
+| NE | 77-2715.03 rate + 77-2716.01 std ded | yes | DONE | 7 cases | ne_income_tax_before_credits | penny-exact 6/6 |
 | WV | 11-21-3/-10/-16 (no rate 4e/4j) | no | — | — | — | gap: rate schedule not encoded |
 | OR | 315.264/266 + 316.085 (no rate 316.037) | no | — | — | — | gap: rate not in #763 |
 | RI | 44-30-103 (child rebate, not the rate) | no | — | — | — | gap: rate 44-30-2.6 not encoded |
 | HI | 235-54 + 235-55.6/.7/.85 (no rate 235-51) | no | — | — | — | gap: rate 235-51 not encoded |
+| NC | 105-153.7 flat rate + 105-153.9 (only an other-state credit) | no | — | — | — | gap: std-deduction §105-153.5 not encoded (the wage-slice's only taxable-income reduction; 153.9 other-state credit is $0 for a single-state filer) |
+| NM | 7-2-5.8 exemption + 7-2-18.15 WFTC | no | — | — | — | gap: rate §7-2-7 not encoded |
+| ND | 57-38-01.28 (joint marriage credit only) | no | — | — | — | gap: rate §57-38-30.3 not encoded |
+| SC | 12-6-520 (bracket inflation adj only) | no | — | — | — | gap: base rate §12-6-510 + deduction not encoded |
+| NJ | 54A:4-7 (NJ EITC only) | no | — | — | — | gap: rate §54A:2-1 not encoded |
+| NE-adc/OK/WI | — | no | — | — | — | OK/WI: no income-tax statutes dir on main |
 
 VA and UT pipelines are composed, validated (validate CI ✓, proof-validate,
 companion test), signed (--manual-exception composition), and committed on this
@@ -43,6 +50,19 @@ index (adds only VA/UT), push, open PRs, arm auto-merge.
 - Target ut_income_tax_before_credits (pure flat tax). Excludes the 59-10-1018
   taxpayer tax credit that PE nets into before_non_refundable_credits (phased out;
   a future enrichment could model it and target before_non_refundable).
+
+### NE decisions (new composable state, post-train fan-out)
+- Neb. Rev. Stat. 77-2715.03 four-bracket progressive tax. 2026 rates 2.46/3.51/
+  4.55/4.55% (L.B. 754 compresses the top two rates to a common 4.55% in 2026) at
+  the PE-2026 inflation-indexed floors: single 0/4,030/24,120/38,870, MFJ
+  0/8,040/48,250/77,730. Supplied floors/rates + 77-2716.01 std deduction ($8,750
+  single / $17,550 MFJ). taxable = AGI − std ded (no pre-tax exemption).
+- Target ne_income_tax_before_credits (pure bracket tax). NE's personal exemption
+  is a POST-tax credit (ne_exemptions, netted into before_refundable_credits), so
+  it is excluded from before_credits. Penny-exact 6/6 vs pinned PE (4.18.9).
+- TAXSIM-2024 residual reconstructs exactly: siitax = PE-2024 before_credits −
+  2024 exemption credit ($166 single / $332 MFJ); residual = 2024→2026 rate-
+  compression/indexation vintage + the credit scope. All 6 dispositioned.
 
 ## Gaps (rate section not yet encoded → not shippable; note to oracle #757)
 
@@ -70,6 +90,32 @@ the rulespec merge train). PE 6/6 exact both states; TAXSIM-2024 dispositioned
 (VA std-deduction vintage; UT rate vintage + taxpayer-credit scope). 134 oracle
 tests + apply_dispositions/scoreboard/vacuous-gate --checks pass locally. Merge
 one-at-a-time behind lane A + tanf (or#248 GA); rebase just before merge.
+
+## Executed — post-#763 fan-out (2026-07-08)
+
+- **VA + UT rulespec**: rebased laneb-slice onto post-#763 origin/main
+  (`git rebase --onto origin/main <train-head>` dropped the 2 train commits,
+  replayed VA/UT + progress), regenerated reverse index (adds VA/UT edges only),
+  pushed. **PR rus#771** open, auto-merge (squash) armed. Full-matrix CI (the
+  repo-global index touch triggers it).
+- **NE rulespec** (new composable state): branch `laneb-slice-ne` off origin/main;
+  pipeline + 7-case companion suite + signed manifest (`sign-applied-files
+  --manual-exception composition`) + index regen. `axiom-encode test` 7/7,
+  proof-validate ✓, validate CI ✓. **PR rus#772** open, auto-merge armed.
+- **NE oracle**: branch `laneb-slice-oracles-ne` off origin/main; concept mapping,
+  comparison, dispositions (all 6 reconstructed), conformance covered row,
+  scoreboard/detail/affected_map/freshness regen. Rebased behind or#248 (ga_tanf)
+  and re-regenerated aggregates. pytest 132 passed; all --check gates pass.
+  **PR or#253** open + MERGEABLE. Auto-merge NOT available on axiom-oracles (no
+  branch protection) → maintainer merges one-at-a-time. If another oracle PR
+  lands first, re-rebase + regen the aggregates (they conflict on covered count).
+- **Scoreboard delta (us-pe)**: VA/UT already merged via or#251. NE adds +1 →
+  **33 covered / 24.09%** (was 32 after or#248's ga_tanf).
+- **Non-composable N–W** (empirical scan of main): WV/OR/RI/HI/NM/ND/SC/NJ lack
+  the rate schedule; NC has the flat rate but lacks the std-deduction §105-153.5
+  (only an other-state credit, $0 for the wage slice); OK/WI have no income-tax
+  statutes on main. All become composable when the missing section lands in a
+  later train (note to oracle #757).
 
 ## Log
 - Verified my slice not on origin/main (still 9f2709e0); sections live in unmerged
