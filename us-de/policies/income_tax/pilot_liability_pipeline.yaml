@@ -1,0 +1,121 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-de/statute/30/1102
+      - us-de/statute/30/1108
+      - us-de/statute/30/1110
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-de/statute/30/1102
+        - us-de/statute/30/1108
+        - us-de/statute/30/1110
+      rationale: |-
+        This pipeline computes the Delaware section 1102 individual income-tax
+        liability for the ordinary resident wage-earner slice: the graduated tax
+        on Delaware taxable income (Delaware adjusted gross income less the
+        section 1108 standard deduction) less the section 1110 personal credits.
+        The encoded 1102 module carries the statutory rate schedule — zero on the
+        first 2,000 dollars, 2.2 per cent to 5,000, 3.9 per cent to 10,000, 4.8
+        per cent to 20,000, 5.2 per cent to 25,000, 5.55 per cent to 60,000, and
+        6.6 per cent above 60,000 — and those bracket boundaries are fixed in
+        statute (Delaware does not index them). Because the six-case grid crosses
+        the 5.55-per-cent and 6.6-per-cent brackets, each case supplies the
+        cumulative tax at its bracket floor, that floor, and the bracket's
+        marginal rate, so the schedule reproduces the graduated tax as the
+        supplied cumulative base plus the supplied marginal rate on taxable income
+        above the floor. To reach a liability comparable to PolicyEngine
+        de_income_tax to the cent, the amounts this pipeline needs are declared
+        caller-supplied inputs: the section 1108 standard deduction (3,250 dollars
+        single, 6,500 dollars joint), the per-case bracket floor, the cumulative
+        base tax at that floor, the bracket marginal rate, and the section 1110
+        personal credit (110 dollars per exemption — 110 single, 220 for the
+        two-exemption joint filer). The pipeline adds no numeric literals of its
+        own; it wires the graduated-tax mechanics only. The section 1108 standard
+        deduction and section 1110 personal-credit provisions are supplied here
+        pending their own executable encodings, mirroring the California pilot's
+        supplied standard deduction and personal exemption credit.
+  summary: |-
+    Composed Delaware individual income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    Delaware adjusted gross income into the section 1102 graduated tax on Delaware
+    taxable income less the section 1110 personal credits, so an end-to-end
+    comparison against PolicyEngine (de_income_tax_before_refundable_credits) and
+    TAXSIM (siitax) does not require the caller to supply the 1102 bracket
+    application or the 1110 credit. It wires: Delaware taxable income (Delaware
+    AGI less the supplied section 1108 standard deduction); the graduated tax as
+    the supplied cumulative base tax at the case's bracket floor plus the supplied
+    marginal rate on taxable income above that floor, which reproduces the
+    statutory 0/2.2/3.9/4.8/5.2/5.55/6.6-per-cent schedule for filers above the
+    floor; and that tax less the supplied section 1110 personal credit, floored at
+    zero. It deliberately models only the ordinary resident wage earner and
+    excludes the section 1109 itemized-deduction election, the lump-sum and
+    business schedules, and the refundable/earned-income credits, all of which are
+    zero for the childless wage-earner grid. Delaware AGI, filing status, the
+    standard deduction, the bracket floor, base, and marginal rate, and the
+    personal credit are supplied inputs; Delaware's brackets are fixed in statute,
+    so this pipeline is compared against PolicyEngine at 2026 and against TAXSIM's
+    latest 2024 law year with the 2024-to-2026 vintage dispositioned rather than
+    absorbed by tolerance.
+rules:
+  - name: de_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 1102 and 1108, Delaware taxable income after the supplied standard deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1108
+              excerpt: "the standard deduction of a resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, de_pit_pilot_adjusted_gross_income - de_pit_pilot_supplied_standard_deduction)
+  - name: de_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 1102, graduated tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1102
+              excerpt: "tax table income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          de_pit_pilot_supplied_bracket_base
+          + de_pit_pilot_supplied_marginal_rate * max(0, de_pit_pilot_taxable_income - de_pit_pilot_supplied_bracket_floor)
+  - name: de_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 1102 graduated tax less the 1110 personal credits, floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/statute/30/1110
+              excerpt: "personal credits"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, de_pit_pilot_schedule_tax - de_pit_pilot_supplied_nonrefundable_credit)
