@@ -1,0 +1,152 @@
+format: rulespec/v1
+imports:
+  - us-de:regulations/title-16/4000-financial-responsibility/4007-standards-of-need-and-payment-standard#de_tanf_payment_standard
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+  summary: |-
+    "Deny assistance if the income exceeds 185% of the applicable Temporary Assistance for Needy Families standard of need." Applicant net income subtracts the $90.00 earned income deduction and child care expenses, then compares net family income to the payment standard. Grant computation subtracts the $90.00 standard work deduction, 30 plus 1/3 disregard if applicable, and child care, then pays the lesser of 50% of the deficit or the payment standard.
+rules:
+  - name: gross_income_test_standard_of_need_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 16 DE Admin. Code 4008.1.1, gross income test
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+              excerpt: "185% of the applicable Temporary Assistance for Needy Families standard of need"
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          1.85
+
+  - name: applicant_earned_income_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 16 DE Admin. Code 4008.1.1, Step 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+              excerpt: "earned income deduction ($90.00)"
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          90.00
+
+  - name: standard_work_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 16 DE Admin. Code 4008.1.1, Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+              excerpt: "standard work deduction ($90.00)"
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          90.00
+
+  - name: thirty_dollar_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 16 DE Admin. Code 4008.1.1, Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+              excerpt: "30 plus 1/3 disregard"
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          30
+
+  - name: one_third_disregard_rate
+    kind: parameter
+    dtype: Rate
+    source: 16 DE Admin. Code 4008.1.1, Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+              excerpt: "1/3 disregard"
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          1 / 3
+
+  - name: deficit_percentage
+    kind: parameter
+    dtype: Rate
+    source: 16 DE Admin. Code 4008.1.1, Step 3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+              excerpt: "Multiply the deficit by 50%"
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          0.50
+
+  - name: de_tanf
+    kind: derived
+    entity: TanfUnit
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 16 DE Admin. Code 4008.1.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-de/regulation/title-16/4000-financial-responsibility/4008.1.1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-de:regulations/title-16/4000-financial-responsibility/4007-standards-of-need-and-payment-standard#de_tanf_payment_standard
+              output: de_tanf_payment_standard
+              hash: sha256:00f1b31a24d7125ade3473cb4b5bcc55862708c434425f807e82ca2983f9ee63
+    versions:
+      - effective_from: '2002-10-01'
+        formula: |-
+          if gross_income > applicable_tanf_standard_of_need * gross_income_test_standard_of_need_multiplier:
+            0
+          else:
+            if max(0, total_wage_earner_earnings - wage_earner_count * applicant_earned_income_deduction - child_care_expenses) + unearned_income > de_tanf_payment_standard:
+              0
+            else:
+              min(
+                de_tanf_payment_standard,
+                max(0, applicable_tanf_standard_of_need - (max(0, total_wage_earner_earnings - wage_earner_count * standard_work_deduction - (if thirty_plus_one_third_disregard_applies: wage_earner_count * thirty_dollar_disregard_amount + max(0, total_wage_earner_earnings - wage_earner_count * standard_work_deduction - wage_earner_count * thirty_dollar_disregard_amount) * one_third_disregard_rate else: 0) - child_care_expenses) + unearned_income)) * deficit_percentage
+              )
