@@ -2,7 +2,7 @@
 """Local bulk-encode drain runner.
 
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
-CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
+CLI (ChatGPT subscription, ``gpt-5.6-terra``) instead of the cloud ``bulk-encode.yml``
 dispatcher, opening merge-train-style batch PRs with auto-merge. It is a faithful
 local mirror of ``.github/workflows/bulk-encode.yml`` plus the oracle-coverage-
 pending declaration step the cloud dispatcher is missing (that missing step is
@@ -166,7 +166,7 @@ WT_ROOT = DRAIN_BASE / "wt"
 STAGE_ROOT = DRAIN_BASE / "staged"
 
 BACKEND = os.environ.get("DRAIN_BACKEND", "codex")
-MODEL = os.environ.get("DRAIN_MODEL", "gpt-5.5")
+MODEL = os.environ.get("DRAIN_MODEL", "gpt-5.6-terra")
 
 # Some fragment-split federal citations (IRC 219(b)/(g), 1402(a)/(b), 223(b))
 # make the model stochastically over-expand the dependency closure -- emitting
