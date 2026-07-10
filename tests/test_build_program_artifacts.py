@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -72,10 +73,38 @@ def patch_non_git_build(
     monkeypatch.setattr(
         artifacts,
         "corpus_provenance",
-        lambda root: {"repo": "rulespec-us", "sha": "a" * 40, "dirty": False},
+        lambda root: {"repo": "rulespec-us", "sha": "a" * 40},
+    )
+    monkeypatch.setattr(
+        artifacts,
+        "load_toolchain_provenance",
+        lambda *args, **kwargs: TEST_TOOLCHAIN,
     )
     for manifest_key, environment_key in artifacts.TOOLCHAIN_REF_ENV.items():
         monkeypatch.setenv(environment_key, TEST_TOOLCHAIN[manifest_key])
+
+
+def commit_test_repo(root: Path) -> str:
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "Artifact Test"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-q", "-m", "test fixture"],
+        check=True,
+    )
+    return subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
 
 
 def install_fake_waiver_core(
@@ -155,6 +184,80 @@ def test_toolchain_provenance_requires_exact_commit_refs(
         artifacts.load_toolchain_provenance(environ)
 
 
+def test_toolchain_environment_must_match_canonical_file(tmp_path: Path) -> None:
+    root = tmp_path / "rulespec-us"
+    toolchain_path = root / ".axiom/toolchain.toml"
+    toolchain_path.parent.mkdir(parents=True)
+    toolchain_path.write_text(
+        "[toolchain]\n"
+        + "\n".join(f'{key} = "{value}"' for key, value in TEST_TOOLCHAIN.items())
+        + '\naxiom_encode_version = "test"\n'
+    )
+    environ = {
+        artifacts.TOOLCHAIN_REF_ENV[key]: ref for key, ref in TEST_TOOLCHAIN.items()
+    }
+
+    assert artifacts.load_toolchain_provenance(environ, root=root) == TEST_TOOLCHAIN
+
+    environ["AXIOM_COMPOSE_REF"] = "4" * 40
+    with pytest.raises(artifacts.BuildSafetyError, match="differs from"):
+        artifacts.load_toolchain_provenance(environ, root=root)
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "programs/us/demo/fy-2026.yaml",
+        "us/policies/untracked.yaml",
+    ],
+)
+def test_corpus_provenance_rejects_untracked_artifact_inputs(
+    tmp_path: Path, relative_path: str
+) -> None:
+    root = tmp_path / "rulespec-us"
+    root.mkdir()
+    (root / ".gitignore").write_text("dist/\n_axiom/\n.engine-src/\n")
+    (root / "README.md").write_text("fixture\n")
+    commit_test_repo(root)
+    write_module(root / relative_path)
+
+    with pytest.raises(artifacts.BuildSafetyError, match="not tracked at HEAD"):
+        artifacts.corpus_provenance(root)
+
+
+def test_corpus_provenance_rejects_modified_tracked_checkout(tmp_path: Path) -> None:
+    root = tmp_path / "rulespec-us"
+    write_module(root / "us/policies/tracked.yaml")
+    commit_test_repo(root)
+    write_module(root / "us/policies/tracked.yaml", imports=["us:policies/other"])
+
+    with pytest.raises(artifacts.BuildSafetyError, match="differs from HEAD"):
+        artifacts.corpus_provenance(root)
+
+
+def test_corpus_provenance_ignores_only_unconsumed_build_locations(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "rulespec-us"
+    root.mkdir()
+    (root / ".gitignore").write_text("dist/\n_axiom/\n.engine-src/\n__pycache__/\n")
+    expected_sha = commit_test_repo(root)
+    for relative_path in (
+        "dist/old.compiled.json",
+        "_axiom/axiom-encode/checkout",
+        ".engine-src/target/release/engine",
+        "tools/__pycache__/builder.pyc",
+    ):
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ignored\n")
+
+    assert artifacts.corpus_provenance(root) == {
+        "repo": "rulespec-us",
+        "sha": expected_sha,
+    }
+
+
 @pytest.mark.parametrize(
     "active_path, message",
     [
@@ -224,6 +327,45 @@ def test_program_discovery_rejects_symlink_specs(tmp_path: Path) -> None:
     linked.symlink_to(outside)
 
     with pytest.raises(artifacts.BuildSafetyError, match="not a regular file"):
+        artifacts.discover_specs(root)
+
+
+def test_program_discovery_requires_program_specs(tmp_path: Path) -> None:
+    root = tmp_path / "rulespec-us"
+    root.mkdir()
+
+    with pytest.raises(
+        artifacts.BuildSafetyError, match="program directory is required"
+    ):
+        artifacts.discover_specs(root)
+
+    (root / "programs").mkdir()
+    with pytest.raises(artifacts.BuildSafetyError, match="contains no program specs"):
+        artifacts.discover_specs(root)
+
+
+@pytest.mark.parametrize("payload", [None, {}, []])
+def test_program_discovery_rejects_malformed_program_spec(
+    tmp_path: Path, payload: object
+) -> None:
+    root = tmp_path / "rulespec-us"
+    path = root / "programs/us/demo/fy-2026.yaml"
+    write_yaml(path, payload)
+
+    with pytest.raises(artifacts.BuildSafetyError, match="program spec"):
+        artifacts.discover_specs(root)
+
+
+def test_program_discovery_requires_identity_to_match_path(tmp_path: Path) -> None:
+    root = tmp_path / "rulespec-us"
+    path = write_program(root)
+    payload = yaml.safe_load(path.read_text())
+    payload["program"] = "us/different"
+    write_yaml(path, payload)
+
+    with pytest.raises(
+        artifacts.BuildSafetyError, match="does not match physical path"
+    ):
         artifacts.discover_specs(root)
 
 
@@ -314,7 +456,9 @@ def test_engine_compile_uses_only_isolated_root_and_cwd(
 
     def fake_run(command, **kwargs):
         captured.update(command=command, **kwargs)
-        return SimpleNamespace(returncode=0, stdout="engine_version: test\n", stderr="")
+        return SimpleNamespace(
+            returncode=0, stdout="engine_version: 1.2.3\n", stderr=""
+        )
 
     monkeypatch.setattr(artifacts.subprocess, "run", fake_run)
 
@@ -326,11 +470,42 @@ def test_engine_compile_uses_only_isolated_root_and_cwd(
             "engine",
             cwd=tmp_path / "sandbox",
         )
-        == "test"
+        == "1.2.3"
     )
     assert captured["env"]["AXIOM_RULESPEC_REPO_ROOTS"] == str(corpus_root)
     assert "--exclusive-rulespec-roots" in captured["command"]
     assert captured["cwd"] == tmp_path / "sandbox"
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        "compiled\n",
+        "engine_version: unknown\n",
+        "engine_version: 1.2.3\nengine_version: 1.2.3\n",
+    ],
+)
+def test_engine_compile_requires_one_valid_version_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: str
+) -> None:
+    monkeypatch.setattr(
+        artifacts.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+        ),
+    )
+
+    with pytest.raises(artifacts.BuildSafetyError, match="exactly one valid"):
+        artifacts.engine_compile(
+            tmp_path / "rulespec-us",
+            tmp_path / "program.rulespec.yaml",
+            tmp_path / "program.compiled.json",
+            "engine",
+            cwd=tmp_path,
+        )
 
 
 def test_main_excludes_waived_program_and_removes_stale_dist(
@@ -467,6 +642,7 @@ def test_main_stamps_exact_toolchain_refs_in_artifact_and_manifest(
     assert provenance["toolchain"] == TEST_TOOLCHAIN
     assert "composer_version" not in manifest
     assert "composer_version" not in provenance
+    assert not list((root / "dist").glob("*.rulespec.yaml"))
 
 
 def test_check_mode_leaves_existing_dist_untouched(
@@ -479,7 +655,7 @@ def test_check_mode_leaves_existing_dist_untouched(
     sentinel.write_text("keep")
     patch_non_git_build(monkeypatch)
 
-    assert artifacts.main(["--root", str(root), "--dist", str(dist), "--check"]) == 0
+    assert artifacts.main(["--root", str(root), "--dist", str(dist), "--check"]) == 2
     assert sentinel.read_text() == "keep"
     assert sorted(path.name for path in dist.iterdir()) == ["sentinel"]
 
@@ -492,8 +668,48 @@ def test_check_mode_does_not_create_missing_dist(
     dist = root / "dist"
     patch_non_git_build(monkeypatch)
 
-    assert artifacts.main(["--root", str(root), "--check"]) == 0
+    assert artifacts.main(["--root", str(root), "--check"]) == 2
     assert not dist.exists()
+
+
+def test_main_rejects_malformed_program_without_mutating_dist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "rulespec-us"
+    write_yaml(root / "programs/us/demo/fy-2026.yaml", {})
+    dist = root / "dist"
+    dist.mkdir()
+    sentinel = dist / "sentinel"
+    sentinel.write_text("keep")
+    patch_non_git_build(monkeypatch)
+
+    assert artifacts.main(["--root", str(root), "--dist", str(dist)]) == 2
+    assert sentinel.read_text() == "keep"
+
+
+def test_main_rejects_untracked_module_without_mutating_dist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "rulespec-us"
+    write_module(root / "us/policies/safe.yaml")
+    write_program(root, scope_path="policies/safe")
+    (root / ".gitignore").write_text("dist/\n")
+    commit_test_repo(root)
+    write_module(root / "us/policies/untracked.yaml")
+    dist = root / "dist"
+    dist.mkdir()
+    sentinel = dist / "sentinel"
+    sentinel.write_text("keep")
+    monkeypatch.setenv("AXIOM_RULES_ENGINE_BIN", "fake-engine")
+    monkeypatch.setattr(artifacts, "load_waived_module_paths", lambda root: set())
+    monkeypatch.setattr(
+        artifacts,
+        "load_toolchain_provenance",
+        lambda *args, **kwargs: TEST_TOOLCHAIN,
+    )
+
+    assert artifacts.main(["--root", str(root), "--dist", str(dist)]) == 2
+    assert sentinel.read_text() == "keep"
 
 
 def test_dist_replacement_refuses_repository_source_directories(tmp_path: Path) -> None:
@@ -521,3 +737,11 @@ def test_dist_replacement_refuses_external_directory(tmp_path: Path) -> None:
         artifacts.replace_dist(staged, external, root)
 
     assert sentinel.read_text() == "owned elsewhere"
+
+
+def test_alaska_tanf_advertises_only_final_public_outputs() -> None:
+    payload = yaml.safe_load(
+        (MODULE_PATH.parents[1] / "programs/us-ak/tanf/fy-2026.yaml").read_text()
+    )
+
+    assert payload["outputs"] == ["ak_atap_eligible", "ak_atap"]

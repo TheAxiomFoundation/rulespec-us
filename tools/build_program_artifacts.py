@@ -14,7 +14,7 @@ build environment, which this script does not make hermetic.
 Modes:
   --check      audit and compile every non-excluded program, write nothing;
                exit 1 if any of those programs fails.
-  (default)    build dist/: composed modules, stamped artifacts, manifest.json.
+  (default)    build dist/: stamped compiled artifacts and manifest.json.
 
 Requirements: `axiom_compose` importable, AXIOM_RULES_ENGINE_BIN pointing at an
 axiom-rules-engine binary, exact 40-character AXIOM_COMPOSE_REF,
@@ -34,6 +34,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -44,6 +45,9 @@ import yaml
 MANIFEST_FORMAT_VERSION = 2
 JURISDICTION_RE = re.compile(r"^us(?:-[a-z0-9]+)*$")
 COMMIT_REF_RE = re.compile(r"^[0-9a-f]{40}$")
+ENGINE_VERSION_RE = re.compile(
+    r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+)
 TOOLCHAIN_REF_ENV = {
     "axiom_compose_ref": "AXIOM_COMPOSE_REF",
     "axiom_encode_ref": "AXIOM_ENCODE_REF",
@@ -67,6 +71,8 @@ class SpecBuild:
 
 def load_toolchain_provenance(
     environ: Mapping[str, str] | None = None,
+    *,
+    root: Path | None = None,
 ) -> dict[str, str]:
     """Load exact immutable tool refs that define the artifact build."""
 
@@ -79,6 +85,23 @@ def load_toolchain_provenance(
                 f"{environment_key} must be exactly 40 lowercase hexadecimal characters"
             )
         result[manifest_key] = value
+    if root is not None:
+        toolchain_path = root / ".axiom/toolchain.toml"
+        try:
+            with toolchain_path.open("rb") as stream:
+                pinned = tomllib.load(stream).get("toolchain")
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            raise BuildSafetyError(
+                f"cannot read canonical toolchain: {error}"
+            ) from error
+        if not isinstance(pinned, dict):
+            raise BuildSafetyError("canonical toolchain must contain [toolchain]")
+        mismatches = [key for key, ref in result.items() if pinned.get(key) != ref]
+        if mismatches:
+            raise BuildSafetyError(
+                "artifact tool environment differs from .axiom/toolchain.toml: "
+                + ", ".join(mismatches)
+            )
     return result
 
 
@@ -265,7 +288,7 @@ def discover_specs(root: Path) -> list[SpecBuild]:
     try:
         programs_metadata = programs_root.lstat()
     except FileNotFoundError:
-        return []
+        raise BuildSafetyError(f"program directory is required: {programs_root}")
     except OSError as error:
         raise BuildSafetyError(f"cannot inspect program directory: {error}") from error
     if programs_root.is_symlink() or not stat.S_ISDIR(programs_metadata.st_mode):
@@ -285,6 +308,11 @@ def discover_specs(root: Path) -> list[SpecBuild]:
             if filename.endswith(".yaml") and not filename.endswith(".test.yaml"):
                 paths.append(current_path / filename)
 
+    if not paths:
+        raise BuildSafetyError(
+            f"program directory contains no program specs: {programs_root}"
+        )
+
     builds: list[SpecBuild] = []
     for path in sorted(paths):
         try:
@@ -301,9 +329,17 @@ def discover_specs(root: Path) -> list[SpecBuild]:
             raise BuildSafetyError(f"program spec escapes the repository: {path}")
 
         spec = _load_yaml(path)
-        if not isinstance(spec, dict) or "program" not in spec:
-            continue
-        program_field = str(spec["program"])
+        if not isinstance(spec, dict):
+            raise BuildSafetyError(f"program spec root must be a mapping: {path}")
+        program_field = spec.get("program")
+        if not isinstance(program_field, str) or not program_field.strip():
+            raise BuildSafetyError(f"program spec has no valid program: {path}")
+        expected_program = "/".join(path.relative_to(programs_root).parts[:-1])
+        if program_field != expected_program:
+            raise BuildSafetyError(
+                f"program spec identity {program_field!r} does not match "
+                f"physical path {expected_program!r}: {path}"
+            )
         segments = [s for s in program_field.split("/") if s]
         jurisdiction = segments[0]
         program_id = segments[-1]
@@ -322,7 +358,7 @@ def discover_specs(root: Path) -> list[SpecBuild]:
     names = [b.artifact_name for b in builds]
     dupes = {n for n in names if names.count(n) > 1}
     if dupes:
-        raise SystemExit(f"artifact name collision: {sorted(dupes)}")
+        raise BuildSafetyError(f"artifact name collision: {sorted(dupes)}")
     return builds
 
 
@@ -540,18 +576,76 @@ def git_output(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def artifact_source_paths(root: Path) -> set[str]:
+    """Return every repository file whose bytes can affect an artifact build."""
+
+    paths: set[str] = set()
+    waiver_path = root / "known-validation-gaps.yaml"
+    if waiver_path.exists() or waiver_path.is_symlink():
+        paths.add(waiver_path.relative_to(root).as_posix())
+
+    trees = [root / "programs"]
+    trees.extend(
+        path for path in root.iterdir() if JURISDICTION_RE.fullmatch(path.name)
+    )
+    for tree in trees:
+        if not tree.is_dir() or tree.is_symlink():
+            continue
+        for current, directories, filenames in os.walk(tree, followlinks=False):
+            directories.sort()
+            current_path = Path(current)
+            for filename in sorted(filenames):
+                if filename.endswith(".yaml") and not filename.endswith(".test.yaml"):
+                    paths.add((current_path / filename).relative_to(root).as_posix())
+    return paths
+
+
+def tracked_repo_paths(root: Path) -> set[str]:
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z"],
+        capture_output=True,
+        check=True,
+    )
+    return {
+        os.fsdecode(raw_path) for raw_path in result.stdout.split(b"\0") if raw_path
+    }
+
+
+def assert_reproducible_source_checkout(root: Path) -> None:
+    """Reject source bytes that are not represented by the repository HEAD."""
+
+    tracked_changes = git_output(
+        root,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=no",
+    )
+    if tracked_changes:
+        first_change = tracked_changes.splitlines()[0]
+        raise BuildSafetyError(
+            "tracked checkout differs from HEAD; artifact builds require an exact "
+            f"commit checkout: {first_change}"
+        )
+
+    tracked_paths = tracked_repo_paths(root)
+    untracked_inputs = sorted(artifact_source_paths(root) - tracked_paths)
+    if untracked_inputs:
+        raise BuildSafetyError(
+            "artifact source inputs are not tracked at HEAD: "
+            + ", ".join(untracked_inputs)
+        )
+
+
 def corpus_provenance(root: Path) -> dict:
+    assert_reproducible_source_checkout(root)
     sha = git_output(root, "rev-parse", "HEAD")
-    # Untracked files (e.g. a previous dist/) don't affect what compiles;
-    # only tracked modifications make the corpus state unreproducible.
-    dirty = bool(git_output(root, "status", "--porcelain", "--untracked-files=no"))
     origin = ""
     try:
         origin = git_output(root, "remote", "get-url", "origin")
     except subprocess.CalledProcessError:
         pass
     repo = re.sub(r"\.git$", "", origin.rsplit("/", 1)[-1]) if origin else root.name
-    return {"repo": repo, "sha": sha, "dirty": dirty}
+    return {"repo": repo, "sha": sha}
 
 
 def sha256_file(path: Path) -> str:
@@ -577,7 +671,7 @@ def engine_compile(
     *,
     cwd: Path,
 ) -> str:
-    """Run the engine compiler; returns its reported engine_version."""
+    """Run the engine compiler and return its single valid engine version."""
     env = dict(os.environ, AXIOM_RULESPEC_REPO_ROOTS=str(corpus_root))
     result = subprocess.run(
         [
@@ -596,8 +690,12 @@ def engine_compile(
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-    match = re.search(r"^engine_version:\s*(\S+)", result.stdout, re.M)
-    return match.group(1) if match else "unknown"
+    versions = re.findall(r"^engine_version:\s*(\S+)\s*$", result.stdout, re.M)
+    if len(versions) != 1 or not ENGINE_VERSION_RE.fullmatch(versions[0]):
+        raise BuildSafetyError(
+            "engine compile output must contain exactly one valid engine_version line"
+        )
+    return versions[0]
 
 
 def stamp_provenance(artifact: Path, provenance: dict) -> None:
@@ -630,7 +728,7 @@ def main(argv: list[str] | None = None) -> int:
         waived_by_target = {
             module_path_to_target(path): path for path in sorted(waived_paths)
         }
-        toolchain = load_toolchain_provenance()
+        toolchain = load_toolchain_provenance(root=root)
         corpus = corpus_provenance(root)
     except (BuildSafetyError, OSError, subprocess.CalledProcessError) as error:
         print(f"artifact build configuration is unsafe: {error}", file=sys.stderr)
@@ -734,7 +832,6 @@ def main(argv: list[str] | None = None) -> int:
             }
             stamp_provenance(artifact_path, provenance)
 
-            shutil.copy2(module_path, staged_dist / module_path.name)
             staged_artifact = Path(
                 shutil.copy2(artifact_path, staged_dist / artifact_path.name)
             )
