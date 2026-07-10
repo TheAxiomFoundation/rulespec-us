@@ -1,0 +1,91 @@
+# Delaware TANF (Temporary Assistance for Needy Families) -- FY 2026, recipient-month benefit.
+#
+# Mirrors the encoded Delaware DSS slice in rulespec-us/us-de:
+#   - regulations/title-16/4000-financial-responsibility/4007-standards-of-need-and-payment-standard
+#       (16 DE Admin. Code 4007.2 payment standard table by budget size 1..8,
+#        +$69 per person above eight)
+#   - regulations/title-16/4000-financial-responsibility/4008-financial-eligibility-and-grant-computation
+#       (16 DE Admin. Code 4008.1.1: the 185%-of-standard-of-need gross income
+#        test, the $90 applicant net-income test against the payment standard,
+#        and the grant = min(payment standard, 50% of the standard-of-need
+#        deficit after the $90 work deduction + $30 + 1/3 disregard))
+# and adds the oracle-suite plumbing: the household-membership data relation, the
+# Count budget-size declaration, and a benefit gated on the demographic fact
+# PolicyEngine's de_tanf requires (a minor child or pregnant member) so the
+# comparison never pays childless units PE's de_tanf would not.
+#
+# Target oracle surface: PolicyEngine de_tanf (SPMUnit, MONTH):
+#   min(deficit_rate * max(standard_of_need - countable_income, 0), payment_standard),
+#   defined_for de_tanf_eligible. The standard of need is 75% of the monthly
+#   federal poverty guideline; for the zero-income units that dominate the
+#   caseload the 50% deficit remainder exceeds the payment standard, so the
+#   benefit equals the payment standard exactly. The annualized output mirrors
+#   the covered al/co/ga convention; the compare framework annualizes PE's
+#   monthly de_tanf.
+
+program: us-de/tanf
+period: 2026-01
+
+outputs:
+  - de_tanf_annual_benefit
+
+acknowledged_incomplete:
+  - de_tanf_annual_benefit
+
+scope:
+  state:
+    - regulations/title-16/4000-financial-responsibility/4008-financial-eligibility-and-grant-computation
+
+transformations:
+  - pattern: data_relation
+    name: member_of_household
+    arity: 2
+    source: axiom-oracles ECPS projection household membership
+
+  # The 4007.2 payment-standard chart is indexed_by de_tanf_payment_standard_budget_size_index,
+  # which is min(number_people_in_budget, 8). The encoder declared that index Count,
+  # but number_people_in_budget itself feeds the min() and the +$69/person tail, so
+  # the compiler would otherwise infer it as decimal and the chart lookup fails
+  # ("parameter key must be an integer"). Declare it Count here, bound to the AU
+  # member count supplied at household scope by the populace input mapping
+  # (assistance_unit_member_count = hh_size), the same slot Georgia's au_size uses.
+  - pattern: derived_formula
+    name: number_people_in_budget
+    effective_from: '2002-10-01'
+    entity: TanfUnit
+    dtype: Count
+    source: axiom-oracles programs/us-de/tanf budget size (integer chart key)
+    formula: assistance_unit_member_count
+
+  # de_tanf (the 4008 grant leaf output) is the pre-demographic-gate monthly
+  # benefit. The remaining leaf free inputs are supplied at HOUSEHOLD scope by the
+  # populace input mapping: applicable_tanf_standard_of_need (0.75 x monthly FPG
+  # via table_by_hh_size), gross_income and total_wage_earner_earnings (monthly AU
+  # sums), unearned_income (monthly AU unearned), and the constants wage_earner_count=1,
+  # child_care_expenses=0, thirty_plus_one_third_disregard_applies=true. The $90 + $30
+  # + 1/3 earned-income deduction is projected at household scope (wage_earner_count=1),
+  # exact for the 0- and 1-earner units that dominate the caseload and diverging only
+  # for the rare multi-earner unit (each earner's own $90/$30 pass), dispositioned --
+  # the ECPS composed-program bridge does not reliably materialise person entities for
+  # zero-earner assistance units, so a per-person leaf would collapse to None there.
+  - pattern: derived_formula
+    name: de_tanf_monthly_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-de/tanf demographic-gated monthly benefit
+    formula: |-
+      if household_has_minor_or_pregnant_member: de_tanf else: 0
+
+  - pattern: derived_formula
+    name: de_tanf_annual_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Year
+    unit: USD
+    source: axiom-oracles programs/us-de/tanf program output
+    formula: |-
+      de_tanf_monthly_benefit * 12
