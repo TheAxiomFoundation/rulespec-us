@@ -47,6 +47,8 @@ def manifest_roots() -> list[tuple[Path, Path]]:
 
 def resolve_applied_path(base: Path, applied: str) -> Path:
     head = applied.split("/", 1)[0]
+    if base == ROOT and head == "programs":
+        return ROOT / applied
     if base == ROOT and not JURISDICTION_DIR_RE.match(head):
         # Pre-consolidation federal manifests predate the us/ prefix.
         return ROOT / "us" / applied
