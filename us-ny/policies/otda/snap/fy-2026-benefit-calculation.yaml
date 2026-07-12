@@ -284,3 +284,106 @@ rules:
           and snap_work_requirement_eligible
           and snap_student_eligible
           and snap_residency_citizenship_eligible
+
+  # Binds the 7 CFR 273.10(e) shelter input to New York's allowable shelter
+  # costs (18 NYCRR 387.12(f)(3)(vi)), so the regulation's whole-dollar
+  # benefit chain computes over the same shelter total as the composed
+  # statutory chain — the same binding the California composition makes. On
+  # the homeless path the vi rule substitutes the standard homeless shelter
+  # allowance as a shelter expense, so the federal pre-shelter homeless
+  # deduction stays off (the snap_claimed_homeless_shelter_deduction binding
+  # below).
+  - name: snap_total_allowable_shelter_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 18 NYCRR 387.12(f)(3)(vi)
+    metadata:
+      proof:
+        atoms:
+          # The proof validator requires composition atoms to cite the
+          # module's own verification source; the operative shelter-expense
+          # substitution is proven in the imported
+          # us-ny:regulations/18-nycrr/387/12/f/3/vi module's own atoms.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_allowable_shelter_costs
+
+  # New York administers homeless shelter costs as a shelter expense through
+  # the excess-shelter computation (18 NYCRR 387.12(f)(3)(vi), which restates
+  # the federal homeless deduction into snap_allowable_shelter_costs above),
+  # not as the separate 273.10(e) pre-shelter homeless deduction. Binding the
+  # federal claimed amount to zero keeps exactly one homeless path live: a
+  # positive claimed amount would zero the federal excess-shelter cost while
+  # the vi substitution simultaneously carries the allowance as a shelter
+  # cost.
+  - name: snap_claimed_homeless_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 18 NYCRR 387.12(f)(3)(vi)
+    metadata:
+      proof:
+        atoms:
+          # Composition-source atom (validator constraint, as above); the
+          # shelter-expense election this zero binding implements is proven
+          # in the vi module, whose restates relation covers the federal
+          # homeless deduction.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0
+
+  # The issued monthly benefit. Rides the 7 CFR 273.10(e)(1)-(2) chain, which
+  # computes in whole dollars (earned-income deduction cents dropped, excess
+  # shelter rounded to the nearest dollar under the 273.10(e)(1)(ii)(A)
+  # election, minimum-benefit floor for one- and two-person households) — the
+  # computation FNS applies in the SNAP quality control database and New
+  # York's eligibility systems apply in issuance. Initial months ride New
+  # York's certification-period proration (18 NYCRR 387.10) through
+  # snap_initial_month_allotment_after_minimum_issuance. The composed
+  # 2014(e)/2017(a) statutory chain above stays pure (it carries cents) and
+  # is not the issued amount.
+  - name: snap_benefit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(2)(ii) via New York SNAP FY 2026 benefit calculation composition
+    metadata:
+      proof:
+        atoms:
+          # Composition-source atom (validator constraint, as above); the
+          # whole-dollar allotment computation is proven in the imported
+          # us:regulations/7-cfr/273/10 module's own atoms.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+              span: 'New York SNAP FY 2026 benefit calculation composition'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_eligible:
+              if household_initial_month:
+                  snap_initial_month_allotment_after_minimum_issuance
+              else:
+                  snap_monthly_allotment
+          else:
+              0
