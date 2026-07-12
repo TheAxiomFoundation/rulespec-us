@@ -1,0 +1,161 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-2003
+  summary: |-
+    “Qualified individual” includes specified Colorado-domiciled natural persons and certain decedents, but excludes a person convicted of a felony who served 180 days or more of specified incarceration. A qualified individual under subsection (1)(a)(II) or (IV) may claim the refund on a timely assistance-grant application unless the refund was claimed on a qualifying income tax return.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-2003/3#state_sales_tax_refund_amount
+      reason: The refund amount depends on the identical individual sales tax refund and identical refund threshold under section 39-22-2002, for which no executable RuleSpec context is available.
+    - output: us-co:statutes/39/39-22-2003/1.5#adjusted_gross_income_including_state_and_local_bond_interest
+      reason: The post-2000 adjusted-gross-income definition depends on the interest-income addition under section 39-22-104(3)(b), whose copied RuleSpec context is unavailable as an executable export.
+rules:
+  - name: minimum_qualifying_individual_age
+    kind: parameter
+    dtype: Integer
+    source: 39-22-2003(1)(a)(II)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "at least eighteen years of age"
+    versions:
+      - effective_from: '1999-01-01'
+        formula: |-
+          18
+
+  - name: felony_incarceration_disqualification_days
+    kind: parameter
+    dtype: Count
+    source: 39-22-2003(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "one hundred eighty days or more"
+    versions:
+      - effective_from: '1999-01-01'
+        formula: |-
+          180
+
+  - name: felony_incarceration_disqualifies_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 39-22-2003(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "convicted of a felony and who served a sentence of incarceration"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "for a total of one hundred eighty days or more"
+    versions:
+      - effective_from: '1999-01-01'
+        formula: |-
+          person_was_convicted_of_felony
+          and days_person_served_incarcerated_in_specified_correctional_facility_during_fiscal_year >= felony_incarceration_disqualification_days
+
+  - name: qualified_individual_for_sales_tax_refund
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 39-22-2003(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "qualified individual means"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "Qualified individual does not include"
+    versions:
+      - effective_from: '1999-01-01'
+        formula: |-
+          person_is_natural
+          and (
+            (
+              person_is_domiciled_in_colorado_for_entire_taxable_year
+              and person_has_state_income_tax_liability_or_files_return_for_withholding_refund
+            )
+            or (
+              person_is_domiciled_in_colorado_for_entire_taxable_year
+              and person_age_as_of_preceding_december_31 >= minimum_qualifying_individual_age
+            )
+            or (
+              person_died_during_taxable_year
+              and person_was_domiciled_in_colorado_from_january_1_until_death
+              and estate_or_spouse_has_state_income_tax_liability_or_files_return_for_withholding_refund
+            )
+            or (
+              person_died_during_taxable_year
+              and person_was_domiciled_in_colorado_from_january_1_until_death
+              and person_age_as_of_december_31_immediately_before_taxable_year >= minimum_qualifying_individual_age
+            )
+          )
+          and not felony_incarceration_disqualifies_individual
+
+  - name: refund_claim_on_assistance_grant_application_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 39-22-2003(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "qualified individual as defined in subsection (1)(a)(II) or (1)(a)(IV)"
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "must be claimed on or before October 15"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-2003
+              excerpt: "has claimed the refund ... on an income tax form"
+    versions:
+      - effective_from: '1999-01-01'
+        formula: |-
+          person_is_natural
+          and (
+            (
+              person_is_domiciled_in_colorado_for_entire_taxable_year
+              and person_age_as_of_preceding_december_31 >= minimum_qualifying_individual_age
+            )
+            or (
+              person_died_during_taxable_year
+              and person_was_domiciled_in_colorado_from_january_1_until_death
+              and person_age_as_of_december_31_immediately_before_taxable_year >= minimum_qualifying_individual_age
+            )
+          )
+          and person_claims_property_tax_or_heat_or_fuel_assistance_grant
+          and assistance_grant_application_is_filed_by_refund_claim_deadline
+          and not person_has_claimed_refund_on_income_tax_return_for_same_tax_year
+          and not felony_incarceration_disqualifies_individual
