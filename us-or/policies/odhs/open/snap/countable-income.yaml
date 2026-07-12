@@ -1,0 +1,197 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-or/manual/odhs/open/page-272
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9
+        - us:regulations/7-cfr/273/10
+      rationale: |-
+        Federal SNAP income and benefit-calculation regulations provide the
+        higher-authority income framework. Oregon OPEN page 272 is the operative
+        state manual source for the ONE-system countable-income steps encoded
+        here, including the 50 percent self-employment cost exclusion and the
+        verified court-ordered child-support exclusion.
+  summary: |-
+    Oregon OPEN SNAP countable-income calculation step. The system adds income,
+    applies a 50 percent exclusion for self-employment with allowable costs when
+    selected, subtracts verified court-ordered child-support expense payments
+    for children outside the filing group, and compares countable income to the
+    130 percent FPL countable-income limit unless the group is categorically
+    eligible or contains an elderly person or an individual with disabilities.
+rules:
+  - name: snap_self_employment_cost_exclusion_rate
+    kind: parameter
+    dtype: Rate
+    source: Oregon OPEN, SNAP benefit allotment calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "the system will allow 50 percent exclusion for the costs"
+    versions:
+      - effective_from: '2026-04-01'
+        formula: |-
+          0.5
+
+  - name: snap_countable_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Oregon OPEN, SNAP benefit allotment calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "If income includes self-employment with allowable costs of doing business, the system will allow 50 percent exclusion for the costs"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-or:policies/odhs/open/snap/countable-income#snap_self_employment_cost_exclusion_rate
+              output: snap_self_employment_cost_exclusion_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-04-01'
+        formula: |-
+          if self_employment_with_allowable_costs_selected:
+              max(0, snap_gross_self_employment_income - (snap_gross_self_employment_income * snap_self_employment_cost_exclusion_rate))
+          else:
+              max(0, snap_gross_self_employment_income)
+
+  - name: snap_verified_court_ordered_child_support_exclusion
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Oregon OPEN, SNAP benefit allotment calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "When Court Ordered Support (COS) expense payments are being made by a member of the filing group for a child who is not in the filing group and have been verified"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "the amount of the allowable expense is subtracted from the countable income"
+    versions:
+      - effective_from: '2026-04-01'
+        formula: |-
+          if court_ordered_child_support_expense_verified_for_child_outside_filing_group:
+              max(0, court_ordered_child_support_expense_paid_by_filing_group_member)
+          else:
+              0
+
+  - name: snap_countable_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Oregon OPEN, SNAP benefit allotment calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "Add all types of income"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "The subtotal is the applicant’s SNAP countable income."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-or:policies/odhs/open/snap/countable-income#snap_countable_self_employment_income
+              output: snap_countable_self_employment_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-or:policies/odhs/open/snap/countable-income#snap_verified_court_ordered_child_support_exclusion
+              output: snap_verified_court_ordered_child_support_exclusion
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-04-01'
+        formula: |-
+          max(
+              0,
+              snap_gross_non_self_employment_income
+              + snap_countable_self_employment_income
+              - snap_verified_court_ordered_child_support_exclusion
+          )
+
+  - name: snap_countable_income_limit_exemption_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Oregon OPEN, SNAP benefit allotment calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "Filing groups that are categorically eligible or contain an elderly person or an individual with disabilities do not need to meet the SNAP countable income limit."
+    versions:
+      - effective_from: '2026-04-01'
+        formula: |-
+          snap_filing_group_categorically_eligible
+          or snap_filing_group_contains_elderly_or_disabled_member
+
+  - name: snap_countable_income_limit_test_passed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Oregon OPEN, SNAP benefit allotment calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "This amount is compared to the SNAP countable income limit – 130 percent FPL."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-or/manual/odhs/open/page-272
+              excerpt: "if the household is not categorically eligible or does not contain an elderly person or an individual with disabilities, and income is equal to or exceeds the countable income limit, the household is not eligible"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-or:policies/odhs/open/snap/countable-income#snap_countable_income
+              output: snap_countable_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-or:policies/odhs/open/snap/countable-income#snap_countable_income_limit_exemption_applies
+              output: snap_countable_income_limit_exemption_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-04-01'
+        formula: |-
+          snap_countable_income_limit_exemption_applies
+          or snap_countable_income < snap_countable_income_limit_130_percent_fpl
