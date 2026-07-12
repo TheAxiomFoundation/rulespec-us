@@ -1,0 +1,104 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ct/manual/dss/snap/tables/block-1
+      - us-ct/manual/dss/snap/tables/block-2
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:statutes/7/2014/g
+      rationale: |-
+        Federal SNAP resource-limit authority provides generally applicable household resource limits and adjustment mechanics, but the Connecticut DSS table is the operative source for the state EDG asset-limit rows and the $4,500 current table amount encoded here.
+  summary: |-
+    "Elderly/Disabled EDG with Gross Income Over 200%" and "EDG's with Gross Income Over 200% and the only Elderly/Disabled Member is Disqualified or Ineligible" have asset limits of "$4,500"; "All Other EDGs" are "N/A."
+rules:
+  - name: snap_asset_limit_amount_for_gross_income_over_200_percent_elderly_or_disabled_edg
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: DSS SNAP tables, Asset Limits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-1
+              excerpt: '$4,500'
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-2
+              excerpt: 'Effective Date: 10/01/2025'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          4500
+
+  - name: snap_asset_limit_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: DSS SNAP tables, Asset Limits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-1
+              excerpt: 'Elderly/Disabled EDG with Gross Income Over 200%'
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-1
+              excerpt: "EDG's with Gross Income Over 200% and the only Elderly/Disabled Member is Disqualified or Ineligible"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-1
+              excerpt: 'All Other EDGs ... N/A'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          edg_gross_income_over_200_percent
+          and (
+            snap_household_has_elderly_or_disabled_member
+            or only_elderly_or_disabled_member_is_disqualified_or_ineligible
+          )
+
+  - name: snap_asset_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DSS SNAP tables, Asset Limits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-1
+              excerpt: 'All Other EDGs $4,500 $4,500 N/A'
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/snap/tables/asset-limits#snap_asset_limit_amount_for_gross_income_over_200_percent_elderly_or_disabled_edg
+              output: snap_asset_limit_amount_for_gross_income_over_200_percent_elderly_or_disabled_edg
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/snap/tables/asset-limits#snap_asset_limit_applies
+              output: snap_asset_limit_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_asset_limit_applies: snap_asset_limit_amount_for_gross_income_over_200_percent_elderly_or_disabled_edg else: 0
