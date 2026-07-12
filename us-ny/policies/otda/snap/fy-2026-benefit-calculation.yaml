@@ -288,35 +288,69 @@ rules:
   # Binds the 7 CFR 273.10(e) shelter input to New York's allowable shelter
   # costs (18 NYCRR 387.12(f)(3)(vi)), so the regulation's whole-dollar
   # benefit chain computes over the same shelter total as the composed
-  # statutory chain — the same binding the California composition makes.
+  # statutory chain — the same binding the California composition makes. On
+  # the homeless path the vi rule substitutes the standard homeless shelter
+  # allowance as a shelter expense, so the federal pre-shelter homeless
+  # deduction stays off (the snap_claimed_homeless_shelter_deduction binding
+  # below).
   - name: snap_total_allowable_shelter_expenses
     kind: derived
     entity: Household
     dtype: Money
     period: Month
     unit: USD
-    source: New York SNAP FY 2026 benefit calculation composition
+    source: 18 NYCRR 387.12(f)(3)(vi)
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
-              span: 'New York SNAP FY 2026 benefit calculation composition'
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/12/f/3/vi
+              excerpt: 'to use the standard homeless shelter allowance as a shelter expense, unless verified actual shelter costs are higher'
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           snap_allowable_shelter_costs
+
+  # New York administers homeless shelter costs as a shelter expense through
+  # the excess-shelter computation (18 NYCRR 387.12(f)(3)(vi), which restates
+  # the federal homeless deduction into snap_allowable_shelter_costs above),
+  # not as the separate 273.10(e) pre-shelter homeless deduction. Binding the
+  # federal claimed amount to zero keeps exactly one homeless path live: a
+  # positive claimed amount would zero the federal excess-shelter cost while
+  # the vi substitution simultaneously carries the allowance as a shelter
+  # cost.
+  - name: snap_claimed_homeless_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 18 NYCRR 387.12(f)(3)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/regulation/18-nycrr/387/12/f/3/vi
+              excerpt: 'to use the standard homeless shelter allowance as a shelter expense'
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0
 
   # The issued monthly benefit. Rides the 7 CFR 273.10(e)(1)-(2) chain, which
   # computes in whole dollars (earned-income deduction cents dropped, excess
   # shelter rounded to the nearest dollar under the 273.10(e)(1)(ii)(A)
   # election, minimum-benefit floor for one- and two-person households) — the
   # computation FNS applies in the SNAP quality control database and New
-  # York's eligibility systems apply in issuance. The composed 2014(e)/2017(a)
-  # statutory chain above stays pure (it carries cents) and is not the issued
-  # amount.
+  # York's eligibility systems apply in issuance. Initial months ride New
+  # York's certification-period proration (18 NYCRR 387.10) through
+  # snap_initial_month_allotment_after_minimum_issuance. The composed
+  # 2014(e)/2017(a) statutory chain above stays pure (it carries cents) and
+  # is not the issued amount.
   - name: snap_benefit
     kind: derived
     entity: Household
@@ -330,12 +364,15 @@ rules:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
-              span: 'New York SNAP FY 2026 benefit calculation composition'
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: 'the monthly allotment equals the maximum SNAP allotment for household size reduced by 30 percent of net monthly income, with specified rounding options; initial-month benefits under $10 are not issued'
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           if snap_eligible:
-              snap_monthly_allotment
+              if household_initial_month:
+                  snap_initial_month_allotment_after_minimum_issuance
+              else:
+                  snap_monthly_allotment
           else:
               0
