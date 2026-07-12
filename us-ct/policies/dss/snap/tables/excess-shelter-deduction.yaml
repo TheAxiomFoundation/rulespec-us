@@ -1,0 +1,99 @@
+format: rulespec/v1
+imports:
+  - us:regulations/7-cfr/273/9#snap_full_excess_shelter_deduction_applies
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ct/manual/dss/snap/tables/block-3
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9#snap_full_excess_shelter_deduction_applies
+        - us:policies/usda/snap/fy-2026-cola/deductions#snap_maximum_excess_shelter_deduction_48_states_dc
+      rationale: |-
+        Federal SNAP context supplies the delegated full-excess-shelter rule and current-year federal maximum; the Connecticut DSS table is the direct local source for applying the no-maximum and $744 maximum EDG categories in this state table slice.
+  summary: |-
+    Elderly / Disabled EDG: No Maximum. All Other EDGs: $744. Exception: the All Other EDGs deduction applies if the only elderly/disabled member is ineligible.
+rules:
+  - name: snap_all_other_edg_maximum_excess_shelter_deduction
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: CT DSS SNAP excess shelter deduction table, All Other EDGs column
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-3
+              excerpt: "All Other EDGs ... $744"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          744
+
+  - name: snap_excess_shelter_deduction_all_other_edg_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: CT DSS SNAP excess shelter deduction table, exception for only elderly/disabled member ineligible
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-3
+              excerpt: "All Other EDGs applies if the only elderly/disabled member is ineligible"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9#snap_full_excess_shelter_deduction_applies
+              output: snap_full_excess_shelter_deduction_applies
+              hash: sha256:76dd530624a00c5199f27bd4ec3ce866cd89e897fd7332b368164cf58f222b9f
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not snap_full_excess_shelter_deduction_applies
+          or only_elderly_or_disabled_member_is_ineligible
+
+  - name: snap_excess_shelter_expense_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: CT DSS SNAP excess shelter deduction table, maximum by EDG category
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-3
+              excerpt: "Elderly / Disabled EDG ... No Maximum $744"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ct/manual/dss/snap/tables/block-3
+              excerpt: "All Other EDGs applies if the only elderly/disabled member is ineligible"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/snap/tables/excess-shelter-deduction#snap_all_other_edg_maximum_excess_shelter_deduction
+              output: snap_all_other_edg_maximum_excess_shelter_deduction
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ct:policies/dss/snap/tables/excess-shelter-deduction#snap_excess_shelter_deduction_all_other_edg_applies
+              output: snap_excess_shelter_deduction_all_other_edg_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_excess_shelter_deduction_all_other_edg_applies: min(max(0, uncapped_snap_excess_shelter_expense_deduction), snap_all_other_edg_maximum_excess_shelter_deduction) else: max(0, uncapped_snap_excess_shelter_expense_deduction)
