@@ -1,0 +1,233 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9
+      rationale: |-
+        Federal SNAP regulations provide the higher-authority shelter-deduction and utility-allowance framework. Alaska DPA Manual MS 602-4E is the direct source for the state shelter-cost, homeless shelter deduction, heating/non-heating utility standard eligibility, and shelter-cost verification rules encoded here.
+  summary: |-
+    Alaska SNAP households receive a shelter deduction when total shelter costs exceed 50% of net income. Regular households receive the excess shelter amount up to the maximum shelter deduction, while SPECAT households with an elderly or disabled member receive the uncapped excess amount. All-homeless households that incur some shelter expense may use a $199 homeless shelter deduction instead of other shelter and utility deductions. Heating utility standard eligibility includes households responsible for primary heating costs and elderly or disabled households receiving qualifying weatherization, Heating Assistance, or Native organization energy assistance. Shelter-cost verification is required at application, for new shelter costs, and when reported shelter costs change by more than $25.
+rules:
+  - name: shelter_excess_threshold_rate
+    kind: parameter
+    dtype: Rate
+    source: MS 602-4E, Shelter Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "more than 50% of their net income"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.50
+
+  - name: homeless_shelter_standard_deduction_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: MS 602-4E(6), Homeless Shelter Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "standard deduction of $199"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          199
+
+  - name: shelter_cost_change_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: MS 602-4E(7), Verification of Shelter Costs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "changed by more than $25"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          25
+
+  - name: heating_assistance_minimum_payment_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: MS 602-4E(2)(a), Heating Utility Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "$21 or more in the month of application or the preceding 12 months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          21
+
+  - name: snap_excess_shelter_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: MS 602-4E, Shelter Deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "excess shelter amount that exceeds 50% of their countable net income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ak:policies/dpa/snap/602-604-2-e/block-1#shelter_excess_threshold_rate
+              output: shelter_excess_threshold_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(0, snap_total_allowable_shelter_expenses - (shelter_excess_threshold_rate * snap_net_income))
+
+  - name: snap_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: MS 602-4E and MS 602-4E(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "Regular households are allowed the excess shelter amount that exceeds 50% of their countable net income, up to the maximum shelter deduction"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "Special Category ( SPECAT ) households with a disabled or elderly household member are allowed the excess shelter amount that exceeds 50% of their countable net income. These households have no maximum shelter deduction"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "If the household is allowed the homeless standard deduction, they are not allowed other shelter or utility deductions"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_all_members_are_homeless and household_incurs_some_shelter_expense and household_chooses_homeless_shelter_standard_deduction:
+            homeless_shelter_standard_deduction_amount
+          else:
+            if snap_household_has_elderly_or_disabled_member:
+              snap_excess_shelter_expenses
+            else:
+              min(snap_excess_shelter_expenses, snap_maximum_shelter_deduction_from_addendum_4)
+
+  - name: snap_heating_utility_standard_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: MS 602-4E(2)(a), Heating Utility Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "Households that are responsible for paying primary heating costs separate from their rent or mortgage are allowed the heating utility standard"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "Households including an aged or disabled individual, living in a multi-unit dwelling or an individual unit, and received a qualifying weatherization program payment"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "received Heating Assistance or energy assistance administered by a Native organization in the amount of $21 or more"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_responsible_for_primary_heating_costs_separate_from_rent_or_mortgage
+          or household_responsible_for_heating_fuel_costs_to_vendor_or_utility
+          or household_responsible_for_heating_fuel_costs_to_landlord_separate_from_rent
+          or household_in_subsidized_housing_is_charged_for_heating_costs
+          or household_verifies_payment_of_heating_expense_billed_in_another_name
+          or household_condominium_or_association_fee_includes_heat
+          or (
+            snap_household_has_elderly_or_disabled_member
+            and household_received_qualifying_weatherization_program_payment_in_application_month_or_preceding_12_months
+          )
+          or (
+            snap_household_has_elderly_or_disabled_member
+            and household_received_heating_or_native_energy_assistance_in_application_month_or_preceding_12_months >= heating_assistance_minimum_payment_amount
+          )
+
+  - name: snap_non_heating_utility_standard_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: MS 602-4E(2)(b), Non-Heating Utility Standards
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "Non-heating utility standards are given to households that are responsible for electricity, water, sewer, and/or phone costs, yet are not responsible for paying heating costs"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not snap_heating_utility_standard_applies
+          and (
+            household_responsible_for_non_heating_utility_costs_to_vendor_or_utility
+            or household_in_subsidized_housing_is_charged_for_non_heating_utility_costs
+            or household_responsible_for_non_heating_utility_costs_to_landlord_separate_from_rent
+          )
+
+  - name: shelter_cost_verification_required_for_reported_change
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: MS 602-4E(7), Verification of Shelter Costs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ak/manual/dpa/snap/602-604-2-e/block-1
+              excerpt: "During the certification period, when the household reports new shelter costs or reports that their shelter costs have changed by more than $25"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_reports_new_shelter_costs
+          or household_reported_shelter_cost_change_amount > shelter_cost_change_verification_threshold
