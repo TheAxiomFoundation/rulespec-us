@@ -212,6 +212,9 @@ def regen_index(leaf: Path) -> None:
 def sync_pending(leaf: Path) -> str:
     """Write oracle-coverage-pending.yaml using the reviewed sync writer.
     Returns the sync summary line."""
+    cov_ok, cov_detail = coverage_sync_writer_status()
+    if not cov_ok:
+        raise RuntimeError(f"coverage sync writer provenance failed: {cov_detail}")
     rc, out = run([str(COV_PY), "-m", "axiom_encode.entrypoint",
                    "oracle-coverage-pending", "sync",
                    "--root", str(leaf.parent), "--source", "bulk"],
@@ -238,6 +241,13 @@ def finalize_pending(leaf: Path) -> bool:
         pf.unlink()
         return False
     return True
+
+
+def is_encoding_manifest_path(path: str) -> bool:
+    """Return whether a changed path is a root or jurisdiction apply manifest."""
+    return path.startswith(".axiom/encoding-manifests/") or (
+        "/.axiom/encoding-manifests/" in path
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +278,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
     and never conflicts on the shared oracle-coverage-pending.yaml as siblings
     merge one after another.
     """
+    require_local_mutation_provenance()
     slug = branch.split("/", 1)[1]
     leaf = make_worktree(f"unstick-{slug}", "origin/main")
     try:
@@ -277,7 +288,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
                        "origin/main...FETCH_HEAD"])
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
-                         or "/.axiom/encoding-manifests/" in f)]
+                         or is_encoding_manifest_path(f))]
         if not artifacts:
             return f"{branch}: no module artifacts in diff (already merged?)"
         run(["git", "-C", str(leaf), "checkout", "FETCH_HEAD", "--", *artifacts],
@@ -360,6 +371,17 @@ def encode_entry(item: dict) -> dict:
     if already_handled(slug):
         res["status"] = "skipped"
         res["detail"] = "bulk/<slug> PR already exists"
+        return res
+    gen_ok, gen_detail = generation_encoder_status()
+    cov_ok, cov_detail = coverage_sync_writer_status()
+    if not gen_ok or not cov_ok:
+        failures = []
+        if not gen_ok:
+            failures.append(f"generation encoder: {gen_detail}")
+        if not cov_ok:
+            failures.append(f"coverage sync writer: {cov_detail}")
+        res["status"] = "config-mismatch"
+        res["detail"] = "local provenance check failed: " + "; ".join(failures)
         return res
     expected_encoder_ref = item.get("encoder_ref") or pinned_toolchain().get(
         "axiom_encode_ref"
@@ -626,6 +648,19 @@ def generation_encoder_status() -> tuple[bool, str]:
     return True, f"{ref} ({expected_version})"
 
 
+def require_local_mutation_provenance() -> None:
+    """Fail before local drain or unstick can mutate a worktree or branch."""
+    gen_ok, gen_detail = generation_encoder_status()
+    cov_ok, cov_detail = coverage_sync_writer_status()
+    failures = []
+    if not gen_ok:
+        failures.append(f"generation encoder: {gen_detail}")
+    if not cov_ok:
+        failures.append(f"coverage sync writer: {cov_detail}")
+    if failures:
+        raise RuntimeError("local mutation provenance failed: " + "; ".join(failures))
+
+
 def cmd_doctor(_args) -> int:
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
@@ -646,6 +681,7 @@ def cmd_doctor(_args) -> int:
 
 
 def cmd_unstick(args) -> int:
+    require_local_mutation_provenance()
     prs = open_bulk_prs()
     if args.pr:
         targets = [p for p in prs if p["number"] in set(args.pr)]
@@ -666,6 +702,7 @@ def cmd_unstick(args) -> int:
 
 
 def cmd_drain(args) -> int:
+    require_local_mutation_provenance()
     matrix = json.loads(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
          "--status", "pending", "--format", "matrix",

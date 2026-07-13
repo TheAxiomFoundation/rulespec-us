@@ -90,6 +90,9 @@ def test_local_pending_sync_strips_apply_signing_key(monkeypatch, tmp_path) -> N
         return 0, "synced"
 
     monkeypatch.setattr(local_drain, "run", fake_run)
+    monkeypatch.setattr(
+        local_drain, "coverage_sync_writer_status", lambda: (True, "reviewed")
+    )
 
     assert local_drain.sync_pending(tmp_path) == "synced"
     assert captured["unset_env"] == ("AXIOM_ENCODE_APPLY_SIGNING_KEY",)
@@ -99,6 +102,32 @@ def test_local_pending_sync_strips_apply_signing_key(monkeypatch, tmp_path) -> N
         "--source",
         "bulk",
     ]
+
+
+def test_local_pending_sync_fails_closed_on_provenance(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        local_drain,
+        "coverage_sync_writer_status",
+        lambda: (False, "wrong checkout"),
+    )
+    monkeypatch.setattr(
+        local_drain,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("sync command must not run"),
+    )
+
+    with pytest.raises(RuntimeError, match="wrong checkout"):
+        local_drain.sync_pending(tmp_path)
+
+
+def test_unstick_preserves_root_and_jurisdiction_manifests() -> None:
+    assert local_drain.is_encoding_manifest_path(
+        ".axiom/encoding-manifests/us-mo/manual/example.json"
+    )
+    assert local_drain.is_encoding_manifest_path(
+        "us-oh/.axiom/encoding-manifests/statutes/example.json"
+    )
+    assert not local_drain.is_encoding_manifest_path(".axiom/index/example.json")
 
 
 def test_local_worktree_uses_same_named_wrapper(monkeypatch, tmp_path) -> None:
@@ -118,6 +147,12 @@ def test_local_worktree_uses_same_named_wrapper(monkeypatch, tmp_path) -> None:
 def test_local_encoder_mismatch_is_resumable(monkeypatch) -> None:
     monkeypatch.setattr(local_drain, "already_handled", lambda _slug: False)
     monkeypatch.setattr(
+        local_drain, "generation_encoder_status", lambda: (True, "reviewed")
+    )
+    monkeypatch.setattr(
+        local_drain, "coverage_sync_writer_status", lambda: (True, "reviewed")
+    )
+    monkeypatch.setattr(
         local_drain,
         "run",
         lambda *_args, **_kwargs: (0, "3869d66d009f52258be35901edbef370e65a399c\n"),
@@ -133,6 +168,34 @@ def test_local_encoder_mismatch_is_resumable(monkeypatch) -> None:
 
     assert result["status"] == "config-mismatch"
     assert "generation encoder revision mismatch" in result["detail"]
+
+
+def test_local_encoder_fails_closed_before_generation(monkeypatch) -> None:
+    monkeypatch.setattr(local_drain, "already_handled", lambda _slug: False)
+    monkeypatch.setattr(
+        local_drain,
+        "generation_encoder_status",
+        lambda: (False, "dirty checkout"),
+    )
+    monkeypatch.setattr(
+        local_drain, "coverage_sync_writer_status", lambda: (True, "reviewed")
+    )
+    monkeypatch.setattr(
+        local_drain,
+        "make_worktree",
+        lambda *_args, **_kwargs: pytest.fail("worktree must not be created"),
+    )
+
+    result = local_drain.encode_entry(
+        {
+            "citation": "us-mo/manual/example/block-1",
+            "slug": "us-mo-manual-example-block-1",
+            "encoder_ref": APPROVED_ENCODER_REF,
+        }
+    )
+
+    assert result["status"] == "config-mismatch"
+    assert "dirty checkout" in result["detail"]
 
 
 def test_local_doctor_rejects_obsolete_sync_contract(monkeypatch, tmp_path) -> None:
