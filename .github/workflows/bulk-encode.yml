@@ -34,11 +34,6 @@ on:
         required: false
         type: string
         default: "8"
-      attest_ref:
-        description: "Branch ref whose reviewed RuleSpec changes need key-holder attestation."
-        required: false
-        type: string
-        default: ""
   schedule:
     # Weekly, off-peak, after the corpus/oracle cadence. Picks up any entries
     # still `pending` in the worklist without a human dispatch.
@@ -55,56 +50,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  attest:
-    name: attest reviewed files
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attest_ref != '' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout branch
-        uses: actions/checkout@v6.0.2
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.attest_ref }}
-          token: ${{ secrets.BULK_ENCODE_TOKEN }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v6.2.0
-        with:
-          python-version: "3.14"
-
-      - name: Install encoder
-        run: |
-          git clone https://github.com/TheAxiomFoundation/axiom-encode.git "$RUNNER_TEMP/axiom-encode"
-          git -C "$RUNNER_TEMP/axiom-encode" checkout 75ad8644b40e80189bae29e65464b87d0491e514
-          python -m pip install --quiet --editable "$RUNNER_TEMP/axiom-encode"
-
-      - name: Attest reviewed files and restore workflow
-        env:
-          ATTEST_REF: ${{ inputs.attest_ref }}
-          AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets.AXIOM_ENCODE_APPLY_SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          axiom-encode sign-applied-files \
-            --repo "$GITHUB_WORKSPACE" \
-            --base-ref origin/main \
-            --head-ref HEAD \
-            --roots us-mo \
-            --manual-exception repair
-          git checkout origin/main -- .github/workflows/bulk-encode.yml
-          git add -- .axiom .github/workflows/bulk-encode.yml
-          git -c user.name="axiom-key-holder" \
-            -c user.email="key-holder@axiom-foundation.org" \
-            commit -m "Attest Missouri SNAP encoding"
-          axiom-encode guard-generated \
-            --repo "$GITHUB_WORKSPACE" \
-            --base-ref origin/main \
-            --head-ref HEAD \
-            --roots us-mo
-          git push origin "HEAD:$ATTEST_REF"
-
   dispatch:
     name: dispatch
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.attest_ref == '' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.compute.outputs.matrix }}
