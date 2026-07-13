@@ -1,0 +1,292 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+    corpus_citation_paths:
+      - us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+      - us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+      - us-ms/manual/mdhs/snap-policy-manual/part-14/page-129
+      - us-ms/manual/mdhs/snap-policy-manual/part-14/page-130
+      - us-ms/manual/mdhs/snap-policy-manual/part-14/page-141
+    upstream_source_check:
+      status: delegated_parameter_source
+      checked_paths:
+        - us:regulations/7-cfr/273/9#snap_utility_allowance_for_shelter_costs
+        - us:policies/usda/snap/fy-2026-cola/deductions#snap_maximum_excess_shelter_deduction_48_states_dc
+      rationale: |-
+        Mississippi SNAP Manual Rule 18.8 applies the maximum shelter deduction provided by FNS and the elderly/disabled exception; the FY 2026 dollar cap is imported from USDA's FY 2026 COLA deduction module.
+  summary: |-
+    Mississippi SNAP allows an optional deduction for legally obligated child support paid to non-household members, offers the standard homeless shelter deduction to all-homeless households not receiving free shelter throughout the month, permits verified higher actual homeless costs, calculates excess shelter costs above 50% of income after prior deductions, caps non-elderly/non-disabled excess shelter deductions at the FNS maximum, and applies the SUA, BUA, telephone allowance, or verified actual utilities according to Rule 18.9.
+imports:
+  - us:policies/usda/snap/fy-2026-cola/deductions
+rules:
+  - name: mississippi_snap_child_support_deduction_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rule 18.6
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+              excerpt: "legally obligated child support payments"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          household_member_pays_legally_obligated_child_support_to_non_household_member
+          and not payment_is_alimony
+
+  - name: mississippi_snap_homeless_shelter_deduction_entitled
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rules 18.7 and 26.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+              excerpt: "all members are homeless and not receiving free shelter throughout the month"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          snap_household_all_members_are_homeless
+          and not snap_household_receives_free_shelter_throughout_month
+
+  - name: mississippi_snap_verified_actual_homeless_shelter_costs_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rules 18.7 and 26.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-130
+              excerpt: "actual costs are higher and verified"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          mississippi_snap_homeless_shelter_deduction_entitled
+          and snap_homeless_actual_shelter_costs_verified
+          and snap_homeless_actual_shelter_costs > snap_homeless_shelter_deduction
+
+  - name: mississippi_snap_claimed_homeless_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Mississippi SNAP Policy Manual Rules 18.7 and 26.5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          if mississippi_snap_verified_actual_homeless_shelter_costs_allowed:
+            snap_homeless_actual_shelter_costs
+          else:
+            if mississippi_snap_homeless_shelter_deduction_entitled:
+              snap_homeless_shelter_deduction
+            else:
+              0
+
+  - name: mississippi_snap_excess_shelter_income_share
+    kind: parameter
+    dtype: Rate
+    source: Mississippi SNAP Policy Manual Rule 18.8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+              excerpt: "in excess of 50 percent of the household's income"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          0.50
+
+  - name: mississippi_snap_liheap_sua_threshold
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Mississippi SNAP Policy Manual Rule 18.9, LIHEAP threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+              excerpt: "receive more than $20 under the LIHEAP program"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          20
+
+  - name: mississippi_snap_excess_shelter_cost
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Mississippi SNAP Policy Manual Rules 18.8 and 30.13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-141
+              excerpt: "Subtract from total shelter costs 50 percent of the household's monthly income"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          max(0, snap_total_allowable_shelter_expenses - snap_household_income_after_prior_deductions * mississippi_snap_excess_shelter_income_share)
+
+  - name: mississippi_snap_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Mississippi SNAP Policy Manual Rule 18.8
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-102
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          if snap_household_contains_disabled_or_elderly_individual:
+            mississippi_snap_excess_shelter_cost
+          else:
+            min(mississippi_snap_excess_shelter_cost, snap_maximum_excess_shelter_deduction_48_states_dc)
+
+  - name: mississippi_snap_standard_utility_allowance_entitled
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rule 18.9, SUA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          snap_household_incurs_heating_or_cooling_expenses_separately_from_rent_or_mortgage
+          or (
+            snap_household_includes_elderly_or_disabled_member
+            and snap_household_receives_liheap_amount > mississippi_snap_liheap_sua_threshold
+          )
+
+  - name: mississippi_snap_basic_utility_allowance_entitled
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rule 18.9, BUA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+              excerpt: "at least two electricity and fuel utilities other than heating or cooling"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          not mississippi_snap_standard_utility_allowance_entitled
+          and snap_household_non_heating_cooling_utility_expense_count >= 2
+
+  - name: mississippi_snap_standard_telephone_allowance_entitled
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rule 18.9, telephone allowance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+              excerpt: "telephone bill is their only separately billed utility expense"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          not mississippi_snap_standard_utility_allowance_entitled
+          and not mississippi_snap_basic_utility_allowance_entitled
+          and snap_household_telephone_bill_only_separately_billed_utility_expense
+
+  - name: mississippi_snap_actual_utility_expenses_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rule 18.9, actual utility expenses
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+              excerpt: "may claim actual utility expenses, which must be verified"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          not mississippi_snap_standard_utility_allowance_entitled
+          and not mississippi_snap_basic_utility_allowance_entitled
+          and not mississippi_snap_standard_telephone_allowance_entitled
+          and snap_actual_utility_expenses_verified
+
+  - name: mississippi_snap_shared_heating_cooling_sua_not_prorated
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Mississippi SNAP Policy Manual Rule 18.9, shared heating/cooling SUA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/manual/mdhs/snap-policy-manual/part-14/page-103
+              excerpt: "will not prorate a SUA that includes heating or cooling costs"
+    versions:
+      - effective_from: '2025-12-01'
+        formula: |-
+          mississippi_snap_standard_utility_allowance_entitled
+          and snap_household_lives_and_shares_heating_or_cooling_expenses_with_others
