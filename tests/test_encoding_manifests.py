@@ -14,6 +14,12 @@ from test_repository_layout import (
     jurisdiction_dirs,
 )
 
+KNOWN_ORPHANED_ENCODING_MANIFESTS = [
+    # The module moved to us-ca/policies/cdss/snap/standard-utility-allowance.yaml
+    # during subtree absorption; its manifest stayed at the old guidance path.
+    "us-ca/guidance/cdss/acin-2025-i-46-25/standard-utility-allowance.yaml",
+]
+
 # Manifest-sync guard: axiom-encode writes an applied-rulespec manifest
 # (schema axiom-encode/applied-rulespec/v1) next to every encoding run,
 # recording the sha256 of each file it applied. A hand-edit to an encoded
@@ -102,13 +108,12 @@ def test_encoded_modules_match_their_manifests() -> None:
         if hashlib.sha256(module.read_bytes()).hexdigest() != expected:
             stale.append(module.relative_to(ROOT).as_posix())
 
-    problems = apply_gap_ratchet("stale_encoding_manifests", stale)
-    assert problems == [], (
+    assert stale == [], (
         "Encoded rule modules drifted from their encoding manifests "
         "(edited outside the axiom-encode path?). Re-run axiom-encode for "
         "each module below, or refresh its manifest under "
         ".axiom/encoding-manifests/ if the edit is being accepted as-is:\n"
-        + "\n".join(problems)
+        + "\n".join(stale)
     )
 
 
@@ -119,12 +124,11 @@ def test_manifests_reference_existing_modules() -> None:
         if not module.is_file() and entry.get("sha256") and not entry.get("deleted")
     ]
 
-    problems = apply_gap_ratchet("orphaned_encoding_manifests", orphaned)
-    assert problems == [], (
+    assert orphaned == KNOWN_ORPHANED_ENCODING_MANIFESTS, (
         "Encoding manifests reference modules that no longer exist at the "
         "recorded path. Move or regenerate the manifest alongside the "
         "module, or delete it if the module was retired:\n"
-        + "\n".join(problems)
+        + "\n".join(orphaned)
     )
 
 
