@@ -30,6 +30,30 @@ def test_bulk_branch_push_uses_full_destination_ref() -> None:
     assert 'push -f origin "HEAD:$branch"' not in workflow
 
 
+def test_review_fix_attestation_is_isolated_and_pinned() -> None:
+    workflow = WORKFLOW.read_text()
+
+    assert (
+        "if: ${{ github.event_name != 'workflow_dispatch' || "
+        "inputs.attest_ref == '' }}" in workflow
+    )
+    assert (
+        "if: ${{ github.event_name == 'workflow_dispatch' && "
+        "inputs.attest_ref != '' }}" in workflow
+    )
+    assert 'bulk/*) ;;' in workflow
+    assert "ref: 9978ad8181914affdebcd6fb881291198c3bc839" in workflow
+    assert 'python-version: "3.14"' in workflow
+    assert "path: target/rulespec-us" in workflow
+    assert "working-directory: trusted/axiom-encode-signer" in workflow
+    assert "--roots \"$roots\"" in workflow
+    assert 'git -C "$target" add -- .axiom "$jurisdiction/.axiom"' in workflow
+    assert "AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets.AXIOM_ENCODE_APPLY_SIGNING_KEY }}" in workflow
+    assert "axiom-encode sign-applied-files" in workflow
+    assert "--manual-exception repair" in workflow
+    assert 'git -C "$target" push origin "HEAD:refs/heads/$ATTEST_REF"' in workflow
+
+
 def test_oracle_classifier_uses_reviewed_sync_writer() -> None:
     workflow = WORKFLOW.read_text()
 

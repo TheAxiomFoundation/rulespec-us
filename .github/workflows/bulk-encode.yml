@@ -34,6 +34,11 @@ on:
         required: false
         type: string
         default: "8"
+      attest_ref:
+        description: "Existing bulk/* branch to re-attest after review fixes. Empty = encode queue."
+        required: false
+        type: string
+        default: ""
   schedule:
     # Weekly, off-peak, after the corpus/oracle cadence. Picks up any entries
     # still `pending` in the worklist without a human dispatch.
@@ -52,6 +57,7 @@ concurrency:
 jobs:
   dispatch:
     name: dispatch
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.attest_ref == '' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.compute.outputs.matrix }}
@@ -556,3 +562,85 @@ jobs:
           retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto --squash
 
           echo "PR ready for $CITATION on branch $branch (status: $ENC_STATUS, auto-merge on green)."
+
+  attest-review-fix:
+    name: attest review fix
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attest_ref != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate repair branch name
+        shell: bash
+        env:
+          ATTEST_REF: ${{ inputs.attest_ref }}
+        run: |
+          set -euo pipefail
+          case "$ATTEST_REF" in
+            bulk/*) ;;
+            *) echo "::error::attest_ref must name a bulk/* branch" >&2; exit 1 ;;
+          esac
+          git check-ref-format "refs/heads/$ATTEST_REF"
+
+      - name: Checkout reviewed repair branch
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.attest_ref }}
+          token: ${{ secrets.BULK_ENCODE_TOKEN }}
+          path: target/rulespec-us
+
+      - name: Set up trusted Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Checkout reviewed manifest signer
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: 9978ad8181914affdebcd6fb881291198c3bc839
+          path: trusted/axiom-encode-signer
+
+      - name: Install reviewed manifest signer
+        working-directory: trusted/axiom-encode-signer
+        run: python -m pip install --quiet -e .
+
+      - name: Attest reviewed RuleSpec edits
+        shell: bash
+        working-directory: trusted/axiom-encode-signer
+        env:
+          ATTEST_REF: ${{ inputs.attest_ref }}
+          AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets.AXIOM_ENCODE_APPLY_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          target="$GITHUB_WORKSPACE/target/rulespec-us"
+          git -C "$target" fetch origin main
+          mapfile -t modules < <(
+            git -C "$target" diff --name-only --diff-filter=AM origin/main...HEAD -- '*.yaml' |
+              awk '/^us(-[a-z0-9_]+)?\/(policies|manual|regulations|statutes)\// && $0 !~ /\.test\.yaml$/'
+          )
+          if [ "${#modules[@]}" -ne 1 ]; then
+            printf '::error::Expected exactly one changed RuleSpec module, found %s\n' "${#modules[@]}" >&2
+            printf '  %s\n' "${modules[@]}" >&2
+            exit 1
+          fi
+          jurisdiction="${modules[0]%%/*}"
+          roots="us"
+          if [ "$jurisdiction" != "us" ]; then
+            roots="us $jurisdiction"
+          fi
+          axiom-encode sign-applied-files \
+            --repo "$target" \
+            --base-ref origin/main \
+            --head-ref HEAD \
+            --roots "$roots" \
+            --manual-exception repair
+          git -C "$target" add -- .axiom "$jurisdiction/.axiom"
+          if git -C "$target" diff --cached --quiet; then
+            echo "::error::Signer did not update an apply manifest" >&2
+            exit 1
+          fi
+          git -C "$target" -c user.email=bulk-encode@axiom -c user.name="bulk-encode" \
+            commit -m "Attest reviewed encoder fixes"
+          git -C "$target" push origin "HEAD:refs/heads/$ATTEST_REF"
