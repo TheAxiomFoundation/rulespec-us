@@ -1,0 +1,110 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.570.11
+  summary: |-
+    "Home Care Allowance (HCA) is a special cash payment made to a client, five (5) years of age or older." Effective January 1, 2026, "the payment floor standard for HCA is $977." A functionally HCBS-eligible client is not eligible for HCA, except during a qualifying reassessment transition of up to three months.
+rules:
+  - name: hca_minimum_age_years
+    kind: parameter
+    dtype: Integer
+    source: 9 CCR 2503-5, § 3.570.11(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.570.11
+              excerpt: "five (5) years of age or older"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          5
+
+  - name: hca_hcbs_transition_maximum_months
+    kind: parameter
+    dtype: Integer
+    source: 9 CCR 2503-5, § 3.570.11(A)(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.570.11
+              excerpt: "up to three (3) months"
+    versions:
+      - effective_from: '2022-05-01'
+        formula: |-
+          3
+
+  - name: hca_payment_floor_standard
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 9 CCR 2503-5, § 3.570.11(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.570.11
+              excerpt: "The payment floor standard for HCA is $977."
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          977
+
+  - name: hca_client_eligible_for_program
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, § 3.570.11(A)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.570.11
+    versions:
+      - effective_from: '2022-05-01'
+        formula: |-
+          client_age_in_years >= hca_minimum_age_years
+          and client_has_been_evaluated_for_hcbs
+          and not client_receives_hcbs
+          and (
+            not client_is_functionally_eligible_for_hcbs
+            or (
+              eligibility_determination_is_reassessment
+              and hca_to_hcbs_transition_delay_not_within_client_control
+              and months_client_remains_on_hca_during_hcbs_transition <= hca_hcbs_transition_maximum_months
+            )
+          )
+
+  - name: hca_state_supplementary_payment_for_month
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, § 3.570.11(E)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.570.11
+              excerpt: "The supplemental payment is in addition to the grant payment and brings the client’s monthly benefit amount equal to the payment floor standard."
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          if client_is_enrolled_in_hca:
+            max(0, hca_payment_floor_standard - client_adult_financial_grant_amount)
+          else: 0

@@ -1,0 +1,136 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+  summary: |-
+    "Unearned income is monetary benefits not earned through employment or self-employment." SSA lump sums are counted in the month received, with unspent amounts treated as resources after nine months. Rental income is unearned when the client is not actively managing the property on average at least twenty hours a week, and is countable only to the extent it exceeds listed allowable expenses.
+rules:
+  - name: ssa_lump_sum_resource_retention_months
+    kind: parameter
+    dtype: Count
+    source: 9 CCR 2503-5, §3.520.785(B)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+              excerpt: "treated as a resource after nine (9) months"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          9
+
+  - name: rental_property_active_management_hours_weekly_threshold_for_unearned_income
+    kind: parameter
+    dtype: Count
+    source: 9 CCR 2503-5, §3.520.785(B)(20)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+              excerpt: "at least twenty (20) hours a week"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          20
+
+  - name: payment_is_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, §3.520.785(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          payment_is_monetary_benefit
+          and not payment_is_earned_through_employment_or_self_employment
+
+  - name: unspent_ssa_lump_sum_is_resource
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, §3.520.785(B)(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+              excerpt: "after nine (9) months"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          payment_is_ssa_lump_sum
+          and ssa_lump_sum_amount_remains_unspent
+          and months_since_ssa_lump_sum_was_received >= ssa_lump_sum_resource_retention_months
+
+  - name: rental_property_income_is_countable_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, §3.520.785(B)(20)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+              excerpt: "actively managing the property on an average of at least twenty (20) hours a week"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          not (client_actively_manages_rental_property
+          and average_rental_property_management_hours_per_week >= rental_property_active_management_hours_weekly_threshold_for_unearned_income)
+
+  - name: countable_rental_property_income
+    kind: derived
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 9 CCR 2503-5, §3.520.785(B)(20)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+              excerpt: "Rental income is countable to the extent it exceeds allowable expenses."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.785
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if rental_property_income_is_countable_unearned_income:
+            max(0, gross_rental_income - rental_property_maintenance_expenses - rental_property_taxes - rental_property_management_fees - rental_property_mortgage_interest - rental_property_utilities_paid)
+          else: 0
