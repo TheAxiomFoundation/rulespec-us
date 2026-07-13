@@ -343,7 +343,7 @@ def wait_for_merge(branch: str, timeout_s: int = 1500) -> str:
 # PART B: generate + PR one pending worklist entry via local Codex.
 # ---------------------------------------------------------------------------
 MODULE_RE = re.compile(
-    r"^[a-z]{2}(-[a-z0-9-]+)?/(statutes|regulations|policies)/.*\.yaml$")
+    r"^[a-z]{2}(-[a-z0-9-]+)?/(manual|statutes|regulations|policies)/.*\.yaml$")
 
 
 def already_handled(slug: str) -> bool:

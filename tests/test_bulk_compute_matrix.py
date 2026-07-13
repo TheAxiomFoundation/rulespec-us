@@ -130,6 +130,11 @@ def test_unstick_preserves_root_and_jurisdiction_manifests() -> None:
     assert not local_drain.is_encoding_manifest_path(".axiom/index/example.json")
 
 
+def test_local_drain_recognizes_manual_rulespec_modules() -> None:
+    assert local_drain.MODULE_RE.match("us-mo/manual/dss/snap/1105/block-1.yaml")
+    assert local_drain.MODULE_RE.match("us-mo/policies/dss/snap/block-1.yaml")
+
+
 def test_local_worktree_uses_same_named_wrapper(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(local_drain, "WT_ROOT", tmp_path / "wt")
     monkeypatch.setattr(local_drain, "CHECKOUT", tmp_path / "checkout")
