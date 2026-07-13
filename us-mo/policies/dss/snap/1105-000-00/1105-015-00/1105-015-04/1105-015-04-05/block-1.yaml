@@ -1,0 +1,295 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:statutes/7/2012/m/4
+        - us:policies/usda/snap/fy-2026-cola/income-eligibility-standards
+      rationale: |-
+        7 U.S.C. 2012(m)(4) supplies controlling institution and boarding-house
+        restrictions, and USDA publishes the annually adjusted federal SNAP income
+        standards. This Missouri manual provision supplies the individual household
+        categories and the 165-percent table stated in the captured manual text.
+    values:
+      other_residents_165_percent_poverty_maximum_gross_income_table:
+        1: 2071
+        2: 2811
+        3: 3551
+        4: 4290
+        5: 5030
+        6: 5770
+        7: 6510
+        8: 7249
+      other_residents_165_percent_poverty_additional_person: 740
+  summary: |-
+    An individual meets this Missouri SNAP household-status provision when the
+    individual lives alone and purchases and prepares food, lives with others but
+    customarily purchases and prepares food separately, is eligible for delivered
+    meals or communal dining, or lives in an FNS-authorized residential treatment
+    program and receives meals there. A person living with others who cannot
+    purchase and prepare meals because of disability also meets the provision when
+    age 60 or older, receiving SSDI or SSI or determined by MRT to have a qualifying
+    permanent disability, and the other residents' countable gross income does not
+    exceed the stated 165-percent poverty limit.
+rules:
+  - name: elderly_disabled_individual_minimum_age
+    kind: parameter
+    dtype: Count
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "the individual must be 60 years of age or older"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: '60'
+
+  - name: other_residents_165_percent_poverty_table_maximum_size
+    kind: parameter
+    dtype: Count
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "8 $7,249 Each additional person +$740"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: '8'
+
+  - name: other_residents_165_percent_poverty_maximum_gross_income_table
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: other_residents_household_size
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              value_key: other_residents_165_percent_poverty_maximum_gross_income_table
+              table:
+                header: 165% of Poverty Level
+                row_key: household_size
+                column_key: maximum_gross_income
+    versions:
+      - effective_from: '0001-01-01'
+        values:
+          1: 2071
+          2: 2811
+          3: 3551
+          4: 4290
+          5: 5030
+          6: 5770
+          7: 6510
+          8: 7249
+
+  - name: other_residents_165_percent_poverty_additional_person
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              value_key: other_residents_165_percent_poverty_additional_person
+              excerpt: "Each additional person +$740"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: '740'
+
+  - name: other_residents_165_percent_poverty_maximum_gross_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              value_key: other_residents_165_percent_poverty_maximum_gross_income_table
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          other_residents_165_percent_poverty_maximum_gross_income_table[max(min(other_residents_household_size, other_residents_165_percent_poverty_table_maximum_size), 1)]
+          + (max(other_residents_household_size - other_residents_165_percent_poverty_table_maximum_size, 0) * other_residents_165_percent_poverty_additional_person)
+
+  - name: other_residents_countable_gross_income_within_165_percent_poverty_limit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "cannot exceed 165 percent of the poverty level"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "is the gross income of the others with whom the individual resides determined as if they were applying to participate in the SNAP Program"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          other_residents_countable_gross_income <= other_residents_165_percent_poverty_maximum_gross_income
+
+  - name: individual_living_alone_purchases_and_prepares_food
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "lives alone and purchases and prepares food for home consumption"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_lives_alone
+          and individual_purchases_food_for_home_consumption
+          and individual_prepares_food_for_home_consumption
+
+  - name: individual_living_with_others_purchases_and_prepares_food_separately
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "lives with others but customarily purchases food and prepares meals for home consumption separate and apart from the others"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_lives_with_others
+          and individual_customarily_purchases_food_separate_from_others
+          and individual_prepares_meals_separate_from_others
+
+  - name: individual_receives_meals_in_fns_authorized_residential_treatment_program
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "lives in a residential treatment program authorized by the Food and Nutrition Service (FNS) and receives meals through the program"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_lives_in_fns_authorized_residential_treatment_program
+          and individual_receives_meals_through_treatment_program
+
+  - name: individual_has_qualifying_disability_basis
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "receiving Social Security Disability Insurance (SSDI) or Supplemental Security Income (SSI), or determined by the Medical Review Team (MRT) to have a non-disease-related permanent disability"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_receives_ssdi
+          or individual_receives_ssi
+          or individual_has_mrt_non_disease_related_permanent_disability_determination
+
+  - name: elderly_disabled_individual_living_with_others_meets_separate_status
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "lives with others but is unable to purchase and prepare meals because he/she is disabled; the individual must be 60 years of age or older"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+              excerpt: "cannot exceed 165 percent of the poverty level"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_lives_with_others
+          and individual_unable_to_purchase_and_prepare_meals_because_disabled
+          and individual_age >= elderly_disabled_individual_minimum_age
+          and individual_has_qualifying_disability_basis
+          and other_residents_countable_gross_income_within_165_percent_poverty_limit
+
+  - name: individual_meets_snap_food_purchase_and_preparation_status
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Missouri SNAP Manual 1105.015.04.05
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/manual/dss/snap/1105-000-00/1105-015-00/1105-015-04/1105-015-04-05/block-1
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          individual_living_alone_purchases_and_prepares_food
+          or individual_living_with_others_purchases_and_prepares_food_separately
+          or individual_is_eligible_for_delivered_meals_or_communal_dining_program
+          or individual_receives_meals_in_fns_authorized_residential_treatment_program
+          or elderly_disabled_individual_living_with_others_meets_separate_status
