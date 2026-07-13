@@ -5,10 +5,7 @@ Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
 CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
 dispatcher, opening the identical one-PR-per-module with auto-merge. It is a
 faithful local mirror of ``.github/workflows/bulk-encode.yml`` plus the
-oracle-coverage-pending declaration step the cloud dispatcher is missing (that
-missing step is why every new-state bulk PR fails the changed-file oracle
-coverage gate; see ``unstick`` below and the workflow fix in the same PR as this
-script).
+oracle-coverage-pending declaration step used by the cloud dispatcher.
 
 Two decisions matter and are baked in here so PRs go green:
 
@@ -18,11 +15,9 @@ Two decisions matter and are baked in here so PRs go green:
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
   *coverage/sync* tool below, not to generation.
-* **Coverage declaration uses axiom-encode main (>=0.2.1190)**, because the CI
-  changed-file coverage classifier (``oracle-coverage-axiom-encode-ref``,
-  default ``main``) is what reclassifies declared-pending outputs from
-  ``unmapped`` to ``pending_classification``. The pinned 1184 encoder does not
-  even have the ``oracle-coverage-pending`` subcommand.
+* **Coverage declaration uses the reviewed current-registry sync writer**, the
+  same immutable encoder revision pinned by the cloud workflow. The generation
+  encoder does not have the required exact-checkout sync command.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
 ``--max-entries``) and every unit of durable state (pushed branch, opened PR,
@@ -36,11 +31,11 @@ pinned checkouts + venvs built once by the operator:
     _bulk_drain/
       axiom-encode/            # worktree @ pinned axiom_encode_ref (1184)
       .venv/                   # pinned encoder venv  -> generation
-      axiom-encode-cov/        # worktree @ axiom-encode main (>=1190)
+      axiom-encode-cov/        # worktree @ reviewed current-registry sync writer
       .venv-cov/               # coverage/sync venv   -> oracle-coverage-pending
       axiom-rules-engine/      # worktree @ pinned engine ref, cargo build
       axiom-corpus/            # worktree @ pinned corpus ref
-      wt/<slug>/rulespec-us/   # per-entry generation worktrees (leaf MUST be rulespec-us)
+      wt/<slug>/rulespec-us/rulespec-us/  # same-named wrapper + generation worktree
 
 Usage:
     python bulk/local_drain.py drain   [--limit N] [--batch A] [--concurrency 3]
@@ -61,11 +56,17 @@ import sys
 import threading
 import time
 import tomllib
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
+APPROVED_CLASSIFIER_REF = "d052eabfaa2e209654aa979638672b28d71b3957"
+APPROVED_ORACLES_REF = "f2d2df36deb9c96b9fac4af15eab69c11d899e51"
+APPROVED_GENERATION_REFS = {
+    "3869d66d009f52258be35901edbef370e65a399c": "0.2.1200",
+    "9978ad8181914affdebcd6fb881291198c3bc839": "0.2.1200.3",
+}
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
 CHECKOUT = HERE.parent                            # this checkout root
 
@@ -74,8 +75,14 @@ DRAIN_BASE = Path(
     os.environ.get("DRAIN_BASE", Path.home() / "TheAxiomFoundation" / "_bulk_drain")
 ).resolve()
 GEN_AE = Path(os.environ.get("DRAIN_GEN_AE", DRAIN_BASE / ".venv/bin/axiom-encode"))
-COV_AE = Path(os.environ.get("DRAIN_COV_AE", DRAIN_BASE / ".venv-cov/bin/axiom-encode"))
+GEN_PY = Path(os.environ.get("DRAIN_GEN_PY", DRAIN_BASE / ".venv/bin/python"))
+GEN_CHECKOUT = Path(
+    os.environ.get("DRAIN_GEN_CHECKOUT", DRAIN_BASE / "axiom-encode")
+)
 COV_PY = Path(os.environ.get("DRAIN_COV_PY", DRAIN_BASE / ".venv-cov/bin/python"))
+COV_CHECKOUT = Path(
+    os.environ.get("DRAIN_COV_CHECKOUT", DRAIN_BASE / "axiom-encode-cov")
+)
 ENGINE = Path(os.environ.get("DRAIN_ENGINE", DRAIN_BASE / "axiom-rules-engine"))
 CORPUS = Path(os.environ.get("DRAIN_CORPUS", DRAIN_BASE / "axiom-corpus"))
 ENGINE_BIN = ENGINE / "target" / "debug"
@@ -101,11 +108,21 @@ def log(msg: str) -> None:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def run(cmd, cwd=None, env=None, capture=True, check=False, timeout=None):
+def run(
+    cmd,
+    cwd=None,
+    env=None,
+    capture=True,
+    check=False,
+    timeout=None,
+    unset_env=(),
+):
     """Run a subprocess, returning (rc, combined_output)."""
     full = dict(os.environ)
     if env:
         full.update(env)
+    for name in unset_env:
+        full.pop(name, None)
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
@@ -163,17 +180,18 @@ def gh_json(args):
 # --- worktree helpers -------------------------------------------------------
 def make_worktree(slug: str, ref: str) -> Path:
     """Fresh generation worktree whose leaf dir is exactly ``rulespec-us``
-    (the --apply resolver requirement) with sibling engine/corpus symlinks."""
-    parent = WT_ROOT / slug
-    leaf = parent / REPO_NAME
+    inside the same-named wrapper required by the canonical path resolver."""
+    container = WT_ROOT / slug
+    wrapper = container / REPO_NAME
+    leaf = wrapper / REPO_NAME
     with _wt_lock:
         if leaf.exists():
             run(["git", "-C", str(CHECKOUT), "worktree", "remove", "--force", str(leaf)])
-        parent.mkdir(parents=True, exist_ok=True)
+        wrapper.mkdir(parents=True, exist_ok=True)
         run(["git", "-C", str(CHECKOUT), "fetch", "origin", "main", "--quiet"])
         run(["git", "-C", str(CHECKOUT), "worktree", "add", "--detach", str(leaf), ref])
     for name, target in (("axiom-rules-engine", ENGINE), ("axiom-corpus", CORPUS)):
-        link = parent / name
+        link = wrapper / name
         if link.is_symlink() or link.exists():
             link.unlink()
         link.symlink_to(target)
@@ -192,11 +210,13 @@ def regen_index(leaf: Path) -> None:
 
 
 def sync_pending(leaf: Path) -> str:
-    """Write oracle-coverage-pending.yaml for REPO_NAME using the >=1190 tool.
+    """Write oracle-coverage-pending.yaml using the reviewed sync writer.
     Returns the sync summary line."""
-    rc, out = run([str(COV_AE), "oracle-coverage-pending", "sync",
-                   "--root", str(leaf.parent), "--repo", REPO_NAME, "--source", "bulk"],
-                  env={"PATH": f"{ENGINE_BIN}:{os.environ['PATH']}"})
+    rc, out = run([str(COV_PY), "-m", "axiom_encode.entrypoint",
+                   "oracle-coverage-pending", "sync",
+                   "--root", str(leaf.parent), "--source", "bulk"],
+                  env={"PATH": f"{ENGINE_BIN}:{os.environ['PATH']}"},
+                  unset_env=("AXIOM_ENCODE_APPLY_SIGNING_KEY",))
     if rc != 0:
         raise RuntimeError(f"oracle-coverage-pending sync failed:\n{out}")
     return out.strip().splitlines()[-1] if out.strip() else "(no output)"
@@ -254,7 +274,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
         run(["git", "-C", str(leaf), "checkout", "-B", branch], check=True)
         run(["git", "-C", str(leaf), "fetch", "origin", branch, "--quiet"])
         _, diff = run(["git", "-C", str(leaf), "diff", "--name-only",
-                       f"origin/main...FETCH_HEAD"])
+                       "origin/main...FETCH_HEAD"])
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
                          or "/.axiom/encoding-manifests/" in f)]
@@ -340,6 +360,19 @@ def encode_entry(item: dict) -> dict:
     if already_handled(slug):
         res["status"] = "skipped"
         res["detail"] = "bulk/<slug> PR already exists"
+        return res
+    expected_encoder_ref = item.get("encoder_ref") or pinned_toolchain().get(
+        "axiom_encode_ref"
+    )
+    rc, active_encoder_ref = run(
+        ["git", "-C", str(GEN_CHECKOUT), "rev-parse", "HEAD"]
+    )
+    if rc != 0 or active_encoder_ref.strip() != expected_encoder_ref:
+        res["status"] = "config-mismatch"
+        res["detail"] = (
+            "generation encoder revision mismatch: "
+            f"expected {expected_encoder_ref}, got {active_encoder_ref.strip() or 'unresolved'}"
+        )
         return res
     leaf = make_worktree(slug, "origin/main")
     tmp = WT_ROOT / slug / "encode-out"
@@ -494,16 +527,112 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+def coverage_sync_writer_status() -> tuple[bool, str]:
+    """Verify the local coverage interpreter imports the clean pinned checkout."""
+    if not COV_PY.exists():
+        return False, f"missing interpreter {COV_PY}"
+    if not COV_CHECKOUT.is_dir():
+        return False, f"missing checkout {COV_CHECKOUT}"
+
+    rc, head = run(["git", "-C", str(COV_CHECKOUT), "rev-parse", "HEAD"])
+    if rc != 0 or head.strip() != APPROVED_CLASSIFIER_REF:
+        actual = head.strip() or "unresolved"
+        return False, f"checkout {actual}, expected {APPROVED_CLASSIFIER_REF}"
+
+    rc, dirty = run(
+        ["git", "-C", str(COV_CHECKOUT), "status", "--porcelain"],
+    )
+    if rc != 0 or dirty.strip():
+        return False, "approved checkout is dirty or unreadable"
+
+    rc, source = run(
+        [
+            str(COV_PY),
+            "-c",
+            "import pathlib, axiom_encode; print(pathlib.Path(axiom_encode.__file__).resolve())",
+        ],
+        unset_env=("AXIOM_ENCODE_APPLY_SIGNING_KEY",),
+    )
+    expected_source = (COV_CHECKOUT / "src/axiom_encode/__init__.py").resolve()
+    if rc != 0 or source.strip() != str(expected_source):
+        return False, "coverage interpreter is not bound to approved checkout"
+
+    rc, oracle_ref = run(
+        [
+            str(COV_PY),
+            "-c",
+            (
+                "import json; from importlib.metadata import distribution; "
+                "payload=json.loads(distribution('axiom-oracles').read_text("
+                "'direct_url.json') or '{}'); "
+                "print(payload.get('vcs_info', {}).get('commit_id', ''))"
+            ),
+        ],
+        unset_env=("AXIOM_ENCODE_APPLY_SIGNING_KEY",),
+    )
+    if rc != 0 or oracle_ref.strip() != APPROVED_ORACLES_REF:
+        return False, "coverage interpreter has the wrong axiom-oracles revision"
+
+    rc, help_text = run(
+        [
+            str(COV_PY),
+            "-m",
+            "axiom_encode.entrypoint",
+            "oracle-coverage-pending",
+            "sync",
+            "--help",
+        ],
+        unset_env=("AXIOM_ENCODE_APPLY_SIGNING_KEY",),
+    )
+    if rc != 0 or "--root" not in help_text or "--repo" in help_text:
+        return False, "executable lacks exact-checkout sync contract"
+    return True, APPROVED_CLASSIFIER_REF
+
+
+def generation_encoder_status() -> tuple[bool, str]:
+    """Verify the local generation executable imports one approved clean checkout."""
+    if not GEN_AE.exists() or not GEN_PY.exists():
+        return False, "generation executable or interpreter is missing"
+    if not GEN_CHECKOUT.is_dir():
+        return False, f"missing checkout {GEN_CHECKOUT}"
+
+    rc, head = run(["git", "-C", str(GEN_CHECKOUT), "rev-parse", "HEAD"])
+    ref = head.strip()
+    if rc != 0 or ref not in APPROVED_GENERATION_REFS:
+        return False, f"unapproved generation checkout {ref or 'unresolved'}"
+    rc, dirty = run(["git", "-C", str(GEN_CHECKOUT), "status", "--porcelain"])
+    if rc != 0 or dirty.strip():
+        return False, "generation checkout is dirty or unreadable"
+
+    rc, identity = run(
+        [
+            str(GEN_PY),
+            "-c",
+            (
+                "import pathlib, axiom_encode; "
+                "print(pathlib.Path(axiom_encode.__file__).resolve()); "
+                "print(axiom_encode.__version__)"
+            ),
+        ],
+        unset_env=("AXIOM_ENCODE_APPLY_SIGNING_KEY",),
+    )
+    lines = identity.strip().splitlines()
+    expected_source = (GEN_CHECKOUT / "src/axiom_encode/__init__.py").resolve()
+    expected_version = APPROVED_GENERATION_REFS[ref]
+    if rc != 0 or lines != [str(expected_source), expected_version]:
+        return False, "generation interpreter is not bound to approved checkout/version"
+    if GEN_AE.parent.resolve() != GEN_PY.parent.resolve():
+        return False, "generation executable and interpreter use different environments"
+    return True, f"{ref} ({expected_version})"
+
+
 def cmd_doctor(_args) -> int:
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
-    for label, ae, want_pending in (("gen encoder (pin)", GEN_AE, False),
-                                    ("cov encoder (main)", COV_AE, True)):
-        has_pending = ae.exists() and run(
-            [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
-        ok = ae.exists() and (has_pending == want_pending)
-        print(f"{label:20s}: {'OK' if ok else 'CHECK'} "
-              f"(oracle-coverage-pending {'present' if has_pending else 'absent'})")
+    gen_ok, gen_detail = generation_encoder_status()
+    print(f"{'gen encoder (pin)':20s}: {'OK' if gen_ok else 'CHECK'} ({gen_detail})")
+    cov_ok, cov_detail = coverage_sync_writer_status()
+    print(f"{'cov sync writer':20s}: {'OK' if cov_ok else 'CHECK'} ({cov_detail})")
     print(f"pinned encoder ver   : {tc.get('axiom_encode_version')}")
     print(f"engine bin           : {'OK' if ENGINE_BIN.exists() else 'MISSING'} {ENGINE_BIN}")
     print(f"corpus               : {'OK' if CORPUS.exists() else 'MISSING'} {CORPUS}")
@@ -513,7 +642,7 @@ def cmd_doctor(_args) -> int:
         print(f"signing key          : {e}")
     rc, out = run(["codex", "--version"])
     print(f"codex CLI            : {'OK ' + out.strip() if rc == 0 else 'MISSING'}")
-    return 0
+    return 0 if gen_ok and cov_ok else 1
 
 
 def cmd_unstick(args) -> int:
