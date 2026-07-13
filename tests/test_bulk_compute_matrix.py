@@ -23,6 +23,13 @@ def test_oracle_classifier_does_not_receive_apply_signing_key() -> None:
     ) in workflow
 
 
+def test_bulk_branch_push_uses_full_destination_ref() -> None:
+    workflow = WORKFLOW.read_text()
+
+    assert 'push -f origin "HEAD:refs/heads/$branch"' in workflow
+    assert 'push -f origin "HEAD:$branch"' not in workflow
+
+
 def test_oracle_classifier_uses_reviewed_sync_writer() -> None:
     workflow = WORKFLOW.read_text()
 
