@@ -38,7 +38,7 @@ import yaml
 WORKLIST = Path(__file__).resolve().parent / "worklist.yaml"
 
 SELECTABLE_STATUSES = {"pending"}
-APPROVED_ENCODER_REFS = {"fed5f3df343cd7548809d1c944a17f96c7c52a68"}
+APPROVED_ENCODER_REFS = {"9978ad8181914affdebcd6fb881291198c3bc839"}
 
 
 def citation_slug(citation: str) -> str:

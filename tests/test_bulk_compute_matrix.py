@@ -1,8 +1,20 @@
+from pathlib import Path
+
 import pytest
 
 from bulk.compute_matrix import APPROVED_ENCODER_REFS, select
 
 APPROVED_ENCODER_REF = next(iter(APPROVED_ENCODER_REFS))
+WORKFLOW = Path(__file__).parents[1] / ".github" / "workflows" / "bulk-encode.yml"
+
+
+def test_oracle_classifier_does_not_receive_apply_signing_key() -> None:
+    workflow = WORKFLOW.read_text()
+
+    assert (
+        'env -u AXIOM_ENCODE_APPLY_SIGNING_KEY "$COV_AE" '
+        "oracle-coverage-pending sync"
+    ) in workflow
 
 
 def test_select_carries_entry_encoder_ref_into_matrix() -> None:
