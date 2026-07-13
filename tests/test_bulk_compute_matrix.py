@@ -47,7 +47,10 @@ def test_review_fix_attestation_is_isolated_and_pinned() -> None:
     assert "path: target/rulespec-us" in workflow
     assert "working-directory: trusted/axiom-encode-signer" in workflow
     assert "--roots \"$roots\"" in workflow
-    assert 'git -C "$target" add -- .axiom "$jurisdiction/.axiom"' in workflow
+    assert "generated_paths=(.axiom)" in workflow
+    assert 'if [ -d "$target/$jurisdiction/.axiom" ]' in workflow
+    assert 'generated_paths+=("$jurisdiction/.axiom")' in workflow
+    assert 'git -C "$target" add -A -- "${generated_paths[@]}"' in workflow
     assert "AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets.AXIOM_ENCODE_APPLY_SIGNING_KEY }}" in workflow
     assert "axiom-encode sign-applied-files" in workflow
     assert "--manual-exception repair" in workflow
