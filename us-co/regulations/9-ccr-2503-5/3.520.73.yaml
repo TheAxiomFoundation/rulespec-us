@@ -1,0 +1,86 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+  summary: |-
+    “The balance in a joint account shall be considered available to the client in proportion to the number of persons on the account.” A fiduciary co-owner makes the account 100% available to the client; different proven ownership intent is evaluated under the prudent person principle. “The gross value of the [retirement or pension] account, less any taxes due,” is countable; if taxes due cannot be provided, deduct 20% of gross value. The provision also specifies verification and valuation methods for accessible deposits, securities, investment vehicles, and specified property rights.
+rules:
+  - name: default_retirement_or_pension_account_tax_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 9 CCR 2503-5, § 3.520.73(B)(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+              excerpt: "deducting 20% from the gross value of the account"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          0.20
+
+  - name: joint_account_amount_available_to_client
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 9 CCR 2503-5, § 3.520.73(A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+              excerpt: "available to the client in proportion to the number of persons on the account"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+              excerpt: "the account shall be considered to be 100% owned by the client"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+              excerpt: "apply the prudent person principle to the evidence"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if account_co_owner_is_clients_legal_fiduciary: joint_account_available_balance else: if client_established_different_intent_of_ownership: amount_prudent_person_principle_determines_available else: joint_account_available_balance / number_of_persons_on_joint_account
+
+  - name: retirement_or_pension_account_countable_resource_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 9 CCR 2503-5, § 3.520.73(B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+              excerpt: "The gross value of the account, less any taxes due, is the amount that is countable as a resource"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.73
+              excerpt: "If the client is not able to provide the amount of taxes that are due"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.520.73#default_retirement_or_pension_account_tax_deduction_rate
+              output: default_retirement_or_pension_account_tax_deduction_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if amount_of_taxes_due_is_known: retirement_or_pension_account_gross_value - retirement_or_pension_account_taxes_due else: retirement_or_pension_account_gross_value - (retirement_or_pension_account_gross_value * default_retirement_or_pension_account_tax_deduction_rate)
