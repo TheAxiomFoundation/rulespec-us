@@ -118,6 +118,17 @@ jobs:
           # validate CI (the default GITHUB_TOKEN would not).
           token: ${{ secrets.BULK_ENCODE_TOKEN }}
 
+      - name: Prepare clean default-branch base
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          cp bulk/applied_artifacts.py "$RUNNER_TEMP/applied_artifacts.py"
+          git switch --detach "origin/$DEFAULT_BRANCH"
+          install -m 0755 "$RUNNER_TEMP/applied_artifacts.py" bulk/applied_artifacts.py
+          echo "Generating from $(git rev-parse HEAD) on origin/$DEFAULT_BRANCH."
+
       - name: Guard - workspace must be named rulespec-us
         shell: bash
         run: |
@@ -161,8 +172,27 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           repository: TheAxiomFoundation/axiom-encode
-          ref: ${{ steps.toolchain.outputs.axiom_encode_ref }}
+          ref: ${{ matrix.item.encoder_ref || steps.toolchain.outputs.axiom_encode_ref }}
           path: _axiom/axiom-encode
+
+      - name: Verify selected encoder commit
+        shell: bash
+        env:
+          EXPECTED_ENCODER_REF: ${{ matrix.item.encoder_ref || steps.toolchain.outputs.axiom_encode_ref }}
+          OVERRIDE_ENCODER_REF: ${{ matrix.item.encoder_ref }}
+          APPROVED_OVERRIDE_ENCODER_REF: 75ad8644b40e80189bae29e65464b87d0491e514
+        run: |
+          set -euo pipefail
+          if [ -n "$OVERRIDE_ENCODER_REF" ] \
+             && [ "$OVERRIDE_ENCODER_REF" != "$APPROVED_OVERRIDE_ENCODER_REF" ]; then
+            echo "::error::Encoder override is not in the reviewed compatibility allowlist." >&2
+            exit 1
+          fi
+          actual="$(git -C _axiom/axiom-encode rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_ENCODER_REF" ]; then
+            echo "::error::Selected encoder resolved to $actual, expected $EXPECTED_ENCODER_REF." >&2
+            exit 1
+          fi
 
       - name: Checkout axiom-rules-engine (pinned)
         uses: actions/checkout@v6.0.2
@@ -186,11 +216,14 @@ jobs:
         with:
           workspaces: _axiom/axiom-rules-engine
 
-      - name: Install pinned axiom-encode
+      - name: Install selected axiom-encode
+        id: encoder
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest pyyaml
           python -m pip install -e _axiom/axiom-encode
+          echo "version=$(python -c 'import axiom_encode; print(axiom_encode.__version__)')" >> "$GITHUB_OUTPUT"
+          echo "ref=$(git -C _axiom/axiom-encode rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build axiom-rules-engine
         working-directory: _axiom/axiom-rules-engine
@@ -267,43 +300,21 @@ jobs:
           echo "wall_seconds=$((end - start))" >> "$GITHUB_OUTPUT"
           echo "Encode wall time: $((end - start))s"
 
-          # Locate the applied module path from the git worktree. Restrict to
-          # jurisdiction directories (two-letter code, optional -suffix) so the
-          # sibling checkouts under _axiom/ and any build artifacts are never
-          # picked up.
-          slug='${{ matrix.item.slug }}'
-          # -uall (untracked-files=all): a brand-new module path creates a new
-          # nested untracked dir; without -uall, `git status --porcelain`
-          # COLLAPSES it to the bare dir entry (e.g. `?? us-ca/statutes/rtc/17053/`),
-          # which the *.yaml regex misses -> the applied module is not detected
-          # even though --apply wrote it (fail-closed false negative). Mirrors the
-          # rulespec-be/rulespec-gh fix.
-          mapfile -t applied < <(git -C "$GITHUB_WORKSPACE" status --porcelain -uall \
-            | sed 's/^...//' \
-            | grep -E '^[a-z]{2}(-[a-z0-9-]+)?/(statutes|regulations|policies)/.*\.yaml$' \
-            | grep -v '\.test\.yaml$' || true)
-
-          if [ "$apply_status" -ne 0 ] || [ "${#applied[@]}" -eq 0 ]; then
+          if [ "$apply_status" -ne 0 ]; then
             echo "status=failed" >> "$GITHUB_OUTPUT"
             echo "::error::Encode/apply failed for $CITATION (exit $apply_status). See encode.log; a *.repair.json was written under $RUNNER_TEMP/encode-out." >&2
             exit 1
           fi
 
-          module="${applied[0]}"
-          test_file="${module%.yaml}.test.yaml"
-          juris="${module%%/*}"
-          # The apply manifest mirrors the module's path under the jurisdiction's
-          # .axiom/encoding-manifests/ -- e.g. us-il/statutes/35/5/306.yaml ->
-          # us-il/.axiom/encoding-manifests/statutes/35/5/306.json. Strip only
-          # the jurisdiction prefix (keep the statutes/regulations/policies bucket).
-          rest="${module#"$juris"/}"
-          manifest_rel="$juris/.axiom/encoding-manifests/${rest%.yaml}.json"
-          # Fall back to a basename search if the direct manifest path guess misses.
-          if [ ! -f "$GITHUB_WORKSPACE/$manifest_rel" ]; then
-            manifest_rel="$(cd "$GITHUB_WORKSPACE" && find "$juris/.axiom/encoding-manifests" -name "$(basename "${module%.yaml}").json" 2>/dev/null | head -1)"
-          fi
+          artifact_output="$(python bulk/applied_artifacts.py \
+            --repo "$GITHUB_WORKSPACE" --citation "$CITATION")"
+          mapfile -t applied_artifacts <<< "$artifact_output"
+          module="${applied_artifacts[0]}"
+          test_file="${applied_artifacts[1]}"
+          manifest_rel="${applied_artifacts[2]}"
           echo "module=$module" >> "$GITHUB_OUTPUT"
           echo "test_file=$test_file" >> "$GITHUB_OUTPUT"
+          echo "manifest_rel=$manifest_rel" >> "$GITHUB_OUTPUT"
           echo "Applied module: $module"
           echo "Applied manifest: $manifest_rel"
 
@@ -404,6 +415,7 @@ jobs:
           CITATION: ${{ matrix.item.citation }}
           MODULE: ${{ steps.encode.outputs.module }}
           TEST_FILE: ${{ steps.encode.outputs.test_file }}
+          MANIFEST_REL: ${{ steps.encode.outputs.manifest_rel }}
           ENC_STATUS: ${{ steps.encode.outputs.status }}
           WALL: ${{ steps.encode.outputs.wall_seconds }}
           MODEL: ${{ matrix.item.model }}
@@ -416,7 +428,7 @@ jobs:
             echo
             echo "- Citation: \`$CITATION\`"
             echo "- Module: \`$MODULE\`"
-            echo "- Encoder: \`$BACKEND:$MODEL\` (toolchain-pinned axiom-encode ${{ steps.toolchain.outputs.axiom_encode_version }})"
+            echo "- Encoder: \`$BACKEND:$MODEL\` (axiom-encode ${{ steps.encoder.outputs.version }} at ${{ steps.encoder.outputs.ref }})"
             echo "- Encode wall time: ${WALL}s"
             echo "- Local gate status: **$ENC_STATUS**"
             echo
@@ -425,12 +437,7 @@ jobs:
             echo
             echo "### Manifest summary"
             echo '```json'
-            # The apply manifest mirrors the module path under the jurisdiction's
-            # .axiom/encoding-manifests/. Locate it by basename (robust to the
-            # statutes/regulations/policies split).
-            manifest=""
-            mf="$(find "$GITHUB_WORKSPACE" -path '*/.axiom/encoding-manifests/*' -name "$(basename "${MODULE%.yaml}").json" 2>/dev/null | head -1)"
-            [ -n "$mf" ] && manifest="$(cat "$mf")"
+            manifest="$(cat "$GITHUB_WORKSPACE/$MANIFEST_REL")"
             echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ["citation","model","backend","run_id","axiom_encode_version","applied_files"]}, indent=2))' 2>/dev/null || echo "$manifest"
             echo '```'
             echo

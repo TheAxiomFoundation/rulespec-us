@@ -16,7 +16,7 @@ Usage:
   python bulk/compute_matrix.py --get us-ny/statute/TAX/673 --field model
 
 The matrix shape is {"include": [{"citation", "repo", "backend", "model",
-"slug"}, ...]}. `slug` is the branch-safe citation slug used for
+"encoder_ref", "slug"}, ...]}. `slug` is the branch-safe citation slug used for
 `bulk/<slug>` branches and the PR title.
 
 Status writes are intentionally NOT done here: the workflow updates statuses by
@@ -38,6 +38,7 @@ import yaml
 WORKLIST = Path(__file__).resolve().parent / "worklist.yaml"
 
 SELECTABLE_STATUSES = {"pending"}
+APPROVED_ENCODER_REFS = {"75ad8644b40e80189bae29e65464b87d0491e514"}
 
 
 def citation_slug(citation: str) -> str:
@@ -66,6 +67,23 @@ def entry_model(data: dict, entry: dict) -> str:
     return entry.get("model") or data.get("defaults", {}).get("model", "gpt-5.5")
 
 
+def entry_encoder_ref(data: dict, entry: dict) -> str:
+    encoder_ref = entry.get("encoder_ref") or data.get("defaults", {}).get(
+        "encoder_ref", ""
+    )
+    if encoder_ref and not re.fullmatch(r"[0-9a-f]{40}", str(encoder_ref)):
+        raise ValueError(
+            f"encoder_ref for {entry.get('citation', '<unknown>')} must be a full "
+            "40-character lowercase commit SHA"
+        )
+    if encoder_ref and str(encoder_ref) not in APPROVED_ENCODER_REFS:
+        raise ValueError(
+            f"encoder_ref for {entry.get('citation', '<unknown>')} is not in the "
+            "reviewed compatibility allowlist"
+        )
+    return str(encoder_ref)
+
+
 def select(data: dict, status: str, batch: str | None, limit: int | None) -> list[dict]:
     out: list[dict] = []
     for entry in data["entries"]:
@@ -79,6 +97,7 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                 "repo": entry.get("repo", "rulespec-us"),
                 "backend": entry_backend(data, entry),
                 "model": entry_model(data, entry),
+                "encoder_ref": entry_encoder_ref(data, entry),
                 "slug": citation_slug(entry["citation"]),
             }
         )
@@ -134,6 +153,8 @@ def main() -> int:
                     print(entry_model(data, entry))
                 elif args.field == "backend":
                     print(entry_backend(data, entry))
+                elif args.field == "encoder_ref":
+                    print(entry_encoder_ref(data, entry))
                 elif args.field:
                     print(entry.get(args.field, ""))
                 else:

@@ -14,7 +14,7 @@ provisions to queue.
 
 | File | Role |
 | --- | --- |
-| `bulk/worklist.yaml` | The durable queue. One entry per module. Committed. |
+| `bulk/worklist.yaml` | The durable queue. One entry per module. Committed. Entries may pin `encoder_ref` for a reviewed compatibility build. |
 | `bulk/compute_matrix.py` | Turns the worklist into the CI job matrix; single source of truth for status selection. |
 | `bulk/roots_for.py` | Maps an applied module path to `guard-generated --roots`. |
 | `.github/workflows/bulk-encode.yml` | The runner: dispatch → matrix → encode `--apply` → gate battery → PR + auto-merge. |
@@ -51,10 +51,17 @@ so two runs never fight over the same `bulk/<slug>` branches.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
+   - Switches the worktree to the current default-branch commit before
+     generation. A dispatch from a reviewed workflow branch can therefore
+     carry queue plumbing without leaking that branch's infrastructure diff
+     into each per-module PR.
    - Reads `.axiom/toolchain.toml` and checks out **the pinned** `axiom-encode`,
      `axiom-rules-engine`, and `axiom-corpus`, then builds the engine. Using the
      pinned encoder means generation and the downstream PR CI validate with the
-     identical version — no version-skew surprises.
+     identical version. An entry-level `encoder_ref` is restricted to an
+     explicit allowlist of reviewed, immutable compatibility builds needed by a source layout such as
+     consolidated state manuals; the actual version and commit are recorded in
+     the signed manifest and PR body.
    - Runs `axiom-encode encode <citation> --apply`. `--apply` validates the main
      file, companion test, and direct dependents in a temporary overlay and
      writes nothing on failure (fail-closed), then installs the three artifacts:
@@ -115,8 +122,10 @@ to `pr-open`, then `merged`.
 
 Append entries to `bulk/worklist.yaml` in the existing shape. `citation` is the
 corpus citation path the encoder resolves (`<jurisdiction>/statute/<path>`).
-Pick self-contained rate/credit/deduction/exemption sections; **skip**
-cross-reference-heavy ones (encode#1058) and any known gate-held sections.
+Prefer self-contained rate/credit/deduction/exemption sections. Complete-manual
+batches may also queue cross-reference-heavy provisions, but each remains an
+independent fail-closed PR and any encode#1058 blocker is triaged rather than
+merged around.
 
 To find candidates mechanically, enumerate un-encoded provisions from the public
 corpus view and cross-reference the encoded YAML on main:
