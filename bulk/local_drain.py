@@ -224,6 +224,7 @@ def regen_index(leaf: Path) -> None:
 def sync_pending(leaf: Path) -> str:
     """Write oracle-coverage-pending.yaml using the pinned classifier.
     Returns the sync summary line."""
+    require_coverage_ref()
     rc, out = run([str(COV_AE), "oracle-coverage-pending", "sync",
                    "--root", str(leaf), "--source", "bulk"],
                   env={
@@ -312,6 +313,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
                "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
+        require_coverage_ref()
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
@@ -456,6 +458,7 @@ def encode_entry(item: dict) -> dict:
                       "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "--amend", "-m", commit_msg])
+        require_coverage_ref()
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,
