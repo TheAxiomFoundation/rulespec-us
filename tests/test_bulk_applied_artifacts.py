@@ -65,6 +65,27 @@ def test_discovers_repo_root_manifest_for_manual_module(tmp_path: Path) -> None:
     ) == (module, test_file, manifest)
 
 
+def test_accepts_manual_bucket_for_manual_source(tmp_path: Path) -> None:
+    citation = "us-mo/manual/dss/snap/1115/block-1"
+    module = "us-mo/manual/dss/snap/1115/block-1.yaml"
+    test_file = "us-mo/manual/dss/snap/1115/block-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-mo/manual/dss/snap/1115/block-1.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(
+        tmp_path / manifest,
+        "us-mo:manual/dss/snap/1115/block-1",
+        {module, test_file},
+    )
+
+    assert discover_applied_artifacts(
+        tmp_path,
+        citation=citation,
+        paths=[module, test_file, manifest],
+    ) == (module, test_file, manifest)
+
+
 def test_discovers_jurisdiction_manifest_for_legacy_module(tmp_path: Path) -> None:
     citation = "us-oh/statute/5747.71"
     module = "us-oh/statutes/5747/71.yaml"
@@ -200,6 +221,24 @@ def test_rejects_canonical_manifest_for_wrong_requested_jurisdiction(
     )
 
     with pytest.raises(ValueError, match="does not match"):
+        discover_applied_artifacts(
+            tmp_path,
+            citation=citation,
+            paths=[module, test_file, manifest],
+        )
+
+
+def test_rejects_exact_request_manifest_for_wrong_module(tmp_path: Path) -> None:
+    citation = "us-ca/manual/dss/snap/1105/block-1"
+    module = "us-mo/policies/dss/snap/1105/block-1.yaml"
+    test_file = "us-mo/policies/dss/snap/1105/block-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-mo/policies/dss/snap/1105/block-1.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(tmp_path / manifest, citation, {module, test_file})
+
+    with pytest.raises(ValueError, match="does not match requested citation"):
         discover_applied_artifacts(
             tmp_path,
             citation=citation,

@@ -12,13 +12,13 @@ from pathlib import Path, PurePosixPath
 MODULE_BUCKETS = {"manual", "policies", "regulations", "statutes"}
 JURISDICTION_RE = re.compile(r"[a-z]{2}(?:-[a-z0-9-]+)?")
 SOURCE_BUCKETS = {
-    "manual": "policies",
-    "policy": "policies",
-    "policies": "policies",
-    "regulation": "regulations",
-    "regulations": "regulations",
-    "statute": "statutes",
-    "statutes": "statutes",
+    "manual": frozenset({"manual", "policies"}),
+    "policy": frozenset({"policies"}),
+    "policies": frozenset({"policies"}),
+    "regulation": frozenset({"regulations"}),
+    "regulations": frozenset({"regulations"}),
+    "statute": frozenset({"statutes"}),
+    "statutes": frozenset({"statutes"}),
 }
 
 
@@ -98,12 +98,12 @@ def _module_matches_request(citation: str, module: str) -> bool:
     if len(request.parts) < 3 or len(output.parts) < 3:
         return False
     jurisdiction, source_bucket, *request_tail = request.parts
-    expected_bucket = SOURCE_BUCKETS.get(source_bucket.lower())
-    if expected_bucket is None:
+    expected_buckets = SOURCE_BUCKETS.get(source_bucket.lower())
+    if expected_buckets is None:
         return False
     return (
         output.parts[0].lower() == jurisdiction.lower()
-        and output.parts[1].lower() == expected_bucket
+        and output.parts[1].lower() in expected_buckets
         and _legal_path_tokens(tuple(request_tail))
         == _legal_path_tokens(output.parts[2:])
     )
@@ -140,10 +140,12 @@ def discover_applied_artifacts(
         manifest = json.loads((repo / manifest_rel).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read applied manifest {manifest_rel}: {exc}") from exc
+    if not _module_matches_request(citation, module):
+        raise ValueError(
+            f"applied module {module!r} does not match requested citation {citation!r}"
+        )
     manifest_citation = manifest.get("citation")
-    accepted_citations = {citation}
-    if _module_matches_request(citation, module):
-        accepted_citations.add(_canonical_module_citation(module))
+    accepted_citations = {citation, _canonical_module_citation(module)}
     if manifest_citation not in accepted_citations:
         raise ValueError(
             f"manifest citation {manifest_citation!r} does not match input "
