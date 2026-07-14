@@ -76,6 +76,9 @@ DRAIN_BASE = Path(
 GEN_AE = Path(os.environ.get("DRAIN_GEN_AE", DRAIN_BASE / ".venv/bin/axiom-encode"))
 COV_AE = Path(os.environ.get("DRAIN_COV_AE", DRAIN_BASE / ".venv-cov/bin/axiom-encode"))
 COV_PY = Path(os.environ.get("DRAIN_COV_PY", DRAIN_BASE / ".venv-cov/bin/python"))
+COV_CHECKOUT = Path(
+    os.environ.get("DRAIN_COV_CHECKOUT", DRAIN_BASE / "axiom-encode-cov")
+).resolve()
 ENGINE = Path(os.environ.get("DRAIN_ENGINE", DRAIN_BASE / "axiom-rules-engine"))
 CORPUS = Path(os.environ.get("DRAIN_CORPUS", DRAIN_BASE / "axiom-corpus"))
 ENGINE_BIN = ENGINE / "target" / "debug"
@@ -495,14 +498,33 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
 
 # ---------------------------------------------------------------------------
 def require_coverage_ref() -> str:
-    cov_checkout = DRAIN_BASE / "axiom-encode-cov"
-    if not cov_checkout.is_dir():
-        raise SystemExit(f"coverage encoder checkout is missing: {cov_checkout}")
-    rc, head = run(["git", "rev-parse", "HEAD"], cwd=cov_checkout)
+    if not COV_CHECKOUT.is_dir():
+        raise SystemExit(f"coverage encoder checkout is missing: {COV_CHECKOUT}")
+    rc, head = run(["git", "rev-parse", "HEAD"], cwd=COV_CHECKOUT)
     actual = head.strip() if rc == 0 else "unavailable"
     if actual != COV_ENCODER_REF:
         raise SystemExit(
             f"coverage encoder checkout must be {COV_ENCODER_REF}; got {actual}"
+        )
+    rc, module_file = run(
+        [
+            str(COV_PY),
+            "-c",
+            "import axiom_encode; print(axiom_encode.__file__)",
+        ]
+    )
+    if rc != 0:
+        raise SystemExit(f"coverage encoder import failed via {COV_PY}")
+    try:
+        Path(module_file.strip()).resolve().relative_to(COV_CHECKOUT)
+    except ValueError as exc:
+        raise SystemExit(
+            f"coverage encoder at {COV_AE} is not installed from {COV_CHECKOUT}"
+        ) from exc
+    expected_executable = COV_PY.parent / "axiom-encode"
+    if COV_AE.resolve() != expected_executable.resolve():
+        raise SystemExit(
+            f"coverage executable must be {expected_executable}; got {COV_AE}"
         )
     return actual
 
