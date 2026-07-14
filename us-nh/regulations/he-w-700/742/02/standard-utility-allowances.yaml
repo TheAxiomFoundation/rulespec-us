@@ -11,8 +11,11 @@ module:
     from rent or mortgage: heating or cooling $965, utilities only $353, electric
     only $206, telephone only $37, and internet only $50. Utilities-only applies to
     households incurring at least 2 utility expenses and no separate heating or cooling
-    expense. Ownership and use of a well or septic system counts as a verified utility
-    expense for that 2-utility criterion.'
+    expense. Cellular-phone purchase costs are excluded from the telephone-only standard;
+    shared-cost households receive the full appropriate standard; and well or septic
+    systems count toward the 2-utility criterion. All standards except internet-only
+    are updated each October 1 using the specified Northeast CPI-U change and nearest-dollar
+    rounding.'
 rules:
 - name: sets_snap_standard_utility_allowance
   kind: source_relation
@@ -24,11 +27,32 @@ rules:
     basis:
       delegation: us:regulations/7-cfr/273/9#snap_state_standard_utility_allowance_delegation
   source: us-nh/regulation/he-w-700/He-W 742.02(b)
+- name: sets_snap_limited_utility_allowance
+  kind: source_relation
+  source_relation:
+    type: sets
+    target: us:regulations/7-cfr/273/9#snap_limited_utility_allowance_state_option
+    authority: state
+    value: us-nh:regulations/he-w-700/742/02/standard-utility-allowances#snap_limited_utility_allowance_state_value
+    basis:
+      delegation: us:regulations/7-cfr/273/9#snap_state_standard_utility_allowance_delegation
+  source: us-nh/regulation/he-w-700/He-W 742.02(d)
+- name: sets_snap_individual_utility_allowance
+  kind: source_relation
+  source_relation:
+    type: sets
+    target: us:regulations/7-cfr/273/9#snap_individual_utility_allowance_state_option
+    authority: state
+    value: us-nh:regulations/he-w-700/742/02/standard-utility-allowances#snap_individual_utility_allowance_state_value
+    basis:
+      delegation: us:regulations/7-cfr/273/9#snap_state_standard_utility_allowance_delegation
+  source: us-nh/regulation/he-w-700/He-W 742.02(e)-(g)
 - name: snap_standard_utility_allowance_state_value
   kind: derived
   versions:
   - effective_from: '2025-10-01'
-    formula: heating_or_cooling_standard_utility_allowance
+    formula: 'if household_incurs_heating_or_cooling_expenses_separately_from_rent_or_mortgage:
+      heating_or_cooling_standard_utility_allowance else: 0'
   metadata:
     proof:
       atoms:
@@ -38,6 +62,11 @@ rules:
           target: us-nh:regulations/he-w-700/742/02/standard-utility-allowances#heating_or_cooling_standard_utility_allowance
           output: heating_or_cooling_standard_utility_allowance
           hash: sha256:local
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: households that incur a heating or cooling expense
   entity: Household
   dtype: Money
   period: Month
@@ -218,11 +247,67 @@ rules:
           corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
           excerpt: does not have regular household telephone or cell phone service
             but incurs costs ... for phone expenses
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: shall not include the costs incurred by a household to purchase
+            a cellular phone
   versions:
   - effective_from: '2025-10-01'
     formula: 'household_only_separate_shelter_cost_is_regular_telephone_or_cell_phone_service
 
-      or household_without_regular_phone_service_incurs_separate_phone_expenses'
+      or (household_without_regular_phone_service_incurs_separate_phone_expenses
+
+      and not household_separate_phone_expenses_are_only_cellular_phone_purchase_costs)'
+- name: snap_limited_utility_allowance_state_value
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: us-nh/regulation/he-w-700/He-W 742.02(d)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: incur a minimum of 2 utility expenses and do not incur heating
+            or cooling expenses
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-nh:regulations/he-w-700/742/02/standard-utility-allowances#utilities_only_standard_utility_allowance
+          output: utilities_only_standard_utility_allowance
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-10-01'
+    formula: 'if snap_utilities_only_standard_utility_allowance_applies:
+      utilities_only_standard_utility_allowance else: 0'
+- name: snap_individual_utility_allowance_state_value
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: us-nh/regulation/he-w-700/He-W 742.02(e)-(g)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: Electric only SUA $206 Telephone only SUA $37 Internet only SUA
+            $50
+  versions:
+  - effective_from: '2025-10-01'
+    formula: 'if household_only_separate_shelter_cost_is_electric_not_used_to_heat_or_cool:
+      electric_only_standard_utility_allowance else: if household_only_separate_shelter_cost_is_internet_service:
+      internet_only_standard_utility_allowance else: if snap_telephone_only_standard_utility_allowance_applies:
+      telephone_only_standard_utility_allowance else: 0'
 - name: local_snap_utility_allowance_for_shelter_costs
   kind: derived
   entity: Household
@@ -260,9 +345,113 @@ rules:
           excerpt: Internet only
   versions:
   - effective_from: '2025-10-01'
-    formula: 'if household_incurs_heating_or_cooling_expenses_separately_from_rent_or_mortgage:
-      heating_or_cooling_standard_utility_allowance else: if snap_utilities_only_standard_utility_allowance_applies:
-      utilities_only_standard_utility_allowance else: if household_only_separate_shelter_cost_is_electric_not_used_to_heat_or_cool:
-      electric_only_standard_utility_allowance else: if household_only_separate_shelter_cost_is_internet_service:
-      internet_only_standard_utility_allowance else: if snap_telephone_only_standard_utility_allowance_applies:
-      telephone_only_standard_utility_allowance else: 0'
+    formula: 'snap_standard_utility_allowance_state_value
+
+      + snap_limited_utility_allowance_state_value
+
+      + snap_individual_utility_allowance_state_value'
+- name: snap_shared_utility_cost_household_allowance
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: us-nh/regulation/he-w-700/He-W 742.02(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: Households that share utility costs and are entitled to a utility
+            allowance shall be granted the appropriate standard utility allowance
+  versions:
+  - effective_from: '2025-10-01'
+    formula: 'if household_shares_utility_costs:
+      local_snap_utility_allowance_for_shelter_costs else: 0'
+- name: snap_sua_nearest_whole_dollar_rounding_midpoint
+  kind: parameter
+  dtype: Decimal
+  source: us-nh/regulation/he-w-700/He-W 742.02(l)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: Rounding the SUA amount ... to the nearest whole dollar
+  versions:
+  - effective_from: '2025-10-01'
+    formula: '0.5'
+- name: snap_sua_consumer_price_index_series
+  kind: parameter
+  dtype: String
+  source: us-nh/regulation/he-w-700/He-W 742.02(k)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: New England Consumer Price Index Card for all urban consumers
+            (CPI-U) for the Northeast region, not seasonally adjusted
+  versions:
+  - effective_from: '2025-10-01'
+    formula: '"New England CPI-U, Northeast region, not seasonally adjusted"'
+- name: snap_standard_utility_allowance_october_1_updated_amount
+  kind: derived
+  entity: Household
+  dtype: Money
+  period: Month
+  unit: USD
+  source: us-nh/regulation/he-w-700/He-W 742.02(k)-(m)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: every SUA except for the internet only SUA shall be updated for
+            October 1 of each year
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: average CPI percent of change in the cost of fuel and utilities
+            from the previous year to the current year, using the most recent 12-month
+            period available
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: Rounding the SUA amount ... to the nearest whole dollar
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-nh/regulation/he-w-700/He-W 742.02
+          excerpt: If the most recent CPI average percent change ... is zero, there
+            shall be no change to the SUA amounts
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-nh:regulations/he-w-700/742/02/standard-utility-allowances#snap_sua_nearest_whole_dollar_rounding_midpoint
+          output: snap_sua_nearest_whole_dollar_rounding_midpoint
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-10-01'
+    formula: 'if standard_utility_allowance_is_internet_only
+
+      or most_recent_available_12_month_standard_utility_allowance_cpi_average_percent_change
+      == 0:
+
+      current_standard_utility_allowance_amount else:
+
+      floor((current_standard_utility_allowance_amount
+
+      * (1 + most_recent_available_12_month_standard_utility_allowance_cpi_average_percent_change))
+
+      + snap_sua_nearest_whole_dollar_rounding_midpoint)'
