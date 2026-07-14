@@ -1,0 +1,133 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+  summary: |-
+    A resource transfer is a transfer without fair consideration when it is voluntary, without fair and valuable consideration, made within thirty-six months before application or while receiving Adult Financial grant payments, and for the purpose of rendering the client eligible. The penalty is based on uncompensated value divided by the current grant standard, rounded down, subject to a maximum of thirty-six months; no penalty applies when the entire resource is returned in the same month.
+  deferred_outputs:
+    - output: us-co:regulations/9-ccr-2503-5/3.520.76#twfc_penalty_period_start_and_end
+      reason: The source specifies month-by-month start, sequencing for multiple transfers, subsequent full-return termination, and repeated partial-return recomputation, but the available Asset-scoped schema has no transfer-date or ordered-transfer relation needed to calculate those calendar effects faithfully.
+rules:
+  - name: twfc_lookback_months
+    kind: parameter
+    dtype: Count
+    source: 9 CCR 2503-5, § 3.520.76(A)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "within thirty-six (36) months prior to the application date"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          36
+
+  - name: maximum_twfc_penalty_months
+    kind: parameter
+    dtype: Count
+    source: 9 CCR 2503-5, § 3.520.76(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "maximum of 36 months"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          36
+
+  - name: transfer_without_fair_consideration
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, § 3.520.76(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "Voluntary; and, Without fair and valuable consideration"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "Made within thirty-six (36) months prior to the application date or while receiving Adult Financial program grant payments"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "For the purpose of rendering the client eligible for assistance"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "thirty-six (36) months"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          transfer_is_voluntary
+          and transfer_lacks_fair_and_valuable_consideration
+          and (months_between_transfer_and_application <= twfc_lookback_months or client_was_receiving_adult_financial_grant_payments_at_transfer)
+          and county_determines_transfer_purpose_was_to_render_client_eligible
+
+  - name: uncompensated_transfer_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+    source: 9 CCR 2503-5, § 3.520.76(D)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "Determine the actual value of the resource less encumbrances and subtract the amount the client received"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          max(0, actual_resource_value - documented_resource_encumbrances - consideration_received_for_resource)
+
+  - name: twfc_ineligibility_months
+    kind: derived
+    entity: Asset
+    dtype: Count
+    period: Month
+    source: 9 CCR 2503-5, § 3.520.76(D)-(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "Divide the uncompensated value by the TWFC monthly penalty value and round down to the nearest whole number."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "the entire resource is returned in the same month, the period of ineligibility does not apply"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.76
+              excerpt: "from 1 month up to a maximum of 36 months"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if transfer_without_fair_consideration and not entire_resource_returned_in_same_month:
+            min(maximum_twfc_penalty_months, max(1, floor(uncompensated_transfer_value / current_adult_financial_program_grant_standard)))
+          else: 0

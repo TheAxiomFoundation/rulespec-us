@@ -1,0 +1,114 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.79
+  summary: |-
+    "Fair share is calculated by totaling shelter costs and dividing by the number of people living in the household." The ISM calculation does not apply to a client residing in and owning a primary residence, receiving subsidized housing, homeless, or paying a fair share when shelter costs are market value or greater. Maximum ISM is 33.33% of the current SSI benefit standard plus a $20.00 disregard.
+  deferred_outputs:
+    - output: us-co:regulations/9-ccr-2503-5/3.520.79#adult_financial_program_maximum_ism_amount
+      reason: The current SSI benefit standard is defined in Section 3.510, which is not available as copied RuleSpec context.
+      source_values:
+        - us-co:regulations/9-ccr-2503-5/3.520.79#adult_financial_ism_ssi_benefit_standard_fraction
+        - us-co:regulations/9-ccr-2503-5/3.520.79#adult_financial_ism_disregard
+    - output: us-co:regulations/9-ccr-2503-5/3.520.79#client_ism_amount
+      reason: The ISM amount calculations require the current maximum ISM amount, which depends on the unavailable SSI benefit standard defined in Section 3.510.
+rules:
+  - name: adult_financial_ism_ssi_benefit_standard_fraction
+    kind: parameter
+    dtype: Rate
+    source: 9 CCR 2503-5, Section 3.520.79(E)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.79
+              excerpt: "multiplying the current SSI benefit standard ... by 33.33%"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          0.3333
+  - name: adult_financial_ism_disregard
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 9 CCR 2503-5, Section 3.520.79(E)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.79
+              excerpt: "adding a $20.00 disregard"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          20
+  - name: client_fair_share_of_shelter_costs
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, Section 3.520.79(B)(4)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.79
+              excerpt: "Fair share is calculated by totaling shelter costs and dividing by the number of people living in the household."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          total_monthly_household_shelter_costs / number_of_people_living_in_household
+  - name: ism_calculation_does_not_apply_due_to_residence_or_housing_status
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, Section 3.520.79(B)(1)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.79
+              excerpt: "The ISM calculation does not apply to a client: Who is residing in and owning his or her primary residence; or, Who is receiving subsidized housing; or, Who is homeless."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          client_resides_in_and_owns_primary_residence
+          or client_receives_subsidized_housing
+          or client_is_homeless
+  - name: ism_calculation_does_not_apply_when_fair_share_paid_at_market_value
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, Section 3.520.79(B)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.79
+              excerpt: "Who is paying his or her fair share of shelter costs when shelter costs are market value or greater"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.520.79#client_fair_share_of_shelter_costs
+              output: client_fair_share_of_shelter_costs
+              hash: sha256:local
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          client_monthly_shelter_costs_paid >= client_fair_share_of_shelter_costs
+          and total_monthly_household_shelter_costs >= current_market_value_monthly_shelter_costs

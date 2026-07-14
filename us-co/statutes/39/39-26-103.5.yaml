@@ -1,0 +1,209 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-26-103.5
+  summary: |-
+    The executive director may issue a direct payment permit number to a person whose preceding twelve-month eligible Colorado purchases total at least seven million dollars, whose compliance history satisfies subsection (1)(b) or is waived for reasonable cause, and whose acceptable accounting system enables full and accurate local-tax collection and allocation. A recipient becomes a qualified purchaser. A permit remains effective through December 31 of the third year following issuance unless revoked, and revocation may be appealed within thirty days after receipt of notice.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-26-103.5#direct_payment_permit_expiration
+      reason: The source specifies expiration on December 31 of a year calculated from issuance, but the available schema has no date-valued output or calendar-date arithmetic.
+      source_values:
+        - us-co:statutes/39/39-26-103.5#permit_term_years_following_issuance
+    - output: us-co:statutes/39/39-26-103.5#revocation_appeal_timeliness
+      reason: Timeliness depends on the date of receipt of revocation notice and a day-level filing date calculation not representable as a date-valued output.
+      source_values:
+        - us-co:statutes/39/39-26-103.5#revocation_appeal_deadline_days
+rules:
+  - name: eligible_purchase_review_period_months
+    kind: parameter
+    dtype: Count
+    source: C.R.S. 39-26-103.5(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "For the preceding twelve-month period"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: eligible_purchase_amount_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: C.R.S. 39-26-103.5(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "at least seven million dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          7000000
+
+  - name: compliance_history_review_years
+    kind: parameter
+    dtype: Count
+    source: C.R.S. 39-26-103.5(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "for the preceding three years"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: permit_term_years_following_issuance
+    kind: parameter
+    dtype: Count
+    source: C.R.S. 39-26-103.5(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "December 31 of the third year following the year in which it is issued"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: revocation_appeal_deadline_days
+    kind: parameter
+    dtype: Count
+    source: C.R.S. 39-26-103.5(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "within thirty days of receipt of the notice of revocation"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+
+  - name: eligible_purchase_volume_requirement_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: C.R.S. 39-26-103.5(1)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "purchased in Colorado in the aggregate"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "Purchases ... to be erected upon or affixed to real property ... shall be excluded"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          purchase_review_period_months == eligible_purchase_review_period_months
+          and eligible_colorado_purchases_excluding_real_property_items >= eligible_purchase_amount_threshold
+
+  - name: compliance_history_requirement_satisfied_or_waived
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: C.R.S. 39-26-103.5(1)(b), (2), (3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "timely filed the required returns and timely remitted the tax shown due"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "may waive the requirements ... if ... failure to comply ... was due to reasonable cause"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not person_has_been_subject_to_collection_remittance_or_reporting_requirements
+          or failure_to_comply_was_due_to_reasonable_cause
+          or (years_subject_to_requirements >= compliance_history_review_years
+          and timely_filed_and_remitted_for_preceding_three_years)
+          or (years_subject_to_requirements < compliance_history_review_years
+          and timely_filed_and_remitted_since_becoming_subject)
+
+  - name: application_satisfies_conditions_for_discretionary_permit_issuance
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: C.R.S. 39-26-103.5(1)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "has in place an accounting system, acceptable to the executive director"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          eligible_purchase_volume_requirement_satisfied
+          and compliance_history_requirement_satisfied_or_waived
+          and accounting_system_acceptable_to_executive_director_and_sufficient_for_local_tax_allocation
+
+  - name: person_is_qualified_purchaser
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: C.R.S. 39-26-103.5(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-103.5
+              excerpt: "A person shall become a qualified purchaser upon receipt of a direct payment permit number."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_has_received_direct_payment_permit_number
