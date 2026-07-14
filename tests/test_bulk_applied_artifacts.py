@@ -141,6 +141,8 @@ def test_bulk_runners_require_review_before_merge() -> None:
     assert "python bulk/applied_artifacts.py" in workflow
     assert 'git switch --detach "origin/$DEFAULT_BRANCH"' in workflow
     assert "--label bulk-encode --draft" in workflow
-    assert 'gh pr merge "$branch"' not in workflow
+    assert ".isDraft == true and .autoMergeRequest == null" in workflow
+    assert "ensure_draft_pr(branch)" in local_drain
+    assert 'gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto' not in workflow
     assert '"--label", "bulk-encode",\n             "--draft"' in local_drain
-    assert '"pr", "merge", branch' not in local_drain
+    assert '"pr", "merge", branch, "--repo", REPO, "--auto"' not in local_drain

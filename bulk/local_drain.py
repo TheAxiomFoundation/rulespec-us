@@ -162,6 +162,33 @@ def gh_json(args):
         return None
 
 
+def ensure_draft_pr(branch: str) -> None:
+    pr = gh_json(
+        ["pr", "view", branch, "--repo", REPO, "--json", "isDraft,autoMergeRequest"]
+    )
+    if pr is None:
+        raise RuntimeError(f"could not read PR state for {branch}")
+    if pr.get("autoMergeRequest") is not None:
+        run(
+            ["gh", "pr", "merge", branch, "--repo", REPO, "--disable-auto"],
+            check=True,
+        )
+    if pr.get("isDraft") is not True:
+        run(["gh", "pr", "ready", branch, "--repo", REPO, "--undo"], check=True)
+
+    verified = gh_json(
+        ["pr", "view", branch, "--repo", REPO, "--json", "isDraft,autoMergeRequest"]
+    )
+    if (
+        verified is None
+        or verified.get("isDraft") is not True
+        or verified.get("autoMergeRequest") is not None
+    ):
+        raise RuntimeError(
+            f"refusing to continue: {branch} is not a draft with auto-merge disabled"
+        )
+
+
 # --- worktree helpers -------------------------------------------------------
 def make_worktree(slug: str, ref: str) -> Path:
     """Fresh generation worktree whose leaf dir is exactly ``rulespec-us``
@@ -283,7 +310,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
-        run(["gh", "pr", "ready", branch, "--repo", REPO, "--undo"])
+        ensure_draft_pr(branch)
         result = f"rebuilt+pushed draft {branch}: {summary}"
         if wait:
             result += "; " + wait_for_merge(branch)

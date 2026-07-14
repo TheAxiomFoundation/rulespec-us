@@ -529,5 +529,19 @@ jobs:
               --add-label bulk-encode
           fi
 
-          gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo >/dev/null 2>&1 || true
+          pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,autoMergeRequest)"
+          if [ "$(jq -r '.autoMergeRequest == null' <<< "$pr_json")" != "true" ]; then
+            retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
+          fi
+          if [ "$(jq -r '.isDraft' <<< "$pr_json")" != "true" ]; then
+            retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
+          fi
+          pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,autoMergeRequest)"
+          if ! jq -e '.isDraft == true and .autoMergeRequest == null' \
+            <<< "$pr_json" >/dev/null; then
+            echo "::error::Refusing to continue: $branch is not a draft with auto-merge disabled." >&2
+            exit 1
+          fi
           echo "Draft PR opened for $CITATION on branch $branch (status: $ENC_STATUS; independent review required)."
