@@ -3,12 +3,9 @@
 
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
 CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
-dispatcher, opening the identical one-PR-per-module with auto-merge. It is a
-faithful local mirror of ``.github/workflows/bulk-encode.yml`` plus the
-oracle-coverage-pending declaration step the cloud dispatcher is missing (that
-missing step is why every new-state bulk PR fails the changed-file oracle
-coverage gate; see ``unstick`` below and the workflow fix in the same PR as this
-script).
+dispatcher. It mirrors the generation path while adding the exact-checkout
+oracle-coverage-pending declaration needed to keep new-state PRs out of the
+unmapped coverage state.
 
 Two decisions matter and are baked in here so PRs go green:
 
@@ -18,10 +15,10 @@ Two decisions matter and are baked in here so PRs go green:
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
   *coverage/sync* tool below, not to generation.
-* **Coverage declaration uses the same immutable axiom-encode ref as CI**, because
-  the changed-file coverage classifier is what reclassifies declared-pending outputs from
-  ``unmapped`` to ``pending_classification``. The pinned 1200 generator has the
-  older workspace/repo sync interface, not the exact-checkout contract used here.
+* **Coverage declaration uses an immutable current-CI encoder ref.** Before any
+  mutation, the runner requires that exact ref to remain the head of the remote
+  ``main`` branch consumed by CI. The pinned 1200 generator has the older
+  workspace/repo sync interface, not the exact-checkout contract used here.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
 ``--max-entries``) and every unit of durable state (pushed branch, opened PR,
@@ -69,6 +66,7 @@ from pathlib import Path
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
 COV_ENCODER_REF = "c83416309a4331d225bcde16907e3b4eb79e26f1"
+COV_ENCODER_REMOTE = "https://github.com/TheAxiomFoundation/axiom-encode.git"
 COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
 CHECKOUT = HERE.parent                            # this checkout root
@@ -542,6 +540,17 @@ def require_coverage_ref() -> str:
         raise SystemExit(
             f"coverage encoder checkout must be {COV_ENCODER_REF}; got {actual}"
         )
+    rc, remote_head = run(
+        ["git", "ls-remote", COV_ENCODER_REMOTE, "refs/heads/main"],
+        merge_stderr=False,
+    )
+    remote_fields = remote_head.split()
+    current_ci_ref = remote_fields[0] if rc == 0 and remote_fields else "unavailable"
+    if current_ci_ref != COV_ENCODER_REF:
+        raise SystemExit(
+            "coverage encoder ref no longer matches CI's remote main: "
+            f"local {COV_ENCODER_REF}; CI {current_ci_ref}"
+        )
     rc, dirty = run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=COV_CHECKOUT,
@@ -563,12 +572,12 @@ def require_coverage_ref() -> str:
     )
     if rc != 0:
         raise SystemExit(f"coverage encoder import failed via {COV_PY}")
-    try:
-        Path(module_file.strip()).resolve().relative_to(COV_CHECKOUT)
-    except ValueError as exc:
+    imported_module = Path(module_file.strip()).resolve()
+    expected_module = (COV_CHECKOUT / "src/axiom_encode/__init__.py").resolve()
+    if imported_module != expected_module:
         raise SystemExit(
-            f"coverage encoder at {COV_AE} is not installed from {COV_CHECKOUT}"
-        ) from exc
+            f"coverage encoder imports {imported_module}; expected {expected_module}"
+        )
     expected_executable = COV_PY.parent / "axiom-encode"
     if COV_AE.resolve() != expected_executable.resolve():
         raise SystemExit(
@@ -636,7 +645,6 @@ def cmd_doctor(_args) -> int:
 
 
 def cmd_unstick(args) -> int:
-    require_coverage_ref()
     prs = open_bulk_prs()
     if args.pr:
         targets = [p for p in prs if p["number"] in set(args.pr)]
@@ -647,6 +655,8 @@ def cmd_unstick(args) -> int:
         for p in prs:
             print(f"  #{p['number']:4d} {p['branch']:40s} validate={p['validate']} merge={p['merge']}")
         return 0
+    if targets:
+        require_coverage_ref()
     log(f"unstick {len(targets)} PR(s): {[p['number'] for p in targets]}")
     for p in targets:
         try:
