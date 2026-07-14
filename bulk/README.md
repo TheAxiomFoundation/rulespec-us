@@ -110,7 +110,7 @@ then `merged`.
 | --- | --- | --- |
 | `Generated RuleSpec failed CI validation` at apply | apply-blocked | Read `*.repair.json` under the run's `encode-out`; usually a bad generated formula or unresolved import. Re-encode (a new run), do not hand-edit. |
 | `points to a RuleSpec file that could not be resolved: rulespec-us-<state>/...` | resolver/layout | The checkout leaf dir was not `rulespec-us`, or a sibling checkout was missing. The workflow guards the leaf-dir name; check the sibling symlink step. |
-| companion test red only | fixtures (#1060) | `needs-fixtures`; run the follow-up fixture pass. |
+| companion test red only | fixtures (#1060) | `needs-fixtures`; fix the encoder or its inputs and re-encode. |
 | self-import / same-section subsection import error | encode#1058 | The section is too cross-reference-heavy for a clean atomic encode. Drop it from the worklist or split the citation to the self-contained fragment. |
 | `oracle coverage ... unmapped` on the PR | oracle mapping | The output needs a PolicyEngine oracle mapping entry (`axiom-encode classify`). Out of scope for the encode job; handle as a mapping follow-up. |
 | 429 from OpenAI | rate limit | Lower `limit`/`max-parallel` or re-dispatch later. The concurrency group prevents overlapping runs. |

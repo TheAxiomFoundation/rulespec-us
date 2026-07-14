@@ -314,28 +314,38 @@ def unstick_pr(branch: str, wait: bool) -> str:
         ensure_draft_pr(branch)
         result = f"rebuilt+pushed draft {branch}: {summary}"
         if wait:
-            result += "; " + wait_for_merge(branch)
+            result += "; " + wait_for_checks(branch)
         return result
     finally:
         drop_worktree(leaf)
 
 
-def wait_for_merge(branch: str, timeout_s: int = 1500) -> str:
+def wait_for_checks(branch: str, timeout_s: int = 1500) -> str:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         pr = gh_json(["pr", "view", branch, "--repo", REPO,
-                      "--json", "state,mergeStateStatus,statusCheckRollup"])
+                      "--json", "state,isDraft,statusCheckRollup"])
         if not pr:
             return "poll-error"
-        if pr["state"] == "MERGED":
-            return "MERGED"
-        vv = next((c.get("conclusion") or c.get("state")
-                   for c in pr.get("statusCheckRollup") or []
-                   if c.get("name") == "validate / validate"), None)
-        if vv in ("FAILURE", "ERROR"):
-            return f"validate={vv} (needs triage)"
+        if pr["state"] != "OPEN":
+            return pr["state"]
+        checks = pr.get("statusCheckRollup") or []
+        failures = {
+            str(check.get("conclusion") or check.get("state") or "").upper()
+            for check in checks
+        } & {"ACTION_REQUIRED", "CANCELLED", "ERROR", "FAILURE", "TIMED_OUT"}
+        if failures:
+            return f"checks={','.join(sorted(failures))} (needs triage)"
+        pending = any(
+            str(check.get("status") or "").upper()
+            not in {"", "COMPLETED"}
+            or str(check.get("state") or "").upper() in {"EXPECTED", "PENDING"}
+            for check in checks
+        )
+        if checks and not pending:
+            return "checks complete; draft review required"
         time.sleep(30)
-    return "timeout-waiting-merge"
+    return "timeout-waiting-checks"
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +710,7 @@ def main() -> int:
     u = sub.add_parser("unstick", help="Sync-declare + rebase open new-state bulk PRs.")
     u.add_argument("--pr", type=int, nargs="*", default=[])
     u.add_argument("--all", action="store_true")
-    u.add_argument("--wait", action="store_true", help="Poll each PR until merged.")
+    u.add_argument("--wait", action="store_true", help="Poll each PR until CI finishes.")
     u.set_defaults(func=cmd_unstick)
     doc = sub.add_parser("doctor", help="Verify toolchain, auth, signing key.")
     doc.set_defaults(func=cmd_doctor)
