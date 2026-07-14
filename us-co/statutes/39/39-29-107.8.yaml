@@ -1,0 +1,202 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-29-107.8
+  summary: |-
+    “At the end of each month, any moneys in the reserve that are not required for a refund are the total gross receipts realized that are available for allocation.” The treasurer credits reserve shortfalls from article 22 proceeds under specified transition rules, including fifteen percent of monthly gross severance tax revenues and one-fourth of the fiscal-year-end deficit.
+rules:
+  - name: reserve_refund_credit_percentage
+    kind: parameter
+    dtype: Rate
+    source: C.R.S. 39-29-107.8(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "exceed fifteen percent of the gross severance tax revenues"
+    versions:
+      - effective_from: '2016-07-01'
+        formula: |-
+          0.15
+
+  - name: fiscal_year_end_deficit_credit_denominator
+    kind: parameter
+    dtype: Integer
+    source: C.R.S. 39-29-107.8(2)(c)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "an amount equal to one-fourth of the deficit"
+    versions:
+      - effective_from: '2017-07-01'
+        formula: |-
+          4
+
+  - name: fiscal_year_end_deficit_credit_fraction
+    kind: parameter
+    dtype: Decimal
+    source: C.R.S. 39-29-107.8(2)(c)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "an amount equal to one-fourth of the deficit"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-29-107.8#fiscal_year_end_deficit_credit_denominator
+              output: fiscal_year_end_deficit_credit_denominator
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-07-01'
+        formula: |-
+          1 / fiscal_year_end_deficit_credit_denominator
+
+  - name: gross_receipts_available_for_allocation
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    unit: USD
+    period: Month
+    source: C.R.S. 39-29-107.8(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "any moneys in the reserve that are not required for a refund are the total gross receipts realized that are available for allocation"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, money_in_reserve - refunds_required_from_reserve)
+
+  - name: reserve_refund_deficit
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    unit: USD
+    period: Month
+    source: C.R.S. 39-29-107.8(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "the amount in the reserve is less than the amount of refunds that are required to be made from the reserve"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, refunds_required_from_reserve - money_in_reserve)
+
+  - name: pre_transition_reserve_credit
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    unit: USD
+    period: Month
+    source: C.R.S. 39-29-107.8(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "an amount equal to the deficit"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-29-107.8#reserve_refund_deficit
+              output: reserve_refund_deficit
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          reserve_refund_deficit
+
+  - name: transition_period_reserve_credit
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    unit: USD
+    period: Month
+    source: C.R.S. 39-29-107.8(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "refunds ... made for a month exceed fifteen percent of the gross severance tax revenues for the same month"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-29-107.8#reserve_refund_credit_percentage
+              output: reserve_refund_credit_percentage
+              hash: sha256:local
+    versions:
+      - effective_from: '2016-07-01'
+        formula: |-
+          max(0, refunds_required_from_reserve - (reserve_refund_credit_percentage * gross_severance_tax_revenues))
+
+  - name: fiscal_year_end_reserve_credit
+    kind: derived
+    entity: StateAgency
+    dtype: Money
+    unit: USD
+    period: Year
+    source: C.R.S. 39-29-107.8(2)(c)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "an amount equal to one-fourth of the deficit"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-29-107.8#fiscal_year_end_deficit_credit_fraction
+              output: fiscal_year_end_deficit_credit_fraction
+              hash: sha256:local
+    versions:
+      - effective_from: '2017-07-01'
+        formula: |-
+          fiscal_year_end_deficit_credit_fraction * max(0, refunds_required_from_reserve - money_in_reserve)
+
+  - name: operational_fund_recoupment_permitted
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Year
+    source: C.R.S. 39-29-107.8(2)(c)(II)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-107.8
+              excerpt: "no amount shall be recouped from the operational fund"
+    versions:
+      - effective_from: '2017-07-01'
+        formula: |-
+          false

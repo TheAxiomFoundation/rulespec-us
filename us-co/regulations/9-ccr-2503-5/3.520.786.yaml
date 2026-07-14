@@ -1,0 +1,178 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+  summary: |-
+    Income tax refunds are exempt in the month received, with remaining funds countable as a resource after twelve months. Listed income is exempt, including qualifying medical third-party payments, energy assistance, educational aid, PASS set-asides, foster-care payments, specified child support, and infrequent or irregular income below $60 in a calendar quarter. VA Aid and Attendance is exempt only to the extent used for specified uncovered care; foster-care excess is countable.
+rules:
+  - name: income_tax_refund_resource_retention_months
+    kind: parameter
+    dtype: Count
+    source: 9 CCR 2503-5 § 3.520.786(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "countable resource after twelve (12) months"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          12
+
+  - name: infrequent_or_irregular_income_quarterly_exemption_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 9 CCR 2503-5 § 3.520.786(O)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "less than $60 in a calendar quarter"
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          60
+
+  - name: payment_is_exempt_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5 § 3.520.786(A)-(P)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          income_tax_refund_received_in_current_month
+          or third_party_payment_for_medical_care_or_medical_confinement_room_and_board
+          or home_energy_assistance_from_private_nonprofit_or_supplier
+          or one_time_non_energy_emergency_or_general_assistance
+          or (personal_or_home_care_allowance_paid_to_client_for_in_home_supportive_services
+          and not nonrecipient_spouse_provides_the_paid_in_home_services)
+          or va_aid_and_attendance_is_used_for_uncovered_medical_or_attendant_care
+          or payment_is_educational_loan_or_grant
+          or payment_is_work_study_income
+          or payment_is_colorado_crime_victim_compensation
+          or payment_is_unearned_income_excluded_by_poms_or_20_cfr_416_1124
+          or payment_is_reverse_mortgage_loan
+          or foster_care_payment_is_intended_for_child_care
+          or child_support_is_paid_for_another_person
+          or child_support_arrears_are_received_for_client
+
+  - name: va_aid_and_attendance_countable_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5 § 3.520.786(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "The remainder is countable and deducted from the assistance grant."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if payment_is_va_aid_and_attendance:
+            max(0, payment_amount - va_aid_and_attendance_amount_used_for_uncovered_medical_or_attendant_care)
+          else: 0
+
+  - name: countable_foster_care_payment_excess
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5 § 3.520.786(M)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "Any amount paid to a provider of foster care in excess of the foster care payment not intended for the care of the child is countable income to the provider."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          if payment_is_foster_care_payment:
+            max(0, payment_amount - foster_care_payment_intended_for_child_care_amount)
+          else: 0
+
+  - name: infrequent_or_irregular_income_is_exempt
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5 § 3.520.786(O)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "Infrequent or irregular income of less than $60 in a calendar quarter."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          income_is_infrequent_or_irregular
+          and payment_amount < infrequent_or_irregular_income_quarterly_exemption_limit
+
+  - name: unspent_income_tax_refund_is_countable_resource
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5 § 3.520.786(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "Any remaining funds shall be a countable resource after twelve (12) months."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          asset_is_remaining_income_tax_refund_funds
+          and months_since_income_tax_refund_received > income_tax_refund_resource_retention_months
+
+  - name: pass_set_aside_income_or_resource_is_exempt
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5 § 3.520.786(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.520.786
+              excerpt: "Income and resources set aside as part of a Plan to Achieve Self Support (PASS) approved by the SSA."
+    versions:
+      - effective_from: '2016-10-01'
+        formula: |-
+          asset_is_income_or_resource_set_aside_under_ssa_approved_pass
