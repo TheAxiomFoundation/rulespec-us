@@ -27,13 +27,22 @@ def changed_paths(repo: Path) -> list[str]:
         check=True,
         capture_output=True,
     )
+    records = completed.stdout.split(b"\0")
     paths: list[str] = []
-    for record in completed.stdout.split(b"\0"):
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
         if not record:
             continue
-        decoded = record.decode("utf-8", errors="strict")
-        if len(decoded) >= 4:
-            paths.append(decoded[3:])
+        if len(record) < 4 or record[2:3] != b" ":
+            raise ValueError("malformed git status --porcelain=v1 -z output")
+        status = record[:2]
+        paths.append(record[3:].decode("utf-8", errors="strict"))
+        if b"R" in status or b"C" in status:
+            if index >= len(records) or not records[index]:
+                raise ValueError("git rename/copy status is missing its source path")
+            index += 1
     return paths
 
 

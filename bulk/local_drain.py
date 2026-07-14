@@ -484,24 +484,58 @@ def flip_statuses(updates: dict) -> None:
     """updates: {citation: status}. Commits to worklist on a small branch + PR."""
     if not updates:
         return
+    branch = "bulk/worklist-status-flip"
+    open_prs = gh_json(
+        [
+            "pr",
+            "list",
+            "--repo",
+            REPO,
+            "--state",
+            "open",
+            "--head",
+            branch,
+            "--json",
+            "number",
+        ]
+    )
+    if open_prs is None:
+        raise RuntimeError(f"could not determine whether {branch} already has a PR")
+    existing_pr = bool(open_prs)
+    if existing_pr:
+        ensure_draft_pr(branch)
+
     leaf = make_worktree("worklist-flip", "origin/main")
     try:
-        run(["git", "-C", str(leaf), "checkout", "-B", "bulk/worklist-status-flip"])
+        if existing_pr:
+            run(["git", "-C", str(leaf), "fetch", "origin", branch], check=True)
+            run(["git", "-C", str(leaf), "checkout", "-B", branch, "FETCH_HEAD"], check=True)
+            run(["git", "-C", str(leaf), "rebase", "origin/main"], check=True)
+        else:
+            run(["git", "-C", str(leaf), "checkout", "-B", branch], check=True)
         for citation, status in updates.items():
             run([str(COV_PY), str(leaf / "bulk/compute_matrix.py"),
-                 "--set-status", citation, status], cwd=leaf)
-        run(["git", "-C", str(leaf), "add", "bulk/worklist.yaml"])
-        run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
-             "-c", "user.name=bulk-encode", "commit", "-q", "-m",
-             "Flip drained worklist statuses (bulk)\n\n"
-             "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"])
+                 "--set-status", citation, status], cwd=leaf, check=True)
+        _, worklist_diff = run(
+            ["git", "-C", str(leaf), "status", "--porcelain", "--", "bulk/worklist.yaml"]
+        )
+        if worklist_diff:
+            run(["git", "-C", str(leaf), "add", "bulk/worklist.yaml"])
+            run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
+                 "-c", "user.name=bulk-encode", "commit", "-q", "-m",
+                 "Flip drained worklist statuses (bulk)\n\n"
+                 "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"], check=True)
+        elif not existing_pr:
+            return
+        if existing_pr:
+            ensure_draft_pr(branch)
         run(["git", "-C", str(leaf), "push", "-f", "origin",
-             "HEAD:refs/heads/bulk/worklist-status-flip"], check=True)
-        branch = "bulk/worklist-status-flip"
-        run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
-             "--head", branch, "--title", "Flip drained worklist statuses (bulk)",
-             "--body", "Status flips for locally-drained entries.", "--label",
-             "bulk-encode", "--draft"], check=True)
+             f"HEAD:refs/heads/{branch}"], check=True)
+        if not existing_pr:
+            run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
+                 "--head", branch, "--title", "Flip drained worklist statuses (bulk)",
+                 "--body", "Status flips for locally-drained entries.", "--label",
+                 "bulk-encode", "--draft"], check=True)
         ensure_draft_pr(branch)
     finally:
         drop_worktree(leaf)

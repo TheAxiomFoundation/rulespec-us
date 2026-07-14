@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bulk.applied_artifacts import discover_applied_artifacts
+from bulk.applied_artifacts import changed_paths, discover_applied_artifacts
 from bulk.compute_matrix import select
 
 
@@ -63,6 +63,36 @@ def test_discovers_jurisdiction_manifest_for_legacy_module(tmp_path: Path) -> No
         citation=citation,
         paths=[module, test_file, manifest],
     ) == (module, test_file, manifest)
+
+
+def test_changed_paths_ignores_rename_source_record(tmp_path: Path) -> None:
+    old_module = "us-mo/manual/dss/snap/old.yaml"
+    new_module = "us-mo/manual/dss/snap/new.yaml"
+    (tmp_path / old_module).parent.mkdir(parents=True)
+    (tmp_path / old_module).write_text("format: rulespec/v1\n")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", old_module], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Axiom Test",
+            "-c",
+            "user.email=test@axiom.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "fixture",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "mv", old_module, new_module], check=True
+    )
+
+    assert changed_paths(tmp_path) == [new_module]
 
 
 @pytest.mark.parametrize(
@@ -148,3 +178,5 @@ def test_bulk_runners_require_review_before_merge() -> None:
     assert 'gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto' not in workflow
     assert '"--label", "bulk-encode",\n             "--draft"' in local_drain
     assert '"pr", "merge", branch, "--repo", REPO, "--auto"' not in local_drain
+    assert '"--head",\n            branch,\n            "--json",\n            "number"' in local_drain
+    assert "if not existing_pr:" in local_drain
