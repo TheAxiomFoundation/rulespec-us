@@ -20,8 +20,8 @@ Two decisions matter and are baked in here so PRs go green:
   *coverage/sync* tool below, not to generation.
 * **Coverage declaration uses the same immutable axiom-encode ref as CI**, because
   the changed-file coverage classifier is what reclassifies declared-pending outputs from
-  ``unmapped`` to ``pending_classification``. The pinned 1200 encoder does not
-  even have the ``oracle-coverage-pending`` subcommand.
+  ``unmapped`` to ``pending_classification``. The pinned 1200 generator has the
+  older workspace/repo sync interface, not the exact-checkout contract used here.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
 ``--max-entries``) and every unit of durable state (pushed branch, opened PR,
@@ -108,7 +108,15 @@ def log(msg: str) -> None:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def run(cmd, cwd=None, env=None, capture=True, check=False, timeout=None):
+def run(
+    cmd,
+    cwd=None,
+    env=None,
+    capture=True,
+    check=False,
+    timeout=None,
+    merge_stderr=True,
+):
     """Run a subprocess, returning (rc, combined_output)."""
     full = dict(os.environ)
     if env:
@@ -122,7 +130,9 @@ def run(cmd, cwd=None, env=None, capture=True, check=False, timeout=None):
         cwd=str(cwd) if cwd else None,
         env=full,
         stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
+        stderr=(subprocess.STDOUT if merge_stderr else subprocess.DEVNULL)
+        if capture
+        else None,
         text=True,
         timeout=timeout,
     )
@@ -140,6 +150,15 @@ def signing_key() -> str:
     for cmd in (
         [agent_secret, "get", "agent/axiom-encode-apply-signing-key"],
         ["agent-secret", "get", "agent/axiom-encode-apply-signing-key"],
+        [
+            "security",
+            "find-generic-password",
+            "-a",
+            "axiom-encode",
+            "-s",
+            "AXIOM_ENCODE_APPLY_SIGNING_KEY",
+            "-w",
+        ],
     ):
         try:
             rc, out = run(cmd)
@@ -147,8 +166,10 @@ def signing_key() -> str:
                 return out.strip()
         except FileNotFoundError:
             continue
-    raise SystemExit("Signing key AXIOM_ENCODE_APPLY_SIGNING_KEY unavailable "
-                     "(tried env + agent-secret + manage-secret.sh).")
+    raise SystemExit(
+        "Signing key AXIOM_ENCODE_APPLY_SIGNING_KEY unavailable "
+        "(tried env, agent-secret, and macOS Keychain)."
+    )
 
 
 def pinned_toolchain() -> dict:
@@ -511,14 +532,20 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
 def require_coverage_ref() -> str:
     if not COV_CHECKOUT.is_dir():
         raise SystemExit(f"coverage encoder checkout is missing: {COV_CHECKOUT}")
-    rc, head = run(["git", "rev-parse", "HEAD"], cwd=COV_CHECKOUT)
+    rc, head = run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=COV_CHECKOUT,
+        merge_stderr=False,
+    )
     actual = head.strip() if rc == 0 else "unavailable"
     if actual != COV_ENCODER_REF:
         raise SystemExit(
             f"coverage encoder checkout must be {COV_ENCODER_REF}; got {actual}"
         )
     rc, dirty = run(
-        ["git", "status", "--porcelain", "--untracked-files=all"], cwd=COV_CHECKOUT
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=COV_CHECKOUT,
+        merge_stderr=False,
     )
     if rc != 0 or dirty.strip():
         raise SystemExit(f"coverage encoder checkout must be clean: {COV_CHECKOUT}")
@@ -531,7 +558,8 @@ def require_coverage_ref() -> str:
             str(COV_PY),
             "-c",
             "import axiom_encode; print(axiom_encode.__file__)",
-        ]
+        ],
+        merge_stderr=False,
     )
     if rc != 0:
         raise SystemExit(f"coverage encoder import failed via {COV_PY}")
@@ -558,6 +586,7 @@ def require_coverage_ref() -> str:
             ),
         ],
         env={"AXIOM_ENCODE_APPLY_SIGNING_KEY": None},
+        merge_stderr=False,
     )
     actual_oracle_ref = oracle_ref.strip() if rc == 0 else "unavailable"
     if actual_oracle_ref != COV_ORACLES_REF:
@@ -571,11 +600,13 @@ def require_coverage_ref() -> str:
 def cmd_doctor(_args) -> int:
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
-    for label, ae, want_pending in (("gen encoder (pin)", GEN_AE, False),
-                                    ("cov encoder (pin)", COV_AE, True)):
+    command_ok = True
+    for label, ae, require_pending in (("gen encoder (pin)", GEN_AE, False),
+                                       ("cov encoder (pin)", COV_AE, True)):
         has_pending = ae.exists() and run(
             [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
-        ok = ae.exists() and (has_pending == want_pending)
+        ok = ae.exists() and (has_pending or not require_pending)
+        command_ok = command_ok and ok
         print(f"{label:20s}: {'OK' if ok else 'CHECK'} "
               f"(oracle-coverage-pending {'present' if has_pending else 'absent'})")
     try:
@@ -587,15 +618,21 @@ def cmd_doctor(_args) -> int:
     print(f"coverage encoder ref: {'OK' if cov_ref_ok else 'CHECK'} "
           f"({actual_cov_ref}; want {COV_ENCODER_REF})")
     print(f"pinned encoder ver   : {tc.get('axiom_encode_version')}")
-    print(f"engine bin           : {'OK' if ENGINE_BIN.exists() else 'MISSING'} {ENGINE_BIN}")
-    print(f"corpus               : {'OK' if CORPUS.exists() else 'MISSING'} {CORPUS}")
+    engine_ok = ENGINE_BIN.exists()
+    corpus_ok = CORPUS.exists()
+    print(f"engine bin           : {'OK' if engine_ok else 'MISSING'} {ENGINE_BIN}")
+    print(f"corpus               : {'OK' if corpus_ok else 'MISSING'} {CORPUS}")
     try:
         print(f"signing key          : present (len {len(signing_key())})")
+        signing_ok = True
     except SystemExit as e:
         print(f"signing key          : {e}")
+        signing_ok = False
     rc, out = run(["codex", "--version"])
     print(f"codex CLI            : {'OK ' + out.strip() if rc == 0 else 'MISSING'}")
-    return 0 if cov_ref_ok else 1
+    return 0 if all(
+        (command_ok, cov_ref_ok, engine_ok, corpus_ok, signing_ok, rc == 0)
+    ) else 1
 
 
 def cmd_unstick(args) -> int:
