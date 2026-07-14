@@ -25,13 +25,17 @@ def _write_manifest(path: Path, citation: str, applied_paths: set[str]) -> None:
 
 def test_discovers_repo_root_manifest_for_manual_module(tmp_path: Path) -> None:
     citation = "us-mo/manual/dss/snap/1105/block-1"
-    module = "us-mo/manual/dss/snap/1105/block-1.yaml"
-    test_file = "us-mo/manual/dss/snap/1105/block-1.test.yaml"
-    manifest = ".axiom/encoding-manifests/us-mo/manual/dss/snap/1105/block-1.json"
+    module = "us-mo/policies/dss/snap/1105/block-1.yaml"
+    test_file = "us-mo/policies/dss/snap/1105/block-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-mo/policies/dss/snap/1105/block-1.json"
     (tmp_path / module).parent.mkdir(parents=True)
     (tmp_path / module).write_text("format: rulespec/v1\n")
     (tmp_path / test_file).write_text("cases: []\n")
-    _write_manifest(tmp_path / manifest, citation, {module, test_file})
+    _write_manifest(
+        tmp_path / manifest,
+        "us-mo:policies/dss/snap/1105/block-1",
+        {module, test_file},
+    )
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
 
     assert discover_applied_artifacts(
@@ -101,7 +105,7 @@ def test_rejects_manifest_for_different_citation(tmp_path: Path) -> None:
     (tmp_path / test_file).parent.mkdir(parents=True)
     (tmp_path / module).write_text("format: rulespec/v1\n")
     (tmp_path / test_file).write_text("cases: []\n")
-    _write_manifest(tmp_path / manifest, "us-mo/manual/different", {module, test_file})
+    _write_manifest(tmp_path / manifest, "us-mo:policies/dss/snap/other", {module, test_file})
 
     with pytest.raises(ValueError, match="does not match"):
         discover_applied_artifacts(

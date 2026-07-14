@@ -60,6 +60,12 @@ def _is_manifest(path: PurePosixPath) -> bool:
     )
 
 
+def _canonical_module_citation(module: str) -> str:
+    path = PurePosixPath(module)
+    relative = path.with_suffix("").parts
+    return f"{relative[0]}:{'/'.join(relative[1:])}"
+
+
 def discover_applied_artifacts(
     repo: Path,
     *,
@@ -91,9 +97,12 @@ def discover_applied_artifacts(
         manifest = json.loads((repo / manifest_rel).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read applied manifest {manifest_rel}: {exc}") from exc
-    if manifest.get("citation") != citation:
+    manifest_citation = manifest.get("citation")
+    accepted_citations = {citation, _canonical_module_citation(module)}
+    if manifest_citation not in accepted_citations:
         raise ValueError(
-            f"manifest citation {manifest.get('citation')!r} does not match {citation!r}"
+            f"manifest citation {manifest_citation!r} does not match input "
+            f"{citation!r} or generated module {module!r}"
         )
 
     applied_files = manifest.get("applied_files")
