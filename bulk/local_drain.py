@@ -506,6 +506,15 @@ def require_coverage_ref() -> str:
         raise SystemExit(
             f"coverage encoder checkout must be {COV_ENCODER_REF}; got {actual}"
         )
+    rc, dirty = run(
+        ["git", "status", "--porcelain", "--untracked-files=all"], cwd=COV_CHECKOUT
+    )
+    if rc != 0 or dirty.strip():
+        raise SystemExit(f"coverage encoder checkout must be clean: {COV_CHECKOUT}")
+    if not COV_PY.is_file():
+        raise SystemExit(f"coverage encoder interpreter is missing: {COV_PY}")
+    if not COV_AE.is_file():
+        raise SystemExit(f"coverage encoder executable is missing: {COV_AE}")
     rc, module_file = run(
         [
             str(COV_PY),
