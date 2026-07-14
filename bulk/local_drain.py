@@ -308,6 +308,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
                "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
+        ensure_draft_pr(branch)
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         ensure_draft_pr(branch)
@@ -461,9 +462,13 @@ def encode_entry(item: dict) -> dict:
                 f"### Acceptance criteria\n\n{acceptance_criteria}\n")
         bf = WT_ROOT / slug / "pr-body.md"
         bf.write_text(body)
-        run(["gh", "pr", "create", "--repo", REPO, "--base", "main", "--head", branch,
+        run(
+            ["gh", "pr", "create", "--repo", REPO, "--base", "main", "--head", branch,
              "--title", title, "--body-file", str(bf), "--label", "bulk-encode",
-             "--draft"])
+             "--draft"],
+            check=True,
+        )
+        ensure_draft_pr(branch)
         res["status"] = gate_status
         res["detail"] = f"draft PR opened on {branch}; {sync_summary}"
         return res
@@ -492,11 +497,12 @@ def flip_statuses(updates: dict) -> None:
              "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"])
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              "HEAD:refs/heads/bulk/worklist-status-flip"], check=True)
+        branch = "bulk/worklist-status-flip"
         run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
-             "--head", "bulk/worklist-status-flip", "--title",
-             "Flip drained worklist statuses (bulk)", "--body",
-             "Status flips for locally-drained entries.", "--label", "bulk-encode",
-             "--draft"])
+             "--head", branch, "--title", "Flip drained worklist statuses (bulk)",
+             "--body", "Status flips for locally-drained entries.", "--label",
+             "bulk-encode", "--draft"], check=True)
+        ensure_draft_pr(branch)
     finally:
         drop_worktree(leaf)
 

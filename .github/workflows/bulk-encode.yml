@@ -477,6 +477,25 @@ jobs:
             done
           }
 
+          ensure_draft() {
+            local pr_json
+            pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,autoMergeRequest)"
+            if [ "$(jq -r '.autoMergeRequest == null' <<< "$pr_json")" != "true" ]; then
+              retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
+            fi
+            if [ "$(jq -r '.isDraft' <<< "$pr_json")" != "true" ]; then
+              retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
+            fi
+            pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,autoMergeRequest)"
+            if ! jq -e '.isDraft == true and .autoMergeRequest == null' \
+              <<< "$pr_json" >/dev/null; then
+              echo "::error::Refusing to continue: $branch is not a draft with auto-merge disabled." >&2
+              return 1
+            fi
+          }
+
           # Ensure the bulk-encode label exists.
           gh label create bulk-encode --repo "$GITHUB_REPOSITORY" \
             --color 1f6feb --description "Opened by the bulk-encode dispatcher" 2>/dev/null || true
@@ -506,6 +525,12 @@ jobs:
             fi
           fi
 
+          # A legacy PR may still be ready with auto-merge armed. Normalize it
+          # before replacing its head so the new commit cannot merge in the gap.
+          if [ -n "$pr_state" ]; then
+            ensure_draft
+          fi
+
           # Push the applied commit onto the bulk branch. This updates the open or
           # just-reopened PR, or stages the branch for a fresh PR below.
           git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
@@ -529,19 +554,5 @@ jobs:
               --add-label bulk-encode
           fi
 
-          pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,autoMergeRequest)"
-          if [ "$(jq -r '.autoMergeRequest == null' <<< "$pr_json")" != "true" ]; then
-            retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
-          fi
-          if [ "$(jq -r '.isDraft' <<< "$pr_json")" != "true" ]; then
-            retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
-          fi
-          pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,autoMergeRequest)"
-          if ! jq -e '.isDraft == true and .autoMergeRequest == null' \
-            <<< "$pr_json" >/dev/null; then
-            echo "::error::Refusing to continue: $branch is not a draft with auto-merge disabled." >&2
-            exit 1
-          fi
+          ensure_draft
           echo "Draft PR opened for $CITATION on branch $branch (status: $ENC_STATUS; independent review required)."
