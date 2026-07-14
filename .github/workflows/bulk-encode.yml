@@ -515,14 +515,23 @@ jobs:
           # time. If the branch was already orphaned by an earlier failed run,
           # reopen is impossible; open a fresh PR instead -- GitHub permits a new
           # PR from a branch whose prior PR is closed.
-          pr_state="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
+          pr_json="$(retry gh pr list --repo "$GITHUB_REPOSITORY" \
+            --head "$branch" --state all --limit 1 --json state)"
+          pr_state="$(jq -r '.[0].state // empty' <<< "$pr_json")"
           if [ "$pr_state" = "CLOSED" ]; then
             if gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
               echo "Reopened closed PR for $branch."
+              pr_state="OPEN"
             else
               echo "::warning::Closed PR for $branch cannot be reopened (head orphaned by a prior force-push); opening a fresh PR." >&2
               pr_state=""
             fi
+          elif [ "$pr_state" = "MERGED" ]; then
+            echo "::error::$branch already has a merged PR; fix the stale worklist entry instead of replacing its branch." >&2
+            exit 1
+          elif [ -n "$pr_state" ] && [ "$pr_state" != "OPEN" ]; then
+            echo "::error::Unexpected PR state for $branch: $pr_state" >&2
+            exit 1
           fi
 
           # A legacy PR may still be ready with auto-merge armed. Normalize it

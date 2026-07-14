@@ -360,6 +360,8 @@ MODULE_RE = re.compile(
 def already_handled(slug: str) -> bool:
     pr = gh_json(["pr", "list", "--repo", REPO, "--head", f"bulk/{slug}",
                   "--state", "all", "--json", "number,state"])
+    if pr is None:
+        raise RuntimeError(f"could not determine PR state for bulk/{slug}")
     return bool(pr)
 
 
@@ -367,7 +369,9 @@ def handled_slugs() -> set:
     """All bulk/<slug> that already have a PR (any state), in one gh call, so a
     drain chunk skips already-PR'd entries without a per-entry API round-trip."""
     data = gh_json(["pr", "list", "--repo", REPO, "--state", "all", "--limit", "400",
-                    "--json", "headRefName"]) or []
+                    "--json", "headRefName"])
+    if data is None:
+        raise RuntimeError("could not list existing bulk PRs")
     return {p["headRefName"].split("/", 1)[1] for p in data
             if p.get("headRefName", "").startswith("bulk/")}
 
@@ -379,7 +383,12 @@ def encode_entry(item: dict) -> dict:
     if _PAUSE.is_set():
         res["detail"] = "paused"
         return res
-    if already_handled(slug):
+    try:
+        handled = already_handled(slug)
+    except RuntimeError as exc:
+        res["detail"] = str(exc)
+        return res
+    if handled:
         res["status"] = "skipped"
         res["detail"] = "bulk/<slug> PR already exists"
         return res
@@ -460,6 +469,18 @@ def encode_entry(item: dict) -> dict:
                       "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "--amend", "-m", commit_msg])
+        open_prs = gh_json(
+            ["pr", "list", "--repo", REPO, "--state", "open", "--head", branch,
+             "--json", "number"]
+        )
+        if open_prs is None:
+            res["detail"] = f"could not verify PR state for {branch} before push"
+            return res
+        if open_prs:
+            ensure_draft_pr(branch)
+            res["status"] = "skipped"
+            res["detail"] = f"existing draft PR normalized for {branch}; no push performed"
+            return res
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,

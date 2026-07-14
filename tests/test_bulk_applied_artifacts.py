@@ -95,6 +95,23 @@ def test_changed_paths_ignores_rename_source_record(tmp_path: Path) -> None:
     assert changed_paths(tmp_path) == [new_module]
 
 
+def test_accepts_manifest_covering_only_changed_module(tmp_path: Path) -> None:
+    citation = "us-mo/manual/dss/snap/1105/block-1"
+    module = "us-mo/policies/dss/snap/1105/block-1.yaml"
+    test_file = "us-mo/policies/dss/snap/1105/block-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-mo/policies/dss/snap/1105/block-1.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(tmp_path / manifest, citation, {module})
+
+    assert discover_applied_artifacts(
+        tmp_path,
+        citation=citation,
+        paths=[module, manifest],
+    ) == (module, test_file, manifest)
+
+
 @pytest.mark.parametrize(
     ("extra_path", "message"),
     [
@@ -172,6 +189,8 @@ def test_bulk_runners_require_review_before_merge() -> None:
     assert 'git switch --detach "origin/$DEFAULT_BRANCH"' in workflow
     assert "--label bulk-encode --draft" in workflow
     assert ".isDraft == true and .autoMergeRequest == null" in workflow
+    assert 'pr_json="$(retry gh pr list' in workflow
+    assert '.[0].state // empty' in workflow
     assert workflow.count("ensure_draft") >= 3
     assert "ensure_draft_pr(branch)" in local_drain
     assert local_drain.count("ensure_draft_pr(branch)") >= 4
@@ -184,3 +203,5 @@ def test_bulk_runners_require_review_before_merge() -> None:
     assert 'startswith("validate / validate")' in local_drain
     assert "if validation_checks and not pending:" in local_drain
     assert 'return "checks complete; draft review required"' in local_drain
+    assert "could not determine PR state" in local_drain
+    assert "before push" in local_drain

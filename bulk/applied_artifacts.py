@@ -128,10 +128,16 @@ def discover_applied_artifacts(
     expected_local = {
         path.split("/", 1)[1] if "/" in path else path for path in expected_full
     }
-    if actual_paths not in (expected_full, expected_local):
+    local_module = module.split("/", 1)[1]
+    covers_changed_module = (
+        actual_paths <= expected_full and module in actual_paths
+    ) or (
+        actual_paths <= expected_local and local_module in actual_paths
+    )
+    if not covers_changed_module:
         raise ValueError(
-            f"manifest {manifest_rel} covers {sorted(actual_paths)}; expected "
-            f"{sorted(expected_full)} or {sorted(expected_local)}"
+            f"manifest {manifest_rel} covers {sorted(actual_paths)}; expected the "
+            f"changed module in {sorted(expected_full)} or {sorted(expected_local)}"
         )
     return module, test_file, manifest_rel
 
