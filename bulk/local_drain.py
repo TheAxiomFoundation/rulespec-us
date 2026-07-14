@@ -59,13 +59,17 @@ import subprocess
 import sys
 import threading
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 local drain environments.
+    import tomli as tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
-COV_ENCODER_REF = "c04e86082b0db8d6e7b65c572228ce11df949c4b"
+COV_ENCODER_REF = "c83416309a4331d225bcde16907e3b4eb79e26f1"
+COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
 CHECKOUT = HERE.parent                            # this checkout root
 
@@ -108,7 +112,11 @@ def run(cmd, cwd=None, env=None, capture=True, check=False, timeout=None):
     """Run a subprocess, returning (rc, combined_output)."""
     full = dict(os.environ)
     if env:
-        full.update(env)
+        for key, value in env.items():
+            if value is None:
+                full.pop(key, None)
+            else:
+                full[key] = value
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
@@ -195,11 +203,14 @@ def regen_index(leaf: Path) -> None:
 
 
 def sync_pending(leaf: Path) -> str:
-    """Write oracle-coverage-pending.yaml for REPO_NAME using the >=1190 tool.
+    """Write oracle-coverage-pending.yaml using the pinned classifier.
     Returns the sync summary line."""
     rc, out = run([str(COV_AE), "oracle-coverage-pending", "sync",
-                   "--root", str(leaf.parent), "--repo", REPO_NAME, "--source", "bulk"],
-                  env={"PATH": f"{ENGINE_BIN}:{os.environ['PATH']}"})
+                   "--root", str(leaf), "--source", "bulk"],
+                  env={
+                      "PATH": f"{ENGINE_BIN}:{os.environ['PATH']}",
+                      "AXIOM_ENCODE_APPLY_SIGNING_KEY": None,
+                  })
     if rc != 0:
         raise RuntimeError(f"oracle-coverage-pending sync failed:\n{out}")
     return out.strip().splitlines()[-1] if out.strip() else "(no output)"
@@ -534,6 +545,25 @@ def require_coverage_ref() -> str:
     if COV_AE.resolve() != expected_executable.resolve():
         raise SystemExit(
             f"coverage executable must be {expected_executable}; got {COV_AE}"
+        )
+    rc, oracle_ref = run(
+        [
+            str(COV_PY),
+            "-c",
+            (
+                "import importlib.metadata,json; "
+                "d=importlib.metadata.distribution('axiom-oracles'); "
+                "u=json.loads(d.read_text('direct_url.json')); "
+                "print(u.get('vcs_info',{}).get('commit_id',''))"
+            ),
+        ],
+        env={"AXIOM_ENCODE_APPLY_SIGNING_KEY": None},
+    )
+    actual_oracle_ref = oracle_ref.strip() if rc == 0 else "unavailable"
+    if actual_oracle_ref != COV_ORACLES_REF:
+        raise SystemExit(
+            f"coverage oracle dependency must be {COV_ORACLES_REF}; "
+            f"got {actual_oracle_ref}"
         )
     return actual
 

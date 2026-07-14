@@ -221,7 +221,7 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           repository: TheAxiomFoundation/axiom-encode
-          ref: c04e86082b0db8d6e7b65c572228ce11df949c4b
+          ref: c83416309a4331d225bcde16907e3b4eb79e26f1
           path: _axiom/axiom-encode-oracle-coverage
 
       - name: Install oracle-coverage classifier (isolated venv)
@@ -231,6 +231,24 @@ jobs:
           python -m venv "$RUNNER_TEMP/cov-venv"
           "$RUNNER_TEMP/cov-venv/bin/pip" install --quiet --upgrade pip
           "$RUNNER_TEMP/cov-venv/bin/pip" install --quiet -e _axiom/axiom-encode-oracle-coverage
+          test "$(git -C _axiom/axiom-encode-oracle-coverage rev-parse HEAD)" = \
+            "c83416309a4331d225bcde16907e3b4eb79e26f1"
+          "$RUNNER_TEMP/cov-venv/bin/python" - <<'PY'
+          import importlib.metadata
+          import json
+
+          direct_url = json.loads(
+              importlib.metadata.distribution("axiom-oracles").read_text(
+                  "direct_url.json"
+              )
+          )
+          actual = direct_url.get("vcs_info", {}).get("commit_id")
+          expected = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
+          if actual != expected:
+              raise SystemExit(
+                  f"axiom-oracles must resolve to {expected}; got {actual}"
+              )
+          PY
           echo "COV_AE=$RUNNER_TEMP/cov-venv/bin/axiom-encode" >> "$GITHUB_ENV"
 
       - name: Encode --apply and run the gate battery
@@ -326,9 +344,9 @@ jobs:
           # oracle-coverage-pending.yaml to exactly the repo's current unmapped
           # set; it is a no-op when the module's outputs are already mapped.
           pending_file="oracle-coverage-pending.yaml"
-          "$COV_AE" oracle-coverage-pending sync \
-            --root "$GITHUB_WORKSPACE/.." \
-            --repo rulespec-us \
+          env -u AXIOM_ENCODE_APPLY_SIGNING_KEY \
+            "$COV_AE" oracle-coverage-pending sync \
+            --root "$GITHUB_WORKSPACE" \
             --source bulk || {
               echo "::error::oracle-coverage-pending sync failed for $CITATION." >&2
               exit 1
