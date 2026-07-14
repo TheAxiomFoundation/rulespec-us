@@ -101,11 +101,16 @@ def _module_matches_request(citation: str, module: str) -> bool:
     expected_buckets = SOURCE_BUCKETS.get(source_bucket.lower())
     if expected_buckets is None:
         return False
+    request_tokens = _legal_path_tokens(tuple(request_tail))
+    output_tokens = _legal_path_tokens(output.parts[2:])
+    if source_bucket.lower() in {"regulation", "regulations"}:
+        # Federal regulation modules canonicalize a numeric title as ``N-cfr``.
+        if len(output_tokens) >= 2 and output_tokens[1] == "cfr":
+            output_tokens = (output_tokens[0], *output_tokens[2:])
     return (
         output.parts[0].lower() == jurisdiction.lower()
         and output.parts[1].lower() in expected_buckets
-        and _legal_path_tokens(tuple(request_tail))
-        == _legal_path_tokens(output.parts[2:])
+        and request_tokens == output_tokens
     )
 
 

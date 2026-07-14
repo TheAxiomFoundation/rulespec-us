@@ -107,6 +107,45 @@ def test_discovers_jurisdiction_manifest_for_legacy_module(tmp_path: Path) -> No
     ) == (module, test_file, manifest)
 
 
+def test_accepts_canonical_cfr_module_for_regulation_source(tmp_path: Path) -> None:
+    citation = "us/regulation/7/247/9/b"
+    module = "us/regulations/7-cfr/247/9/b.yaml"
+    test_file = "us/regulations/7-cfr/247/9/b.test.yaml"
+    manifest = "us/.axiom/encoding-manifests/regulations/7-cfr/247/9/b.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(
+        tmp_path / manifest,
+        citation,
+        {"regulations/7-cfr/247/9/b.yaml", "regulations/7-cfr/247/9/b.test.yaml"},
+    )
+
+    assert discover_applied_artifacts(
+        tmp_path,
+        citation=citation,
+        paths=[module, test_file, manifest],
+    ) == (module, test_file, manifest)
+
+
+def test_rejects_cfr_module_for_different_regulation(tmp_path: Path) -> None:
+    citation = "us/regulation/7/247/9/b"
+    module = "us/regulations/7-cfr/247/9/c.yaml"
+    test_file = "us/regulations/7-cfr/247/9/c.test.yaml"
+    manifest = "us/.axiom/encoding-manifests/regulations/7-cfr/247/9/c.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(tmp_path / manifest, citation, {module, test_file})
+
+    with pytest.raises(ValueError, match="does not match requested citation"):
+        discover_applied_artifacts(
+            tmp_path,
+            citation=citation,
+            paths=[module, test_file, manifest],
+        )
+
+
 def test_changed_paths_ignores_rename_source_record(tmp_path: Path) -> None:
     old_module = "us-mo/manual/dss/snap/old.yaml"
     new_module = "us-mo/manual/dss/snap/new.yaml"
