@@ -16,7 +16,7 @@ Usage:
   python bulk/compute_matrix.py --get us-ny/statute/TAX/673 --field model
 
 The matrix shape is {"include": [{"citation", "repo", "backend", "model",
-"slug"}, ...]}. `slug` is the branch-safe citation slug used for
+"acceptance_criteria", "slug"}, ...]}. `slug` is the branch-safe citation slug used for
 `bulk/<slug>` branches and the PR title.
 
 Status writes are intentionally NOT done here: the workflow updates statuses by
@@ -79,6 +79,7 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                 "repo": entry.get("repo", "rulespec-us"),
                 "backend": entry_backend(data, entry),
                 "model": entry_model(data, entry),
+                "acceptance_criteria": entry.get("note", ""),
                 "slug": citation_slug(entry["citation"]),
             }
         )

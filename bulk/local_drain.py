@@ -3,7 +3,7 @@
 
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
 CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
-dispatcher, opening the identical one-PR-per-module with auto-merge. It is a
+dispatcher, opening the identical one-draft-PR-per-module review queue. It is a
 faithful local mirror of ``.github/workflows/bulk-encode.yml`` plus the
 oracle-coverage-pending declaration step the cloud dispatcher is missing (that
 missing step is why every new-state bulk PR fails the changed-file oracle
@@ -61,8 +61,10 @@ import sys
 import threading
 import time
 import tomllib
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
+
+from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
@@ -254,7 +256,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
         run(["git", "-C", str(leaf), "checkout", "-B", branch], check=True)
         run(["git", "-C", str(leaf), "fetch", "origin", branch, "--quiet"])
         _, diff = run(["git", "-C", str(leaf), "diff", "--name-only",
-                       f"origin/main...FETCH_HEAD"])
+                       "origin/main...FETCH_HEAD"])
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
                          or "/.axiom/encoding-manifests/" in f)]
@@ -281,8 +283,8 @@ def unstick_pr(branch: str, wait: bool) -> str:
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
-        run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
-        result = f"rebuilt+pushed {branch}: {summary}"
+        run(["gh", "pr", "ready", branch, "--repo", REPO, "--undo"])
+        result = f"rebuilt+pushed draft {branch}: {summary}"
         if wait:
             result += "; " + wait_for_merge(branch)
         return result
@@ -312,7 +314,7 @@ def wait_for_merge(branch: str, timeout_s: int = 1500) -> str:
 # PART B: generate + PR one pending worklist entry via local Codex.
 # ---------------------------------------------------------------------------
 MODULE_RE = re.compile(
-    r"^[a-z]{2}(-[a-z0-9-]+)?/(statutes|regulations|policies)/.*\.yaml$")
+    r"^[a-z]{2}(-[a-z0-9-]+)?/(manual|statutes|regulations|policies)/.*\.yaml$")
 
 
 def already_handled(slug: str) -> bool:
@@ -364,21 +366,16 @@ def encode_entry(item: dict) -> dict:
             _PAUSE.set()
             res["status"], res["detail"] = "paused", "codex subscription-limit signal"
             return res
-        _, st = run(["git", "-C", str(leaf), "status", "--porcelain", "-uall"])
-        applied = [ln[3:] for ln in st.splitlines()
-                   if MODULE_RE.match(ln[3:]) and not ln[3:].endswith(".test.yaml")]
-        if rc != 0 or not applied:
+        if rc != 0:
             res["detail"] = f"encode/apply failed (rc={rc}); see {tmp}"
             return res
-        module = applied[0]
-        test_file = module[:-5] + ".test.yaml"
-        juris = module.split("/", 1)[0]
-        rest = module[len(juris) + 1:]
-        manifest = f"{juris}/.axiom/encoding-manifests/{rest[:-5]}.json"
-        if not (leaf / manifest).exists():
-            hits = list((leaf / juris / ".axiom/encoding-manifests").rglob(
-                Path(module).stem + ".json"))
-            manifest = str(hits[0].relative_to(leaf)) if hits else manifest
+        try:
+            module, test_file, manifest = discover_applied_artifacts(
+                leaf, citation=citation
+            )
+        except ValueError as exc:
+            res["detail"] = f"applied artifact discovery failed: {exc}"
+            return res
         regen_index(leaf)
 
         # gate battery (fail-closed pre-check, PR-CI order)
@@ -427,19 +424,21 @@ def encode_entry(item: dict) -> dict:
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,
              "--color", "1f6feb", "-d", "Opened by the bulk-encode dispatcher"])
+        acceptance_criteria = item.get("acceptance_criteria", "")
         body = (f"## Locally bulk-encoded module\n\n- Citation: `{citation}`\n"
                 f"- Module: `{module}`\n- Encoder: `{BACKEND}:{MODEL}` "
                 f"(toolchain-pinned axiom-encode)\n- Local gate: **{gate_status}**\n"
                 f"- {sync_summary}\n\nProduced by `bulk/local_drain.py` "
                 "(local Codex mirror of the bulk-encode dispatcher). The "
-                "authoritative gate is the required `validate / validate` check.")
+                "authoritative gate is the required `validate / validate` check.\n\n"
+                f"### Acceptance criteria\n\n{acceptance_criteria}\n")
         bf = WT_ROOT / slug / "pr-body.md"
         bf.write_text(body)
         run(["gh", "pr", "create", "--repo", REPO, "--base", "main", "--head", branch,
-             "--title", title, "--body-file", str(bf), "--label", "bulk-encode"])
-        run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
+             "--title", title, "--body-file", str(bf), "--label", "bulk-encode",
+             "--draft"])
         res["status"] = gate_status
-        res["detail"] = f"PR opened on {branch}; {sync_summary}"
+        res["detail"] = f"draft PR opened on {branch}; {sync_summary}"
         return res
     except subprocess.TimeoutExpired:
         res["detail"] = "encode timed out (>3600s)"
@@ -469,9 +468,8 @@ def flip_statuses(updates: dict) -> None:
         run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
              "--head", "bulk/worklist-status-flip", "--title",
              "Flip drained worklist statuses (bulk)", "--body",
-             "Status flips for locally-drained entries.", "--label", "bulk-encode"])
-        run(["gh", "pr", "merge", "bulk/worklist-status-flip", "--repo", REPO,
-             "--auto", "--squash"])
+             "Status flips for locally-drained entries.", "--label", "bulk-encode",
+             "--draft"])
     finally:
         drop_worktree(leaf)
 
