@@ -1,0 +1,172 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-547
+  summary: An eligible early childhood educator has qualifying federal adjusted gross
+    income, holds an early childhood professional credential for part of the income
+    tax year, and is a licensee of or employed by an eligible program for at least
+    six months. For income tax years beginning on or after January 1, 2022, but before
+    January 1, 2026, the unadjusted credit is $750 for credential I, $1,000 for credential
+    II, and $1,500 for credentials III through VI; only one credit is allowed, based
+    on the highest credential attained.
+  deferred_outputs:
+  - output: us-co:statutes/39/39-22-547/a#department_definition
+    reason: "The definition of \u201Cdepartment\u201D is documentary and creates no\
+      \ computable policy output."
+  - output: us-co:statutes/39/39-22-547/b#early_childhood_professional_credential_definition
+    reason: The credential designation definition is documentary; credential status
+      and highest credential level are factual boundary inputs to the operative credit
+      rules.
+  - output: us-co:statutes/39/39-22-547/d#eligible_program
+    reason: Exact eligible-program membership depends in part on the unavailable definition
+      in section 26.5-2-202 and a program-level relation not supplied in this source
+      slice.
+  - output: us-co:statutes/39/39-22-547/f#inflation
+    reason: The annual Denver-Aurora-Lakewood CPI change is an external official index
+      value not provided by this source slice.
+  - output: us-co:statutes/39/39-22-547/3(b)(II)#inflation_adjusted_credit_amount
+    reason: Post-unadjusted credit amounts depend on the department's annual inflation
+      adjustments using the external CPI index.
+  - output: us-co:statutes/39/39-22-547/4#refundable_credit_excess_after_inflation_adjustment
+    reason: The refundable excess for inflation-adjusted years depends on the unavailable
+      annually adjusted credit amount.
+rules:
+- name: single_return_federal_adjusted_gross_income_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 39-22-547(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: less than or equal to seventy-five thousand dollars for an individual
+            filing a single return
+  versions:
+  - effective_from: '2022-01-01'
+    formula: '75000'
+- name: joint_return_federal_adjusted_gross_income_limit
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 39-22-547(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: less than or equal to one hundred fifty thousand dollars for an
+            individual filing a joint return
+  versions:
+  - effective_from: '2022-01-01'
+    formula: '150000'
+- name: unadjusted_credit_amount_by_credential_level
+  kind: parameter
+  dtype: Money
+  unit: USD
+  indexed_by: highest_early_childhood_professional_credential_level
+  source: 39-22-547(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].values
+        kind: parameter_table
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          table:
+            header: amount of the credit
+            row_key: early childhood professional credential level
+            column_key: credit amount
+  versions:
+  - effective_from: '2022-01-01'
+    values:
+      1: 750
+      2: 1000
+      3: 1500
+      4: 1500
+      5: 1500
+      6: 1500
+- name: eligible_early_childhood_educator
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Year
+  source: 39-22-547(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: Holds an early childhood professional credential for at least part
+            of the income tax year
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: For at least six months ... is either the licensee of an eligible
+            program or employed by an eligible program
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+  versions:
+  - effective_from: '2022-01-01'
+    formula: "((((joint_return_filed) and federal_adjusted_gross_income <= joint_return_federal_adjusted_gross_income_limit)\n\
+      \  or (not (joint_return_filed) and federal_adjusted_gross_income <= single_return_federal_adjusted_gross_income_limit)))\
+      \ and holds_early_childhood_professional_credential_for_part_of_tax_year and\
+      \ is_licensee_or_employee_of_eligible_program_for_required_duration"
+- name: credit_amount_for_unadjusted_tax_year
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 39-22-547(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: only allowed one credit per income tax year ... based on the highest
+            early childhood professional credential attained
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: Seven hundred fifty dollars for an early childhood professional
+            I
+  versions:
+  - effective_from: '2022-01-01'
+    formula: 'if eligible_early_childhood_educator and credit_amounts_are_unadjusted:
+      unadjusted_credit_amount_by_credential_level[highest_early_childhood_professional_credential_level]
+      else: 0'
+- name: refundable_credit_excess_for_unadjusted_tax_year
+  kind: derived
+  entity: Person
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 39-22-547/4
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-547
+          excerpt: The amount of the credit ... that exceeds the eligible early childhood
+            educator's income taxes due is refunded
+  versions:
+  - effective_from: '2022-01-01'
+    formula: max(0, credit_amount_for_unadjusted_tax_year - income_taxes_due_under_article_22)

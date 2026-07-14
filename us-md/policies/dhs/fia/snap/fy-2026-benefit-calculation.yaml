@@ -1,0 +1,110 @@
+format: rulespec/v1
+module:
+  kind: composition
+  source_verification:
+    corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+  summary: |-
+    Maryland SNAP FY 2026 benefit calculation composition. This module imports
+    the federal USDA FY 2026 SNAP allotment, deduction, resource-limit,
+    income-standard, income-calculation, residency, citizenship, SSN, student,
+    work-requirement, and allotment rules, plus Maryland's encoded FIA AT 26-05
+    standard utility allowances, and composes them into Maryland SNAP
+    eligibility and monthly benefit calculations on the 7 CFR 273.10
+    whole-dollar chain.
+imports:
+  - us:policies/usda/snap/state-plan-composition
+  - us:regulations/7-cfr/273/8
+  - us:regulations/7-cfr/273/9
+  - us-md:policies/dhs/fia/snap/standard-utility-allowances
+rules:
+  - name: snap_total_allowable_shelter_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Maryland SNAP shelter utility allowance composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          shelter_costs
+
+  - name: snap_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Maryland SNAP FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_excess_shelter_deduction_for_net_income
+
+  - name: md_snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Maryland SNAP eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_residency_eligible
+          and snap_household_member_eligible
+          and md_income_and_resource_eligible
+  - name: snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Maryland SNAP eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          md_snap_eligible
+  - name: md_applied_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Maryland SNAP FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_qualifies_for_standard_utility_allowance:
+              md_standard_utility_allowance_amount
+          else:
+              if household_qualifies_for_limited_utility_allowance:
+                  md_limited_utility_allowance_amount
+              else:
+                  if household_qualifies_for_telephone_allowance:
+                      md_telephone_allowance_amount
+                  else:
+                      0
+
+  - name: shelter_costs
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Maryland SNAP shelter utility allowance composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_shelter_costs_incurred + md_applied_utility_allowance
+  - name: md_income_and_resource_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Maryland SNAP categorical eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_categorically_eligible_for_resource_exemption
+          or (
+            snap_resource_eligible
+            and snap_standard_income_eligible
+          )
