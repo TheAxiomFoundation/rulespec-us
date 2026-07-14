@@ -16,9 +16,9 @@ module:
         as the delegated parameter source for these values.
   summary: 'The page lists SNAP income deductions and states: "$388 Mandatory utility
     allowance (MUA)," "$265 Basic utility allowance (BUA)," and "$27 Telephone allowance."
-    It also states that deductions may be given only if the household is eligible
-    for them and that required verification must be provided before a deduction can
-    be given.'
+    Eligibility is resolved through the detailed Chapter 12 utility rules on pages
+    163 through 165. MUA, BUA, and telephone values are mutually exclusive, and BUA
+    requires utility verification.'
 rules:
 - name: sets_snap_standard_utility_allowance
   kind: source_relation
@@ -54,7 +54,8 @@ rules:
   kind: derived
   versions:
   - effective_from: '2025-10-01'
-    formula: snap_mandatory_utility_allowance
+    formula: 'if sc_snap_mandatory_utility_allowance_entitled:
+      snap_mandatory_utility_allowance else: 0'
   metadata:
     proof:
       atoms:
@@ -63,6 +64,12 @@ rules:
         import:
           target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#snap_mandatory_utility_allowance
           output: snap_mandatory_utility_allowance
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#sc_snap_mandatory_utility_allowance_entitled
+          output: sc_snap_mandatory_utility_allowance_entitled
           hash: sha256:local
   entity: Household
   dtype: Money
@@ -73,7 +80,8 @@ rules:
   kind: derived
   versions:
   - effective_from: '2025-10-01'
-    formula: snap_basic_utility_allowance
+    formula: 'if snap_standard_utility_allowance_state_value > 0: 0 else: if household_basic_utility_allowance_deduction_allowed:
+      snap_basic_utility_allowance else: 0'
   metadata:
     proof:
       atoms:
@@ -83,6 +91,12 @@ rules:
           target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#snap_basic_utility_allowance
           output: snap_basic_utility_allowance
           hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-163#household_basic_utility_allowance_deduction_allowed
+          output: household_basic_utility_allowance_deduction_allowed
+          hash: sha256:9df3abfa9f7f1c70581f1434ece4c191dc881a0cb96304da2851d847c4dd1a15
   entity: Household
   dtype: Money
   period: Month
@@ -92,7 +106,8 @@ rules:
   kind: derived
   versions:
   - effective_from: '2025-10-01'
-    formula: snap_telephone_allowance
+    formula: 'if snap_standard_utility_allowance_state_value > 0 or snap_limited_utility_allowance_state_value > 0:
+      0 else: if telephone_standard_allowance_entitlement: snap_telephone_allowance else: 0'
   metadata:
     proof:
       atoms:
@@ -102,6 +117,12 @@ rules:
           target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#snap_telephone_allowance
           output: snap_telephone_allowance
           hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-165#telephone_standard_allowance_entitlement
+          output: telephone_standard_allowance_entitlement
+          hash: sha256:e10a8a8dd8723e249a6b20b701143059eee50dd71d9ed525ed2b0de77161c49e
   entity: Household
   dtype: Money
   period: Month
@@ -158,6 +179,38 @@ rules:
   versions:
   - effective_from: '2025-10-01'
     formula: '27'
+- name: sc_snap_mandatory_utility_allowance_entitled
+  kind: derived
+  entity: Household
+  dtype: Judgment
+  period: Month
+  source: SNAP Manual Chapter 12, pages 163-164
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-163#household_entitled_to_mandatory_utility_allowance
+          output: household_entitled_to_mandatory_utility_allowance
+          hash: sha256:9df3abfa9f7f1c70581f1434ece4c191dc881a0cb96304da2851d847c4dd1a15
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-164#household_may_receive_mua
+          output: household_may_receive_mua
+          hash: sha256:2819a796f6eca5befc1a254032f5cd7f7aba9097e4356026f4c1928bdb129a70
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/page-164#household_barred_from_mua_unless_liheap
+          output: household_barred_from_mua_unless_liheap
+          hash: sha256:2819a796f6eca5befc1a254032f5cd7f7aba9097e4356026f4c1928bdb129a70
+  versions:
+  - effective_from: '2025-10-01'
+    formula: '(household_entitled_to_mandatory_utility_allowance or household_may_receive_mua)
+
+      and not household_barred_from_mua_unless_liheap'
 - name: local_snap_utility_allowance_for_shelter_costs
   kind: derived
   entity: Household
@@ -169,28 +222,32 @@ rules:
     proof:
       atoms:
       - path: versions[0].formula
-        kind: condition
-        source:
-          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
-          excerpt: provided the household is eligible for them
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#snap_standard_utility_allowance_state_value
+          output: snap_standard_utility_allowance_state_value
+          hash: sha256:local
       - path: versions[0].formula
-        kind: condition
-        source:
-          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
-          excerpt: Required verification must be provided before a deduction can be
-            given.
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#snap_limited_utility_allowance_state_value
+          output: snap_limited_utility_allowance_state_value
+          hash: sha256:local
       - path: versions[0].formula
-        kind: formula
-        source:
-          corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
-          excerpt: $388 Mandatory utility allowance (MUA); $265 Basic utility allowance
-            (BUA); $27 Telephone allowance
+        kind: import
+        import:
+          target: us-sc:policies/dss/snap-policy-manual/chapter-12/utility-allowance-amounts#snap_individual_utility_allowance_state_value
+          output: snap_individual_utility_allowance_state_value
+          hash: sha256:local
   versions:
   - effective_from: '2025-10-01'
-    formula: 'if required_verification_provided and household_eligible_for_mandatory_utility_allowance:
-      snap_mandatory_utility_allowance else: if required_verification_provided and
-      household_eligible_for_basic_utility_allowance: snap_basic_utility_allowance
-      else: if required_verification_provided and household_eligible_for_telephone_allowance:
-      snap_telephone_allowance else: 0'
+    formula: 'snap_standard_utility_allowance_state_value
+
+      + snap_limited_utility_allowance_state_value
+
+      + snap_individual_utility_allowance_state_value'
 imports:
 - us:regulations/7-cfr/273/9
+- us-sc:policies/dss/snap-policy-manual/page-163
+- us-sc:policies/dss/snap-policy-manual/page-164
+- us-sc:policies/dss/snap-policy-manual/page-165
