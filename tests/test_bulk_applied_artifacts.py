@@ -181,4 +181,6 @@ def test_bulk_runners_require_review_before_merge() -> None:
     assert '"--head",\n            branch,\n            "--json",\n            "number"' in local_drain
     assert "if not existing_pr:" in local_drain
     assert "wait_for_merge" not in local_drain
+    assert 'startswith("validate / validate")' in local_drain
+    assert "if validation_checks and not pending:" in local_drain
     assert 'return "checks complete; draft review required"' in local_drain

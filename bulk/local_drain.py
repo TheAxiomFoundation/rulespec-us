@@ -13,16 +13,13 @@ script).
 Two decisions matter and are baked in here so PRs go green:
 
 * **Generation uses the toolchain-pinned encoder** (``.axiom/toolchain.toml``
-  ``axiom_encode_version``, currently 0.2.1184). The required ``validate /
-  validate`` check validates with that same pin, so generating with anything
-  newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
-  match a brief that says ">=0.2.1190" -- that number refers only to the
-  *coverage/sync* tool below, not to generation.
-* **Coverage declaration uses axiom-encode main (>=0.2.1190)**, because the CI
+  ``axiom_encode_version``). The required ``validate / validate`` check uses
+  that same pin, so generation changes only through a reviewed toolchain-pin
+  migration.
+* **Coverage declaration uses axiom-encode main**, because the CI
   changed-file coverage classifier (``oracle-coverage-axiom-encode-ref``,
   default ``main``) is what reclassifies declared-pending outputs from
-  ``unmapped`` to ``pending_classification``. The pinned 1184 encoder does not
-  even have the ``oracle-coverage-pending`` subcommand.
+  ``unmapped`` to ``pending_classification``.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
 ``--max-entries``) and every unit of durable state (pushed branch, opened PR,
@@ -34,9 +31,9 @@ Toolchain layout (override via env): a sibling ``_bulk_drain`` workspace holds
 pinned checkouts + venvs built once by the operator:
 
     _bulk_drain/
-      axiom-encode/            # worktree @ pinned axiom_encode_ref (1184)
+      axiom-encode/            # worktree @ pinned axiom_encode_ref
       .venv/                   # pinned encoder venv  -> generation
-      axiom-encode-cov/        # worktree @ axiom-encode main (>=1190)
+      axiom-encode-cov/        # worktree @ axiom-encode main
       .venv-cov/               # coverage/sync venv   -> oracle-coverage-pending
       axiom-rules-engine/      # worktree @ pinned engine ref, cargo build
       axiom-corpus/            # worktree @ pinned corpus ref
@@ -261,7 +258,7 @@ def open_bulk_prs():
             continue
         vv = next((c.get("conclusion") or c.get("state")
                    for c in pr.get("statusCheckRollup") or []
-                   if c.get("name") == "validate / validate"), None)
+                   if str(c.get("name") or "").startswith("validate / validate")), None)
         prs.append({"number": pr["number"], "branch": pr["headRefName"],
                     "merge": pr["mergeStateStatus"], "validate": vv})
     return sorted(prs, key=lambda p: p["number"])
@@ -330,6 +327,11 @@ def wait_for_checks(branch: str, timeout_s: int = 1500) -> str:
         if pr["state"] != "OPEN":
             return pr["state"]
         checks = pr.get("statusCheckRollup") or []
+        validation_checks = [
+            check
+            for check in checks
+            if str(check.get("name") or "").startswith("validate / validate")
+        ]
         failures = {
             str(check.get("conclusion") or check.get("state") or "").upper()
             for check in checks
@@ -342,7 +344,7 @@ def wait_for_checks(branch: str, timeout_s: int = 1500) -> str:
             or str(check.get("state") or "").upper() in {"EXPECTED", "PENDING"}
             for check in checks
         )
-        if checks and not pending:
+        if validation_checks and not pending:
             return "checks complete; draft review required"
         time.sleep(30)
     return "timeout-waiting-checks"
