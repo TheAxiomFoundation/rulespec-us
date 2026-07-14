@@ -39,6 +39,7 @@ import yaml
 WORKLIST = Path(__file__).resolve().parent / "worklist.yaml"
 
 SELECTABLE_STATUSES = {"pending", "pending-local"}
+REPO_ROOT = WORKLIST.parents[1]
 
 
 def citation_slug(citation: str) -> str:
@@ -65,6 +66,34 @@ def entry_backend(data: dict, entry: dict) -> str:
 
 def entry_model(data: dict, entry: dict) -> str:
     return entry.get("model") or data.get("defaults", {}).get("model", "gpt-5.5")
+
+
+def entry_allow_context(entry: dict) -> list[str]:
+    """Return reviewed repo-local encoder context paths for one queue entry."""
+    citation = entry.get("citation", "unknown citation")
+    values = entry.get("allow_context", [])
+    if not isinstance(values, list) or not all(
+        isinstance(value, str) and value and "\n" not in value for value in values
+    ):
+        raise ValueError(
+            f"{citation}: allow_context must be a list of non-empty path strings"
+        )
+    if values and entry.get("status") == "pending":
+        raise ValueError(
+            f"{citation}: allow_context is not supported for cloud pending entries"
+        )
+
+    root = REPO_ROOT.resolve()
+    for value in values:
+        path = Path(value)
+        resolved = (root / path).resolve()
+        if path.is_absolute() or not resolved.is_relative_to(root):
+            raise ValueError(f"{citation}: allow_context path escapes the repository")
+        if not resolved.is_file():
+            raise ValueError(
+                f"{citation}: allow_context path is not a repository file: {value}"
+            )
+    return values
 
 
 def select(data: dict, status: str, batch: str | None, limit: int | None) -> list[dict]:
@@ -95,6 +124,7 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                 "model": entry_model(data, entry),
                 "acceptance_criteria": entry.get("note", ""),
                 "slug": citation_slug(entry["citation"]),
+                "allow_context": entry_allow_context(entry),
                 "requires_merged_citations": dependencies,
                 "program_scope_sync": program_scope_sync,
             }

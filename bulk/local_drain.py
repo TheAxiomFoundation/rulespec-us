@@ -545,6 +545,32 @@ def apply_program_scope_sync(leaf: Path, item: dict, env: dict) -> list[str]:
     return [program_spec]
 
 
+def encode_command(leaf: Path, tmp: Path, item: dict) -> list[str]:
+    """Build the reviewed encoder command, including repo-local legal context."""
+    root = leaf.resolve()
+    context_paths: list[Path] = []
+    for value in item.get("allow_context", []):
+        if not isinstance(value, str) or not value or "\n" in value:
+            raise ValueError("allow_context must contain non-empty path strings")
+        path = Path(value)
+        resolved = (root / path).resolve()
+        if path.is_absolute() or not resolved.is_relative_to(root):
+            raise ValueError("allow_context path escapes the RuleSpec checkout")
+        if not resolved.is_file():
+            raise ValueError(f"allow_context file does not exist: {value}")
+        context_paths.append(resolved)
+
+    command = [
+        str(GEN_AE), "encode", item["citation"], "--backend", BACKEND,
+        "--model", MODEL, "--policy-repo-path", str(leaf),
+        "--axiom-rules-engine-path", str(ENGINE), "--corpus-path", str(CORPUS),
+        "--output", str(tmp), "--apply", "--no-sync",
+    ]
+    for path in context_paths:
+        command.extend(["--allow-context", str(path)])
+    return command
+
+
 def encode_entry(item: dict) -> dict:
     """Full local mirror of bulk-encode.yml for one entry. Returns a result dict."""
     citation, slug = item["citation"], item["slug"]
@@ -585,12 +611,8 @@ def encode_entry(item: dict) -> dict:
     }
     try:
         rc, out = run(
-            [str(GEN_AE), "encode", citation, "--backend", BACKEND, "--model", MODEL,
-             "--policy-repo-path", str(leaf),
-             "--axiom-rules-engine-path", str(ENGINE),
-             "--corpus-path", str(CORPUS),
-             "--output", str(tmp), "--apply", "--no-sync"],
-            cwd=leaf, env=env, timeout=3600)
+            encode_command(leaf, tmp, item), cwd=leaf, env=env, timeout=3600
+        )
         if LIMIT_SIGNS.search(out):
             _PAUSE.set()
             res["status"], res["detail"] = "paused", "codex subscription-limit signal"
