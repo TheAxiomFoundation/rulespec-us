@@ -1,0 +1,233 @@
+format: rulespec/v1
+imports:
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+  summary: |-
+    Deduct $65 from gross earned income and divide the remainder by two; deduct $20 from gross unearned income, subject to the married-client allocation rule. Spousal earned and unearned income is deemed under the same disregards, except specified spouse income is unavailable and MMMNA is deducted from an institutionalized spouse's total income.
+  deferred_outputs:
+    - output: us-co:regulations/9-ccr-2503-5/3.544#sponsor_income_deemed_to_non_citizen_client
+      reason: Sponsor deeming requires the current SSI benefit standard for an individual defined in section 3.510, which is not available as copied RuleSpec context.
+      source_values:
+        - us-co:regulations/9-ccr-2503-5/3.544#and_so_sponsor_spouse_deduction_fraction
+    - output: us-co:regulations/9-ccr-2503-5/3.544#and_so_grant_payment_amount
+      reason: The final grant payment must include sponsor-deemed income, whose calculation depends on the unavailable section 3.510 SSI benefit standard.
+rules:
+  - name: and_so_earned_income_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(A)(1), (D)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: Deduct $65 from the gross earned income.
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          65
+  - name: and_so_unearned_income_disregard_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(B)(2), (E)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: Deduct $20.00.
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          20
+  - name: and_so_sponsor_spouse_deduction_fraction
+    kind: parameter
+    dtype: Decimal
+    source: 9 CCR 2503-5, § 3.544(G)(2)(b)-(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: equal to one-half the current SSI benefit standard for an individual
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          1 / 2
+  - name: and_so_countable_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: Deduct $65 from the gross earned income; and, divide the remainder by two (2).
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_earned_income_disregard_amount
+              output: and_so_earned_income_disregard_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          max(0, (gross_earned_income - and_so_earned_income_disregard_amount) / 2)
+  - name: and_so_countable_unearned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: If the client is married, the $20.00 disregard shall be split between the client and the spouse so that no more than a $20.00 disregard is applied.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_unearned_income_disregard_amount
+              output: and_so_unearned_income_disregard_amount
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          max(0, gross_unearned_income - (if client_is_married: client_share_of_unearned_income_disregard else: and_so_unearned_income_disregard_amount))
+  - name: and_so_spouse_income_available_for_deeming
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 9 CCR 2503-5, § 3.544(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: their income shall not be considered as available to the client and shall not be deemed
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          not (
+            (spouse_receives_adult_financial_grant_payments
+            or spouse_receives_ssi_benefits
+            or spouse_receives_medicaid_assistance)
+            and spouse_income_no_greater_than_ssi_limit
+          )
+  - name: and_so_deemed_spouse_earned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(D), (F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: The result is the amount of earned income deemed to the client.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_earned_income_disregard_amount
+              output: and_so_earned_income_disregard_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_spouse_income_available_for_deeming
+              output: and_so_spouse_income_available_for_deeming
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          if and_so_spouse_income_available_for_deeming: max(0, (spouse_gross_earned_income - and_so_earned_income_disregard_amount) / 2) else: 0
+  - name: and_so_deemed_spouse_unearned_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(E), (F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: Deduct $20.00 unless the client also has unearned income.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_unearned_income_disregard_amount
+              output: and_so_unearned_income_disregard_amount
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_spouse_income_available_for_deeming
+              output: and_so_spouse_income_available_for_deeming
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          if and_so_spouse_income_available_for_deeming: max(0, spouse_gross_unearned_income - (if gross_unearned_income > 0: spouse_share_of_unearned_income_disregard else: and_so_unearned_income_disregard_amount)) else: 0
+  - name: and_so_deemed_spouse_income_after_mmmna
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 9 CCR 2503-5, § 3.544(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/9-ccr-2503-5/3.544
+              excerpt: the MMMNA shall be deducted from the institutionalized spouse’s total income.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_deemed_spouse_earned_income
+              output: and_so_deemed_spouse_earned_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/9-ccr-2503-5/3.544#and_so_deemed_spouse_unearned_income
+              output: and_so_deemed_spouse_unearned_income
+              hash: sha256:local
+    versions:
+      - effective_from: '2022-04-01'
+        formula: |-
+          if spouse_is_institutionalized and client_has_retained_mmmna: max(0, and_so_deemed_spouse_earned_income + and_so_deemed_spouse_unearned_income - institutionalized_spouse_mmmna) else: and_so_deemed_spouse_earned_income + and_so_deemed_spouse_unearned_income

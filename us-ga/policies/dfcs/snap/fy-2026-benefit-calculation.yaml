@@ -1,0 +1,110 @@
+format: rulespec/v1
+module:
+  kind: composition
+  source_verification:
+    corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+  summary: |-
+    Georgia SNAP FY 2026 benefit calculation composition. This module imports
+    the federal USDA FY 2026 SNAP allotment, deduction, resource-limit,
+    income-standard, income-calculation, residency, citizenship, SSN, student,
+    work-requirement, and allotment rules, plus Georgia's encoded section 3617
+    standard utility allowances, and composes them into Georgia SNAP
+    eligibility and monthly benefit calculations on the 7 CFR 273.10
+    whole-dollar chain.
+imports:
+  - us:policies/usda/snap/state-plan-composition
+  - us:regulations/7-cfr/273/8
+  - us:regulations/7-cfr/273/9
+  - us-ga:policies/dfcs/snap/standard-utility-allowances
+rules:
+  - name: snap_total_allowable_shelter_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Georgia SNAP shelter utility allowance composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          shelter_costs
+
+  - name: snap_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Georgia SNAP FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_excess_shelter_deduction_for_net_income
+
+  - name: ga_snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_residency_eligible
+          and snap_household_member_eligible
+          and ga_income_and_resource_eligible
+  - name: snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          ga_snap_eligible
+  - name: ga_applied_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Georgia SNAP FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_qualifies_for_heating_cooling_standard_utility_allowance:
+              ga_heating_cooling_standard_utility_allowance_amount
+          else:
+              if household_qualifies_for_limited_standard_utility_allowance:
+                  ga_limited_standard_utility_allowance_amount
+              else:
+                  if household_qualifies_for_telephone_standard:
+                      ga_telephone_standard_amount
+                  else:
+                      0
+
+  - name: shelter_costs
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Georgia SNAP shelter utility allowance composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_shelter_costs_incurred + ga_applied_utility_allowance
+  - name: ga_income_and_resource_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP categorical eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_categorically_eligible_for_resource_exemption
+          or (
+            snap_resource_eligible
+            and snap_standard_income_eligible
+          )

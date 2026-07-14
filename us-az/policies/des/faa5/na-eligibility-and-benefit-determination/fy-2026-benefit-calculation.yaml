@@ -5,15 +5,22 @@ module:
     corpus_citation_path: us-az/manual/des/faa5/na-eligibility-and-benefit-determination/block-9
   summary: |-
     Arizona Nutrition Assistance FY 2026 benefit calculation composition. This
-    module exposes the final regular-month SNAP/NA allotment surface for oracle
-    comparison by composing the encoded Arizona benefit-amount rule and boundary
-    bridge outputs for gross income, net income, eligibility, maximum allotment,
-    minimum allotment, and shelter deduction values. Those upstream bridge
-    values remain inputs until the full Arizona NA eligibility chain is encoded.
+    module composes the federal USDA FY 2026 SNAP chain (maximum allotments,
+    deductions, income standards, and the 7 CFR 273.10 whole-dollar benefit
+    computation) with Arizona's encoded FAA5 utility-allowance eligibility
+    rules and the FAA6.J.09 utility allowance amounts, and exposes the issued
+    monthly benefit (snap_benefit) on the 273.10 chain. Arizona's own
+    manual-literal benefit-amount rule remains exposed as
+    na_regular_month_allotment, fed by the same net income; the budgetary-unit
+    eligibility determination remains an input bridge until the full Arizona
+    NA eligibility chain is wired.
 imports:
+  - us:policies/usda/snap/state-plan-composition
+  - us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility
+  - us-az:policies/des/faa6/utility-allowance-current-amount
   - us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount
 rules:
-  - name: snap_gross_monthly_income
+  - name: az_applied_utility_allowance
     kind: derived
     entity: Household
     dtype: Money
@@ -23,9 +30,18 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          max(0, snap_gross_monthly_earned_income + snap_total_monthly_unearned_income)
+          if snap_standard_utility_allowance:
+              az_standard_utility_allowance_amount
+          else:
+              if snap_limited_utility_allowance:
+                  az_limited_utility_allowance_amount
+              else:
+                  if snap_telephone_utility_allowance_eligible:
+                      az_telephone_utility_allowance_amount
+                  else:
+                      0
 
-  - name: snap_net_income
+  - name: shelter_costs
     kind: derived
     entity: Household
     dtype: Money
@@ -35,20 +51,9 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          max(0, na_net_income)
+          household_shelter_costs_incurred + az_applied_utility_allowance
 
-  - name: snap_eligible
-    kind: derived
-    entity: Household
-    dtype: Judgment
-    period: Month
-    source: Arizona Nutrition Assistance FY 2026 benefit calculation composition
-    versions:
-      - effective_from: '2025-10-01'
-        formula: |-
-          na_budgetary_unit_is_eligible
-
-  - name: snap_maximum_allotment
+  - name: na_net_income
     kind: derived
     entity: Household
     dtype: Money
@@ -58,7 +63,19 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          max(0, thrifty_food_plan_amount_for_budgetary_unit_size)
+          snap_net_monthly_income
+
+  - name: snap_total_allowable_shelter_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Arizona Nutrition Assistance FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          shelter_costs
 
   - name: snap_excess_shelter_deduction
     kind: derived
@@ -72,7 +89,18 @@ rules:
         formula: |-
           max(0, snap_excess_shelter_deduction_for_net_income)
 
-  - name: snap_regular_month_allotment
+  - name: snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Arizona Nutrition Assistance FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          na_budgetary_unit_is_eligible
+
+  - name: na_regular_month_allotment
     kind: derived
     entity: Household
     dtype: Money
