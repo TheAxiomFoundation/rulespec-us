@@ -207,21 +207,20 @@ jobs:
 
       # The oracle-coverage-pending lane (the fix for new-state bulk PRs failing
       # the changed-file PolicyEngine oracle-coverage gate) is a *newer* encoder
-      # contract than the pinned validate toolchain: the pinned generator has
-      # the older workspace/repo sync interface, while the CI coverage classifier
-      # deliberately runs a separately pinned, newer exact-checkout interface so
-      # new mappings unblock generated PRs. Keep this ref identical to
-      # `oracle-coverage-axiom-encode-ref` in repository-checks.yml.
+      # feature than the pinned validate toolchain: the pinned axiom-encode has
+      # no `oracle-coverage-pending` subcommand, and the CI coverage classifier
+      # deliberately runs axiom-encode@main so new mappings unblock generated PRs
+      # (validate-rulespec.yml `oracle-coverage-axiom-encode-ref`, default main).
       # Install that same classifier in an isolated venv so the sync step below
       # declares a new module's unmapped outputs exactly as the CI gate reads
       # them. Without this, every new-state module opens a PR that fails the
       # required validate check on `... : unmapped` and auto-merge hangs forever
       # (rulespec-us #614-616, #619-636 etc.).
-      - name: Checkout pinned oracle-coverage classifier
+      - name: Checkout oracle-coverage classifier (axiom-encode main)
         uses: actions/checkout@v6.0.2
         with:
           repository: TheAxiomFoundation/axiom-encode
-          ref: c83416309a4331d225bcde16907e3b4eb79e26f1
+          ref: main
           path: _axiom/axiom-encode-oracle-coverage
 
       - name: Install oracle-coverage classifier (isolated venv)
@@ -231,24 +230,6 @@ jobs:
           python -m venv "$RUNNER_TEMP/cov-venv"
           "$RUNNER_TEMP/cov-venv/bin/pip" install --quiet --upgrade pip
           "$RUNNER_TEMP/cov-venv/bin/pip" install --quiet -e _axiom/axiom-encode-oracle-coverage
-          test "$(git -C _axiom/axiom-encode-oracle-coverage rev-parse HEAD)" = \
-            "c83416309a4331d225bcde16907e3b4eb79e26f1"
-          "$RUNNER_TEMP/cov-venv/bin/python" - <<'PY'
-          import importlib.metadata
-          import json
-
-          direct_url = json.loads(
-              importlib.metadata.distribution("axiom-oracles").read_text(
-                  "direct_url.json"
-              )
-          )
-          actual = direct_url.get("vcs_info", {}).get("commit_id")
-          expected = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
-          if actual != expected:
-              raise SystemExit(
-                  f"axiom-oracles must resolve to {expected}; got {actual}"
-              )
-          PY
           echo "COV_AE=$RUNNER_TEMP/cov-venv/bin/axiom-encode" >> "$GITHUB_ENV"
 
       - name: Encode --apply and run the gate battery
@@ -336,7 +317,7 @@ jobs:
           fi
 
           # Declare the module's unmapped executable outputs in the
-          # oracle-coverage pending lane, using the pinned classifier
+          # oracle-coverage pending lane, using the axiom-encode@main classifier
           # installed above. The changed-file oracle-coverage gate reclassifies
           # declared outputs from `unmapped` to `pending_classification`, so this
           # is what lets a new-state module's PR pass the required validate check
@@ -344,9 +325,9 @@ jobs:
           # oracle-coverage-pending.yaml to exactly the repo's current unmapped
           # set; it is a no-op when the module's outputs are already mapped.
           pending_file="oracle-coverage-pending.yaml"
-          env -u AXIOM_ENCODE_APPLY_SIGNING_KEY \
-            "$COV_AE" oracle-coverage-pending sync \
-            --root "$GITHUB_WORKSPACE" \
+          "$COV_AE" oracle-coverage-pending sync \
+            --root "$GITHUB_WORKSPACE/.." \
+            --repo rulespec-us \
             --source bulk || {
               echo "::error::oracle-coverage-pending sync failed for $CITATION." >&2
               exit 1
