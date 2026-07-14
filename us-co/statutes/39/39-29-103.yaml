@@ -1,0 +1,156 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-29-103
+  summary: |-
+    A tax is imposed on Colorado metallic-mineral severance at 2.25% of gross income exceeding $11,000,000 for taxable years commencing before July 1, 1999, or $19,000,000 thereafter. A credit for qualifying ad valorem taxes is limited to fifty percent of the computed tax.
+rules:
+  - name: metallic_minerals_gross_income_exemption_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: C.R.S. 39-29-103(1)(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "First $11,000,000 No tax"
+          - path: versions[1].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "First $19,000,000 No tax"
+    versions:
+      - effective_from: '1978-01-01'
+        formula: |-
+          11000000
+      - effective_from: '1999-07-01'
+        formula: |-
+          19000000
+
+  - name: metallic_minerals_severance_tax_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: C.R.S. 39-29-103(1)(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "Amount exceeding $11,000,000 2.25%"
+    versions:
+      - effective_from: '1978-01-01'
+        formula: |-
+          0.0225
+
+  - name: ad_valorem_tax_credit_percentage_limit
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: C.R.S. 39-29-103(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "Such credit shall not exceed fifty percent of the tax computed"
+    versions:
+      - effective_from: '1978-01-01'
+        formula: |-
+          0.50
+
+  - name: metallic_minerals_severance_tax_before_credit
+    kind: derived
+    entity: Business
+    dtype: Money
+    unit: USD
+    period: Year
+    source: C.R.S. 39-29-103(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "Such tax shall be levied against every mining operation engaged in the severance of metallic minerals and shall be based upon the gross income"
+    versions:
+      - effective_from: '1978-01-01'
+        formula: |-
+          if mining_operation_is_engaged_in_severance_of_metallic_minerals
+          and metallic_minerals_are_severed_from_the_earth_in_colorado:
+            metallic_minerals_severance_tax_rate
+            * max(0, gross_income_of_mining_operation - metallic_minerals_gross_income_exemption_threshold)
+          else: 0
+
+  - name: qualifying_ad_valorem_tax_credit
+    kind: derived
+    entity: Business
+    dtype: Money
+    unit: USD
+    period: Year
+    source: C.R.S. 39-29-103(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "all ad valorem taxes assessed during the taxable year in the case of accrual basis taxpayers or paid during the taxable year in the case of cash basis taxpayers"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "Such credit shall not exceed fifty percent of the tax computed"
+    versions:
+      - effective_from: '1978-01-01'
+        formula: |-
+          min(
+            max(
+              0,
+              if taxpayer_uses_accrual_basis:
+                ad_valorem_taxes_assessed_during_taxable_year_on_producing_mines_valued_under_section_39_6_106
+              else:
+                if taxpayer_uses_cash_basis:
+                  ad_valorem_taxes_paid_during_taxable_year_on_producing_mines_valued_under_section_39_6_106
+                else: 0
+            ),
+            ad_valorem_tax_credit_percentage_limit
+            * metallic_minerals_severance_tax_before_credit
+          )
+
+  - name: metallic_minerals_severance_tax_after_ad_valorem_credit
+    kind: derived
+    entity: Business
+    dtype: Money
+    unit: USD
+    period: Year
+    source: C.R.S. 39-29-103(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-103
+              excerpt: "allowed, as a credit against the tax computed in accordance with subsection (1)"
+    versions:
+      - effective_from: '1978-01-01'
+        formula: |-
+          max(
+            0,
+            metallic_minerals_severance_tax_before_credit
+            - qualifying_ad_valorem_tax_credit
+          )
