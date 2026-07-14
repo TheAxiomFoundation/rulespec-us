@@ -260,6 +260,29 @@ def test_pr_lookup_failure_pauses_without_permanent_failure(monkeypatch) -> None
     _local_drain._PAUSE.clear()
 
 
+def test_unstick_recognizes_both_manifest_roots() -> None:
+    assert _local_drain.is_encoding_manifest_path(
+        ".axiom/encoding-manifests/us-mo/policies/dss/snap/block-1.json"
+    )
+    assert _local_drain.is_encoding_manifest_path(
+        "us-mo/.axiom/encoding-manifests/policies/dss/snap/block-1.json"
+    )
+    assert not _local_drain.is_encoding_manifest_path(
+        "_axiom/axiom-encode/.axiom/encoding-manifests/example.json"
+    )
+
+
+def test_validation_state_aggregates_all_shards() -> None:
+    success = {"name": "validate / validate (us-ca)", "conclusion": "SUCCESS"}
+    failure = {"name": "validate / validate (us-ny)", "conclusion": "FAILURE"}
+    pending = {"name": "validate / validate (us-tx)", "state": "IN_PROGRESS"}
+
+    assert _local_drain.aggregate_validation_state([success, failure]) == "FAILURE"
+    assert _local_drain.aggregate_validation_state([success, pending]) == "PENDING"
+    assert _local_drain.aggregate_validation_state([success]) == "SUCCESS"
+    assert _local_drain.aggregate_validation_state([]) is None
+
+
 def test_matrix_preserves_acceptance_criteria() -> None:
     data = {
         "defaults": {"backend": "openai", "model": "gpt-5.5"},

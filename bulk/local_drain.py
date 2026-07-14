@@ -290,19 +290,52 @@ def finalize_pending(leaf: Path) -> bool:
     return True
 
 
+def is_encoding_manifest_path(path: str) -> bool:
+    return path.startswith(".axiom/encoding-manifests/") or bool(
+        re.match(
+            r"^[a-z]{2}(?:-[a-z0-9-]+)?/\.axiom/encoding-manifests/",
+            path,
+        )
+    )
+
+
+def aggregate_validation_state(checks: list[dict]) -> str | None:
+    states = [
+        str(check.get("conclusion") or check.get("state") or "").upper()
+        for check in checks
+        if str(check.get("name") or "").startswith("validate / validate")
+    ]
+    if not states:
+        return None
+    failed = {
+        "ACTION_REQUIRED",
+        "CANCELLED",
+        "ERROR",
+        "FAILURE",
+        "STALE",
+        "TIMED_OUT",
+    }
+    if any(state in failed for state in states):
+        return "FAILURE"
+    complete = {"NEUTRAL", "SKIPPED", "SUCCESS"}
+    if any(state not in complete for state in states):
+        return "PENDING"
+    return "SUCCESS"
+
+
 # ---------------------------------------------------------------------------
 # PART A: unstick already-open new-state bulk PRs (priority).
 # ---------------------------------------------------------------------------
 def open_bulk_prs():
     data = gh_json(["pr", "list", "--repo", REPO, "--state", "open", "--limit", "200",
                     "--json", "number,headRefName,mergeStateStatus,statusCheckRollup"])
+    if data is None:
+        raise RuntimeError("could not list open bulk PRs")
     prs = []
-    for pr in data or []:
+    for pr in data:
         if not pr["headRefName"].startswith("bulk/"):
             continue
-        vv = next((c.get("conclusion") or c.get("state")
-                   for c in pr.get("statusCheckRollup") or []
-                   if str(c.get("name") or "").startswith("validate / validate")), None)
+        vv = aggregate_validation_state(pr.get("statusCheckRollup") or [])
         prs.append({"number": pr["number"], "branch": pr["headRefName"],
                     "merge": pr["mergeStateStatus"], "validate": vv})
     return sorted(prs, key=lambda p: p["number"])
@@ -327,7 +360,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
                        "origin/main...FETCH_HEAD"])
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
-                         or "/.axiom/encoding-manifests/" in f)]
+                         or is_encoding_manifest_path(f))]
         if not artifacts:
             return f"{branch}: no module artifacts in diff (already merged?)"
         run(["git", "-C", str(leaf), "checkout", "FETCH_HEAD", "--", *artifacts],
