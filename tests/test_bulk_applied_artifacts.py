@@ -372,6 +372,13 @@ def test_matrix_preserves_acceptance_criteria() -> None:
                 "status": "pending",
                 "batch": "SNAP-SC-UTIL",
                 "note": "Verify mutual exclusivity.",
+                "requires_merged_citations": ["us-sc/manual/page-163"],
+                "program_scope_sync": {
+                    "program_spec": "programs/us-sc/snap/fy-2026.yaml",
+                    "scope": "state",
+                    "add": ["policies/dss/snap-policy-manual/page-159"],
+                    "remove": ["policies/dss/snap-policy-manual/page-369"],
+                },
             }
         ],
     }
@@ -379,6 +386,96 @@ def test_matrix_preserves_acceptance_criteria() -> None:
     selected = select(data, "pending", "SNAP-SC-UTIL", None)
 
     assert selected[0]["acceptance_criteria"] == "Verify mutual exclusivity."
+    assert selected[0]["requires_merged_citations"] == ["us-sc/manual/page-163"]
+    assert selected[0]["program_scope_sync"]["scope"] == "state"
+
+
+def test_program_scope_sync_uses_pinned_encoder(monkeypatch, tmp_path: Path) -> None:
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return 0, "updated\n"
+
+    monkeypatch.setattr(_local_drain, "run", fake_run)
+    item = {
+        "program_scope_sync": {
+            "program_spec": "programs/us-sc/snap/fy-2026.yaml",
+            "scope": "state",
+            "add": ["policies/dss/snap-policy-manual/page-159"],
+            "remove": ["policies/dss/snap-policy-manual/page-369"],
+        }
+    }
+
+    changed = _local_drain.apply_program_scope_sync(tmp_path, item, {})
+
+    assert changed == ["programs/us-sc/snap/fy-2026.yaml"]
+    assert calls == [[
+        str(_local_drain.COV_AE), "program-scope-sync", "--repo", str(tmp_path),
+        "--program-spec", "programs/us-sc/snap/fy-2026.yaml", "--scope", "state",
+        "--add", "policies/dss/snap-policy-manual/page-159",
+        "--remove", "policies/dss/snap-policy-manual/page-369",
+    ]]
+
+
+def test_program_scope_sync_rejects_empty_mapping(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="program_spec"):
+        _local_drain.apply_program_scope_sync(
+            tmp_path, {"program_scope_sync": {}}, {}
+        )
+
+
+def test_matrix_rejects_scalar_dependency_metadata() -> None:
+    data = {
+        "entries": [{
+            "citation": "us-sc/manual/page-159",
+            "status": "pending-local",
+            "requires_merged_citations": "us-sc/manual/page-163",
+        }]
+    }
+
+    with pytest.raises(ValueError, match="requires_merged_citations"):
+        select(data, "pending-local", None, None)
+
+
+def test_sc_local_queue_schedules_prerequisites_before_dependent() -> None:
+    selected = select(_compute_matrix.load(), "pending-local", None, None)
+
+    citations = [item["citation"] for item in selected]
+    assert citations.index("us-sc/manual/dss/snap-policy-manual/page-163") < (
+        citations.index("us-sc/manual/dss/snap-policy-manual/page-159")
+    )
+    assert citations.index("us-sc/manual/dss/snap-policy-manual/page-165") < (
+        citations.index("us-sc/manual/dss/snap-policy-manual/page-159")
+    )
+
+
+def test_unstick_recognizes_program_specs() -> None:
+    assert _local_drain.PROGRAM_SPEC_RE.match("programs/us-sc/snap/fy-2026.yaml")
+    assert not _local_drain.PROGRAM_SPEC_RE.match("us-sc/policies/dss/snap/page.yaml")
+
+
+def test_worklist_item_for_slug_reads_all_statuses(monkeypatch, tmp_path: Path) -> None:
+    item = {
+        "citation": "us-sc/manual/page-159",
+        "slug": "us-sc-manual-page-159",
+        "program_scope_sync": {"program_spec": "programs/us-sc/snap/fy-2026.yaml"},
+    }
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps({"include": [item]}), stderr=""
+        )
+
+    monkeypatch.setattr(_local_drain.subprocess, "run", fake_run)
+
+    assert _local_drain.worklist_item_for_slug(
+        tmp_path, "us-sc-manual-page-159"
+    ) == item
+    assert "--status" in calls[0][0]
+    assert "any" in calls[0][0]
 
 
 def test_local_runner_requires_review_before_merge() -> None:
@@ -398,6 +495,7 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert 'return "checks complete; draft review required"' in local_drain
     assert "could not determine PR state" in local_drain
     assert "before push" in local_drain
-    assert "COV_ENCODER_REF = \"c83416309a4331d225bcde16907e3b4eb79e26f1\"" in local_drain
+    assert "COV_ENCODER_REF = \"f2b7e2393447deecbadf398c86d2b5f07ec5bfdd\"" in local_drain
+    assert '"program-scope-sync", "--help"' in local_drain
     assert "COV_ORACLES_REF = \"9901e2479ac39bba865b8232e1c7d879ba447d8d\"" in local_drain
     assert local_drain.count("require_coverage_ref()") >= 5

@@ -17,8 +17,8 @@ Two decisions matter and are baked in here so PRs go green:
   *coverage/sync* tool below, not to generation.
 * **Coverage declaration uses an immutable current-CI encoder ref.** Before any
   mutation, the runner requires that exact ref to remain the head of the remote
-  ``main`` branch consumed by CI. The pinned 1200 generator has the older
-  workspace/repo sync interface, not the exact-checkout contract used here.
+  ``main`` branch consumed by CI. This keeps the coverage classifier aligned
+  with the exact-checkout contract used by required CI.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
 ``--max-entries``) and every unit of durable state (pushed branch, opened PR,
@@ -30,7 +30,7 @@ Toolchain layout (override via env): a sibling ``_bulk_drain`` workspace holds
 pinned checkouts + venvs built once by the operator:
 
     _bulk_drain/
-      axiom-encode/            # worktree @ pinned axiom_encode_ref (1200)
+      axiom-encode/            # worktree @ pinned axiom_encode_ref
       .venv/                   # pinned encoder venv  -> generation
       axiom-encode-cov/        # worktree @ COV_ENCODER_REF below
       .venv-cov/               # coverage/sync venv   -> oracle-coverage-pending
@@ -39,7 +39,8 @@ pinned checkouts + venvs built once by the operator:
       wt/<slug>/rulespec-us/   # per-entry generation worktrees (leaf MUST be rulespec-us)
 
 Usage:
-    python bulk/local_drain.py drain   [--limit N] [--batch A] [--concurrency 3]
+    python bulk/local_drain.py drain   [--status pending-local] [--limit N]
+                                       [--batch A] [--concurrency 3]
                                        [--max-entries N] [--max-seconds 540]
     python bulk/local_drain.py unstick [--pr N ...] [--all] [--wait]
     python bulk/local_drain.py doctor  # verify toolchain + auth + signing key
@@ -67,7 +68,7 @@ from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
-COV_ENCODER_REF = "c83416309a4331d225bcde16907e3b4eb79e26f1"
+COV_ENCODER_REF = "f2b7e2393447deecbadf398c86d2b5f07ec5bfdd"
 COV_ENCODER_REMOTE = "https://github.com/TheAxiomFoundation/axiom-encode.git"
 COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
@@ -358,6 +359,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
         run(["git", "-C", str(leaf), "fetch", "origin", branch, "--quiet"])
         _, diff = run(["git", "-C", str(leaf), "diff", "--name-only",
                        "origin/main...FETCH_HEAD"])
+        program_specs = [f for f in diff.splitlines() if PROGRAM_SPEC_RE.match(f)]
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
                          or is_encoding_manifest_path(f))]
@@ -365,10 +367,23 @@ def unstick_pr(branch: str, wait: bool) -> str:
             return f"{branch}: no module artifacts in diff (already merged?)"
         run(["git", "-C", str(leaf), "checkout", "FETCH_HEAD", "--", *artifacts],
             check=True)
+        composition_files = []
+        if program_specs:
+            item = worklist_item_for_slug(leaf, slug)
+            configured_spec = (item.get("program_scope_sync") or {}).get(
+                "program_spec")
+            if program_specs != [configured_spec]:
+                raise RuntimeError(
+                    f"{branch}: changed ProgramSpecs {program_specs} do not match "
+                    f"the queue configuration {configured_spec!r}"
+                )
+            composition_files = apply_program_scope_sync(leaf, item, {})
         summary = sync_pending(leaf)
         keep_pending = finalize_pending(leaf)
         regen_index(leaf)
-        add_files = [*artifacts, ".axiom/index/provisions_to_rules.json"]
+        add_files = [
+            *artifacts, *composition_files, ".axiom/index/provisions_to_rules.json"
+        ]
         if keep_pending:
             add_files.append("oracle-coverage-pending.yaml")
         run(["git", "-C", str(leaf), "add", "--", *add_files])
@@ -440,6 +455,8 @@ def wait_for_checks(branch: str, timeout_s: int = 1500) -> str:
 # ---------------------------------------------------------------------------
 MODULE_RE = re.compile(
     r"^[a-z]{2}(-[a-z0-9-]+)?/(manual|statutes|regulations|policies)/.*\.yaml$")
+PROGRAM_SPEC_RE = re.compile(
+    r"^programs/[a-z]{2}(?:-[a-z0-9]+)*/.+\.yaml$")
 
 
 def already_handled(slug: str) -> bool:
@@ -461,12 +478,91 @@ def handled_slugs() -> set:
             if p.get("headRefName", "").startswith("bulk/")}
 
 
+def worklist_item_for_slug(leaf: Path, slug: str) -> dict:
+    process = subprocess.run(
+        [str(COV_PY), str(leaf / "bulk/compute_matrix.py"),
+         "--status", "any", "--format", "matrix"],
+        capture_output=True, text=True, cwd=leaf,
+    )
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"could not read worklist metadata for {slug}: {process.stderr.strip()}"
+        )
+    try:
+        entries = json.loads(process.stdout)["include"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise RuntimeError(f"invalid worklist matrix while resolving {slug}") from exc
+    matches = [entry for entry in entries if entry.get("slug") == slug]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected one worklist entry for {slug}; found {len(matches)}"
+        )
+    return matches[0]
+
+
+def merged_dependency(citation: str) -> bool:
+    branch = f"bulk/{citation_slug(citation)}"
+    prs = gh_json([
+        "pr", "list", "--repo", REPO, "--state", "merged", "--head", branch,
+        "--json", "number",
+    ])
+    if prs is None:
+        raise RuntimeError(f"could not determine merged state for {branch}")
+    return bool(prs)
+
+
+def apply_program_scope_sync(leaf: Path, item: dict, env: dict) -> list[str]:
+    spec = item.get("program_scope_sync")
+    if spec is None:
+        return []
+    if not isinstance(spec, dict):
+        raise ValueError("program_scope_sync must be a mapping")
+    program_spec = spec.get("program_spec")
+    scope = spec.get("scope")
+    add = spec.get("add", [])
+    remove = spec.get("remove", [])
+    if not isinstance(program_spec, str) or not program_spec:
+        raise ValueError("program_scope_sync.program_spec must be a non-empty string")
+    if scope not in {"federal", "state", "local"}:
+        raise ValueError("program_scope_sync.scope must be federal, state, or local")
+    if not isinstance(add, list) or not all(isinstance(v, str) for v in add):
+        raise ValueError("program_scope_sync.add must be a string list")
+    if not isinstance(remove, list) or not all(isinstance(v, str) for v in remove):
+        raise ValueError("program_scope_sync.remove must be a string list")
+    if not add and not remove:
+        raise ValueError("program_scope_sync must add or remove at least one module")
+    command = [
+        str(COV_AE), "program-scope-sync", "--repo", str(leaf),
+        "--program-spec", program_spec, "--scope", scope,
+    ]
+    for value in add:
+        command.extend(["--add", value])
+    for value in remove:
+        command.extend(["--remove", value])
+    rc, out = run(command, cwd=leaf, env=env)
+    if rc != 0:
+        raise RuntimeError(f"program-scope-sync failed:\n{out}")
+    return [program_spec]
+
+
 def encode_entry(item: dict) -> dict:
     """Full local mirror of bulk-encode.yml for one entry. Returns a result dict."""
     citation, slug = item["citation"], item["slug"]
     res = {"citation": citation, "slug": slug, "status": "failed", "detail": ""}
     if _PAUSE.is_set():
         res["detail"] = "paused"
+        return res
+    try:
+        unmet = [
+            dependency
+            for dependency in item.get("requires_merged_citations", [])
+            if not merged_dependency(dependency)
+        ]
+    except RuntimeError as exc:
+        return pause_for_retry(res, f"{exc}; retry drain")
+    if unmet:
+        res["status"] = "blocked"
+        res["detail"] = "waiting for merged dependencies: " + ", ".join(unmet)
         return res
     try:
         handled = already_handled(slug)
@@ -509,11 +605,16 @@ def encode_entry(item: dict) -> dict:
         except ValueError as exc:
             res["detail"] = f"applied artifact discovery failed: {exc}"
             return res
+        try:
+            composition_files = apply_program_scope_sync(leaf, item, env)
+        except (RuntimeError, ValueError) as exc:
+            res["detail"] = str(exc)
+            return res
         regen_index(leaf)
 
         # gate battery (fail-closed pre-check, PR-CI order)
         run(["git", "-C", str(leaf), "add", "--", module, test_file, manifest,
-             ".axiom/index/provisions_to_rules.json"])
+             *composition_files, ".axiom/index/provisions_to_rules.json"])
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", f"wip: {citation}"])
         roots = subprocess.run([str(COV_PY), str(leaf / "bulk/roots_for.py"), module],
@@ -542,7 +643,7 @@ def encode_entry(item: dict) -> dict:
         title = f"Encode {citation} (bulk)"
         if gate_status == "needs-fixtures":
             title = f"Encode {citation} (bulk, needs-fixtures)"
-        add_files = [".axiom/index/provisions_to_rules.json"]
+        add_files = [*composition_files, ".axiom/index/provisions_to_rules.json"]
         if keep_pending:
             add_files.append("oracle-coverage-pending.yaml")
         run(["git", "-C", str(leaf), "add", "--", *add_files])
@@ -576,6 +677,7 @@ def encode_entry(item: dict) -> dict:
         body = (f"## Locally bulk-encoded module\n\n- Citation: `{citation}`\n"
                 f"- Module: `{module}`\n- Encoder: `{BACKEND}:{MODEL}` "
                 f"(toolchain-pinned axiom-encode)\n- Local gate: **{gate_status}**\n"
+                f"- ProgramSpec sync: `{', '.join(composition_files) or 'none'}`\n"
                 f"- {sync_summary}\n\nProduced by `bulk/local_drain.py` "
                 "(local Codex mirror of the bulk-encode dispatcher). The "
                 "authoritative gate is the required `validate / validate` check.\n\n"
@@ -762,14 +864,25 @@ def cmd_doctor(_args) -> int:
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
     command_ok = True
-    for label, ae, require_pending in (("gen encoder (pin)", GEN_AE, False),
-                                       ("cov encoder (pin)", COV_AE, True)):
+    for label, ae, required_commands in (
+        ("gen encoder (pin)", GEN_AE, ("encode",)),
+        ("current encoder", COV_AE,
+         ("oracle-coverage-pending", "program-scope-sync")),
+    ):
         has_pending = ae.exists() and run(
             [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
-        ok = ae.exists() and (has_pending or not require_pending)
+        has_scope_sync = ae.exists() and run(
+            [str(ae), "program-scope-sync", "--help"])[0] == 0
+        available = {
+            "encode": ae.exists() and run([str(ae), "encode", "--help"])[0] == 0,
+            "oracle-coverage-pending": has_pending,
+            "program-scope-sync": has_scope_sync,
+        }
+        ok = ae.exists() and all(available[command]
+                                 for command in required_commands)
         command_ok = command_ok and ok
         print(f"{label:20s}: {'OK' if ok else 'CHECK'} "
-              f"(oracle-coverage-pending {'present' if has_pending else 'absent'})")
+              f"(commands: {', '.join(command for command in required_commands if available[command])})")
     try:
         actual_cov_ref = require_coverage_ref()
         cov_ref_ok = True
@@ -822,7 +935,7 @@ def cmd_drain(args) -> int:
     require_coverage_ref()
     matrix = json.loads(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
-         "--status", "pending", "--format", "matrix",
+         "--status", args.status, "--format", "matrix",
          *(["--batch", args.batch] if args.batch else []),
          *(["--limit", str(args.limit)] if args.limit else [])],
         capture_output=True, text=True, cwd=CHECKOUT).stdout)["include"]
@@ -868,7 +981,7 @@ def cmd_drain(args) -> int:
                         inflight.add(ex.submit(encode_entry, item))
     remaining = int(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
-         "--status", "pending", "--format", "count"],
+         "--status", args.status, "--format", "count"],
         capture_output=True, text=True, cwd=CHECKOUT).stdout or 0)
     write_progress(results, remaining, _PAUSE.is_set())
     # Persist flips durably to a file and batch them into ONE worklist PR later
@@ -908,7 +1021,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    d = sub.add_parser("drain", help="Encode pending worklist entries via local Codex.")
+    d = sub.add_parser("drain", help="Encode worklist entries via local Codex.")
+    d.add_argument("--status", choices=("pending", "pending-local"),
+                   default="pending")
     d.add_argument("--limit", type=int)
     d.add_argument("--batch")
     d.add_argument("--concurrency", type=int, default=3)
