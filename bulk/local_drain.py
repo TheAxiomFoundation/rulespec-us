@@ -3,9 +3,9 @@
 
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
 CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
-dispatcher. It mirrors the generation path while adding the exact-checkout
-oracle-coverage-pending declaration needed to keep new-state PRs out of the
-unmapped coverage state.
+dispatcher, opening one draft PR per module for independent review. It mirrors
+the generation path while adding the exact-checkout oracle-coverage-pending
+declaration needed to keep new-state PRs out of the unmapped coverage state.
 
 Two decisions matter and are baked in here so PRs go green:
 
@@ -62,6 +62,8 @@ except ModuleNotFoundError:  # Python 3.10 local drain environments.
     import tomli as tomllib
 from datetime import datetime, timezone
 from pathlib import Path
+
+from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
@@ -190,6 +192,40 @@ def gh_json(args):
         return None
 
 
+def ensure_draft_pr(branch: str) -> None:
+    pr = gh_json(
+        ["pr", "view", branch, "--repo", REPO, "--json", "isDraft,autoMergeRequest"]
+    )
+    if pr is None:
+        raise RuntimeError(f"could not read PR state for {branch}")
+    if pr.get("autoMergeRequest") is not None:
+        run(
+            ["gh", "pr", "merge", branch, "--repo", REPO, "--disable-auto"],
+            check=True,
+        )
+    if pr.get("isDraft") is not True:
+        run(["gh", "pr", "ready", branch, "--repo", REPO, "--undo"], check=True)
+
+    verified = gh_json(
+        ["pr", "view", branch, "--repo", REPO, "--json", "isDraft,autoMergeRequest"]
+    )
+    if (
+        verified is None
+        or verified.get("isDraft") is not True
+        or verified.get("autoMergeRequest") is not None
+    ):
+        raise RuntimeError(
+            f"refusing to continue: {branch} is not a draft with auto-merge disabled"
+        )
+
+
+def pause_for_retry(result: dict, detail: str) -> dict:
+    _PAUSE.set()
+    result["status"] = "paused"
+    result["detail"] = detail
+    return result
+
+
 # --- worktree helpers -------------------------------------------------------
 def make_worktree(slug: str, ref: str) -> Path:
     """Fresh generation worktree whose leaf dir is exactly ``rulespec-us``
@@ -254,19 +290,52 @@ def finalize_pending(leaf: Path) -> bool:
     return True
 
 
+def is_encoding_manifest_path(path: str) -> bool:
+    return path.startswith(".axiom/encoding-manifests/") or bool(
+        re.match(
+            r"^[a-z]{2}(?:-[a-z0-9-]+)?/\.axiom/encoding-manifests/",
+            path,
+        )
+    )
+
+
+def aggregate_validation_state(checks: list[dict]) -> str | None:
+    states = [
+        str(check.get("conclusion") or check.get("state") or "").upper()
+        for check in checks
+        if str(check.get("name") or "").startswith("validate / validate")
+    ]
+    if not states:
+        return None
+    failed = {
+        "ACTION_REQUIRED",
+        "CANCELLED",
+        "ERROR",
+        "FAILURE",
+        "STALE",
+        "TIMED_OUT",
+    }
+    if any(state in failed for state in states):
+        return "FAILURE"
+    complete = {"NEUTRAL", "SKIPPED", "SUCCESS"}
+    if any(state not in complete for state in states):
+        return "PENDING"
+    return "SUCCESS"
+
+
 # ---------------------------------------------------------------------------
 # PART A: unstick already-open new-state bulk PRs (priority).
 # ---------------------------------------------------------------------------
 def open_bulk_prs():
     data = gh_json(["pr", "list", "--repo", REPO, "--state", "open", "--limit", "200",
                     "--json", "number,headRefName,mergeStateStatus,statusCheckRollup"])
+    if data is None:
+        raise RuntimeError("could not list open bulk PRs")
     prs = []
-    for pr in data or []:
+    for pr in data:
         if not pr["headRefName"].startswith("bulk/"):
             continue
-        vv = next((c.get("conclusion") or c.get("state")
-                   for c in pr.get("statusCheckRollup") or []
-                   if c.get("name") == "validate / validate"), None)
+        vv = aggregate_validation_state(pr.get("statusCheckRollup") or [])
         prs.append({"number": pr["number"], "branch": pr["headRefName"],
                     "merge": pr["mergeStateStatus"], "validate": vv})
     return sorted(prs, key=lambda p: p["number"])
@@ -291,7 +360,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
                        "origin/main...FETCH_HEAD"])
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
-                         or "/.axiom/encoding-manifests/" in f)]
+                         or is_encoding_manifest_path(f))]
         if not artifacts:
             return f"{branch}: no module artifacts in diff (already merged?)"
         run(["git", "-C", str(leaf), "checkout", "FETCH_HEAD", "--", *artifacts],
@@ -313,46 +382,71 @@ def unstick_pr(branch: str, wait: bool) -> str:
                "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
+        ensure_draft_pr(branch)
         require_coverage_ref()
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
-        run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
-        result = f"rebuilt+pushed {branch}: {summary}"
+        ensure_draft_pr(branch)
+        result = f"rebuilt+pushed draft {branch}: {summary}"
         if wait:
-            result += "; " + wait_for_merge(branch)
+            result += "; " + wait_for_checks(branch)
         return result
     finally:
         drop_worktree(leaf)
 
 
-def wait_for_merge(branch: str, timeout_s: int = 1500) -> str:
+def wait_for_checks(branch: str, timeout_s: int = 1500) -> str:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         pr = gh_json(["pr", "view", branch, "--repo", REPO,
-                      "--json", "state,mergeStateStatus,statusCheckRollup"])
+                      "--json", "state,isDraft,statusCheckRollup"])
         if not pr:
             return "poll-error"
-        if pr["state"] == "MERGED":
-            return "MERGED"
-        vv = next((c.get("conclusion") or c.get("state")
-                   for c in pr.get("statusCheckRollup") or []
-                   if c.get("name") == "validate / validate"), None)
-        if vv in ("FAILURE", "ERROR"):
-            return f"validate={vv} (needs triage)"
+        if pr["state"] != "OPEN":
+            return pr["state"]
+        checks = pr.get("statusCheckRollup") or []
+        validation_checks = [
+            check
+            for check in checks
+            if str(check.get("name") or "").startswith("validate / validate")
+        ]
+        failures = {
+            str(check.get("conclusion") or check.get("state") or "").upper()
+            for check in checks
+        } & {
+            "ACTION_REQUIRED",
+            "CANCELLED",
+            "ERROR",
+            "FAILURE",
+            "STALE",
+            "TIMED_OUT",
+        }
+        if failures:
+            return f"checks={','.join(sorted(failures))} (needs triage)"
+        pending = any(
+            str(check.get("status") or "").upper()
+            not in {"", "COMPLETED"}
+            or str(check.get("state") or "").upper() in {"EXPECTED", "PENDING"}
+            for check in checks
+        )
+        if validation_checks and not pending:
+            return "checks complete; draft review required"
         time.sleep(30)
-    return "timeout-waiting-merge"
+    return "timeout-waiting-checks"
 
 
 # ---------------------------------------------------------------------------
 # PART B: generate + PR one pending worklist entry via local Codex.
 # ---------------------------------------------------------------------------
 MODULE_RE = re.compile(
-    r"^[a-z]{2}(-[a-z0-9-]+)?/(statutes|regulations|policies)/.*\.yaml$")
+    r"^[a-z]{2}(-[a-z0-9-]+)?/(manual|statutes|regulations|policies)/.*\.yaml$")
 
 
 def already_handled(slug: str) -> bool:
     pr = gh_json(["pr", "list", "--repo", REPO, "--head", f"bulk/{slug}",
                   "--state", "all", "--json", "number,state"])
+    if pr is None:
+        raise RuntimeError(f"could not determine PR state for bulk/{slug}")
     return bool(pr)
 
 
@@ -360,7 +454,9 @@ def handled_slugs() -> set:
     """All bulk/<slug> that already have a PR (any state), in one gh call, so a
     drain chunk skips already-PR'd entries without a per-entry API round-trip."""
     data = gh_json(["pr", "list", "--repo", REPO, "--state", "all", "--limit", "400",
-                    "--json", "headRefName"]) or []
+                    "--json", "headRefName"])
+    if data is None:
+        raise RuntimeError("could not list existing bulk PRs")
     return {p["headRefName"].split("/", 1)[1] for p in data
             if p.get("headRefName", "").startswith("bulk/")}
 
@@ -372,7 +468,11 @@ def encode_entry(item: dict) -> dict:
     if _PAUSE.is_set():
         res["detail"] = "paused"
         return res
-    if already_handled(slug):
+    try:
+        handled = already_handled(slug)
+    except RuntimeError as exc:
+        return pause_for_retry(res, f"{exc}; retry drain")
+    if handled:
         res["status"] = "skipped"
         res["detail"] = "bulk/<slug> PR already exists"
         return res
@@ -399,21 +499,16 @@ def encode_entry(item: dict) -> dict:
             _PAUSE.set()
             res["status"], res["detail"] = "paused", "codex subscription-limit signal"
             return res
-        _, st = run(["git", "-C", str(leaf), "status", "--porcelain", "-uall"])
-        applied = [ln[3:] for ln in st.splitlines()
-                   if MODULE_RE.match(ln[3:]) and not ln[3:].endswith(".test.yaml")]
-        if rc != 0 or not applied:
+        if rc != 0:
             res["detail"] = f"encode/apply failed (rc={rc}); see {tmp}"
             return res
-        module = applied[0]
-        test_file = module[:-5] + ".test.yaml"
-        juris = module.split("/", 1)[0]
-        rest = module[len(juris) + 1:]
-        manifest = f"{juris}/.axiom/encoding-manifests/{rest[:-5]}.json"
-        if not (leaf / manifest).exists():
-            hits = list((leaf / juris / ".axiom/encoding-manifests").rglob(
-                Path(module).stem + ".json"))
-            manifest = str(hits[0].relative_to(leaf)) if hits else manifest
+        try:
+            module, test_file, manifest = discover_applied_artifacts(
+                leaf, citation=citation
+            )
+        except ValueError as exc:
+            res["detail"] = f"applied artifact discovery failed: {exc}"
+            return res
         regen_index(leaf)
 
         # gate battery (fail-closed pre-check, PR-CI order)
@@ -458,24 +553,44 @@ def encode_entry(item: dict) -> dict:
                       "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "--amend", "-m", commit_msg])
+        open_prs = gh_json(
+            ["pr", "list", "--repo", REPO, "--state", "open", "--head", branch,
+             "--json", "number"]
+        )
+        if open_prs is None:
+            return pause_for_retry(
+                res,
+                f"could not verify PR state for {branch} before push; retry drain",
+            )
+        if open_prs:
+            ensure_draft_pr(branch)
+            res["status"] = "skipped"
+            res["detail"] = f"existing draft PR normalized for {branch}; no push performed"
+            return res
         require_coverage_ref()
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,
              "--color", "1f6feb", "-d", "Opened by the bulk-encode dispatcher"])
+        acceptance_criteria = item.get("acceptance_criteria", "")
         body = (f"## Locally bulk-encoded module\n\n- Citation: `{citation}`\n"
                 f"- Module: `{module}`\n- Encoder: `{BACKEND}:{MODEL}` "
                 f"(toolchain-pinned axiom-encode)\n- Local gate: **{gate_status}**\n"
                 f"- {sync_summary}\n\nProduced by `bulk/local_drain.py` "
                 "(local Codex mirror of the bulk-encode dispatcher). The "
-                "authoritative gate is the required `validate / validate` check.")
+                "authoritative gate is the required `validate / validate` check.\n\n"
+                f"### Acceptance criteria\n\n{acceptance_criteria}\n")
         bf = WT_ROOT / slug / "pr-body.md"
         bf.write_text(body)
-        run(["gh", "pr", "create", "--repo", REPO, "--base", "main", "--head", branch,
-             "--title", title, "--body-file", str(bf), "--label", "bulk-encode"])
-        run(["gh", "pr", "merge", branch, "--repo", REPO, "--auto", "--squash"])
+        run(
+            ["gh", "pr", "create", "--repo", REPO, "--base", "main", "--head", branch,
+             "--title", title, "--body-file", str(bf), "--label", "bulk-encode",
+             "--draft"],
+            check=True,
+        )
+        ensure_draft_pr(branch)
         res["status"] = gate_status
-        res["detail"] = f"PR opened on {branch}; {sync_summary}"
+        res["detail"] = f"draft PR opened on {branch}; {sync_summary}"
         return res
     except subprocess.TimeoutExpired:
         res["detail"] = "encode timed out (>3600s)"
@@ -489,25 +604,59 @@ def flip_statuses(updates: dict) -> None:
     """updates: {citation: status}. Commits to worklist on a small branch + PR."""
     if not updates:
         return
+    branch = "bulk/worklist-status-flip"
+    open_prs = gh_json(
+        [
+            "pr",
+            "list",
+            "--repo",
+            REPO,
+            "--state",
+            "open",
+            "--head",
+            branch,
+            "--json",
+            "number",
+        ]
+    )
+    if open_prs is None:
+        raise RuntimeError(f"could not determine whether {branch} already has a PR")
+    existing_pr = bool(open_prs)
+    if existing_pr:
+        ensure_draft_pr(branch)
+
     leaf = make_worktree("worklist-flip", "origin/main")
     try:
-        run(["git", "-C", str(leaf), "checkout", "-B", "bulk/worklist-status-flip"])
+        if existing_pr:
+            run(["git", "-C", str(leaf), "fetch", "origin", branch], check=True)
+            run(["git", "-C", str(leaf), "checkout", "-B", branch, "FETCH_HEAD"], check=True)
+            run(["git", "-C", str(leaf), "rebase", "origin/main"], check=True)
+        else:
+            run(["git", "-C", str(leaf), "checkout", "-B", branch], check=True)
         for citation, status in updates.items():
             run([str(COV_PY), str(leaf / "bulk/compute_matrix.py"),
-                 "--set-status", citation, status], cwd=leaf)
-        run(["git", "-C", str(leaf), "add", "bulk/worklist.yaml"])
-        run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
-             "-c", "user.name=bulk-encode", "commit", "-q", "-m",
-             "Flip drained worklist statuses (bulk)\n\n"
-             "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"])
+                 "--set-status", citation, status], cwd=leaf, check=True)
+        _, worklist_diff = run(
+            ["git", "-C", str(leaf), "status", "--porcelain", "--", "bulk/worklist.yaml"]
+        )
+        if worklist_diff:
+            run(["git", "-C", str(leaf), "add", "bulk/worklist.yaml"])
+            run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
+                 "-c", "user.name=bulk-encode", "commit", "-q", "-m",
+                 "Flip drained worklist statuses (bulk)\n\n"
+                 "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"], check=True)
+        elif not existing_pr:
+            return
+        if existing_pr:
+            ensure_draft_pr(branch)
         run(["git", "-C", str(leaf), "push", "-f", "origin",
-             "HEAD:refs/heads/bulk/worklist-status-flip"], check=True)
-        run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
-             "--head", "bulk/worklist-status-flip", "--title",
-             "Flip drained worklist statuses (bulk)", "--body",
-             "Status flips for locally-drained entries.", "--label", "bulk-encode"])
-        run(["gh", "pr", "merge", "bulk/worklist-status-flip", "--repo", REPO,
-             "--auto", "--squash"])
+             f"HEAD:refs/heads/{branch}"], check=True)
+        if not existing_pr:
+            run(["gh", "pr", "create", "--repo", REPO, "--base", "main",
+                 "--head", branch, "--title", "Flip drained worklist statuses (bulk)",
+                 "--body", "Status flips for locally-drained entries.", "--label",
+                 "bulk-encode", "--draft"], check=True)
+        ensure_draft_pr(branch)
     finally:
         drop_worktree(leaf)
 
@@ -518,8 +667,8 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [f"# Local drain progress ({now})", ""]
     if paused:
-        lines += ["> **PAUSED on Codex subscription-limit signal.** Re-run after "
-                  "the window resets; the drain resumes idempotently.", ""]
+        lines += ["> **PAUSED on a retryable condition.** Resolve the condition "
+                  "reported below and re-run; the drain resumes idempotently.", ""]
     lines += [f"- Remaining pending: {remaining}",
               f"- Handled this run: {len(results)}", "",
               "| citation | result | detail |", "| --- | --- | --- |"]
@@ -769,7 +918,7 @@ def main() -> int:
     u = sub.add_parser("unstick", help="Sync-declare + rebase open new-state bulk PRs.")
     u.add_argument("--pr", type=int, nargs="*", default=[])
     u.add_argument("--all", action="store_true")
-    u.add_argument("--wait", action="store_true", help="Poll each PR until merged.")
+    u.add_argument("--wait", action="store_true", help="Poll each PR until CI finishes.")
     u.set_defaults(func=cmd_unstick)
     doc = sub.add_parser("doctor", help="Verify toolchain, auth, signing key.")
     doc.set_defaults(func=cmd_doctor)
