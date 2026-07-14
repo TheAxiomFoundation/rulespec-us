@@ -369,9 +369,13 @@ def test_matrix_preserves_acceptance_criteria() -> None:
         "entries": [
             {
                 "citation": "us-sc/manual/dss/snap-policy-manual/page-159",
-                "status": "pending",
+                "status": "pending-local",
                 "batch": "SNAP-SC-UTIL",
                 "note": "Verify mutual exclusivity.",
+                "allow_context": [
+                    "us/regulations/7-cfr/273/9.yaml",
+                    "us/regulations/7-cfr/273/9/d/6/iii.yaml",
+                ],
                 "requires_merged_citations": ["us-sc/manual/page-163"],
                 "program_scope_sync": {
                     "program_spec": "programs/us-sc/snap/fy-2026.yaml",
@@ -383,9 +387,13 @@ def test_matrix_preserves_acceptance_criteria() -> None:
         ],
     }
 
-    selected = select(data, "pending", "SNAP-SC-UTIL", None)
+    selected = select(data, "pending-local", "SNAP-SC-UTIL", None)
 
     assert selected[0]["acceptance_criteria"] == "Verify mutual exclusivity."
+    assert selected[0]["allow_context"] == [
+        "us/regulations/7-cfr/273/9.yaml",
+        "us/regulations/7-cfr/273/9/d/6/iii.yaml",
+    ]
     assert selected[0]["requires_merged_citations"] == ["us-sc/manual/page-163"]
     assert selected[0]["program_scope_sync"]["scope"] == "state"
 
@@ -436,6 +444,76 @@ def test_matrix_rejects_scalar_dependency_metadata() -> None:
 
     with pytest.raises(ValueError, match="requires_merged_citations"):
         select(data, "pending-local", None, None)
+
+
+def test_matrix_rejects_context_outside_repository() -> None:
+    data = {
+        "entries": [{
+            "citation": "us-sc/manual/page-163",
+            "status": "pending-local",
+            "allow_context": ["/etc/passwd"],
+        }]
+    }
+
+    with pytest.raises(ValueError, match="escapes the repository"):
+        select(data, "pending-local", None, None)
+
+
+def test_matrix_rejects_context_for_cloud_entry() -> None:
+    data = {
+        "entries": [{
+            "citation": "us-sc/manual/page-163",
+            "status": "pending",
+            "allow_context": ["us/regulations/7-cfr/273/9.yaml"],
+        }]
+    }
+
+    with pytest.raises(ValueError, match="not supported for cloud pending"):
+        select(data, "pending", None, None)
+
+
+@pytest.mark.parametrize("status", ["pr-open", "needs-fixtures", "failed", "merged"])
+def test_matrix_preserves_context_after_local_status_transition(status: str) -> None:
+    data = {
+        "entries": [{
+            "citation": "us-sc/manual/page-163",
+            "status": status,
+            "allow_context": ["us/regulations/7-cfr/273/9.yaml"],
+        }]
+    }
+
+    selected = select(data, "any", None, None)
+
+    assert selected[0]["allow_context"] == ["us/regulations/7-cfr/273/9.yaml"]
+
+
+def test_encode_command_includes_reviewed_repo_context(tmp_path: Path) -> None:
+    context = tmp_path / "us/regulations/7-cfr/273/9.yaml"
+    context.parent.mkdir(parents=True)
+    context.write_text("format: rulespec/v1\n")
+
+    command = _local_drain.encode_command(
+        tmp_path,
+        tmp_path / "encode-out",
+        {
+            "citation": "us-sc/manual/dss/snap-policy-manual/page-163",
+            "allow_context": ["us/regulations/7-cfr/273/9.yaml"],
+        },
+    )
+
+    assert command[-2:] == ["--allow-context", str(context.resolve())]
+
+
+def test_encode_command_rejects_context_outside_checkout(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="escapes the RuleSpec checkout"):
+        _local_drain.encode_command(
+            tmp_path,
+            tmp_path / "encode-out",
+            {
+                "citation": "us-sc/manual/dss/snap-policy-manual/page-163",
+                "allow_context": ["../outside.yaml"],
+            },
+        )
 
 
 def test_sc_local_queue_schedules_prerequisites_before_dependent() -> None:
