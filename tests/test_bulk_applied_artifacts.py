@@ -285,6 +285,25 @@ def test_rejects_exact_request_manifest_for_wrong_module(tmp_path: Path) -> None
         )
 
 
+def test_rejects_non_object_manifest(tmp_path: Path) -> None:
+    citation = "us-mo/manual/dss/snap/1105/block-1"
+    module = "us-mo/manual/dss/snap/1105/block-1.yaml"
+    test_file = "us-mo/manual/dss/snap/1105/block-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-mo/manual/dss/snap/1105/block-1.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    (tmp_path / manifest).parent.mkdir(parents=True)
+    (tmp_path / manifest).write_text("[]\n")
+
+    with pytest.raises(ValueError, match="must contain a JSON object"):
+        discover_applied_artifacts(
+            tmp_path,
+            citation=citation,
+            paths=[module, test_file, manifest],
+        )
+
+
 def test_pr_lookup_failure_pauses_without_permanent_failure(monkeypatch) -> None:
     _local_drain._PAUSE.clear()
     monkeypatch.setattr(_local_drain, "gh_json", lambda _args: None)
@@ -297,6 +316,28 @@ def test_pr_lookup_failure_pauses_without_permanent_failure(monkeypatch) -> None
     assert "retry drain" in result["detail"]
     assert _local_drain._PAUSE.is_set()
     _local_drain._PAUSE.clear()
+
+
+def test_wait_for_checks_rejects_stale_validation(monkeypatch) -> None:
+    monkeypatch.setattr(
+        _local_drain,
+        "gh_json",
+        lambda _args: {
+            "state": "OPEN",
+            "isDraft": True,
+            "statusCheckRollup": [
+                {
+                    "name": "validate / validate (us-mo)",
+                    "status": "COMPLETED",
+                    "conclusion": "STALE",
+                }
+            ],
+        },
+    )
+
+    assert _local_drain.wait_for_checks("bulk/example", timeout_s=1) == (
+        "checks=STALE (needs triage)"
+    )
 
 
 def test_unstick_recognizes_both_manifest_roots() -> None:

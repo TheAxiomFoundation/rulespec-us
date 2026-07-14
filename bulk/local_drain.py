@@ -413,7 +413,14 @@ def wait_for_checks(branch: str, timeout_s: int = 1500) -> str:
         failures = {
             str(check.get("conclusion") or check.get("state") or "").upper()
             for check in checks
-        } & {"ACTION_REQUIRED", "CANCELLED", "ERROR", "FAILURE", "TIMED_OUT"}
+        } & {
+            "ACTION_REQUIRED",
+            "CANCELLED",
+            "ERROR",
+            "FAILURE",
+            "STALE",
+            "TIMED_OUT",
+        }
         if failures:
             return f"checks={','.join(sorted(failures))} (needs triage)"
         pending = any(

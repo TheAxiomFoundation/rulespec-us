@@ -145,6 +145,8 @@ def discover_applied_artifacts(
         manifest = json.loads((repo / manifest_rel).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read applied manifest {manifest_rel}: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"applied manifest {manifest_rel} must contain a JSON object")
     if not _module_matches_request(citation, module):
         raise ValueError(
             f"applied module {module!r} does not match requested citation {citation!r}"
