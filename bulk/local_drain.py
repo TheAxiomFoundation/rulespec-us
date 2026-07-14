@@ -13,15 +13,14 @@ script).
 Two decisions matter and are baked in here so PRs go green:
 
 * **Generation uses the toolchain-pinned encoder** (``.axiom/toolchain.toml``
-  ``axiom_encode_version``, currently 0.2.1184). The required ``validate /
+  ``axiom_encode_version``, currently 0.2.1200). The required ``validate /
   validate`` check validates with that same pin, so generating with anything
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
   *coverage/sync* tool below, not to generation.
-* **Coverage declaration uses axiom-encode main (>=0.2.1190)**, because the CI
-  changed-file coverage classifier (``oracle-coverage-axiom-encode-ref``,
-  default ``main``) is what reclassifies declared-pending outputs from
-  ``unmapped`` to ``pending_classification``. The pinned 1184 encoder does not
+* **Coverage declaration uses the same immutable axiom-encode ref as CI**, because
+  the changed-file coverage classifier is what reclassifies declared-pending outputs from
+  ``unmapped`` to ``pending_classification``. The pinned 1200 encoder does not
   even have the ``oracle-coverage-pending`` subcommand.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
@@ -34,9 +33,9 @@ Toolchain layout (override via env): a sibling ``_bulk_drain`` workspace holds
 pinned checkouts + venvs built once by the operator:
 
     _bulk_drain/
-      axiom-encode/            # worktree @ pinned axiom_encode_ref (1184)
+      axiom-encode/            # worktree @ pinned axiom_encode_ref (1200)
       .venv/                   # pinned encoder venv  -> generation
-      axiom-encode-cov/        # worktree @ axiom-encode main (>=1190)
+      axiom-encode-cov/        # worktree @ COV_ENCODER_REF below
       .venv-cov/               # coverage/sync venv   -> oracle-coverage-pending
       axiom-rules-engine/      # worktree @ pinned engine ref, cargo build
       axiom-corpus/            # worktree @ pinned corpus ref
@@ -66,6 +65,7 @@ from pathlib import Path
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
+COV_ENCODER_REF = "c04e86082b0db8d6e7b65c572228ce11df949c4b"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
 CHECKOUT = HERE.parent                            # this checkout root
 
@@ -494,16 +494,37 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+def require_coverage_ref() -> str:
+    cov_checkout = DRAIN_BASE / "axiom-encode-cov"
+    if not cov_checkout.is_dir():
+        raise SystemExit(f"coverage encoder checkout is missing: {cov_checkout}")
+    rc, head = run(["git", "rev-parse", "HEAD"], cwd=cov_checkout)
+    actual = head.strip() if rc == 0 else "unavailable"
+    if actual != COV_ENCODER_REF:
+        raise SystemExit(
+            f"coverage encoder checkout must be {COV_ENCODER_REF}; got {actual}"
+        )
+    return actual
+
+
 def cmd_doctor(_args) -> int:
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
     for label, ae, want_pending in (("gen encoder (pin)", GEN_AE, False),
-                                    ("cov encoder (main)", COV_AE, True)):
+                                    ("cov encoder (pin)", COV_AE, True)):
         has_pending = ae.exists() and run(
             [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
         ok = ae.exists() and (has_pending == want_pending)
         print(f"{label:20s}: {'OK' if ok else 'CHECK'} "
               f"(oracle-coverage-pending {'present' if has_pending else 'absent'})")
+    try:
+        actual_cov_ref = require_coverage_ref()
+        cov_ref_ok = True
+    except SystemExit:
+        actual_cov_ref = "unavailable or mismatched"
+        cov_ref_ok = False
+    print(f"coverage encoder ref: {'OK' if cov_ref_ok else 'CHECK'} "
+          f"({actual_cov_ref}; want {COV_ENCODER_REF})")
     print(f"pinned encoder ver   : {tc.get('axiom_encode_version')}")
     print(f"engine bin           : {'OK' if ENGINE_BIN.exists() else 'MISSING'} {ENGINE_BIN}")
     print(f"corpus               : {'OK' if CORPUS.exists() else 'MISSING'} {CORPUS}")
@@ -513,10 +534,11 @@ def cmd_doctor(_args) -> int:
         print(f"signing key          : {e}")
     rc, out = run(["codex", "--version"])
     print(f"codex CLI            : {'OK ' + out.strip() if rc == 0 else 'MISSING'}")
-    return 0
+    return 0 if cov_ref_ok else 1
 
 
 def cmd_unstick(args) -> int:
+    require_coverage_ref()
     prs = open_bulk_prs()
     if args.pr:
         targets = [p for p in prs if p["number"] in set(args.pr)]
@@ -537,6 +559,7 @@ def cmd_unstick(args) -> int:
 
 
 def cmd_drain(args) -> int:
+    require_coverage_ref()
     matrix = json.loads(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
          "--status", "pending", "--format", "matrix",
