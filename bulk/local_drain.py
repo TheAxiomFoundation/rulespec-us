@@ -61,7 +61,7 @@ import sys
 import threading
 import time
 import tomllib
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = "TheAxiomFoundation/rulespec-us"
@@ -254,7 +254,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
         run(["git", "-C", str(leaf), "checkout", "-B", branch], check=True)
         run(["git", "-C", str(leaf), "fetch", "origin", branch, "--quiet"])
         _, diff = run(["git", "-C", str(leaf), "diff", "--name-only",
-                       f"origin/main...FETCH_HEAD"])
+                       "origin/main...FETCH_HEAD"])
         artifacts = [f for f in diff.splitlines()
                      if (MODULE_RE.match(f) or f.endswith(".test.yaml")
                          or "/.axiom/encoding-manifests/" in f)]
