@@ -1,0 +1,161 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-29-104
+  summary: |-
+    “The rate of the tax for each calendar quarter shall be five cents per ton of molybdenum ore.” On and after July 1, 1999, the first 625,000 tons produced each quarter are not taxed. The quarterly declaration and tax payment are due by the fifteenth day following the quarter.
+rules:
+  - name: molybdenum_severance_tax_per_ton
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: C.R.S. § 39-29-104(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "five cents per ton of molybdenum ore"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.05
+
+  - name: quarterly_molybdenum_ore_exemption_tons
+    kind: parameter
+    dtype: Decimal
+    source: C.R.S. § 39-29-104(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "On and after July 1, 1999"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "the first six hundred twenty-five thousand tons of molybdenum ore produced each quarter"
+    versions:
+      - effective_from: '1999-07-01'
+        formula: |-
+          625000
+
+  - name: quarterly_filing_and_payment_deadline_days_after_quarter
+    kind: parameter
+    dtype: Integer
+    source: C.R.S. § 39-29-104(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "on or before the fifteenth day following the end of each such quarter"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          15
+
+  - name: quarterly_taxable_molybdenum_ore_tons
+    kind: derived
+    entity: Person
+    dtype: Decimal
+    source: C.R.S. § 39-29-104(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "no tax provided for in this section shall be imposed on the first six hundred twenty-five thousand tons"
+    versions:
+      - effective_from: '1999-07-01'
+        formula: |-
+          max(0, molybdenum_ore_tons_produced_in_calendar_quarter - quarterly_molybdenum_ore_exemption_tons)
+
+  - name: quarterly_molybdenum_severance_tax
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    source: C.R.S. § 39-29-104(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "levied against every person engaged in the severance of molybdenum ore"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "five cents per ton of molybdenum ore"
+    versions:
+      - effective_from: '1999-07-01'
+        formula: |-
+          if person_engaged_in_severance_of_molybdenum_ore: molybdenum_severance_tax_per_ton * quarterly_taxable_molybdenum_ore_tons else: 0
+
+  - name: quarterly_severance_report_filed_timely
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    source: C.R.S. § 39-29-104(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "Such actual severance shall be reported on quarterly declaration forms prescribed by the executive director."
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "filed with ... the department of revenue on or before the fifteenth day following the end of each such quarter"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not person_engaged_in_severance_of_molybdenum_ore
+          or (
+            actual_severance_reported_on_prescribed_quarterly_declaration_form
+            and days_after_quarter_end_when_declaration_filed <= quarterly_filing_and_payment_deadline_days_after_quarter
+          )
+
+  - name: quarterly_severance_tax_paid_timely
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    source: C.R.S. § 39-29-104(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "the tax owed shall be paid to the department of revenue"
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-co/statute/39/39-29-104
+              excerpt: "on or before the fifteenth day following the end of each such quarter"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not person_engaged_in_severance_of_molybdenum_ore
+          or (
+            quarterly_molybdenum_severance_tax_owed_paid_to_department_of_revenue
+            and days_after_quarter_end_when_tax_paid <= quarterly_filing_and_payment_deadline_days_after_quarter
+          )
