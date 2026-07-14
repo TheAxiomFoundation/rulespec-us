@@ -11,6 +11,15 @@ from pathlib import Path, PurePosixPath
 
 MODULE_BUCKETS = {"manual", "policies", "regulations", "statutes"}
 JURISDICTION_RE = re.compile(r"[a-z]{2}(?:-[a-z0-9-]+)?")
+SOURCE_BUCKETS = {
+    "manual": "policies",
+    "policy": "policies",
+    "policies": "policies",
+    "regulation": "regulations",
+    "regulations": "regulations",
+    "statute": "statutes",
+    "statutes": "statutes",
+}
 
 
 def changed_paths(repo: Path) -> list[str]:
@@ -75,6 +84,31 @@ def _canonical_module_citation(module: str) -> str:
     return f"{relative[0]}:{'/'.join(relative[1:])}"
 
 
+def _legal_path_tokens(parts: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(
+        token.lower()
+        for part in parts
+        for token in re.findall(r"[a-z0-9]+", part.lower())
+    )
+
+
+def _module_matches_request(citation: str, module: str) -> bool:
+    request = PurePosixPath(citation)
+    output = PurePosixPath(module).with_suffix("")
+    if len(request.parts) < 3 or len(output.parts) < 3:
+        return False
+    jurisdiction, source_bucket, *request_tail = request.parts
+    expected_bucket = SOURCE_BUCKETS.get(source_bucket.lower())
+    if expected_bucket is None:
+        return False
+    return (
+        output.parts[0].lower() == jurisdiction.lower()
+        and output.parts[1].lower() == expected_bucket
+        and _legal_path_tokens(tuple(request_tail))
+        == _legal_path_tokens(output.parts[2:])
+    )
+
+
 def discover_applied_artifacts(
     repo: Path,
     *,
@@ -107,7 +141,9 @@ def discover_applied_artifacts(
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read applied manifest {manifest_rel}: {exc}") from exc
     manifest_citation = manifest.get("citation")
-    accepted_citations = {citation, _canonical_module_citation(module)}
+    accepted_citations = {citation}
+    if _module_matches_request(citation, module):
+        accepted_citations.add(_canonical_module_citation(module))
     if manifest_citation not in accepted_citations:
         raise ValueError(
             f"manifest citation {manifest_citation!r} does not match input "

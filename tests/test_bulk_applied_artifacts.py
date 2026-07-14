@@ -1,22 +1,29 @@
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 
 def _load_bulk_module(name: str):
-    path = Path(__file__).resolve().parents[1] / "bulk" / f"{name}.py"
+    bulk_dir = Path(__file__).resolve().parents[1] / "bulk"
+    path = bulk_dir / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"bulk_{name}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.path.insert(0, str(bulk_dir))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(bulk_dir))
     return module
 
 
 _applied_artifacts = _load_bulk_module("applied_artifacts")
 _compute_matrix = _load_bulk_module("compute_matrix")
+_local_drain = _load_bulk_module("local_drain")
 changed_paths = _applied_artifacts.changed_paths
 discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
 select = _compute_matrix.select
@@ -174,6 +181,44 @@ def test_rejects_manifest_for_different_citation(tmp_path: Path) -> None:
             citation=citation,
             paths=[module, test_file, manifest],
         )
+
+
+def test_rejects_canonical_manifest_for_wrong_requested_jurisdiction(
+    tmp_path: Path,
+) -> None:
+    citation = "us-ca/manual/dss/snap/1105/block-1"
+    module = "us-mo/policies/dss/snap/1105/block-1.yaml"
+    test_file = "us-mo/policies/dss/snap/1105/block-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-mo/policies/dss/snap/1105/block-1.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(
+        tmp_path / manifest,
+        "us-mo:policies/dss/snap/1105/block-1",
+        {module, test_file},
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        discover_applied_artifacts(
+            tmp_path,
+            citation=citation,
+            paths=[module, test_file, manifest],
+        )
+
+
+def test_pr_lookup_failure_pauses_without_permanent_failure(monkeypatch) -> None:
+    _local_drain._PAUSE.clear()
+    monkeypatch.setattr(_local_drain, "gh_json", lambda _args: None)
+
+    result = _local_drain.encode_entry(
+        {"citation": "us-mo/manual/dss/snap/1105/block-1", "slug": "retry"}
+    )
+
+    assert result["status"] == "paused"
+    assert "retry drain" in result["detail"]
+    assert _local_drain._PAUSE.is_set()
+    _local_drain._PAUSE.clear()
 
 
 def test_matrix_preserves_acceptance_criteria() -> None:

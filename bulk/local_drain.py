@@ -219,6 +219,13 @@ def ensure_draft_pr(branch: str) -> None:
         )
 
 
+def pause_for_retry(result: dict, detail: str) -> dict:
+    _PAUSE.set()
+    result["status"] = "paused"
+    result["detail"] = detail
+    return result
+
+
 # --- worktree helpers -------------------------------------------------------
 def make_worktree(slug: str, ref: str) -> Path:
     """Fresh generation worktree whose leaf dir is exactly ``rulespec-us``
@@ -424,8 +431,7 @@ def encode_entry(item: dict) -> dict:
     try:
         handled = already_handled(slug)
     except RuntimeError as exc:
-        res["detail"] = str(exc)
-        return res
+        return pause_for_retry(res, f"{exc}; retry drain")
     if handled:
         res["status"] = "skipped"
         res["detail"] = "bulk/<slug> PR already exists"
@@ -512,8 +518,10 @@ def encode_entry(item: dict) -> dict:
              "--json", "number"]
         )
         if open_prs is None:
-            res["detail"] = f"could not verify PR state for {branch} before push"
-            return res
+            return pause_for_retry(
+                res,
+                f"could not verify PR state for {branch} before push; retry drain",
+            )
         if open_prs:
             ensure_draft_pr(branch)
             res["status"] = "skipped"
@@ -619,8 +627,8 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [f"# Local drain progress ({now})", ""]
     if paused:
-        lines += ["> **PAUSED on Codex subscription-limit signal.** Re-run after "
-                  "the window resets; the drain resumes idempotently.", ""]
+        lines += ["> **PAUSED on a retryable condition.** Resolve the condition "
+                  "reported below and re-run; the drain resumes idempotently.", ""]
     lines += [f"- Remaining pending: {remaining}",
               f"- Handled this run: {len(results)}", "",
               "| citation | result | detail |", "| --- | --- | --- |"]
