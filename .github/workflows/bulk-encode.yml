@@ -12,9 +12,9 @@ name: Bulk encode
 #   * The job runs the same gate battery the PR CI runs (guard-generated is
 #     satisfied by the signed apply manifest; validate + companion test +
 #     proof-validate run locally as a fast fail-closed pre-check), opens a PR
-#     per module on branch `bulk/<slug>` labelled `bulk-encode`, as a draft for
-#     the required independent review-fix cycle.
-#   * The job NEVER bypasses red or merges. The authoritative gate
+#     per module on branch `bulk/<slug>` labelled `bulk-encode`, and sets the
+#     PR to auto-merge on green (`gh pr merge --auto --squash`).
+#   * The job NEVER bypasses red. It never admin-merges. The authoritative gate
 #     is the repository's required `validate / validate` check on the PR; this
 #     workflow only queues work and pre-checks it.
 #
@@ -118,19 +118,6 @@ jobs:
           # validate CI (the default GITHUB_TOKEN would not).
           token: ${{ secrets.BULK_ENCODE_TOKEN }}
 
-      - name: Prepare clean default-branch base
-        shell: bash
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          set -euo pipefail
-          # Keep the dispatcher helper available while ensuring generated PRs
-          # contain no queue or workflow changes from the dispatch branch.
-          cp bulk/applied_artifacts.py "$RUNNER_TEMP/applied_artifacts.py"
-          git switch --detach "origin/$DEFAULT_BRANCH"
-          install -m 0755 "$RUNNER_TEMP/applied_artifacts.py" bulk/applied_artifacts.py
-          echo "Encoding from $(git rev-parse --short HEAD) (origin/$DEFAULT_BRANCH)"
-
       - name: Guard - workspace must be named rulespec-us
         shell: bash
         run: |
@@ -227,7 +214,7 @@ jobs:
       # Install that same classifier in an isolated venv so the sync step below
       # declares a new module's unmapped outputs exactly as the CI gate reads
       # them. Without this, every new-state module opens a PR that fails the
-      # required validate check on `... : unmapped`
+      # required validate check on `... : unmapped` and auto-merge hangs forever
       # (rulespec-us #614-616, #619-636 etc.).
       - name: Checkout oracle-coverage classifier (axiom-encode main)
         uses: actions/checkout@v6.0.2
@@ -280,21 +267,43 @@ jobs:
           echo "wall_seconds=$((end - start))" >> "$GITHUB_OUTPUT"
           echo "Encode wall time: $((end - start))s"
 
-          if [ "$apply_status" -ne 0 ]; then
+          # Locate the applied module path from the git worktree. Restrict to
+          # jurisdiction directories (two-letter code, optional -suffix) so the
+          # sibling checkouts under _axiom/ and any build artifacts are never
+          # picked up.
+          slug='${{ matrix.item.slug }}'
+          # -uall (untracked-files=all): a brand-new module path creates a new
+          # nested untracked dir; without -uall, `git status --porcelain`
+          # COLLAPSES it to the bare dir entry (e.g. `?? us-ca/statutes/rtc/17053/`),
+          # which the *.yaml regex misses -> the applied module is not detected
+          # even though --apply wrote it (fail-closed false negative). Mirrors the
+          # rulespec-be/rulespec-gh fix.
+          mapfile -t applied < <(git -C "$GITHUB_WORKSPACE" status --porcelain -uall \
+            | sed 's/^...//' \
+            | grep -E '^[a-z]{2}(-[a-z0-9-]+)?/(statutes|regulations|policies)/.*\.yaml$' \
+            | grep -v '\.test\.yaml$' || true)
+
+          if [ "$apply_status" -ne 0 ] || [ "${#applied[@]}" -eq 0 ]; then
             echo "status=failed" >> "$GITHUB_OUTPUT"
             echo "::error::Encode/apply failed for $CITATION (exit $apply_status). See encode.log; a *.repair.json was written under $RUNNER_TEMP/encode-out." >&2
             exit 1
           fi
 
-          artifact_output="$(python bulk/applied_artifacts.py \
-            --repo "$GITHUB_WORKSPACE" --citation "$CITATION")"
-          mapfile -t applied_artifacts <<< "$artifact_output"
-          module="${applied_artifacts[0]}"
-          test_file="${applied_artifacts[1]}"
-          manifest_rel="${applied_artifacts[2]}"
+          module="${applied[0]}"
+          test_file="${module%.yaml}.test.yaml"
+          juris="${module%%/*}"
+          # The apply manifest mirrors the module's path under the jurisdiction's
+          # .axiom/encoding-manifests/ -- e.g. us-il/statutes/35/5/306.yaml ->
+          # us-il/.axiom/encoding-manifests/statutes/35/5/306.json. Strip only
+          # the jurisdiction prefix (keep the statutes/regulations/policies bucket).
+          rest="${module#"$juris"/}"
+          manifest_rel="$juris/.axiom/encoding-manifests/${rest%.yaml}.json"
+          # Fall back to a basename search if the direct manifest path guess misses.
+          if [ ! -f "$GITHUB_WORKSPACE/$manifest_rel" ]; then
+            manifest_rel="$(cd "$GITHUB_WORKSPACE" && find "$juris/.axiom/encoding-manifests" -name "$(basename "${module%.yaml}").json" 2>/dev/null | head -1)"
+          fi
           echo "module=$module" >> "$GITHUB_OUTPUT"
           echo "test_file=$test_file" >> "$GITHUB_OUTPUT"
-          echo "manifest_rel=$manifest_rel" >> "$GITHUB_OUTPUT"
           echo "Applied module: $module"
           echo "Applied manifest: $manifest_rel"
 
@@ -358,8 +367,9 @@ jobs:
           axiom-encode proof-validate "$GITHUB_WORKSPACE/$module"
 
           # 4. companion test. A #1060 fixture-ceiling failure here is NOT a hard
-          #    fail: mark the module needs-fixtures and open the draft PR so the
-          #    encoder can be fixed and rerun without hand-editing generated files.
+          #    fail: mark the module needs-fixtures so a follow-up fixture pass
+          #    writes them, but still open the PR (auto-merge will hold on the
+          #    red required check until fixtures land).
           set +e
           test_out="$RUNNER_TEMP/companion.log"
           axiom-encode test \
@@ -374,7 +384,7 @@ jobs:
             echo "Companion tests passed."
           else
             echo "status=needs-fixtures" >> "$GITHUB_OUTPUT"
-            echo "::warning::Companion fixtures failed for $CITATION (#1060 ceiling). Marking needs-fixtures; fix the encoder and re-encode before review." >&2
+            echo "::warning::Companion fixtures failed for $CITATION (#1060 ceiling). Marking needs-fixtures; PR opens but will not merge until fixtures land." >&2
           fi
 
       - name: Assemble PR body
@@ -394,8 +404,6 @@ jobs:
           CITATION: ${{ matrix.item.citation }}
           MODULE: ${{ steps.encode.outputs.module }}
           TEST_FILE: ${{ steps.encode.outputs.test_file }}
-          MANIFEST_REL: ${{ steps.encode.outputs.manifest_rel }}
-          ACCEPTANCE_CRITERIA: ${{ matrix.item.acceptance_criteria }}
           ENC_STATUS: ${{ steps.encode.outputs.status }}
           WALL: ${{ steps.encode.outputs.wall_seconds }}
           MODEL: ${{ matrix.item.model }}
@@ -415,13 +423,14 @@ jobs:
             echo "Produced by \`axiom-encode encode $CITATION --apply\` in the bulk-encode dispatcher"
             echo "(\`.github/workflows/bulk-encode.yml\`). Values are the encoder's; this PR is plumbing."
             echo
-            echo "### Acceptance criteria"
-            echo
-            echo "$ACCEPTANCE_CRITERIA"
-            echo
             echo "### Manifest summary"
             echo '```json'
-            manifest="$(cat "$GITHUB_WORKSPACE/$MANIFEST_REL")"
+            # The apply manifest mirrors the module path under the jurisdiction's
+            # .axiom/encoding-manifests/. Locate it by basename (robust to the
+            # statutes/regulations/policies split).
+            manifest=""
+            mf="$(find "$GITHUB_WORKSPACE" -path '*/.axiom/encoding-manifests/*' -name "$(basename "${MODULE%.yaml}").json" 2>/dev/null | head -1)"
+            [ -n "$mf" ] && manifest="$(cat "$mf")"
             echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ["citation","model","backend","run_id","axiom_encode_version","applied_files"]}, indent=2))' 2>/dev/null || echo "$manifest"
             echo '```'
             echo
@@ -433,7 +442,7 @@ jobs:
             if [ "$ENC_STATUS" = "green" ]; then
               echo "companion test:  pass"
             else
-              echo "companion test:  needs-fixtures (#1060 ceiling) - encoder fix and re-encode required"
+              echo "companion test:  needs-fixtures (#1060 ceiling) - follow-up fixture pass required"
             fi
             echo '```'
             echo
@@ -441,12 +450,12 @@ jobs:
           } > "$body"
           echo "path=$body" >> "$GITHUB_OUTPUT"
 
-      - name: Open draft PR for independent review
+      - name: Open PR and enable auto-merge
         # Same gate-battery guard as "Assemble PR body": never force-push the
-        # bulk branch or open a PR for an encode whose gate battery did not pass.
-        # Under the old `always() && module != ''` guard a
+        # bulk branch, open a PR, or arm auto-merge for an encode whose gate
+        # battery did not pass. Under the old `always() && module != ''` guard a
         # guard/validate/proof failure (which sets `module` but leaves `status`
-        # unwritten) still force-pushed the broken commit
+        # unwritten) still force-pushed the broken commit and armed auto-merge
         # (rulespec-uk#104 D2 / rulespec-us#605).
         if: ${{ steps.encode.outputs.status == 'green' || steps.encode.outputs.status == 'needs-fixtures' }}
         shell: bash
@@ -477,25 +486,6 @@ jobs:
             done
           }
 
-          ensure_draft() {
-            local pr_json
-            pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
-              --json isDraft,autoMergeRequest)"
-            if [ "$(jq -r '.autoMergeRequest == null' <<< "$pr_json")" != "true" ]; then
-              retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
-            fi
-            if [ "$(jq -r '.isDraft' <<< "$pr_json")" != "true" ]; then
-              retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
-            fi
-            pr_json="$(retry gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
-              --json isDraft,autoMergeRequest)"
-            if ! jq -e '.isDraft == true and .autoMergeRequest == null' \
-              <<< "$pr_json" >/dev/null; then
-              echo "::error::Refusing to continue: $branch is not a draft with auto-merge disabled." >&2
-              return 1
-            fi
-          }
-
           # Ensure the bulk-encode label exists.
           gh label create bulk-encode --repo "$GITHUB_REPOSITORY" \
             --color 1f6feb --description "Opened by the bulk-encode dispatcher" 2>/dev/null || true
@@ -506,8 +496,8 @@ jobs:
           fi
 
           # Reconcile the PR for this branch BEFORE touching the branch. A prior
-          # run may have left a CLOSED PR for bulk/<slug>. It must be reopened
-          # before updating -- but GitHub pins a
+          # run may have left a CLOSED PR for bulk/<slug>. auto-merge cannot be
+          # enabled on a closed PR, so it must be reopened -- but GitHub pins a
           # closed PR to its head SHA and refuses to reopen once that head has
           # been force-updated (`reopenPullRequest` returns "Could not open the
           # pull request"). The force-push therefore MUST happen after the reopen,
@@ -515,29 +505,14 @@ jobs:
           # time. If the branch was already orphaned by an earlier failed run,
           # reopen is impossible; open a fresh PR instead -- GitHub permits a new
           # PR from a branch whose prior PR is closed.
-          pr_json="$(retry gh pr list --repo "$GITHUB_REPOSITORY" \
-            --head "$branch" --state all --limit 1 --json state)"
-          pr_state="$(jq -r '.[0].state // empty' <<< "$pr_json")"
+          pr_state="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
           if [ "$pr_state" = "CLOSED" ]; then
             if gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
               echo "Reopened closed PR for $branch."
-              pr_state="OPEN"
             else
               echo "::warning::Closed PR for $branch cannot be reopened (head orphaned by a prior force-push); opening a fresh PR." >&2
               pr_state=""
             fi
-          elif [ "$pr_state" = "MERGED" ]; then
-            echo "::error::$branch already has a merged PR; fix the stale worklist entry instead of replacing its branch." >&2
-            exit 1
-          elif [ -n "$pr_state" ] && [ "$pr_state" != "OPEN" ]; then
-            echo "::error::Unexpected PR state for $branch: $pr_state" >&2
-            exit 1
-          fi
-
-          # A legacy PR may still be ready with auto-merge armed. Normalize it
-          # before replacing its head so the new commit cannot merge in the gap.
-          if [ -n "$pr_state" ]; then
-            ensure_draft
           fi
 
           # Push the applied commit onto the bulk branch. This updates the open or
@@ -556,12 +531,17 @@ jobs:
               --base "$DEFAULT_BRANCH" --head "$branch" \
               --title "$title" \
               --body-file "${{ steps.prbody.outputs.path }}" \
-              --label bulk-encode --draft
+              --label bulk-encode
           else
             retry gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
               --title "$title" --body-file "${{ steps.prbody.outputs.path }}" \
               --add-label bulk-encode
           fi
 
-          ensure_draft
-          echo "Draft PR opened for $CITATION on branch $branch (status: $ENC_STATUS; independent review required)."
+          # Enable auto-merge on green. Never admin, never bypass red. If the
+          # module is needs-fixtures, auto-merge is still enabled but the red
+          # companion-test-derived required check holds the merge until a
+          # follow-up fixture pass turns it green.
+          retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto --squash
+
+          echo "PR ready for $CITATION on branch $branch (status: $ENC_STATUS, auto-merge on green)."

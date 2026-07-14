@@ -3,23 +3,22 @@
 
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
 CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
-dispatcher, opening the identical one-draft-PR-per-module review queue. It is a
-faithful local mirror of ``.github/workflows/bulk-encode.yml`` plus the
-oracle-coverage-pending declaration step the cloud dispatcher is missing (that
-missing step is why every new-state bulk PR fails the changed-file oracle
-coverage gate; see ``unstick`` below and the workflow fix in the same PR as this
-script).
+dispatcher, opening one draft PR per module for independent review. It mirrors
+the generation path while adding the exact-checkout oracle-coverage-pending
+declaration needed to keep new-state PRs out of the unmapped coverage state.
 
 Two decisions matter and are baked in here so PRs go green:
 
 * **Generation uses the toolchain-pinned encoder** (``.axiom/toolchain.toml``
-  ``axiom_encode_version``). The required ``validate / validate`` check uses
-  that same pin, so generation changes only through a reviewed toolchain-pin
-  migration.
-* **Coverage declaration uses axiom-encode main**, because the CI
-  changed-file coverage classifier (``oracle-coverage-axiom-encode-ref``,
-  default ``main``) is what reclassifies declared-pending outputs from
-  ``unmapped`` to ``pending_classification``.
+  ``axiom_encode_version``, currently 0.2.1200). The required ``validate /
+  validate`` check validates with that same pin, so generating with anything
+  newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
+  match a brief that says ">=0.2.1190" -- that number refers only to the
+  *coverage/sync* tool below, not to generation.
+* **Coverage declaration uses an immutable current-CI encoder ref.** Before any
+  mutation, the runner requires that exact ref to remain the head of the remote
+  ``main`` branch consumed by CI. The pinned 1200 generator has the older
+  workspace/repo sync interface, not the exact-checkout contract used here.
 
 Everything runs foreground. The loop is chunked (``--max-seconds``,
 ``--max-entries``) and every unit of durable state (pushed branch, opened PR,
@@ -31,9 +30,9 @@ Toolchain layout (override via env): a sibling ``_bulk_drain`` workspace holds
 pinned checkouts + venvs built once by the operator:
 
     _bulk_drain/
-      axiom-encode/            # worktree @ pinned axiom_encode_ref
+      axiom-encode/            # worktree @ pinned axiom_encode_ref (1200)
       .venv/                   # pinned encoder venv  -> generation
-      axiom-encode-cov/        # worktree @ axiom-encode main
+      axiom-encode-cov/        # worktree @ COV_ENCODER_REF below
       .venv-cov/               # coverage/sync venv   -> oracle-coverage-pending
       axiom-rules-engine/      # worktree @ pinned engine ref, cargo build
       axiom-corpus/            # worktree @ pinned corpus ref
@@ -57,7 +56,10 @@ import subprocess
 import sys
 import threading
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 local drain environments.
+    import tomli as tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -65,6 +67,9 @@ from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
+COV_ENCODER_REF = "c83416309a4331d225bcde16907e3b4eb79e26f1"
+COV_ENCODER_REMOTE = "https://github.com/TheAxiomFoundation/axiom-encode.git"
+COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
 CHECKOUT = HERE.parent                            # this checkout root
 
@@ -75,6 +80,9 @@ DRAIN_BASE = Path(
 GEN_AE = Path(os.environ.get("DRAIN_GEN_AE", DRAIN_BASE / ".venv/bin/axiom-encode"))
 COV_AE = Path(os.environ.get("DRAIN_COV_AE", DRAIN_BASE / ".venv-cov/bin/axiom-encode"))
 COV_PY = Path(os.environ.get("DRAIN_COV_PY", DRAIN_BASE / ".venv-cov/bin/python"))
+COV_CHECKOUT = Path(
+    os.environ.get("DRAIN_COV_CHECKOUT", DRAIN_BASE / "axiom-encode-cov")
+).resolve()
 ENGINE = Path(os.environ.get("DRAIN_ENGINE", DRAIN_BASE / "axiom-rules-engine"))
 CORPUS = Path(os.environ.get("DRAIN_CORPUS", DRAIN_BASE / "axiom-corpus"))
 ENGINE_BIN = ENGINE / "target" / "debug"
@@ -100,17 +108,31 @@ def log(msg: str) -> None:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def run(cmd, cwd=None, env=None, capture=True, check=False, timeout=None):
+def run(
+    cmd,
+    cwd=None,
+    env=None,
+    capture=True,
+    check=False,
+    timeout=None,
+    merge_stderr=True,
+):
     """Run a subprocess, returning (rc, combined_output)."""
     full = dict(os.environ)
     if env:
-        full.update(env)
+        for key, value in env.items():
+            if value is None:
+                full.pop(key, None)
+            else:
+                full[key] = value
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
         env=full,
         stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
+        stderr=(subprocess.STDOUT if merge_stderr else subprocess.DEVNULL)
+        if capture
+        else None,
         text=True,
         timeout=timeout,
     )
@@ -128,6 +150,15 @@ def signing_key() -> str:
     for cmd in (
         [agent_secret, "get", "agent/axiom-encode-apply-signing-key"],
         ["agent-secret", "get", "agent/axiom-encode-apply-signing-key"],
+        [
+            "security",
+            "find-generic-password",
+            "-a",
+            "axiom-encode",
+            "-s",
+            "AXIOM_ENCODE_APPLY_SIGNING_KEY",
+            "-w",
+        ],
     ):
         try:
             rc, out = run(cmd)
@@ -135,8 +166,10 @@ def signing_key() -> str:
                 return out.strip()
         except FileNotFoundError:
             continue
-    raise SystemExit("Signing key AXIOM_ENCODE_APPLY_SIGNING_KEY unavailable "
-                     "(tried env + agent-secret + manage-secret.sh).")
+    raise SystemExit(
+        "Signing key AXIOM_ENCODE_APPLY_SIGNING_KEY unavailable "
+        "(tried env, agent-secret, and macOS Keychain)."
+    )
 
 
 def pinned_toolchain() -> dict:
@@ -218,11 +251,15 @@ def regen_index(leaf: Path) -> None:
 
 
 def sync_pending(leaf: Path) -> str:
-    """Write oracle-coverage-pending.yaml for REPO_NAME using the >=1190 tool.
+    """Write oracle-coverage-pending.yaml using the pinned classifier.
     Returns the sync summary line."""
+    require_coverage_ref()
     rc, out = run([str(COV_AE), "oracle-coverage-pending", "sync",
-                   "--root", str(leaf.parent), "--repo", REPO_NAME, "--source", "bulk"],
-                  env={"PATH": f"{ENGINE_BIN}:{os.environ['PATH']}"})
+                   "--root", str(leaf), "--source", "bulk"],
+                  env={
+                      "PATH": f"{ENGINE_BIN}:{os.environ['PATH']}",
+                      "AXIOM_ENCODE_APPLY_SIGNING_KEY": None,
+                  })
     if rc != 0:
         raise RuntimeError(f"oracle-coverage-pending sync failed:\n{out}")
     return out.strip().splitlines()[-1] if out.strip() else "(no output)"
@@ -306,6 +343,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", msg])
         ensure_draft_pr(branch)
+        require_coverage_ref()
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         ensure_draft_pr(branch)
@@ -481,6 +519,7 @@ def encode_entry(item: dict) -> dict:
             res["status"] = "skipped"
             res["detail"] = f"existing draft PR normalized for {branch}; no push performed"
             return res
+        require_coverage_ref()
         run(["git", "-C", str(leaf), "push", "-f", "origin",
              f"HEAD:refs/heads/{branch}"], check=True)
         run(["gh", "label", "create", "bulk-encode", "--repo", REPO,
@@ -592,26 +631,121 @@ def write_progress(results: list, remaining: int, paused: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+def require_coverage_ref() -> str:
+    if not COV_CHECKOUT.is_dir():
+        raise SystemExit(f"coverage encoder checkout is missing: {COV_CHECKOUT}")
+    rc, head = run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=COV_CHECKOUT,
+        merge_stderr=False,
+    )
+    actual = head.strip() if rc == 0 else "unavailable"
+    if actual != COV_ENCODER_REF:
+        raise SystemExit(
+            f"coverage encoder checkout must be {COV_ENCODER_REF}; got {actual}"
+        )
+    rc, remote_head = run(
+        ["git", "ls-remote", COV_ENCODER_REMOTE, "refs/heads/main"],
+        merge_stderr=False,
+    )
+    remote_fields = remote_head.split()
+    current_ci_ref = remote_fields[0] if rc == 0 and remote_fields else "unavailable"
+    if current_ci_ref != COV_ENCODER_REF:
+        raise SystemExit(
+            "coverage encoder ref no longer matches CI's remote main: "
+            f"local {COV_ENCODER_REF}; CI {current_ci_ref}"
+        )
+    rc, dirty = run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=COV_CHECKOUT,
+        merge_stderr=False,
+    )
+    if rc != 0 or dirty.strip():
+        raise SystemExit(f"coverage encoder checkout must be clean: {COV_CHECKOUT}")
+    if not COV_PY.is_file():
+        raise SystemExit(f"coverage encoder interpreter is missing: {COV_PY}")
+    if not COV_AE.is_file():
+        raise SystemExit(f"coverage encoder executable is missing: {COV_AE}")
+    rc, module_file = run(
+        [
+            str(COV_PY),
+            "-c",
+            "import axiom_encode; print(axiom_encode.__file__)",
+        ],
+        merge_stderr=False,
+    )
+    if rc != 0:
+        raise SystemExit(f"coverage encoder import failed via {COV_PY}")
+    imported_module = Path(module_file.strip()).resolve()
+    expected_module = (COV_CHECKOUT / "src/axiom_encode/__init__.py").resolve()
+    if imported_module != expected_module:
+        raise SystemExit(
+            f"coverage encoder imports {imported_module}; expected {expected_module}"
+        )
+    expected_executable = COV_PY.parent / "axiom-encode"
+    if COV_AE.resolve() != expected_executable.resolve():
+        raise SystemExit(
+            f"coverage executable must be {expected_executable}; got {COV_AE}"
+        )
+    rc, oracle_ref = run(
+        [
+            str(COV_PY),
+            "-c",
+            (
+                "import importlib.metadata,json; "
+                "d=importlib.metadata.distribution('axiom-oracles'); "
+                "u=json.loads(d.read_text('direct_url.json')); "
+                "print(u.get('vcs_info',{}).get('commit_id',''))"
+            ),
+        ],
+        env={"AXIOM_ENCODE_APPLY_SIGNING_KEY": None},
+        merge_stderr=False,
+    )
+    actual_oracle_ref = oracle_ref.strip() if rc == 0 else "unavailable"
+    if actual_oracle_ref != COV_ORACLES_REF:
+        raise SystemExit(
+            f"coverage oracle dependency must be {COV_ORACLES_REF}; "
+            f"got {actual_oracle_ref}"
+        )
+    return actual
+
+
 def cmd_doctor(_args) -> int:
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
-    for label, ae, want_pending in (("gen encoder (pin)", GEN_AE, False),
-                                    ("cov encoder (main)", COV_AE, True)):
+    command_ok = True
+    for label, ae, require_pending in (("gen encoder (pin)", GEN_AE, False),
+                                       ("cov encoder (pin)", COV_AE, True)):
         has_pending = ae.exists() and run(
             [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
-        ok = ae.exists() and (has_pending == want_pending)
+        ok = ae.exists() and (has_pending or not require_pending)
+        command_ok = command_ok and ok
         print(f"{label:20s}: {'OK' if ok else 'CHECK'} "
               f"(oracle-coverage-pending {'present' if has_pending else 'absent'})")
+    try:
+        actual_cov_ref = require_coverage_ref()
+        cov_ref_ok = True
+    except SystemExit:
+        actual_cov_ref = "unavailable or mismatched"
+        cov_ref_ok = False
+    print(f"coverage encoder ref: {'OK' if cov_ref_ok else 'CHECK'} "
+          f"({actual_cov_ref}; want {COV_ENCODER_REF})")
     print(f"pinned encoder ver   : {tc.get('axiom_encode_version')}")
-    print(f"engine bin           : {'OK' if ENGINE_BIN.exists() else 'MISSING'} {ENGINE_BIN}")
-    print(f"corpus               : {'OK' if CORPUS.exists() else 'MISSING'} {CORPUS}")
+    engine_ok = ENGINE_BIN.exists()
+    corpus_ok = CORPUS.exists()
+    print(f"engine bin           : {'OK' if engine_ok else 'MISSING'} {ENGINE_BIN}")
+    print(f"corpus               : {'OK' if corpus_ok else 'MISSING'} {CORPUS}")
     try:
         print(f"signing key          : present (len {len(signing_key())})")
+        signing_ok = True
     except SystemExit as e:
         print(f"signing key          : {e}")
+        signing_ok = False
     rc, out = run(["codex", "--version"])
     print(f"codex CLI            : {'OK ' + out.strip() if rc == 0 else 'MISSING'}")
-    return 0
+    return 0 if all(
+        (command_ok, cov_ref_ok, engine_ok, corpus_ok, signing_ok, rc == 0)
+    ) else 1
 
 
 def cmd_unstick(args) -> int:
@@ -625,6 +759,8 @@ def cmd_unstick(args) -> int:
         for p in prs:
             print(f"  #{p['number']:4d} {p['branch']:40s} validate={p['validate']} merge={p['merge']}")
         return 0
+    if targets:
+        require_coverage_ref()
     log(f"unstick {len(targets)} PR(s): {[p['number'] for p in targets]}")
     for p in targets:
         try:
@@ -635,6 +771,7 @@ def cmd_unstick(args) -> int:
 
 
 def cmd_drain(args) -> int:
+    require_coverage_ref()
     matrix = json.loads(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
          "--status", "pending", "--format", "matrix",

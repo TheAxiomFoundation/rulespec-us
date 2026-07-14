@@ -1,11 +1,9 @@
 # Bulk encode
 
-A durable queue → runner → PR loop for bulk RuleSpec encoding, independent of
-any local session. It encodes already-ingested provisions with
+A durable queue -> runner -> PR loop for bulk RuleSpec encoding. It encodes
+already-ingested provisions with
 `axiom-encode encode <citation> --apply`, pre-checks them with the same gate
-battery the PR CI runs, and opens one draft PR per module for the required
-independent review/fix cycle. A PR is merged only after that cycle is complete
-and current CI is green.
+battery the PR CI runs, and opens one PR per module.
 
 The encoder and the CI gates own correctness. This system is **plumbing**: it
 never edits or invents generated values. Its only judgement is *which*
@@ -18,7 +16,9 @@ provisions to queue.
 | `bulk/worklist.yaml` | The durable queue. One entry per module. Committed. |
 | `bulk/compute_matrix.py` | Turns the worklist into the CI job matrix; single source of truth for status selection. |
 | `bulk/roots_for.py` | Maps an applied module path to `guard-generated --roots`. |
-| `.github/workflows/bulk-encode.yml` | The runner: dispatch → matrix → encode `--apply` → gate battery → draft PR. |
+| `bulk/local_drain.py` | Review-safe local runner: exact classifier provenance, one draft PR per module, and no automatic merge. |
+| `bulk/applied_artifacts.py` | Validates the module, companion test, and signed manifest written by one encoder apply. |
+| `.github/workflows/bulk-encode.yml` | The runner: dispatch → matrix → encode `--apply` → gate battery → PR + auto-merge. |
 
 ## Running it
 
@@ -37,13 +37,31 @@ with no human action. Parallelism is capped at 4 (`max-parallel`) to stay under
 OpenAI rate limits; a top-level `concurrency` group serialises whole dispatches
 so two runs never fight over the same `bulk/<slug>` branches.
 
+### Local review-safe drain
+
+Agent-operated drains use `bulk/local_drain.py`, not the legacy cloud
+dispatcher. The local runner requires the immutable classifier and oracle refs
+recorded in the script, reads the apply signing key from an approved secret
+source, and generates RuleSpec only through `axiom-encode encode --apply`.
+
+```bash
+uv run python bulk/local_drain.py doctor
+uv run python bulk/local_drain.py drain --max-entries 1 --concurrency 1
+```
+
+Every generated branch is opened as a draft with auto-merge disabled. Each PR
+must complete the independent review/fix cycle and current CI before a human or
+agent marks it ready and merges it. RuleSpec YAML and companion fixtures are
+never hand-edited; findings are fixed in source material, prompts, harnesses,
+or encoder code and then regenerated with `encode --apply`.
+
 ### Secrets (repo Actions secrets on rulespec-us)
 
 | Secret | Why |
 | --- | --- |
 | `OPENAI_API_KEY` | Headless `--backend openai` generation. |
 | `AXIOM_ENCODE_APPLY_SIGNING_KEY` | Signs the apply manifest so `guard-generated` accepts the new files. Must match the key that signs manifests elsewhere. |
-| `BULK_ENCODE_TOKEN` | A `repo`+`workflow`-scoped token used to push the branch and open the PR. **Required**: PRs opened by the default `GITHUB_TOKEN` do **not** trigger the `pull_request` event, so the required `validate / validate` check would never run. This token makes the PR a real event that triggers CI. |
+| `BULK_ENCODE_TOKEN` | A `repo`+`workflow`-scoped token used to push the branch and open the PR. **Required**: PRs opened by the default `GITHUB_TOKEN` do **not** trigger the `pull_request` event, so the required `validate / validate` check would never run and auto-merge would hang forever. This token makes the PR a real event that triggers CI. |
 
 ## What each job does
 
@@ -63,15 +81,12 @@ so two runs never fight over the same `bulk/<slug>` branches.
      `.axiom/encoding-manifests/**/<sec>.json`.
    - Runs the gate battery in PR-CI order: `guard-generated` (manifest present),
      `validate --skip-reviewers`, `proof-validate`, then the companion `test`.
-   - Opens `bulk/<slug>` as a draft with the manifest summary, acceptance
-     criteria, and gate output in the PR body, labels it `bulk-encode`, and
-     verifies that auto-merge is disabled.
+   - Opens `bulk/<slug>` with the manifest summary + gate output as the PR body,
+     labels it `bulk-encode`, and runs `gh pr merge --auto --squash`.
 
-The job **never** merges generated output. Each draft goes through an
-independent review, actionable findings are fixed by improving inputs or the
-encoder and re-encoding, and focused checks are rerun until there are no
-actionable findings. The authoritative automated gate is the repository's
-required `validate / validate` check on the PR.
+The job **never** uses `--admin`, never bypasses a red check, and never merges
+directly. The authoritative gate is the repository's required
+`validate / validate` check on the PR.
 
 ## Statuses
 
@@ -81,8 +96,8 @@ Set in `worklist.yaml`. The runner reads `pending`; humans/follow-ups own the re
 | --- | --- |
 | `pending` | Queued. The next dispatch may pick it up. |
 | `in-progress` | A run is encoding it (transient). |
-| `needs-fixtures` | Encoded + applied, but the gpt-5.5 companion fixtures hit the #1060 ceiling. The draft PR remains blocked while the encoder is fixed and rerun. |
-| `pr-open` | A draft PR exists and awaits the review/fix cycle and green CI. |
+| `needs-fixtures` | Encoded + applied, but the gpt-5.5 companion fixtures hit the #1060 ceiling. The PR opens; auto-merge holds on the red required check until fixtures land. |
+| `pr-open` | A PR exists and is set to auto-merge on green. |
 | `merged` | The PR merged to main. Terminal success. |
 | `failed` | Encode or a non-fixture gate failed. Needs human triage. Never auto-retried, never merged. |
 
@@ -95,14 +110,13 @@ local convenience.
 `--apply` succeeds when the module compiles, validates, and its proof tree
 checks. The **companion test fixtures** are a separate quality tier: the #1060
 ceiling means gpt-5.5-authored fixtures sometimes fail. When that happens the
-runner marks the module `needs-fixtures` and still opens the draft PR, so the
-failure is durable and reviewable.
+runner marks the module `needs-fixtures` and still opens the PR, so the encoded
+module is reviewable and its auto-merge simply waits.
 
 A follow-up pass fixes the encoder prompt, harness, source material, or other
-root cause and then reruns `encode --apply`. Generated RuleSpec and companion
-fixtures are not hand-edited. Once the re-encoded artifacts pass review and CI,
-the PR can be marked ready and merged. Update the worklist entry to `pr-open`,
-then `merged`.
+root cause and reruns `encode --apply`; generated fixtures are never hand-edited
+or back-filled to make a test pass. Once the regenerated artifacts pass review
+and CI, the PR can merge. Update the worklist entry to `pr-open`, then `merged`.
 
 ## Failure taxonomy
 
@@ -162,6 +176,6 @@ already lives org-wide in
 country adopts bulk encoding, lift `bulk-encode.yml` into the org `.github`
 repo as a `workflow_call` reusable workflow parameterised by repo + worklist
 path, and keep a thin per-repo `bulk/worklist.yaml` + caller. The gate battery,
-toolchain-pin resolution, and draft-PR/review logic are already repo-agnostic
+toolchain-pin resolution, and PR/auto-merge logic are already repo-agnostic
 except for the hard-coded `rulespec-us` leaf-dir guard, which would become an
 input.

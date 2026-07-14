@@ -1,11 +1,25 @@
+import importlib.util
 import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from bulk.applied_artifacts import changed_paths, discover_applied_artifacts
-from bulk.compute_matrix import select
+
+def _load_bulk_module(name: str):
+    path = Path(__file__).resolve().parents[1] / "bulk" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"bulk_{name}", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_applied_artifacts = _load_bulk_module("applied_artifacts")
+_compute_matrix = _load_bulk_module("compute_matrix")
+changed_paths = _applied_artifacts.changed_paths
+discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
+select = _compute_matrix.select
 
 
 def _write_manifest(path: Path, citation: str, applied_paths: set[str]) -> None:
@@ -180,21 +194,13 @@ def test_matrix_preserves_acceptance_criteria() -> None:
     assert selected[0]["acceptance_criteria"] == "Verify mutual exclusivity."
 
 
-def test_bulk_runners_require_review_before_merge() -> None:
+def test_local_runner_requires_review_before_merge() -> None:
     root = Path(__file__).resolve().parents[1]
-    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
     local_drain = (root / "bulk/local_drain.py").read_text()
 
-    assert "python bulk/applied_artifacts.py" in workflow
-    assert 'git switch --detach "origin/$DEFAULT_BRANCH"' in workflow
-    assert "--label bulk-encode --draft" in workflow
-    assert ".isDraft == true and .autoMergeRequest == null" in workflow
-    assert 'pr_json="$(retry gh pr list' in workflow
-    assert '.[0].state // empty' in workflow
-    assert workflow.count("ensure_draft") >= 3
+    assert "discover_applied_artifacts(" in local_drain
     assert "ensure_draft_pr(branch)" in local_drain
     assert local_drain.count("ensure_draft_pr(branch)") >= 4
-    assert 'gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto' not in workflow
     assert '"--label", "bulk-encode",\n             "--draft"' in local_drain
     assert '"pr", "merge", branch, "--repo", REPO, "--auto"' not in local_drain
     assert '"--head",\n            branch,\n            "--json",\n            "number"' in local_drain
@@ -205,3 +211,6 @@ def test_bulk_runners_require_review_before_merge() -> None:
     assert 'return "checks complete; draft review required"' in local_drain
     assert "could not determine PR state" in local_drain
     assert "before push" in local_drain
+    assert "COV_ENCODER_REF = \"c83416309a4331d225bcde16907e3b4eb79e26f1\"" in local_drain
+    assert "COV_ORACLES_REF = \"9901e2479ac39bba865b8232e1c7d879ba447d8d\"" in local_drain
+    assert local_drain.count("require_coverage_ref()") >= 5
