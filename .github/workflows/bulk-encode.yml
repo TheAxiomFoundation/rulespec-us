@@ -809,10 +809,22 @@ jobs:
           fi
 
           # Generated PRs remain draft until an independent reviewer reports no
-          # actionable findings. Normalize reused branches back to draft too.
-          is_draft="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)"
+          # actionable findings. Reused PRs can retain an auto-merge request
+          # from the legacy workflow, so explicitly remove it before restoring
+          # and verifying the draft state.
+          pr_json="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json isDraft,autoMergeRequest)"
+          if [ "$(jq -r '.autoMergeRequest != null' <<< "$pr_json")" = "true" ]; then
+            retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
+          fi
+          is_draft="$(jq -r .isDraft <<< "$pr_json")"
           if [ "$is_draft" != "true" ]; then
             retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
+          fi
+          if ! gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,autoMergeRequest \
+            --jq '.isDraft == true and .autoMergeRequest == null' | grep -qx true; then
+            echo "::error::$branch is not a draft with auto-merge disabled." >&2
+            exit 1
           fi
 
           echo "Draft PR opened for $CITATION on branch $branch (status: $ENC_STATUS; review required)."

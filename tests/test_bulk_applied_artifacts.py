@@ -637,7 +637,9 @@ def test_cloud_apply_execs_external_signer_before_other_children() -> None:
     assert "ACCEPTANCE_CRITERIA" not in signing_step
     assert "--label bulk-encode --draft" in encode_job
     assert "gh pr ready \"$branch\" --repo \"$GITHUB_REPOSITORY\" --undo" in encode_job
-    assert "gh pr merge" not in encode_job
+    assert "gh pr merge \"$branch\" --repo \"$GITHUB_REPOSITORY\" --disable-auto" in encode_job
+    assert "--auto --squash" not in encode_job
+    assert ".autoMergeRequest == null" in encode_job
 
 
 def test_toolchain_separates_evidence_identity_from_workflow_refs() -> None:
