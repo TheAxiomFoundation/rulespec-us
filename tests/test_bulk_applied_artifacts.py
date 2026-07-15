@@ -651,6 +651,11 @@ def test_toolchain_separates_evidence_identity_from_workflow_refs() -> None:
 
     assert set(evidence) == {"toolchain"}
     assert set(evidence["toolchain"]) == {
+        "axiom_encode_version",
+        "axiom_encode_ref",
+        "axiom_rules_engine_ref",
+        "axiom_corpus_ref",
+        "rulespec_us_ref",
         "axiom_corpus_release",
         "axiom_corpus_release_content_sha256",
         "validation_waiver_set_sha256",
@@ -697,10 +702,9 @@ def test_source_staleness_uses_protected_signed_release_contract() -> None:
     assert 'exit "$status"' not in workflow
 
 
-def test_required_validation_uses_registry_capable_shared_workflow() -> None:
+def test_required_validation_stays_on_legacy_contract_during_migration() -> None:
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/repository-checks.yml").read_text()
 
-    assert "validate-rulespec.yml@9824ded32e2a249abfe7cfbce06dd96952a26452" in workflow
-    assert "corpus-release-registry-url: https://swocpijqqahhuwtuahwc.supabase.co" in workflow
-    assert "corpus-release-registry-anon-key: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" in workflow
+    assert "validate-rulespec.yml@55686f89c852b45b26b25ddd4157d6b37bf81926" in workflow
+    assert "corpus-release-registry-url" not in workflow
