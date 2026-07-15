@@ -691,6 +691,8 @@ def test_source_staleness_uses_protected_signed_release_contract() -> None:
     assert "axiom-encode-signing-supervisor" in workflow
     assert '--corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus"' in workflow
     assert "--corpus-root" not in workflow
+    assert 'echo "::warning::check-source-staleness reported exit status $status' in workflow
+    assert 'exit "$status"' not in workflow
 
 
 def test_required_validation_uses_registry_capable_shared_workflow() -> None:
