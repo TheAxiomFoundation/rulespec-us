@@ -17,7 +17,8 @@ into runnable programs.
 - `tests/`: repository-wide validation — layout, companion-test pairing,
   RuleSpec shape, derived-rule coverage, and program-spec scope auditing —
   plus `generate_reverse_index.py`, which builds the provision→rules index.
-- `.axiom/toolchain.toml`: pinned validation toolchain (full commit SHAs).
+- `.axiom/toolchain.toml`: immutable corpus-release and validation-waiver evidence identities.
+- `.axiom/workflow-toolchain.toml`: immutable dependency checkout SHAs used by validation and generation workflows.
 - `.axiom/index/provisions_to_rules.json`: generated reverse index mapping
   each corpus citation path to the modules that depend on it (via module
   `source_verification` and proof-atom sources). Regenerate with

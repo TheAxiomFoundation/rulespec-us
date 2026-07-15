@@ -2,6 +2,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -446,6 +447,22 @@ def test_matrix_rejects_scalar_dependency_metadata() -> None:
         select(data, "pending-local", None, None)
 
 
+def test_matrix_rejects_incomplete_program_scope_sync() -> None:
+    data = {
+        "entries": [{
+            "citation": "us-sc/manual/page-159",
+            "status": "pending",
+            "program_scope_sync": {
+                "program_spec": "programs/us-sc/snap/fy-2026.yaml",
+                "scope": "state",
+            },
+        }]
+    }
+
+    with pytest.raises(ValueError, match="must add or remove"):
+        select(data, "pending", None, None)
+
+
 def test_matrix_rejects_context_outside_repository() -> None:
     data = {
         "entries": [{
@@ -459,7 +476,7 @@ def test_matrix_rejects_context_outside_repository() -> None:
         select(data, "pending-local", None, None)
 
 
-def test_matrix_rejects_context_for_cloud_entry() -> None:
+def test_matrix_preserves_context_for_cloud_entry() -> None:
     data = {
         "entries": [{
             "citation": "us-sc/manual/page-163",
@@ -468,8 +485,11 @@ def test_matrix_rejects_context_for_cloud_entry() -> None:
         }]
     }
 
-    with pytest.raises(ValueError, match="not supported for cloud pending"):
-        select(data, "pending", None, None)
+    selected = select(data, "pending", None, None)
+
+    assert selected[0]["allow_context"] == [
+        "us/regulations/7-cfr/273/9.yaml"
+    ]
 
 
 @pytest.mark.parametrize("status", ["pr-open", "needs-fixtures", "failed", "merged"])
@@ -516,8 +536,8 @@ def test_encode_command_rejects_context_outside_checkout(tmp_path: Path) -> None
         )
 
 
-def test_sc_local_queue_schedules_prerequisites_before_dependent() -> None:
-    selected = select(_compute_matrix.load(), "pending-local", None, None)
+def test_sc_queue_schedules_prerequisites_before_dependent() -> None:
+    selected = select(_compute_matrix.load(), "any", None, None)
 
     citations = [item["citation"] for item in selected]
     assert citations.index("us-sc/manual/dss/snap-policy-manual/page-163") < (
@@ -577,3 +597,106 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert '"program-scope-sync", "--help"' in local_drain
     assert "COV_ORACLES_REF = \"9901e2479ac39bba865b8232e1c7d879ba447d8d\"" in local_drain
     assert local_drain.count("require_coverage_ref()") >= 5
+
+
+def test_cloud_apply_execs_external_signer_before_other_children() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    encode_job = workflow.split("\n  encode:\n", 1)[1]
+    signing_step = workflow.split(
+        "- name: Encode --apply through protected signer", 1
+    )[1].split("- name: Discover applied artifacts", 1)[0]
+
+    assert 'python-version: "3.13"' in encode_job
+    assert 'go-version: "1.26.1"' in encode_job
+    assert "pull-requests: read" in encode_job
+    assert "axiom-encode-oracle-coverage" not in encode_job
+    assert "Checkout oracle-coverage classifier" not in encode_job
+    assert "Fetch pinned signed corpus release object from public registry" in encode_job
+    assert "rest/v1/release_objects?select=release_object" in encode_job
+    assert "NEXT_PUBLIC_SUPABASE_ANON_KEY" in encode_job
+    assert '--header "apikey: $SUPABASE_ANON_KEY"' in encode_job
+    assert '--header "Accept-Profile: corpus"' in encode_job
+    assert "not isinstance(rows, list) or len(rows) != 1" in encode_job
+    assert "pub-a8952f8657fc49fda358146ac001366c.r2.dev" not in encode_job
+    assert 'curl --fail --silent --show-error --location --proto \'=https\'' in encode_job
+    assert 'sudo install -m 0755 "$(command -v git)"' in encode_job
+    assert "python/axiom-encode-checkout/src/axiom_encode" in encode_job
+    assert "safe.directory=/opt/axiom-verification/python/axiom-encode-checkout" in encode_job
+    assert "sudo chmod go-w /opt" in encode_job
+    assert "git merge-base --is-ancestor" in encode_job
+    assert "--state open" in encode_job
+    assert '--root "$GITHUB_WORKSPACE"' in encode_job
+    assert "--repo rulespec-us" not in encode_job
+    assert "AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets." in signing_step
+    assert "exec \"$RUNNER_TEMP/axiom-encode-apply-signer\" run" in signing_step
+    assert "--key-env AXIOM_ENCODE_APPLY_SIGNING_KEY" in signing_step
+    assert "| tee" not in signing_step
+    assert "jq " not in signing_step
+    assert "\n          python " not in signing_step
+    assert "ACCEPTANCE_CRITERIA" not in signing_step
+    assert "--label bulk-encode --draft" in encode_job
+    assert "gh pr ready \"$branch\" --repo \"$GITHUB_REPOSITORY\" --undo" in encode_job
+    assert "gh pr merge" not in encode_job
+
+
+def test_toolchain_separates_evidence_identity_from_workflow_refs() -> None:
+    root = Path(__file__).resolve().parents[1]
+    evidence = tomllib.loads((root / ".axiom/toolchain.toml").read_text())
+    workflow = tomllib.loads(
+        (root / ".axiom/workflow-toolchain.toml").read_text()
+    )
+
+    assert set(evidence) == {"toolchain"}
+    assert set(evidence["toolchain"]) == {
+        "axiom_corpus_release",
+        "axiom_corpus_release_content_sha256",
+        "validation_waiver_set_sha256",
+    }
+    assert set(workflow) == {"workflow_toolchain"}
+    assert {
+        "axiom_encode_ref",
+        "axiom_rules_engine_ref",
+        "axiom_corpus_ref",
+        "rulespec_us_ref",
+        "axiom_encode_version",
+    } <= set(workflow["workflow_toolchain"])
+    assert list(root.glob("*/.axiom/toolchain.toml")) == []
+
+
+def test_cloud_gate_battery_uses_protected_current_command_plane() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    gate_step = workflow.split(
+        "- name: Discover applied artifacts and run the gate battery", 1
+    )[1].split("- name: Assemble PR body", 1)[0]
+
+    assert gate_step.count(
+        "/opt/axiom-verification/axiom-encode-signing-supervisor"
+    ) == 4
+    assert "--roots" not in gate_step
+    assert "--corpus-path \"$GITHUB_WORKSPACE/_axiom/axiom-corpus\"" in gate_step
+    assert "--expected-encoder-checkout" in gate_step
+    assert "--axiom-rules-engine-path" in gate_step
+    assert "--root \"$GITHUB_WORKSPACE/$juris\"" in gate_step
+
+
+def test_source_staleness_uses_protected_signed_release_contract() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/source-staleness.yml").read_text()
+
+    assert "axiom_corpus_release_content_sha256" in workflow
+    assert "rest/v1/release_objects?select=release_object" in workflow
+    assert "Provision protected corpus-release verifier" in workflow
+    assert "axiom-encode-signing-supervisor" in workflow
+    assert '--corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus"' in workflow
+    assert "--corpus-root" not in workflow
+
+
+def test_required_validation_uses_registry_capable_shared_workflow() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/repository-checks.yml").read_text()
+
+    assert "validate-rulespec.yml@9824ded32e2a249abfe7cfbce06dd96952a26452" in workflow
+    assert "corpus-release-registry-url: https://swocpijqqahhuwtuahwc.supabase.co" in workflow
+    assert "corpus-release-registry-anon-key: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" in workflow

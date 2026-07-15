@@ -9,8 +9,9 @@ declaration needed to keep new-state PRs out of the unmapped coverage state.
 
 Two decisions matter and are baked in here so PRs go green:
 
-* **Generation uses the toolchain-pinned encoder** (``.axiom/toolchain.toml``
-  ``axiom_encode_version``, currently 0.2.1200). The required ``validate /
+* **Generation uses the workflow-pinned encoder**
+  (``.axiom/workflow-toolchain.toml``
+  ``axiom_encode_version``). The required ``validate /
   validate`` check validates with that same pin, so generating with anything
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
@@ -174,8 +175,10 @@ def signing_key() -> str:
 
 
 def pinned_toolchain() -> dict:
-    data = tomllib.loads((CHECKOUT / ".axiom/toolchain.toml").read_text())
-    return data.get("toolchain", data)
+    data = tomllib.loads(
+        (CHECKOUT / ".axiom/workflow-toolchain.toml").read_text()
+    )
+    return data["workflow_toolchain"]
 
 
 def citation_slug(citation: str) -> str:
@@ -639,19 +642,23 @@ def encode_entry(item: dict) -> dict:
              *composition_files, ".axiom/index/provisions_to_rules.json"])
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", f"wip: {citation}"])
-        roots = subprocess.run([str(COV_PY), str(leaf / "bulk/roots_for.py"), module],
-                               capture_output=True, text=True).stdout.strip() or "us"
+        jurisdiction = module.split("/", 1)[0]
         for gate in (
             [str(GEN_AE), "guard-generated", "--repo", str(leaf),
-             "--base-ref", "origin/main", "--head-ref", "HEAD", "--roots", roots],
-            [str(GEN_AE), "validate", str(leaf / module), "--skip-reviewers"],
-            [str(GEN_AE), "proof-validate", str(leaf / module)],
+             "--base-ref", "origin/main", "--head-ref", "HEAD",
+             "--corpus-path", str(CORPUS),
+             "--expected-encoder-checkout", str(DRAIN_BASE / "axiom-encode")],
+            [str(GEN_AE), "validate", str(leaf / module), "--skip-reviewers",
+             "--corpus-path", str(CORPUS),
+             "--axiom-rules-engine-path", str(ENGINE)],
+            [str(GEN_AE), "proof-validate", str(leaf / module),
+             "--corpus-path", str(CORPUS)],
         ):
             grc, gout = run(gate, cwd=leaf, env=env)
             if grc != 0:
                 res["detail"] = f"gate failed: {gate[1]}\n{gout[-800:]}"
                 return res
-        trc, _ = run([str(GEN_AE), "test", "--root", str(leaf),
+        trc, _ = run([str(GEN_AE), "test", "--root", str(leaf / jurisdiction),
                       "--axiom-rules-engine-path", str(ENGINE), str(leaf / test_file)],
                      cwd=leaf, env=env)
         gate_status = "green" if trc == 0 else "needs-fixtures"

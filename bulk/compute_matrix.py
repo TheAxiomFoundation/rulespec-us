@@ -78,11 +78,6 @@ def entry_allow_context(entry: dict) -> list[str]:
         raise ValueError(
             f"{citation}: allow_context must be a list of non-empty path strings"
         )
-    if values and entry.get("status") == "pending":
-        raise ValueError(
-            f"{citation}: allow_context is not supported for cloud pending entries"
-        )
-
     root = REPO_ROOT.resolve()
     for value in values:
         path = Path(value)
@@ -116,6 +111,35 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
             raise ValueError(
                 f"{entry.get('citation')}: program_scope_sync must be a mapping"
             )
+        if program_scope_sync is not None:
+            program_spec = program_scope_sync.get("program_spec")
+            scope = program_scope_sync.get("scope")
+            additions = program_scope_sync.get("add", [])
+            removals = program_scope_sync.get("remove", [])
+            if not isinstance(program_spec, str) or not program_spec:
+                raise ValueError(
+                    f"{entry.get('citation')}: program_scope_sync.program_spec "
+                    "must be a non-empty string"
+                )
+            if scope not in {"federal", "state", "local"}:
+                raise ValueError(
+                    f"{entry.get('citation')}: program_scope_sync.scope must be "
+                    "federal, state, or local"
+                )
+            for field, values in (("add", additions), ("remove", removals)):
+                if not isinstance(values, list) or not all(
+                    isinstance(value, str) and value and "\n" not in value
+                    for value in values
+                ):
+                    raise ValueError(
+                        f"{entry.get('citation')}: program_scope_sync.{field} "
+                        "must be a list of non-empty strings"
+                    )
+            if not additions and not removals:
+                raise ValueError(
+                    f"{entry.get('citation')}: program_scope_sync must add or "
+                    "remove at least one module"
+                )
         out.append(
             {
                 "citation": entry["citation"],
