@@ -15,8 +15,11 @@ and are not counted in the 44-jurisdiction universe.
   UT, VA). Every committed Axiom-versus-PolicyEngine grid is 6/6.
 - Colorado has separate ECPS/TAXSIM bridge coverage and extensive Title 39
   encodings. It is counted covered, but not as a standardized pilot.
-- No liability comparison yet: **23** jurisdictions (AR, DC, HI, IA, IN, KS,
-  LA, MO, MS, MT, ND, NH, NJ, NM, OK, OR, PA, RI, SC, VT, WA, WI, WV).
+- This campaign added source-grounded pilots for **12** jurisdictions (DC, HI,
+  IA, IN, LA, MT, NM, OK, OR, RI, WA, WI), bringing liability comparison
+  coverage to **33 of 44** jurisdictions when Colorado is included.
+- No liability comparison remains for **11** jurisdictions (AR, KS, MO, MS,
+  ND, NH, NJ, PA, SC, VT, WV).
 
 The standardized pilots are deliberately narrow resident wage-earner core-
 liability grids. They do not claim full-return coverage for every credit,
@@ -26,16 +29,36 @@ deduction, local tax, or special income class.
 
 | Batch | Jurisdictions | State |
 | --- | --- | --- |
-| East | DC, HI, IA, IN, KS, LA | calibrating/composing |
-| Central | MT, ND, NJ, NM, OK, OR, PA, RI, SC | calibrating/composing |
-| West | VT, WA, WI, WV | calibrating/composing |
-| Source-blocked audit | AR, MS, MO, NH | primary-source audit |
+| East | DC, HI, IA, IN, LA | 5 pilots; proof/test/PE parity green |
+| Central | MT, NM, OK, OR, RI | 5 pilots; proof/test/PE parity green |
+| West | WA, WI | 2 pilots; proof/test green |
+| Source/vintage blockers | AR, KS, MO, MS, ND, NH, NJ, PA, SC, VT, WV | typed below |
 
 Each candidate must use a primary-source corpus citation or an explicit hashed
 RuleSpec import, carry a companion test, reproduce the selected PolicyEngine
 2026 target on the standard six-case grid, and complete the independent
 review/fix cycle before merge. Missing authority is a typed blocker, never
 permission to supply invented law.
+
+The 12 new pipelines pass 72/72 engine companion cases. Eleven reproduce their
+selected PolicyEngine 2026 target on 6/6 cases. Wisconsin deliberately follows
+the post-2024 statutory bases, actual August 2024-to-August 2025 CPI-U change,
+and required $10 rounding; it matches PolicyEngine within $1 on 2/6 cases and
+records the other four as dispositioned upstream stale/unrounded-oracle gaps.
+The independent review/fix cycle completed with no actionable findings across
+the east, central, and west batches.
+
+The remaining typed blockers are:
+
+- AR and MS: legacy, unreviewed Supabase-only authority.
+- KS, PA, and VT: operative rate citation absent under the staged deterministic
+  identifiers checked.
+- MO and NH: source queue marked `blocked_primary_source`; NH is also repealed
+  and zero at 2026, so a vacuous zero pilot is not acceptable.
+- ND and SC: staged rate schedule is stale against the 2026 law/oracle target.
+- NJ: staged rate provision has a null body.
+- WV: existing signed modules omit the operative 2026 rate schedule; staged
+  section 11-21-4e/4j still requires verified primary text.
 
 ## Corpus publication blocker
 
@@ -58,7 +81,7 @@ Consequences observed in this campaign:
 
 ## Required closeout gates
 
-1. Land source-grounded liability candidates and companion tests.
+1. Land the 12 source-grounded liability candidates and companion tests.
 2. Sign composition candidates through the reviewed manual-exception path;
    regenerate the reverse index and oracle-pending declaration centrally.
 3. Add PolicyEngine/TAXSIM comparison suites and conformance rows in

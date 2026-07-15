@@ -1,0 +1,95 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ri/statute/44-30-2.6
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ri/statute/44-30-2.6
+      rationale: |-
+        The staged 2026-05-06 primary text of R.I. Gen. Laws 44-30-2.6
+        imposes a table-based tax on Rhode Island taxable income and requires
+        annual inflation adjustment of the table amounts. The normalized staged
+        body does not preserve the printed table cells, so this candidate does
+        not encode numeric schedule literals. Instead it accepts modified Rhode
+        Island adjusted gross income, a supplied aggregate standard-deduction and
+        personal-exemption amount, and the active 2026 bracket base, floor, and
+        rate as declared caller-supplied current-authority inputs, matching the supplied
+        schedule convention used by the established Arizona pilot. It models
+        the ordinary resident wage-earner tax before nonrefundable credits.
+  summary: |-
+    Candidate Rhode Island individual income-tax liability pipeline for the
+    2026 ordinary full-year resident wage-earner slice. It derives Rhode Island
+    taxable income from supplied modified Rhode Island AGI less supplied standard
+    deductions and personal exemptions, then applies the active section 44-30-2.6
+    bracket in base-plus-marginal form. Its exact PolicyEngine 4.18.9 analog is
+    `ri_income_tax_before_non_refundable_credits` on the six-case childless age-40
+    full-year resident wage grid: single at $30,000/$60,000/$150,000 and
+    one-earner joint at $60,000/$120,000/$300,000. The fixtures have zero
+    section 44-30-12 modifications, so supplied modified Rhode Island AGI equals
+    wage income. PolicyEngine supplies the deduction/exemption and indexed
+    schedule inputs; expected outputs are independently hand-computed.
+rules:
+  - name: ri_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: R.I. Gen. Laws 44-30-2.6(c)(3), taxable income after supplied deduction and exemption amounts
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ri/statute/44-30-2.6
+              excerpt: "“Rhode Island taxable income” means federal adjusted gross income as determined under the Internal Revenue Code, 26 U.S.C. § 1 et seq., and as modified for Rhode Island purposes pursuant to § 44-30-12 less the amount of Rhode Island Basic Standard Deduction allowed pursuant to subparagraph 44-30-2.6(c)(3)(B), and less the amount of personal exemption allowed pursuant to subparagraph 44-30-2.6(c)(3)(C)"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ri_pit_pilot_modified_adjusted_gross_income - ri_pit_pilot_supplied_deductions_and_exemptions)
+  - name: ri_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: R.I. Gen. Laws 44-30-2.6(c)(3)(A), supplied active indexed bracket base plus marginal tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ri/statute/44-30-2.6
+              excerpt: "There is hereby imposed on the taxable income of married individuals filing joint returns, qualifying widow(er), every head of household, unmarried individuals, married individuals filing separate returns and bankruptcy estates, a tax determined in accordance with the following table"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ri/statute/44-30-2.6
+              excerpt: "The dollar amount contained in subparagraphs 44-30-2.6(c)(3)(A), 44-30-2.6(c)(3)(B) and 44-30-2.6(c)(3)(C) shall be increased annually"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ri_pit_pilot_supplied_bracket_base
+          + ri_pit_pilot_supplied_marginal_rate * max(0, ri_pit_pilot_taxable_income - ri_pit_pilot_supplied_bracket_floor)
+  - name: ri_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: R.I. Gen. Laws 44-30-2.6 table tax before nonrefundable credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ri/statute/44-30-2.6
+              excerpt: "a tax determined in accordance with the following table"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: ri_pit_pilot_schedule_tax
