@@ -7,8 +7,35 @@ permissions:
   contents: read
 
 jobs:
-  fingerprint:
+  matrix:
     runs-on: ubuntu-latest
+    outputs:
+      jurisdictions: ${{ steps.matrix.outputs.jurisdictions }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Build jurisdiction matrix
+        id: matrix
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          jurisdictions = sorted({
+              path.split("/", 1)[0]
+              for path in Path(".axiom/fingerprint-paths.txt").read_text().splitlines()
+              if path
+          })
+          print("jurisdictions=" + json.dumps({"jurisdiction": jurisdictions}, separators=(",", ":")))
+          PY
+
+  fingerprint:
+    needs: matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJson(needs.matrix.outputs.jurisdictions) }}
     steps:
       - uses: actions/checkout@v6.0.2
 
@@ -111,9 +138,11 @@ jobs:
         run: cargo build --locked
 
       - name: Fingerprint residual failures
+        env:
+          JURISDICTION: ${{ matrix.jurisdiction }}
         run: |
           set -euo pipefail
-          mapfile -t modules < .axiom/fingerprint-paths.txt
+          mapfile -t modules < <(grep "^${JURISDICTION}/" .axiom/fingerprint-paths.txt)
           /opt/axiom-verification/axiom-encode-signing-supervisor \
             --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
             --trusted-python-runtime-root /opt/axiom-verification/python \
@@ -124,12 +153,12 @@ jobs:
             --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
             --root "$GITHUB_WORKSPACE" \
             --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
-            --json "${modules[@]}" > waiver-fingerprints.json
+            --json "${modules[@]}" > "waiver-fingerprints-${JURISDICTION}.json"
 
       - name: Upload fingerprints
         if: always()
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: waiver-fingerprints
-          path: waiver-fingerprints.json
+          name: waiver-fingerprints-${{ matrix.jurisdiction }}
+          path: waiver-fingerprints-${{ matrix.jurisdiction }}.json
           if-no-files-found: error
