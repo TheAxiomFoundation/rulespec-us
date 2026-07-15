@@ -1,0 +1,135 @@
+name: Waiver fingerprint scratch
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ffb0e7ccde22f6e136dc52aecaf4b5ed3ea6c6b7
+          path: _axiom/axiom-encode
+          persist-credentials: false
+
+      - uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          ref: 48797e101c093bb388be718c6f5d8fc9d9f94a7d
+          path: _axiom/axiom-rules-engine
+          persist-credentials: false
+
+      - uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: 6b27ed6a7b419876468c105509262b989a64965f
+          path: _axiom/axiom-corpus
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+
+      - uses: actions/setup-go@v6.5.0
+        with:
+          go-version: 1.26.1
+          cache: false
+
+      - name: Install encoder
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e _axiom/axiom-encode
+          python -m pip install \
+            --target "$RUNNER_TEMP/axiom-verification-site-packages" \
+            ./_axiom/axiom-encode
+
+      - name: Fetch signed corpus release
+        env:
+          SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          release=us-rulespec-foundation-v5-2026-07-15
+          digest=e34c830c865d77851376d9bcf3095bb928ce3040433ebe7f24492c20eb36b873
+          destination="_axiom/axiom-corpus/releases/$release/$digest.json"
+          mkdir -p "$(dirname "$destination")"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$destination.response" \
+            "https://swocpijqqahhuwtuahwc.supabase.co/rest/v1/release_objects?select=release_object&release_name=eq.$release&content_sha256=eq.$digest&limit=2"
+          python - "$destination.response" "$destination" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          response, destination = map(Path, sys.argv[1:])
+          rows = json.loads(response.read_bytes())
+          if not isinstance(rows, list) or len(rows) != 1:
+              raise SystemExit("expected exactly one signed release object")
+          destination.write_text(json.dumps(rows[0]["release_object"], indent=2, sort_keys=True) + "\n")
+          response.unlink()
+          PY
+
+      - name: Provision verification supervisor
+        working-directory: _axiom/axiom-encode
+        env:
+          TRUST_APPLY_ROOT: ${{ vars.AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY }}
+          TRUST_EVAL_ROOT: ${{ vars.AXIOM_ENCODE_EVAL_SIGNING_PUBLIC_KEY }}
+          TRUST_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \
+            -o "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            ./cmd/axiom-encode-signing-supervisor
+          sudo rm -rf /opt/axiom-verification
+          sudo "$(command -v python)" scripts/provision_verification_supervisor.py \
+            --destination /opt/axiom-verification \
+            --supervisor "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            --site-packages "$RUNNER_TEMP/axiom-verification-site-packages" \
+            --apply-root "$TRUST_APPLY_ROOT" \
+            --eval-root "$TRUST_EVAL_ROOT" \
+            --corpus-release-root "$TRUST_CORPUS_RELEASE_ROOT"
+          sudo chown -R 0:0 /opt/axiom-verification
+          sudo chmod -R go-w /opt/axiom-verification
+          sudo install -m 0755 "$(command -v git)" /opt/axiom-verification/python/bin/git
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
+
+      - name: Build rules engine
+        working-directory: _axiom/axiom-rules-engine
+        run: cargo build --locked
+
+      - name: Fingerprint residual failures
+        run: |
+          set -euo pipefail
+          mapfile -t modules < .axiom/fingerprint-paths.txt
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/lib/python3.13/site-packages/axiom_encode \
+            -- /opt/axiom-verification/axiom-encode \
+            validation-waivers fingerprint \
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+            --root "$GITHUB_WORKSPACE" \
+            --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
+            --json "${modules[@]}" > waiver-fingerprints.json
+
+      - name: Upload fingerprints
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: waiver-fingerprints
+          path: waiver-fingerprints.json
+          if-no-files-found: error
