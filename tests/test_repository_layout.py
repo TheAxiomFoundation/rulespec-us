@@ -22,16 +22,8 @@ DISALLOWED_GENERIC_RULE_NAMES = {
     "threshold",
     "value",
 }
-KNOWN_MISSING_COMPANION_TESTS = [
-    "us-ny/regulations/18-nycrr/385/3.yaml",
-    "us-ny/regulations/18-nycrr/387/10.yaml",
-    "us-ny/regulations/18-nycrr/387/12/a.yaml",
-    "us-ny/regulations/18-nycrr/387/12/b.yaml",
-    "us-ny/regulations/18-nycrr/387/9/a/1.yaml",
-    "us-ny/regulations/18-nycrr/387/9/a/2.yaml",
-    "us-sc/policies/dss/snap-policy-manual/page-398.yaml",
-]
-KNOWN_SHAPE_ISSUES = ["us-ca/regulations/mpp/63-406/1.yaml"]
+KNOWN_MISSING_COMPANION_TESTS: list[str] = []
+KNOWN_SHAPE_ISSUES: list[str] = []
 KNOWN_UNCOVERED_DERIVED_RULES = [
     "us/statutes/42/415/a.yaml#aime_in_first_pia_segment",
     "us/statutes/42/415/a.yaml#aime_in_second_pia_segment",

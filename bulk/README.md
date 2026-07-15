@@ -1,9 +1,10 @@
 # Bulk encode
 
-A durable queue -> runner -> PR loop for bulk RuleSpec encoding. It encodes
-already-ingested provisions with
+A durable queue → runner → PR loop for bulk RuleSpec encoding, independent of
+any local session. It encodes already-ingested provisions with
 `axiom-encode encode <citation> --apply`, pre-checks them with the same gate
-battery the PR CI runs, and opens one PR per module.
+battery the PR CI runs, opens one PR per module, and lets each PR auto-merge on
+green.
 
 The encoder and the CI gates own correctness. This system is **plumbing**: it
 never edits or invents generated values. Its only judgement is *which*
@@ -16,8 +17,6 @@ provisions to queue.
 | `bulk/worklist.yaml` | The durable queue. One entry per module. Committed. |
 | `bulk/compute_matrix.py` | Turns the worklist into the CI job matrix; single source of truth for status selection. |
 | `bulk/roots_for.py` | Maps an applied module path to `guard-generated --roots`. |
-| `bulk/local_drain.py` | Review-safe local runner: exact classifier provenance, one draft PR per module, and no automatic merge. |
-| `bulk/applied_artifacts.py` | Validates the module, companion test, and signed manifest written by one encoder apply. |
 | `.github/workflows/bulk-encode.yml` | The runner: dispatch → matrix → encode `--apply` → gate battery → PR + auto-merge. |
 
 ## Running it
@@ -36,24 +35,6 @@ The `schedule` trigger runs weekly and drains any remaining `pending` entries
 with no human action. Parallelism is capped at 4 (`max-parallel`) to stay under
 OpenAI rate limits; a top-level `concurrency` group serialises whole dispatches
 so two runs never fight over the same `bulk/<slug>` branches.
-
-### Local review-safe drain
-
-Agent-operated drains use `bulk/local_drain.py`, not the legacy cloud
-dispatcher. The local runner requires the immutable classifier and oracle refs
-recorded in the script, reads the apply signing key from an approved secret
-source, and generates RuleSpec only through `axiom-encode encode --apply`.
-
-```bash
-uv run python bulk/local_drain.py doctor
-uv run python bulk/local_drain.py drain --max-entries 1 --concurrency 1
-```
-
-Every generated branch is opened as a draft with auto-merge disabled. Each PR
-must complete the independent review/fix cycle and current CI before a human or
-agent marks it ready and merges it. RuleSpec YAML and companion fixtures are
-never hand-edited; findings are fixed in source material, prompts, harnesses,
-or encoder code and then regenerated with `encode --apply`.
 
 ### Secrets (repo Actions secrets on rulespec-us)
 
@@ -113,10 +94,11 @@ ceiling means gpt-5.5-authored fixtures sometimes fail. When that happens the
 runner marks the module `needs-fixtures` and still opens the PR, so the encoded
 module is reviewable and its auto-merge simply waits.
 
-A follow-up pass fixes the encoder prompt, harness, source material, or other
-root cause and reruns `encode --apply`; generated fixtures are never hand-edited
-or back-filled to make a test pass. Once the regenerated artifacts pass review
-and CI, the PR can merge. Update the worklist entry to `pr-open`, then `merged`.
+A follow-up agent pass then writes correct fixtures — honestly split, i.e. the
+fixture values come from re-deriving expected outputs against the engine, never
+back-filled to make a test pass. Once fixtures are committed to the PR branch,
+the required check goes green and auto-merge completes. Update the worklist entry
+to `pr-open`, then `merged`.
 
 ## Failure taxonomy
 
@@ -124,7 +106,7 @@ and CI, the PR can merge. Update the worklist entry to `pr-open`, then `merged`.
 | --- | --- | --- |
 | `Generated RuleSpec failed CI validation` at apply | apply-blocked | Read `*.repair.json` under the run's `encode-out`; usually a bad generated formula or unresolved import. Re-encode (a new run), do not hand-edit. |
 | `points to a RuleSpec file that could not be resolved: rulespec-us-<state>/...` | resolver/layout | The checkout leaf dir was not `rulespec-us`, or a sibling checkout was missing. The workflow guards the leaf-dir name; check the sibling symlink step. |
-| companion test red only | fixtures (#1060) | `needs-fixtures`; fix the encoder or its inputs and re-encode. |
+| companion test red only | fixtures (#1060) | `needs-fixtures`; run the follow-up fixture pass. |
 | self-import / same-section subsection import error | encode#1058 | The section is too cross-reference-heavy for a clean atomic encode. Drop it from the worklist or split the citation to the self-contained fragment. |
 | `oracle coverage ... unmapped` on the PR | oracle mapping | The output needs a PolicyEngine oracle mapping entry (`axiom-encode classify`). Out of scope for the encode job; handle as a mapping follow-up. |
 | 429 from OpenAI | rate limit | Lower `limit`/`max-parallel` or re-dispatch later. The concurrency group prevents overlapping runs. |
