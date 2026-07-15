@@ -13,14 +13,23 @@ module:
         Michigan Compiled Laws § 400.57a(3) directs the department to establish
         FIP income and asset eligibility levels, and § 400.57b(1)(b) conditions
         FIP eligibility on assets below the limits set by the department. BEM 400
-        supplies the department-set $15,000 liquid-resource amount modeled here.
+        supplies the department-set asset limits modeled here.
   summary: |-
-    Draft, narrow FIP resource slice: FIP treats an asset group with cash,
-    investments, and retirement plans of $15,000 or less as within this liquid
-    resource limit. This module intentionally excludes the separate real-property
-    limit and all other asset, program, and eligibility rules in BEM 400.
+    FIP asset-limit slice: countable cash, investments, and retirement plans
+    must not exceed $15,000, and countable real-property assets must not exceed
+    $200,000. This module takes the countable totals as inputs; BEM 400's
+    availability, exclusion, valuation, and trust rules are separate rules and
+    are not represented by the limits alone.
+  deferred_outputs:
+    - output: us-mi:policies/mdhhs/bridges/bem/400#mi_fip_asset_eligible
+      blocked_by:
+        - us-mi:policies/mdhhs/bridges/bem/400#mi_fip_countable_asset_composition
+      reason: |-
+        BEM 400 makes countability depend on availability and exclusions and
+        separately addresses trusts. This page supplies the two asset limits,
+        but does not by itself construct all FIP countable assets.
 rules:
-  - name: mi_fip_liquid_resource_limit
+  - name: mi_fip_cash_investment_retirement_asset_limit
     kind: parameter
     dtype: Money
     unit: USD
@@ -37,7 +46,24 @@ rules:
       - effective_from: '2026-01-01'
         formula: |-
           15000
-  - name: mi_fip_resources_eligible
+  - name: mi_fip_real_property_asset_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Michigan Bridges Eligibility Manual BEM 400, page 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-mi/manual/mdhhs/bridges/bem/400/page-5
+              excerpt: "$200,000 for real property assets."
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          200000
+  - name: mi_fip_cash_investment_retirement_assets_within_limit
     kind: derived
     entity: SpmUnit
     dtype: Judgment
@@ -54,10 +80,34 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us-mi:policies/mdhhs/bridges/bem/400/page-5#mi_fip_liquid_resource_limit
-              output: mi_fip_liquid_resource_limit
+              target: us-mi:policies/mdhhs/bridges/bem/400/page-5#mi_fip_cash_investment_retirement_asset_limit
+              output: mi_fip_cash_investment_retirement_asset_limit
               hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          spm_unit_cash_assets <= mi_fip_liquid_resource_limit
+          mi_fip_countable_cash_investment_retirement_assets <= mi_fip_cash_investment_retirement_asset_limit
+  - name: mi_fip_real_property_assets_within_limit
+    kind: derived
+    entity: SpmUnit
+    dtype: Judgment
+    period: Month
+    source: Michigan Bridges Eligibility Manual BEM 400, page 5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-mi/manual/mdhhs/bridges/bem/400/page-5
+              excerpt: "$200,000 for real property assets."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-mi:policies/mdhhs/bridges/bem/400/page-5#mi_fip_real_property_asset_limit
+              output: mi_fip_real_property_asset_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          mi_fip_countable_real_property_assets <= mi_fip_real_property_asset_limit
