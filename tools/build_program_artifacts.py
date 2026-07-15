@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build compiled program artifacts from every spec in programs/.
+"""Build compiled program artifacts from every jurisdiction programs/ root.
 
-For each programs/<jurisdiction>/<program>/<period>.yaml spec this composes the
+For each <jurisdiction>/programs/<program>/<period>.yaml spec this composes the
 program (axiom-compose), compiles it to an executable artifact
 (axiom-rules-engine compile), stamps provenance into the artifact metadata, and
 writes a manifest describing everything that was built.
@@ -52,7 +52,7 @@ class SpecBuild:
 
 def discover_specs(root: Path) -> list[SpecBuild]:
     builds: list[SpecBuild] = []
-    for path in sorted((root / "programs").rglob("*.yaml")):
+    for path in sorted(root.glob("us*/programs/**/*.yaml")):
         if path.name.endswith(".test.yaml"):
             continue
         spec = yaml.safe_load(path.read_text())

@@ -15,10 +15,9 @@ Usage:
   # Read one field (used by the runner to look up backend/model per entry):
   python bulk/compute_matrix.py --get us-ny/statute/TAX/673 --field model
 
-The matrix shape preserves the reviewed execution metadata needed by local
-jobs, in addition to the citation/backend/model fields used by cloud jobs.
-`slug` is the branch-safe citation slug used for `bulk/<slug>` branches and the
-PR title.
+The matrix shape is {"include": [{"citation", "repo", "backend", "model",
+"slug"}, ...]}. `slug` is the branch-safe citation slug used for
+`bulk/<slug>` branches and the PR title.
 
 Status writes are intentionally NOT done here: the workflow updates statuses by
 committing to the worklist through a dedicated follow-up (so status changes are
@@ -38,8 +37,7 @@ import yaml
 
 WORKLIST = Path(__file__).resolve().parent / "worklist.yaml"
 
-SELECTABLE_STATUSES = {"pending", "pending-local"}
-REPO_ROOT = WORKLIST.parents[1]
+SELECTABLE_STATUSES = {"pending"}
 
 
 def citation_slug(citation: str) -> str:
@@ -68,34 +66,6 @@ def entry_model(data: dict, entry: dict) -> str:
     return entry.get("model") or data.get("defaults", {}).get("model", "gpt-5.5")
 
 
-def entry_allow_context(entry: dict) -> list[str]:
-    """Return reviewed repo-local encoder context paths for one queue entry."""
-    citation = entry.get("citation", "unknown citation")
-    values = entry.get("allow_context", [])
-    if not isinstance(values, list) or not all(
-        isinstance(value, str) and value and "\n" not in value for value in values
-    ):
-        raise ValueError(
-            f"{citation}: allow_context must be a list of non-empty path strings"
-        )
-    if values and entry.get("status") == "pending":
-        raise ValueError(
-            f"{citation}: allow_context is not supported for cloud pending entries"
-        )
-
-    root = REPO_ROOT.resolve()
-    for value in values:
-        path = Path(value)
-        resolved = (root / path).resolve()
-        if path.is_absolute() or not resolved.is_relative_to(root):
-            raise ValueError(f"{citation}: allow_context path escapes the repository")
-        if not resolved.is_file():
-            raise ValueError(
-                f"{citation}: allow_context path is not a repository file: {value}"
-            )
-    return values
-
-
 def select(data: dict, status: str, batch: str | None, limit: int | None) -> list[dict]:
     out: list[dict] = []
     for entry in data["entries"]:
@@ -103,30 +73,13 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
             continue
         if batch and str(entry.get("batch", "")).upper() != batch.upper():
             continue
-        dependencies = entry.get("requires_merged_citations", [])
-        if not isinstance(dependencies, list) or not all(
-            isinstance(value, str) and value for value in dependencies
-        ):
-            raise ValueError(
-                f"{entry.get('citation')}: requires_merged_citations must be "
-                "a list of non-empty strings"
-            )
-        program_scope_sync = entry.get("program_scope_sync")
-        if program_scope_sync is not None and not isinstance(program_scope_sync, dict):
-            raise ValueError(
-                f"{entry.get('citation')}: program_scope_sync must be a mapping"
-            )
         out.append(
             {
                 "citation": entry["citation"],
                 "repo": entry.get("repo", "rulespec-us"),
                 "backend": entry_backend(data, entry),
                 "model": entry_model(data, entry),
-                "acceptance_criteria": entry.get("note", ""),
                 "slug": citation_slug(entry["citation"]),
-                "allow_context": entry_allow_context(entry),
-                "requires_merged_citations": dependencies,
-                "program_scope_sync": program_scope_sync,
             }
         )
     if limit is not None:
@@ -155,12 +108,6 @@ def main() -> int:
         help="LOCAL ONLY: set an entry's status in place.",
     )
     args = ap.parse_args()
-
-    if args.status not in SELECTABLE_STATUSES | {"any"}:
-        raise SystemExit(
-            f"unsupported selectable status: {args.status}; expected one of "
-            f"{', '.join(sorted(SELECTABLE_STATUSES | {'any'}))}"
-        )
 
     data = load()
 
