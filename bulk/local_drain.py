@@ -57,6 +57,7 @@ import subprocess
 import sys
 import threading
 import time
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10 local drain environments.
@@ -68,7 +69,7 @@ from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
-COV_ENCODER_REF = "f2b7e2393447deecbadf398c86d2b5f07ec5bfdd"
+COV_ENCODER_REF = "9d0f8296134865bcb9af9a303660ab1ac1416e0e"
 COV_ENCODER_REMOTE = "https://github.com/TheAxiomFoundation/axiom-encode.git"
 COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
@@ -539,7 +540,9 @@ def apply_program_scope_sync(leaf: Path, item: dict, env: dict) -> list[str]:
         command.extend(["--add", value])
     for value in remove:
         command.extend(["--remove", value])
-    rc, out = run(command, cwd=leaf, env=env)
+    classifier_env = dict(env)
+    classifier_env["AXIOM_ENCODE_APPLY_SIGNING_KEY"] = None
+    rc, out = run(command, cwd=leaf, env=classifier_env)
     if rc != 0:
         raise RuntimeError(f"program-scope-sync failed:\n{out}")
     return [program_spec]
@@ -618,7 +621,11 @@ def encode_entry(item: dict) -> dict:
             res["status"], res["detail"] = "paused", "codex subscription-limit signal"
             return res
         if rc != 0:
-            res["detail"] = f"encode/apply failed (rc={rc}); see {tmp}"
+            failure_log = WT_ROOT / slug / "encode-failure.log"
+            failure_log.write_text(out)
+            res["detail"] = (
+                f"encode/apply failed (rc={rc}); see {failure_log}"
+            )
             return res
         try:
             module, test_file, manifest = discover_applied_artifacts(
@@ -891,12 +898,19 @@ def cmd_doctor(_args) -> int:
         ("current encoder", COV_AE,
          ("oracle-coverage-pending", "program-scope-sync")),
     ):
+        clean_signing_env = {"AXIOM_ENCODE_APPLY_SIGNING_KEY": None}
         has_pending = ae.exists() and run(
-            [str(ae), "oracle-coverage-pending", "--help"])[0] == 0
+            [str(ae), "oracle-coverage-pending", "--help"],
+            env=clean_signing_env,
+        )[0] == 0
         has_scope_sync = ae.exists() and run(
-            [str(ae), "program-scope-sync", "--help"])[0] == 0
+            [str(ae), "program-scope-sync", "--help"],
+            env=clean_signing_env,
+        )[0] == 0
         available = {
-            "encode": ae.exists() and run([str(ae), "encode", "--help"])[0] == 0,
+            "encode": ae.exists() and run(
+                [str(ae), "encode", "--help"], env=clean_signing_env
+            )[0] == 0,
             "oracle-coverage-pending": has_pending,
             "program-scope-sync": has_scope_sync,
         }
