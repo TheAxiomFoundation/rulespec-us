@@ -134,12 +134,19 @@ def _pull_state(pull: dict) -> str:
     return state.upper() if isinstance(state, str) else ""
 
 
-def latest_exact_pr(pages: object, repo_full_name: str, branch: str) -> dict:
+def latest_exact_pr(
+    pages: object,
+    repo_full_name: str,
+    branch: str,
+    required_state: str | None = None,
+) -> dict:
     """Return the latest PR for an exact repository and head branch."""
     matches = []
     for pull in _exact_repo_pulls(pages, repo_full_name):
         head = pull.get("head")
         if not isinstance(head, dict) or head.get("ref") != branch:
+            continue
+        if required_state is not None and _pull_state(pull) != required_state:
             continue
         number = pull.get("number")
         if not isinstance(number, int) or number <= 0:
@@ -356,6 +363,12 @@ def main() -> int:
         default=None,
         help="Print the latest exact-repository PR record for this branch.",
     )
+    ap.add_argument(
+        "--find-pr-state",
+        choices=["OPEN", "CLOSED", "MERGED"],
+        default=None,
+        help="With --find-pr-branch, restrict the selected PR state.",
+    )
     args = ap.parse_args()
 
     if args.status not in SELECTABLE_STATUSES | {"any"}:
@@ -412,10 +425,21 @@ def main() -> int:
         if pages is None:
             raise SystemExit("--find-pr-branch requires --exclude-prs")
         try:
-            print(json.dumps(latest_exact_pr(pages, args.repo_full_name, args.find_pr_branch)))
+            print(
+                json.dumps(
+                    latest_exact_pr(
+                        pages,
+                        args.repo_full_name,
+                        args.find_pr_branch,
+                        args.find_pr_state,
+                    )
+                )
+            )
         except ValueError as exc:
             raise SystemExit(f"could not identify exact pull request: {exc}") from exc
         return 0
+    if args.find_pr_state:
+        raise SystemExit("--find-pr-state requires --find-pr-branch")
     if args.exclude_failure_issues:
         try:
             issue_pages = json.loads(

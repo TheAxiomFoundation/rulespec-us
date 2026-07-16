@@ -694,6 +694,42 @@ def test_latest_exact_pr_ignores_same_branch_from_fork() -> None:
     ) == {"number": 901, "state": "OPEN", "merge_commit": ""}
 
 
+def test_latest_exact_pr_can_select_merged_before_newer_closed_pr() -> None:
+    pages = [
+        [
+            {
+                "number": 901,
+                "state": "closed",
+                "merged_at": "2026-07-15T11:00:00Z",
+                "updated_at": "2026-07-15T11:00:00Z",
+                "merge_commit_sha": "a" * 40,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "number": 902,
+                "state": "closed",
+                "merged_at": None,
+                "updated_at": "2026-07-15T12:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+        ]
+    ]
+
+    assert latest_exact_pr(
+        pages,
+        "TheAxiomFoundation/rulespec-us",
+        "bulk/us-sc-manual-page-163",
+        "MERGED",
+    ) == {"number": 901, "state": "MERGED", "merge_commit": "a" * 40}
+
+
 def test_merged_pr_slugs_uses_exact_repository() -> None:
     pages = [
         [
@@ -906,6 +942,8 @@ def test_cloud_bulk_prs_remain_draft_without_auto_merge() -> None:
     branch_push = workflow.index('push -f origin "HEAD:$branch"')
     assert state_lookup < merged_guard < branch_push
     assert '--find-pr-branch "$branch"' in workflow
+    assert "retry fetch_reconcile_pulls" in workflow
+    assert 'mv "$temporary" "$RUNNER_TEMP/reconcile-pulls.json"' in workflow
     assert 'gh pr reopen "$pr_number"' in workflow
     assert 'gh pr edit "$pr_number"' in workflow
     assert 'gh pr view "$pr_number"' in workflow
@@ -936,6 +974,7 @@ def test_cloud_dispatch_filters_dependencies_before_matrix_limit() -> None:
     assert "merged_slugs=merged_slugs" in Path(
         root / "bulk/compute_matrix.py"
     ).read_text()
+    assert '--find-pr-state MERGED' in workflow
 
 
 def test_cloud_companion_failure_classification_is_fail_closed() -> None:

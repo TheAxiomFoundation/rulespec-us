@@ -423,7 +423,7 @@ jobs:
             dependency_pr="$(python bulk/compute_matrix.py \
               --exclude-prs "$RUNNER_TEMP/dependency-pulls.json" \
               --repo-full-name "$GITHUB_REPOSITORY" \
-              --find-pr-branch "bulk/$slug")"
+              --find-pr-branch "bulk/$slug" --find-pr-state MERGED)"
             if [ "$(jq -r '.state // ""' <<< "$dependency_pr")" != "MERGED" ]; then
               echo "::error::$CITATION is waiting for merged dependency $dependency." >&2
               exit 1
@@ -855,10 +855,20 @@ jobs:
           # Query every state and bind reconciliation to this repository's exact
           # head branch. A fork can use the same ref name; branch-only gh filters
           # are therefore insufficient for any mutation.
-          retry gh api --paginate --slurp \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" \
-            > "$RUNNER_TEMP/reconcile-pulls.json"
+          fetch_reconcile_pulls() {
+            local temporary="$RUNNER_TEMP/reconcile-pulls.$$.tmp"
+            rm -f "$temporary"
+            if gh api --paginate --slurp \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" \
+              > "$temporary"; then
+              mv "$temporary" "$RUNNER_TEMP/reconcile-pulls.json"
+              return 0
+            fi
+            rm -f "$temporary"
+            return 1
+          }
+          retry fetch_reconcile_pulls
           pr_json="$(python bulk/compute_matrix.py \
             --exclude-prs "$RUNNER_TEMP/reconcile-pulls.json" \
             --repo-full-name "$GITHUB_REPOSITORY" \
