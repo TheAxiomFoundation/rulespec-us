@@ -59,9 +59,14 @@ one non-oracle 2027 boundary case so section 4J cannot be silently carried past
 the section 4H trigger. Vermont follows the section 5822 statutory rates and
 annual inflation authority using supplied current 2026 indexed thresholds; its
 six cases match PolicyEngine at return-cent precision. The independent
-review/fix cycle completed across the east, central, and west batches; the
-AR/KS/MO/MS/ND/NH/NJ/PA/SC/VT/WV follow-on remains subject to the full-PR cycle
-before merge.
+review/fix cycle completed across the east, central, and west batches. The
+final independent whole-PR review/fix cycle then corrected Washington proof
+wording, preserved plural corpus dependencies in the reverse index, closed
+strict source-child coverage explicitly, moved Vermont's individual rate
+calculation to person scope before tax-unit aggregation, and made all
+version-local test inputs explicit. All 23 pilots pass strict validation
+against the complete successor-corpus integration worktree; protected-main
+source promotion remains the merge blocker described below.
 
 There are no remaining jurisdiction-level liability-grid blockers.
 
