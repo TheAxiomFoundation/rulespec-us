@@ -12,7 +12,11 @@ from pathlib import Path, PurePosixPath
 MODULE_BUCKETS = {"manual", "policies", "regulations", "statutes"}
 JURISDICTION_RE = re.compile(r"[a-z]{2}(?:-[a-z0-9-]+)?")
 SOURCE_BUCKETS = {
+    "form": frozenset({"policies"}),
+    "forms": frozenset({"policies"}),
+    "guidance": frozenset({"policies"}),
     "manual": frozenset({"manual", "policies"}),
+    "manuals": frozenset({"manual", "policies"}),
     "policy": frozenset({"policies"}),
     "policies": frozenset({"policies"}),
     "regulation": frozenset({"regulations"}),
@@ -103,7 +107,11 @@ def _module_matches_request(citation: str, module: str) -> bool:
         return False
     request_tokens = _legal_path_tokens(tuple(request_tail))
     output_tokens = _legal_path_tokens(output.parts[2:])
-    if source_bucket.lower() in {"regulation", "regulations"}:
+    if (
+        source_bucket.lower() in {"regulation", "regulations"}
+        and request_tail
+        and request_tail[0].isdigit()
+    ):
         # Federal regulation modules canonicalize a numeric title as ``N-cfr``.
         if len(output_tokens) >= 2 and output_tokens[1] == "cfr":
             output_tokens = (output_tokens[0], *output_tokens[2:])
