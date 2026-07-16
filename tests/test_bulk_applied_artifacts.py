@@ -108,8 +108,16 @@ def test_discovers_jurisdiction_manifest_for_legacy_module(tmp_path: Path) -> No
     ) == (module, test_file, manifest)
 
 
-def test_accepts_canonical_cfr_module_for_regulation_source(tmp_path: Path) -> None:
-    citation = "us/regulation/7/247/9/b"
+@pytest.mark.parametrize(
+    "citation",
+    [
+        "us/regulation/7/247/9/b",
+        "us/regulations/7-cfr/247/9/b",
+    ],
+)
+def test_accepts_canonical_cfr_module_for_regulation_source(
+    tmp_path: Path, citation: str
+) -> None:
     module = "us/regulations/7-cfr/247/9/b.yaml"
     test_file = "us/regulations/7-cfr/247/9/b.test.yaml"
     manifest = "us/.axiom/encoding-manifests/regulations/7-cfr/247/9/b.json"
@@ -121,6 +129,33 @@ def test_accepts_canonical_cfr_module_for_regulation_source(tmp_path: Path) -> N
         citation,
         {"regulations/7-cfr/247/9/b.yaml", "regulations/7-cfr/247/9/b.test.yaml"},
     )
+
+    assert discover_applied_artifacts(
+        tmp_path,
+        citation=citation,
+        paths=[module, test_file, manifest],
+    ) == (module, test_file, manifest)
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        "us/form/irs/publication-1",
+        "us/forms/irs/publication-1",
+        "us/guidance/irs/publication-1",
+        "us/manuals/irs/publication-1",
+    ],
+)
+def test_accepts_policy_module_for_policy_source_aliases(
+    tmp_path: Path, citation: str
+) -> None:
+    module = "us/policies/irs/publication-1.yaml"
+    test_file = "us/policies/irs/publication-1.test.yaml"
+    manifest = ".axiom/encoding-manifests/us/policies/irs/publication-1.json"
+    (tmp_path / module).parent.mkdir(parents=True)
+    (tmp_path / module).write_text("format: rulespec/v1\n")
+    (tmp_path / test_file).write_text("cases: []\n")
+    _write_manifest(tmp_path / manifest, citation, {module, test_file})
 
     assert discover_applied_artifacts(
         tmp_path,
