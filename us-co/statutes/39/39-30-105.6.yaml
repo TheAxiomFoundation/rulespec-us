@@ -1,0 +1,161 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-30-105.6
+  summary: |-
+    A taxpayer who owns or rents an enterprise-zone building at least twenty years
+    old and unoccupied for at least two years may receive a credit equal to
+    twenty-five percent of qualified rehabilitation expenditures or fifty thousand
+    dollars per building, whichever is less. A federal rehabilitation credit
+    disallows this credit. Unused credit carryforward is subject to section
+    24-46-107.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-30-105.6#unused_credit_carryforward
+      reason: The carryforward rule is expressly subject to section 24-46-107, whose executable RuleSpec source is unavailable.
+      source_values:
+        - us-co:statutes/39/39-30-105.6#credit_carryforward_period_limit_years
+rules:
+  - name: building_minimum_age_years
+    kind: parameter
+    dtype: Count
+    source: Colo. Rev. Stat. § 39-30-105.6(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "at least twenty years old"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          20
+
+  - name: building_minimum_unoccupied_years
+    kind: parameter
+    dtype: Count
+    source: Colo. Rev. Stat. § 39-30-105.6(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "unoccupied for at least two years"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          2
+
+  - name: rehabilitation_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: Colo. Rev. Stat. § 39-30-105.6(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "twenty-five percent of the aggregate qualified expenditures"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          0.25
+
+  - name: rehabilitation_credit_cap_per_building
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Colo. Rev. Stat. § 39-30-105.6(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "fifty thousand dollars per building"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          50000
+
+  - name: credit_carryforward_period_limit_years
+    kind: parameter
+    dtype: Count
+    source: Colo. Rev. Stat. § 39-30-105.6(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "a period not exceeding five years"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          5
+
+  - name: enterprise_zone_building_rehabilitation_credit_is_allowed
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: Colo. Rev. Stat. § 39-30-105.6(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "shall not be allowed the credit"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          taxpayer_is_owner_or_tenant_of_building
+          and building_is_in_enterprise_zone
+          and building_age_in_years >= building_minimum_age_years
+          and building_unoccupied_years >= building_minimum_unoccupied_years
+          and qualified_rehabilitation_expenditures > 0
+          and not taxpayer_is_allowed_federal_rehabilitation_credit_for_building_costs
+
+  - name: enterprise_zone_building_rehabilitation_credit
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Colo. Rev. Stat. § 39-30-105.6(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+              excerpt: "twenty-five percent of the aggregate qualified expenditures per building or fifty thousand dollars per building, whichever is less"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-30-105.6
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          if enterprise_zone_building_rehabilitation_credit_is_allowed:
+            min(
+              qualified_rehabilitation_expenditures * rehabilitation_credit_rate,
+              rehabilitation_credit_cap_per_building
+            )
+          else: 0
