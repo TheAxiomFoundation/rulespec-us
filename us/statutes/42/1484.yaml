@@ -1,0 +1,275 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/1484
+  summary: |-
+    The section authorizes insured loans for farm labor housing, defines "housing", "related facilities", and "domestic farm labor", directs the Secretary to consider only domestic farm labor housing needs when making assistance available, and requires carbon monoxide alarms and qualifying smoke alarms in housing and related facilities constructed with loans under this section.
+  deferred_outputs:
+    - output: us:statutes/42/1484/a#loan_insurance_authorized
+      reason: The loan-insurance authorization and terms depend on section 1472 mechanics and lender/borrower loan-contract administration not fully represented in this module.
+    - output: us:statutes/42/1484/b#insurance_fund_utilization
+      reason: Fund discharge and administration depends on unavailable 7 USC 1005a and 7 USC 1005c(a), (b), and (c) fund mechanics.
+    - output: us:statutes/42/1484/g#interest_rate_limitation_waiver
+      reason: Waiver computation depends on unavailable section 1471(c)(3) and section 1481 comparable-obligation rate mechanics. The source also states a one-eighth-of-1-percent spread, but this branch is deferred until the affected waiver formula can be encoded without introducing an ungrounded decimal conversion.
+    - output: us:statutes/42/1484/i#farm_labor_housing_available_for_section_1485_tenants
+      reason: Occupancy eligibility depends on section 1485 tenant eligibility mechanics.
+    - output: us:statutes/42/1484/j#carbon_monoxide_alarm_or_detector_standard_compliance
+      reason: Compliance depends on external International Fire Code chapters or later Federal Register standards adopted by the Secretary and HUD.
+rules:
+  - name: insured_loan_interest_rate_cap
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 1484(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "bears interest at a rate in excess of 1 per centum per annum"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.01
+
+  - name: secretary_retained_charge_minimum_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 1484(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "not less than one-half of 1 per centum per annum"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.005
+
+  - name: insurance_fund_charge_deposit_minimum_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 1484(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "amounts not less than one-half of 1 per centum per annum"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.005
+
+  - name: qualifying_battery_smoke_alarm_service_life_years
+    kind: parameter
+    dtype: Count
+    source: 42 USC 1484(k)(2)(B)(i)(I)(bb)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "uses 10-year non rechargeable, nonreplaceable primary batteries"
+    versions:
+      - effective_from: '2022-12-29'
+        formula: |-
+          10
+
+  - name: new_or_rehabilitated_dwelling_unit_requires_hardwired_smoke_alarm
+    kind: derived
+    entity: HousingFacility
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "dwelling unit built or substantially rehabilitated after December 29, 2022, is hardwired"
+    versions:
+      - effective_from: '2022-12-29'
+        formula: |-
+          dwelling_unit_built_or_substantially_rehabilitated_after_statutory_smoke_alarm_date
+          and smoke_alarm_is_hardwired
+
+  - name: existing_dwelling_unit_has_qualifying_smoke_alarm
+    kind: derived
+    entity: HousingFacility
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "built before December 29, 2022, and not substantially rehabilitated after December 29, 2022"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "is hardwired; or ... uses 10-year non rechargeable, nonreplaceable primary batteries"
+    versions:
+      - effective_from: '2022-12-29'
+        formula: |-
+          dwelling_unit_built_before_statutory_smoke_alarm_date
+          and not dwelling_unit_substantially_rehabilitated_after_statutory_smoke_alarm_date
+          and (smoke_alarm_is_hardwired or (smoke_alarm_uses_primary_batteries_with_service_life_years >= qualifying_battery_smoke_alarm_service_life_years and smoke_alarm_primary_batteries_are_non_rechargeable and smoke_alarm_primary_batteries_are_nonreplaceable and smoke_alarm_is_sealed and smoke_alarm_is_tamper_resistant and smoke_alarm_contains_silencing_means))
+          and smoke_alarm_provides_required_hearing_loss_notification
+
+  - name: farm_labor_loan_housing_contains_qualifying_smoke_alarms
+    kind: derived
+    entity: HousingFacility
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(k)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "Housing and related facilities constructed with loans under this section shall contain qualifying smoke alarms"
+    versions:
+      - effective_from: '2022-12-29'
+        formula: |-
+          constructed_with_loan_under_this_section
+          and smoke_alarms_installed_in_accordance_with_applicable_codes_and_nfpa_72
+          and smoke_alarms_installed_on_each_level_except_crawl_spaces_and_unfinished_attics
+          and smoke_alarms_installed_in_or_near_each_sleeping_area
+          and smoke_alarms_installed_in_each_common_area_in_project
+          and (new_or_rehabilitated_dwelling_unit_requires_hardwired_smoke_alarm or existing_dwelling_unit_has_qualifying_smoke_alarm)
+
+  - name: housing
+    kind: derived
+    entity: HousingFacility
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/1484
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          new_structure_suitable_for_dwelling_use_by_domestic_farm_labor
+          or existing_structure_can_be_made_suitable_for_dwelling_use_by_domestic_farm_labor_by_rehabilitation_alteration_conversion_or_improvement
+
+  - name: related_facilities
+    kind: derived
+    entity: HousingFacility
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/1484
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          new_structure_suitable_for_dining_community_infirmary_or_other_essential_service_facility_use
+          or existing_structure_can_be_made_suitable_for_dining_community_infirmary_or_other_essential_service_facility_use_by_rehabilitation_alteration_conversion_or_improvement
+          or land_necessary_for_adequate_site
+
+  - name: domestic_farm_labor
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/1484
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          receives_substantial_income_from_agricultural_or_aquacultural_production_handling_or_processing
+          and (person_is_united_states_citizen or person_legally_admitted_for_permanent_residence or person_legally_admitted_to_united_states_and_authorized_to_work_in_agriculture)
+
+  - name: retired_or_disabled_person_included_as_domestic_farm_labor
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/1484
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_retired_or_disabled
+          and person_was_domestic_farm_labor_at_retirement_or_disability
+
+  - name: assistance_need_determination_limited_to_domestic_farm_labor_housing_needs
+    kind: derived
+    entity: AssistanceArea
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "take into consideration the housing needs only of domestic farm labor"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          assistance_made_available_under_this_section_or_section_1486
+          and need_determination_considers_only_domestic_farm_labor_housing_needs_in_area
+
+  - name: assistance_decision_disregards_other_area_housing_needs
+    kind: derived
+    entity: AssistanceArea
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1484(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1484
+              excerpt: "without regard to the extent or nature of other housing needs in the area"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          assistance_made_available_under_this_section_or_section_1486
+          and assistance_decision_made_without_regard_to_other_housing_needs_in_area
