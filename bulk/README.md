@@ -42,10 +42,12 @@ group serialises whole dispatches so two runs never fight over the same
 
 Signed apply runs only in the main-branch `bulk-encode.yml`
 workflow. The workflow provisions a root-owned Python runtime and launches the
-current encoder through `axiom-encode-apply-signer`; the private key is consumed
-by the external signer and never reaches the encoder process. `allow_context`
-and `program_scope_sync` metadata travel with each durable queue entry, so a
-restarted job reconstructs the same reviewed command without hand edits.
+   current encoder through `axiom-encode-apply-signer`; the private key is consumed
+   by the external signer and never reaches the encoder process. `allow_context`
+   and `program_scope_sync` metadata travel with each durable queue entry. The
+   entry's reviewed acceptance criteria are passed to the encoder through
+   `--review-findings`, so a restarted or review-triggered regeneration
+   reconstructs the same corrective command without hand edits.
 
 Every generated PR must complete the independent review/fix cycle and current
 CI before merge. RuleSpec YAML and companion fixtures are never hand-edited;

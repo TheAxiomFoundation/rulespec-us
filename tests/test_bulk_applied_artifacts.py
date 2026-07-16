@@ -979,6 +979,8 @@ def test_cloud_apply_uses_protected_signer_and_exact_artifact_discovery() -> Non
     assert "find \"$GITHUB_WORKSPACE\" -path '*/.axiom/encoding-manifests/*'" not in encode_job
     assert "Require merged queue dependencies" in encode_job
     assert "Prepare reviewed encode context" in encode_job
+    assert 'REVIEW_FINDINGS: ${{ matrix.item.acceptance_criteria }}' in encode_job
+    assert 'encode_args+=(--review-findings "$RUNNER_TEMP/review-findings.md")' in signing_step
     assert "AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets." in signing_step
     assert 'exec "$RUNNER_TEMP/axiom-encode-apply-signer" run' in signing_step
     assert "--key-env AXIOM_ENCODE_APPLY_SIGNING_KEY" in signing_step
