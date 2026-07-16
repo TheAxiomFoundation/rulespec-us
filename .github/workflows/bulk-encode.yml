@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: "8"
+      citation:
+        description: "Exact worklist citation to encode or refresh in its existing draft PR."
+        required: false
+        type: string
+        default: ""
   schedule:
     # Weekly, off-peak, after the corpus/oracle cadence. Picks up any entries
     # still `pending` in the worklist without a human dispatch.
@@ -76,12 +81,13 @@ jobs:
         shell: bash
         env:
           BATCH: ${{ inputs.batch }}
+          CITATION: ${{ inputs.citation }}
           LIMIT: ${{ inputs.limit || '8' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Fetch every PR state before applying the dispatch limit. Exact bulk
-          # branches with an open or merged PR are removed from consideration,
+          # branches with an open or merged PR are removed from queue consideration,
           # so stale pending entries cannot repeatedly consume the first slots
           # and starve later queue work. Closed, unmerged PRs remain eligible for
           # the workflow's reviewed reopen/recreate recovery path.
@@ -94,19 +100,28 @@ jobs:
             "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=bulk-encode-failed&per_page=100" \
             > "$RUNNER_TEMP/failure-issues.json"
           args=(
-            --status pending --format matrix --limit "$LIMIT"
+            --format matrix
             --exclude-prs "$RUNNER_TEMP/pulls.json"
             --exclude-failure-issues "$RUNNER_TEMP/failure-issues.json"
             --repo-full-name "$GITHUB_REPOSITORY"
           )
-          if [ -n "$BATCH" ]; then
-            args+=(--batch "$BATCH")
+          if [ -n "$CITATION" ]; then
+            # An explicit citation is the reviewed regeneration route. It may
+            # update an existing open draft, while compute_matrix continues to
+            # block merged branches, unresolved dependencies, and open failure
+            # holds. The exact filter also caps the matrix to one entry.
+            args+=(--status any --only-citation "$CITATION" --limit 1)
+          else
+            args+=(--status pending --limit "$LIMIT")
+            if [ -n "$BATCH" ]; then
+              args+=(--batch "$BATCH")
+            fi
           fi
           matrix="$(python bulk/compute_matrix.py "${args[@]}")"
           count="$(python -c 'import json,sys; print(len(json.loads(sys.argv[1])["include"]))' "$matrix")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Selected $count ready module(s) without an active PR or hard-failure hold:"
+          echo "Selected $count ready module(s) without a blocking merge or hard-failure hold:"
           python bulk/compute_matrix.py "${args[@]/--format matrix/--format table}" || true
 
       - name: Fail if nothing to encode

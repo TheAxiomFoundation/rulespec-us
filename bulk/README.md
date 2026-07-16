@@ -74,6 +74,11 @@ The protected workflow supplies these jobs:
    Closed, unmerged PRs stay eligible for the workflow's reopen/recreate
    recovery path. Dispatch limits are constrained to GitHub's `0..256` matrix
    capacity.
+   A manual dispatch can set `citation` to one exact worklist citation to
+   regenerate its existing open draft after review or a `needs-fixtures`
+   result. This explicit path still blocks merged branches, unresolved
+   dependencies, and open hard-failure issues; close the failure issue after
+   triage before retrying.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
@@ -128,7 +133,8 @@ runner marks the module `needs-fixtures` and still opens a draft PR so the
 encoded module and failure are reviewable.
 
 A follow-up pass fixes the encoder prompt, harness, source material, or other
-root cause and reruns `encode --apply`; generated fixtures are never hand-edited
+root cause and dispatches the exact worklist `citation` to rerun `encode
+--apply`; generated fixtures are never hand-edited
 or back-filled to make a test pass. Once the regenerated artifacts pass review
 and CI, the PR can merge. Update the worklist entry to `pr-open`, then `merged`.
 

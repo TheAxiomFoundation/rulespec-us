@@ -19,6 +19,10 @@ Usage:
   python bulk/compute_matrix.py --status pending --exclude-prs pulls.json \
     --repo-full-name TheAxiomFoundation/rulespec-us
 
+  # Explicitly refresh one reviewed draft while keeping merge/failure guards:
+  python bulk/compute_matrix.py --status any --only-citation us-ny/statute/TAX/673 \
+    --exclude-prs pulls.json --repo-full-name TheAxiomFoundation/rulespec-us
+
 The matrix shape preserves the reviewed execution metadata needed by local
 jobs, in addition to the citation/backend/model fields used by cloud jobs.
 `slug` is the branch-safe citation slug used for `bulk/<slug>` branches and the
@@ -222,6 +226,22 @@ def failed_issue_slugs(pages: object) -> set[str]:
     return slugs
 
 
+def dispatch_excluded_slugs(
+    active_slugs: set[str],
+    merged_slugs: set[str],
+    failure_slugs: set[str],
+    only_citation: str | None,
+) -> set[str]:
+    """Build queue exclusions, allowing only a guarded open-draft refresh."""
+    excluded = set(active_slugs)
+    if only_citation is not None:
+        refresh_slug = citation_slug(only_citation)
+        if refresh_slug not in merged_slugs:
+            excluded.discard(refresh_slug)
+    excluded.update(failure_slugs)
+    return excluded
+
+
 def select(
     data: dict,
     status: str,
@@ -230,12 +250,17 @@ def select(
     *,
     excluded_slugs: set[str] | None = None,
     merged_slugs: set[str] | None = None,
+    only_citation: str | None = None,
 ) -> list[dict]:
     if limit is not None and not 0 <= limit <= MAX_MATRIX_ENTRIES:
         raise ValueError(f"limit must be between 0 and {MAX_MATRIX_ENTRIES}")
     out: list[dict] = []
     excluded_slugs = excluded_slugs or set()
+    citation_found = False
     for entry in data["entries"]:
+        if only_citation is not None and entry.get("citation") != only_citation:
+            continue
+        citation_found = True
         if status != "any" and entry.get("status") != status:
             continue
         if batch and str(entry.get("batch", "")).upper() != batch.upper():
@@ -303,6 +328,8 @@ def select(
                 "program_scope_sync": program_scope_sync,
             }
         )
+    if only_citation is not None and not citation_found:
+        raise ValueError(f"citation not found: {only_citation}")
     if limit is not None:
         out = out[:limit]
     return out
@@ -359,6 +386,14 @@ def main() -> int:
         help="Open failure issues from `gh api --paginate --slurp`.",
     )
     ap.add_argument(
+        "--only-citation",
+        default=None,
+        help=(
+            "Select one exact worklist citation. Its open PR may be refreshed, "
+            "but merged PR and hard-failure exclusions still apply."
+        ),
+    )
+    ap.add_argument(
         "--find-pr-branch",
         default=None,
         help="Print the latest exact-repository PR record for this branch.",
@@ -411,16 +446,18 @@ def main() -> int:
 
     if bool(args.exclude_prs) != bool(args.repo_full_name):
         raise SystemExit("--exclude-prs and --repo-full-name must be used together")
-    excluded_slugs: set[str] = set()
+    active_slugs: set[str] = set()
     merged_slugs: set[str] | None = None
     pages = None
     if args.exclude_prs:
         try:
             pages = json.loads(args.exclude_prs.read_text(encoding="utf-8"))
-            excluded_slugs = active_pr_slugs(pages, args.repo_full_name)
+            active_slugs = active_pr_slugs(pages, args.repo_full_name)
             merged_slugs = merged_pr_slugs(pages, args.repo_full_name)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise SystemExit(f"could not read pull request exclusions: {exc}") from exc
+    if args.only_citation is not None and merged_slugs is None:
+        raise SystemExit("--only-citation requires --exclude-prs")
     if args.find_pr_branch:
         if pages is None:
             raise SystemExit("--find-pr-branch requires --exclude-prs")
@@ -440,15 +477,22 @@ def main() -> int:
         return 0
     if args.find_pr_state:
         raise SystemExit("--find-pr-state requires --find-pr-branch")
+    failure_slugs: set[str] = set()
     if args.exclude_failure_issues:
         try:
             issue_pages = json.loads(
                 args.exclude_failure_issues.read_text(encoding="utf-8")
             )
-            excluded_slugs.update(failed_issue_slugs(issue_pages))
+            failure_slugs = failed_issue_slugs(issue_pages)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise SystemExit(f"could not read failure issue exclusions: {exc}") from exc
 
+    excluded_slugs = dispatch_excluded_slugs(
+        active_slugs,
+        merged_slugs or set(),
+        failure_slugs,
+        args.only_citation,
+    )
     selected = select(
         data,
         args.status,
@@ -456,6 +500,7 @@ def main() -> int:
         args.limit,
         excluded_slugs=excluded_slugs,
         merged_slugs=merged_slugs,
+        only_citation=args.only_citation,
     )
 
     if args.format == "count":

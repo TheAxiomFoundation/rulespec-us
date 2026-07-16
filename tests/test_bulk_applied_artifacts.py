@@ -31,6 +31,7 @@ discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
 select = _compute_matrix.select
 active_pr_slugs = _compute_matrix.active_pr_slugs
 failed_issue_slugs = _compute_matrix.failed_issue_slugs
+dispatch_excluded_slugs = _compute_matrix.dispatch_excluded_slugs
 latest_exact_pr = _compute_matrix.latest_exact_pr
 matrix_limit = _compute_matrix.matrix_limit
 merged_pr_slugs = _compute_matrix.merged_pr_slugs
@@ -576,6 +577,64 @@ def test_matrix_excludes_active_prs_before_applying_limit() -> None:
     assert [item["citation"] for item in selected] == ["us-sc/manual/page-165"]
 
 
+def test_matrix_explicit_citation_selects_only_reviewed_draft() -> None:
+    data = {
+        "entries": [
+            {"citation": "us-sc/manual/page-163", "status": "pr-open"},
+            {"citation": "us-sc/manual/page-165", "status": "pending"},
+        ]
+    }
+
+    selected = select(
+        data,
+        "any",
+        None,
+        1,
+        excluded_slugs=set(),
+        merged_slugs=set(),
+        only_citation="us-sc/manual/page-163",
+    )
+
+    assert [item["citation"] for item in selected] == ["us-sc/manual/page-163"]
+
+
+def test_matrix_explicit_citation_still_honors_exclusions() -> None:
+    citation = "us-sc/manual/page-163"
+    data = {"entries": [{"citation": citation, "status": "needs-fixtures"}]}
+
+    selected = select(
+        data,
+        "any",
+        None,
+        1,
+        excluded_slugs={"us-sc-manual-page-163"},
+        merged_slugs=set(),
+        only_citation=citation,
+    )
+
+    assert selected == []
+
+
+def test_explicit_refresh_bypasses_only_its_open_pr_exclusion() -> None:
+    citation = "us-sc/manual/page-163"
+    slug = "us-sc-manual-page-163"
+
+    assert dispatch_excluded_slugs({slug}, set(), set(), citation) == set()
+    assert dispatch_excluded_slugs({slug}, {slug}, set(), citation) == {slug}
+    assert dispatch_excluded_slugs({slug}, set(), {slug}, citation) == {slug}
+
+
+def test_matrix_explicit_citation_must_exist() -> None:
+    with pytest.raises(ValueError, match="citation not found"):
+        select(
+            {"entries": []},
+            "any",
+            None,
+            1,
+            only_citation="us-sc/manual/page-163",
+        )
+
+
 def test_matrix_excludes_blocked_dependencies_before_applying_limit() -> None:
     data = {
         "entries": [
@@ -975,6 +1034,18 @@ def test_cloud_dispatch_filters_dependencies_before_matrix_limit() -> None:
         root / "bulk/compute_matrix.py"
     ).read_text()
     assert '--find-pr-state MERGED' in workflow
+
+
+def test_cloud_dispatch_can_refresh_one_open_draft() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    compute_step = workflow.split("- name: Compute matrix from worklist", 1)[1].split(
+        "- name: Fail if nothing to encode", 1
+    )[0]
+
+    assert 'CITATION: ${{ inputs.citation }}' in compute_step
+    assert 'args+=(--status any --only-citation "$CITATION" --limit 1)' in compute_step
+    assert "dispatch_excluded_slugs" in Path(root / "bulk/compute_matrix.py").read_text()
 
 
 def test_cloud_companion_failure_classification_is_fail_closed() -> None:
