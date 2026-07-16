@@ -603,7 +603,7 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert 'return "checks complete; draft review required"' in local_drain
     assert "could not determine PR state" in local_drain
     assert "before push" in local_drain
-    assert "COV_ENCODER_REF = \"9d0f8296134865bcb9af9a303660ab1ac1416e0e\"" in local_drain
+    assert "COV_ENCODER_REF = \"ffb0e7ccde22f6e136dc52aecaf4b5ed3ea6c6b7\"" in local_drain
     assert '"program-scope-sync", "--help"' in local_drain
     assert "COV_ORACLES_REF = \"9901e2479ac39bba865b8232e1c7d879ba447d8d\"" in local_drain
     assert local_drain.count("require_coverage_ref()") >= 5

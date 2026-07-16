@@ -69,7 +69,7 @@ from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
-COV_ENCODER_REF = "9d0f8296134865bcb9af9a303660ab1ac1416e0e"
+COV_ENCODER_REF = "ffb0e7ccde22f6e136dc52aecaf4b5ed3ea6c6b7"
 COV_ENCODER_REMOTE = "https://github.com/TheAxiomFoundation/axiom-encode.git"
 COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk

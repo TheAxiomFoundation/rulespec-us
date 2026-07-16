@@ -60,24 +60,35 @@ The remaining typed blockers are:
 - WV: existing signed modules omit the operative 2026 rate schedule; staged
   section 11-21-4e/4j still requires verified primary text.
 
-## Corpus publication blocker
+## Corpus source-recovery blocker
 
-The 2026-07-10 named-release migration intentionally deleted legacy release
-membership before activating the new v2 release model. The active public
-`corpus.current_provisions` view now contains named-release scopes but no US
-state-statute scope. The underlying versioned state-statute rows remain staged
-in `corpus.provisions` for productionized states, but the legacy pinned encoder
-resolves only the active public view.
+The signed v2 release `us-rulespec-2026-07-16` is active with content SHA-256
+`33ba06e3f3b62df2fd623669de0b14534dade2631b410be325f1465ff5f7f0bc` and
+signed corpus provenance `21d898b8ad07f6f7a27b63b8190d76866ad14348`.
+Its public object verifies, exposes US state statutes, and restores the
+Michigan `206.30/2` fragment that was previously unavailable.
 
-Consequences observed in this campaign:
+The release is only a partial unblock for this campaign: it resolves 6 of the
+20 citations used by the 12 pilots. Source verification still lacks these 14
+active citation paths:
 
-- SS1 Michigan fragment attempts stopped before model generation because
-  neither `us-mi/statute/206.30/<fragment>` nor its parent was active.
-- Atomic `encode --apply` work must wait for a reviewed, signed v2 US corpus
-  release (or an equivalent approved release repair).
-- Existing supplied-current-authority composition modules remain structurally
-  testable and are the established path used by the AZ/GA/MI/NC pilots, but
-  they do not replace the missing atomic statute encodings.
+- DC `47-1801.04`;
+- HI `235-51` and `235-2.4`;
+- IA `422.5` and `422.7`;
+- IN `6-3-2-1` and `6-3-1-3.5`;
+- LA `47:32`;
+- MT `15-30-2103`;
+- NM `7-2-7`;
+- OK `68-2355`;
+- OR `316.037`;
+- RI `44-30-2.6`; and
+- WI `71.06`.
+
+The RuleSpec PR must remain draft until these primary-source provisions are
+recovered into a reviewed, signed successor release and strict source
+validation passes. Existing supplied-current-authority composition modules
+remain structurally testable, but they do not replace the missing atomic
+statute encodings.
 
 ## Required closeout gates
 
