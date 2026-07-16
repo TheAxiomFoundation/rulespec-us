@@ -13,9 +13,32 @@ on:
     - cron: "13 6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  legacy-rulespec-freeze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Verify frozen legacy RuleSpec artifacts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            args+=(--base-ref "$BASE_SHA")
+          fi
+          python tools/check_legacy_rulespec_freeze.py "${args[@]}"
+
   validate:
-    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@7d355a3c7d59d99a9e95369b007b2c36f2c27d66
+    needs: legacy-rulespec-freeze
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@d96c5d81f4e386a4e48b5d4f2a7435a13e28c812
     secrets: inherit
     with:
       axiom-encode-ref: 1d11a50a9d8c60130aab65c808c1d4919b2aeb49
@@ -26,12 +49,11 @@ jobs:
       run-generated-guard: false
 
   drift-alarm:
-    # Red-main alarm. A full validation runs on every push to main and on the
-    # daily schedule; if either goes red, open (or refresh) a tracking issue so
-    # cross-shard drift that a scoped PR let through can never accumulate
-    # silently. Never fires for pull requests.
-    needs: validate
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.validate.result != 'success' }}
+    # Red-main alarm. Repository validation and the legacy freeze run on every
+    # push to main and on the daily schedule; if either goes red, open (or
+    # refresh) a tracking issue. Never fires for pull requests.
+    needs: [legacy-rulespec-freeze, validate]
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && (needs.legacy-rulespec-freeze.result != 'success' || needs.validate.result != 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,15 +64,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT_NAME: ${{ github.event_name }}
+          FREEZE_RESULT: ${{ needs.legacy-rulespec-freeze.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
         run: |
           set -euo pipefail
-          title="Scheduled full RuleSpec validation is red on main"
-          body="The full-matrix validation run failed on main (${EVENT_NAME}): ${RUN_URL}
+          title="RuleSpec repository checks are red on main"
+          body="A repository check failed on main (${EVENT_NAME}): ${RUN_URL}
 
-          Shard-on-demand validates only the touched jurisdiction on pull
-          requests, so a red full run on main is the signal that cross-shard
-          drift reached main. Investigate the failing shard(s) in the run above,
-          then close this issue once main is green again."
+          Legacy RuleSpec freeze: ${FREEZE_RESULT}
+          Full-matrix validation: ${VALIDATE_RESULT}
+
+          Investigate the failed check in the run above, then close this issue
+          once main is green again."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
