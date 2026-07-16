@@ -1,0 +1,112 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-mo/statute/143.011
+      - us-mo/statute/143.021
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-mo/statute/143.011
+        - us-mo/statute/143.021
+      rationale: |-
+        Mo. Rev. Stat. section 143.011 imposes tax on every resident's Missouri
+        taxable income, and section 143.021 requires residents with taxable
+        income to determine tax from the section 143.011 rates. The official
+        corpus record overlays the Department of Revenue's operative 2026
+        schedule: zero through $1,348, intermediate rates from 2.0 through 4.5
+        percent, and $263 plus 4.7 percent of excess over $9,436 in the top
+        bracket. This narrow composition accepts completed-return Missouri
+        taxable income and the active bracket's cumulative base tax, floor, and
+        marginal rate as caller-supplied current-authority inputs. Deductions,
+        exemptions, special income classes, and credits remain outside this
+        rate-section module.
+  summary: |-
+    Composed Missouri individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied completed-
+    return Missouri taxable income and applies the supplied active sections
+    143.011 and 143.021 bracket in cumulative-base-plus-marginal form before
+    credits. Its closest PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2 analog is
+    `mo_income_tax_before_credits` on the six-case childless age-40 grid:
+    single at $30,000/$60,000/$150,000 of wages and one-earner joint at
+    $60,000/$120,000/$300,000. PolicyEngine supplies completed taxable income;
+    expected outputs are independently hand-computed from the official 2026
+    overlay. All six differ from PolicyEngine by about $0.563 because its
+    modeled uprating produces nonofficial 2026 thresholds, including a
+    $9,399.29 projected top floor instead of the published $9,436 floor.
+rules:
+  - name: mo_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Mo. Rev. Stat. sections 143.011 and 143.021, supplied Missouri taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/statute/143.021
+              excerpt: "Every resident having a taxable income shall determine his or her tax from the rates provided in section 143.011"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, mo_pit_pilot_supplied_taxable_income)
+
+  - name: mo_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Mo. Rev. Stat. section 143.011, official 2026 resident schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/statute/143.011
+              excerpt: "$0 to $1,348: $0"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/statute/143.011
+              excerpt: "Over $1,348 but not over $2,696: 2.0% of excess over $1,348"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/statute/143.011
+              excerpt: "Over $8,088 but not over $9,436: $202 plus 4.5% of excess over $8,088"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/statute/143.011
+              excerpt: "Over $9,436: $263 plus 4.7% of excess over $9,436"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          mo_pit_pilot_supplied_bracket_base
+          + mo_pit_pilot_supplied_marginal_rate * max(0, mo_pit_pilot_taxable_income - mo_pit_pilot_supplied_bracket_floor)
+
+  - name: mo_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Mo. Rev. Stat. sections 143.011 and 143.021, resident tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mo/statute/143.011
+              excerpt: "A tax is hereby imposed for every taxable year on the Missouri taxable income of every resident."
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, mo_pit_pilot_schedule_tax)
