@@ -15,11 +15,11 @@ and are not counted in the 44-jurisdiction universe.
   UT, VA). Every committed Axiom-versus-PolicyEngine grid is 6/6.
 - Colorado has separate ECPS/TAXSIM bridge coverage and extensive Title 39
   encodings. It is counted covered, but not as a standardized pilot.
-- This campaign added source-grounded pilots for **22** jurisdictions (AR, DC,
-  HI, IA, IN, KS, LA, MO, MS, MT, ND, NH, NJ, NM, OK, OR, PA, RI, SC, WA, WI,
-  WV), bringing liability comparison coverage to **43 of 44** jurisdictions
+- This campaign added source-grounded pilots for **23** jurisdictions (AR, DC,
+  HI, IA, IN, KS, LA, MO, MS, MT, ND, NH, NJ, NM, OK, OR, PA, RI, SC, VT, WA,
+  WI, WV), bringing liability comparison coverage to **44 of 44** jurisdictions
   when Colorado is included.
-- No liability comparison remains for **1** jurisdiction (VT).
+- No jurisdiction-level liability comparison remains.
 
 The standardized pilots are deliberately narrow resident wage-earner core-
 liability grids. They do not claim full-return coverage for every credit,
@@ -32,8 +32,8 @@ deduction, local tax, or special income class.
 | East | DC, HI, IA, IN, LA | 5 pilots; proof/test/PE parity green |
 | Central | MT, NM, OK, OR, RI | 5 pilots; proof/test/PE parity green |
 | West | WA, WI | 2 pilots; proof/test green |
-| Source-ready follow-on | AR, KS, MO, MS, ND, NH, NJ, PA, SC, WV | 10 pilots; proof/test green; oracle residuals typed below |
-| Source/vintage blockers | VT | typed below |
+| Source-ready follow-on | AR, KS, MO, MS, ND, NH, NJ, PA, SC, VT, WV | 11 pilots; proof/test green; oracle residuals typed below |
+| Source/vintage blockers | None | campaign liability grid complete |
 
 Each candidate must use a primary-source corpus citation or an explicit hashed
 RuleSpec import, carry a companion test, reproduce the selected PolicyEngine
@@ -41,7 +41,7 @@ RuleSpec import, carry a companion test, reproduce the selected PolicyEngine
 review/fix cycle before merge. Missing authority is a typed blocker, never
 permission to supply invented law.
 
-The 22 new pipelines pass 133/133 engine companion cases. Eighteen reproduce
+The 23 new pipelines pass 139/139 engine companion cases. Nineteen reproduce
 their selected PolicyEngine 2026 target on 6/6 cases. Kansas matches its closest
 target within one cent on 6/6; PolicyEngine starts its upper marginal brackets
 one dollar above the statutory cumulative-base floors. Missouri follows the
@@ -56,14 +56,14 @@ three zero cases match, while three positive cases expose PolicyEngine's
 carried-forward 2025 thresholds. New Hampshire encodes the Chapter 77 repeal
 result, rather than a fictional active zero-rate schedule. West Virginia adds
 one non-oracle 2027 boundary case so section 4J cannot be silently carried past
-the section 4H trigger. The independent review/fix cycle completed across the
-east, central, and west batches; the AR/KS/MO/MS/ND/NH/NJ/PA/SC/WV follow-on
-remains subject to the full-PR cycle before merge.
+the section 4H trigger. Vermont follows the section 5822 statutory rates and
+annual inflation authority using supplied current 2026 indexed thresholds; its
+six cases match PolicyEngine at return-cent precision. The independent
+review/fix cycle completed across the east, central, and west batches; the
+AR/KS/MO/MS/ND/NH/NJ/PA/SC/VT/WV follow-on remains subject to the full-PR cycle
+before merge.
 
-The remaining typed blockers are:
-
-- VT: operative rate citation absent under the staged deterministic identifier
-  checked.
+There are no remaining jurisdiction-level liability-grid blockers.
 
 ## Corpus source-recovery blocker
 
@@ -74,8 +74,8 @@ Its public object verifies, exposes US state statutes, and restores the
 Michigan `206.30/2` fragment that was previously unavailable.
 
 The release is only a partial unblock for this campaign: strict CI resolves 3
-of the 38 citations used by the 22 pilots. Source verification still lacks
-these 35 active citation paths:
+of the 43 citations used by the 23 pilots. Source verification still lacks
+these 40 active citation paths:
 
 - AR `act-2-2026` and `act-2-2026/section-1`;
 - DC `47-1801.04`;
@@ -96,6 +96,7 @@ these 35 active citation paths:
 - PA `act-1971-2/article-3/section-302`;
 - RI `44-30-2.6`;
 - SC `12-6-510`;
+- VT `title-32`, `chapter-151`, `32-5811`, `32-5822`, and `32-5823`;
 - WA `82/82.87/82.87.040`, `82/82.87/82.87.060`, and
   `82/82.87/82.87.080`;
 - WI `71.06`; and
@@ -108,11 +109,12 @@ and `79-32-116`, Mississippi `27-7-5`, North Dakota
 canonical New Hampshire Title V root and body-bearing repealed Chapter 77, New
 Jersey `54a:2-1`, Missouri
 `143.011` and `143.021` with the Department of Revenue's 2026 schedule overlay,
-Pennsylvania `act-1971-2/article-3/section-302`, South Carolina `12-6-510`, the
-canonical dotted Washington RCW provisions, and West Virginia's complete
-Article 21 package including sections 3, 4H, and 4J. Strict RuleSpec CI will
-remain blocked until those recoveries are included in a reviewed, signed
-successor corpus release.
+Pennsylvania `act-1971-2/article-3/section-302`, South Carolina `12-6-510`,
+Vermont's canonical Chapter 151 roots and body-bearing sections 5811, 5822, and
+5823 with the 2026 Act 152 and Act 164 overlays, the canonical dotted
+Washington RCW provisions, and West Virginia's complete Article 21 package
+including sections 3, 4H, and 4J. Strict RuleSpec CI will remain blocked until
+those recoveries are included in a reviewed, signed successor corpus release.
 
 The RuleSpec PR must remain draft until these primary-source provisions are
 recovered into a reviewed, signed successor release and strict source
@@ -122,7 +124,7 @@ statute encodings.
 
 ## Required closeout gates
 
-1. Land the 22 source-grounded liability candidates and companion tests.
+1. Land the 23 source-grounded liability candidates and companion tests.
 2. Sign composition candidates through the reviewed manual-exception path;
    regenerate the reverse index and oracle-pending declaration centrally.
 3. Add PolicyEngine/TAXSIM comparison suites and conformance rows in
