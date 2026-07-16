@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -727,6 +728,18 @@ def test_cloud_companion_failure_classification_is_fail_closed() -> None:
     assert '--json "${test_file#"$juris"/}"' in gate_step
     assert 'payload.get("success") is not False' in gate_step
     assert "value_mismatch.fullmatch" in gate_step
+    pattern_match = re.search(
+        r'value_mismatch = re\.compile\(\s*r"([^"]+)"', gate_step
+    )
+    assert pattern_match is not None
+    value_mismatch = re.compile(pattern_match.group(1))
+    assert value_mismatch.fullmatch(
+        "us:statutes/26/61#gross_income: expected 10, got 12"
+    )
+    assert value_mismatch.fullmatch(
+        "us:policies/example#amounts[2]: expected 10, got 12"
+    )
+    assert value_mismatch.fullmatch("missing output amount; got []") is None
     assert 'echo "status=needs-fixtures"' in gate_step
     assert 'echo "status=failed"' in gate_step
     assert 'exit "$test_status"' in gate_step
