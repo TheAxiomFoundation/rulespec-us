@@ -144,7 +144,7 @@ def latest_exact_pr(
     branch: str,
     required_state: str | None = None,
 ) -> dict:
-    """Return the latest PR for an exact repository and head branch."""
+    """Return the active or latest PR for an exact repository and head branch."""
     matches = []
     for pull in _exact_repo_pulls(pages, repo_full_name):
         head = pull.get("head")
@@ -161,6 +161,7 @@ def latest_exact_pr(
     pull = max(
         matches,
         key=lambda item: (
+            {"OPEN": 2, "MERGED": 1}.get(_pull_state(item), 0),
             str(item.get("updated_at") or ""),
             int(item["number"]),
         ),

@@ -789,6 +789,41 @@ def test_latest_exact_pr_can_select_merged_before_newer_closed_pr() -> None:
     ) == {"number": 901, "state": "MERGED", "merge_commit": "a" * 40}
 
 
+def test_latest_exact_pr_prefers_open_before_newer_closed_pr() -> None:
+    pages = [
+        [
+            {
+                "number": 901,
+                "state": "open",
+                "merged_at": None,
+                "updated_at": "2026-07-15T11:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "number": 902,
+                "state": "closed",
+                "merged_at": None,
+                "updated_at": "2026-07-15T12:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+        ]
+    ]
+
+    assert latest_exact_pr(
+        pages,
+        "TheAxiomFoundation/rulespec-us",
+        "bulk/us-sc-manual-page-163",
+    ) == {"number": 901, "state": "OPEN", "merge_commit": ""}
+
+
 def test_merged_pr_slugs_uses_exact_repository() -> None:
     pages = [
         [
