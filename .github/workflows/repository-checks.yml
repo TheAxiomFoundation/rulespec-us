@@ -36,17 +36,52 @@ jobs:
           fi
           python tools/check_legacy_rulespec_freeze.py "${args[@]}"
 
+  workflow-toolchain:
+    runs-on: ubuntu-latest
+    outputs:
+      axiom_encode_ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+      axiom_rules_engine_ref: ${{ steps.pins.outputs.axiom_rules_engine_ref }}
+      axiom_corpus_ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
+      rulespec_us_ref: ${{ steps.pins.outputs.rulespec_us_ref }}
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Read protected workflow toolchain
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          toolchain = tomllib.loads(
+              Path(".axiom/workflow-toolchain.toml").read_text()
+          )["workflow_toolchain"]
+          for key in (
+              "axiom_encode_ref",
+              "axiom_rules_engine_ref",
+              "axiom_corpus_ref",
+              "rulespec_us_ref",
+          ):
+              value = toolchain.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+          PY
+
   validate:
-    needs: legacy-rulespec-freeze
+    needs: [legacy-rulespec-freeze, workflow-toolchain]
     uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@d96c5d81f4e386a4e48b5d4f2a7435a13e28c812
     secrets: inherit
     with:
-      axiom-encode-ref: eeae9f707e71819960c36c7ef0f03e796770096a
-      axiom-rules-engine-ref: 05eac9d2f89dabe5c6673176260762cef3a58f47
-      axiom-corpus-ref: 21d898b8ad07f6f7a27b63b8190d76866ad14348
-      rulespec-us-ref: 8a35bfaceb5754a38c111f4f246e69891de6c2d3
+      axiom-encode-ref: ${{ needs.workflow-toolchain.outputs.axiom_encode_ref }}
+      axiom-rules-engine-ref: ${{ needs.workflow-toolchain.outputs.axiom_rules_engine_ref }}
+      axiom-corpus-ref: ${{ needs.workflow-toolchain.outputs.axiom_corpus_ref }}
+      rulespec-us-ref: ${{ needs.workflow-toolchain.outputs.rulespec_us_ref }}
       validate-roots: auto
-      run-generated-guard: false
       guard-programs-root: false
 
   drift-alarm:

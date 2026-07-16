@@ -5,6 +5,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,44 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     workflow = (ROOT / ".github/workflows/repository-checks.yml").read_text()
 
     assert "legacy-rulespec-freeze:" in workflow
-    assert "needs: legacy-rulespec-freeze" in workflow
-    assert "eeae9f707e71819960c36c7ef0f03e796770096a" in workflow
+    assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
     assert "d96c5d81f4e386a4e48b5d4f2a7435a13e28c812" in workflow
+
+
+def test_generation_workflows_use_immutable_toolchain() -> None:
+    toolchain = tomllib.loads((ROOT / ".axiom/workflow-toolchain.toml").read_text())[
+        "workflow_toolchain"
+    ]
+    assert toolchain == {
+        "axiom_encode_version": "0.2.1256",
+        "axiom_encode_ref": "eeae9f707e71819960c36c7ef0f03e796770096a",
+        "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
+        "axiom_corpus_ref": "21d898b8ad07f6f7a27b63b8190d76866ad14348",
+        "rulespec_us_ref": "8a35bfaceb5754a38c111f4f246e69891de6c2d3",
+    }
+
+    source_staleness = (ROOT / ".github/workflows/source-staleness.yml").read_text()
+    assert '.axiom/workflow-toolchain.toml").read_text()' in source_staleness
+    assert 'ref: "main"' not in source_staleness
+
+    repository_checks = (ROOT / ".github/workflows/repository-checks.yml").read_text()
+    assert '.axiom/workflow-toolchain.toml").read_text()' in repository_checks
+    workflow_inputs = {
+        "axiom-encode-ref": "axiom_encode_ref",
+        "axiom-rules-engine-ref": "axiom_rules_engine_ref",
+        "axiom-corpus-ref": "axiom_corpus_ref",
+        "rulespec-us-ref": "rulespec_us_ref",
+    }
+    for input_name, output_name in workflow_inputs.items():
+        assert (
+            f"{input_name}: ${{{{ needs.workflow-toolchain.outputs.{output_name} }}}}"
+            in repository_checks
+        )
+    for value in toolchain.values():
+        assert value not in repository_checks
+
+    bulk_encode = (ROOT / ".github/workflows/bulk-encode.yml").read_text()
+    assert "disabled pending reviewed activation" in bulk_encode
+    assert "exit 1" in bulk_encode
+    assert "axiom_encode.cli encode" not in bulk_encode
+    assert "schedule:" not in bulk_encode
