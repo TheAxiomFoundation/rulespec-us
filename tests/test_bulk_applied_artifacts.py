@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import json
 import re
@@ -29,6 +30,7 @@ changed_paths = _applied_artifacts.changed_paths
 discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
 select = _compute_matrix.select
 active_pr_slugs = _compute_matrix.active_pr_slugs
+matrix_limit = _compute_matrix.matrix_limit
 
 
 def _write_manifest(path: Path, citation: str, applied_paths: set[str]) -> None:
@@ -569,6 +571,23 @@ def test_matrix_excludes_active_prs_before_applying_limit() -> None:
     )
 
     assert [item["citation"] for item in selected] == ["us-sc/manual/page-165"]
+
+
+@pytest.mark.parametrize("limit", [-1, 257])
+def test_matrix_rejects_out_of_range_limit(limit: int) -> None:
+    with pytest.raises(ValueError, match="between 0 and 256"):
+        select({"entries": []}, "pending", None, limit)
+
+
+@pytest.mark.parametrize("value", ["-1", "257", "not-an-integer"])
+def test_matrix_limit_parser_rejects_unsafe_values(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError, match="limit must"):
+        matrix_limit(value)
+
+
+def test_matrix_limit_parser_accepts_github_capacity_bounds() -> None:
+    assert matrix_limit("0") == 0
+    assert matrix_limit("256") == 256
 
 
 def test_active_pr_slugs_excludes_open_and_merged_exact_repo_branches() -> None:

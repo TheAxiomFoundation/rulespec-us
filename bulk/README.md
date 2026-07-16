@@ -69,7 +69,8 @@ The protected workflow supplies these jobs:
    emits the matrix. Entries whose exact `bulk/<slug>` branch already has an
    open or merged PR are excluded before the limit is applied, so a stale
    `pending` status cannot starve later queue entries. Closed, unmerged PRs stay
-   eligible for the workflow's reopen/recreate recovery path.
+   eligible for the workflow's reopen/recreate recovery path. Dispatch limits
+   are constrained to GitHub's `0..256` matrix capacity.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.

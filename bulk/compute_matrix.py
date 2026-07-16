@@ -44,6 +44,20 @@ WORKLIST = Path(__file__).resolve().parent / "worklist.yaml"
 
 SELECTABLE_STATUSES = {"pending", "pending-local"}
 REPO_ROOT = WORKLIST.parents[1]
+MAX_MATRIX_ENTRIES = 256
+
+
+def matrix_limit(value: str) -> int:
+    """Parse a bounded GitHub Actions matrix limit."""
+    try:
+        limit = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("limit must be an integer") from exc
+    if not 0 <= limit <= MAX_MATRIX_ENTRIES:
+        raise argparse.ArgumentTypeError(
+            f"limit must be between 0 and {MAX_MATRIX_ENTRIES}"
+        )
+    return limit
 
 
 def citation_slug(citation: str) -> str:
@@ -136,6 +150,8 @@ def select(
     *,
     excluded_slugs: set[str] | None = None,
 ) -> list[dict]:
+    if limit is not None and not 0 <= limit <= MAX_MATRIX_ENTRIES:
+        raise ValueError(f"limit must be between 0 and {MAX_MATRIX_ENTRIES}")
     out: list[dict] = []
     excluded_slugs = excluded_slugs or set()
     for entry in data["entries"]:
@@ -215,7 +231,10 @@ def main() -> int:
         "--batch", default=None, help="Restrict to a batch label (A, B, ...)."
     )
     ap.add_argument(
-        "--limit", type=int, default=None, help="Cap the number of entries."
+        "--limit",
+        type=matrix_limit,
+        default=None,
+        help=f"Cap entries between 0 and {MAX_MATRIX_ENTRIES}.",
     )
     ap.add_argument(
         "--format",
