@@ -630,3 +630,103 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert "Local signed generation is disabled" in local_drain
     assert '"AXIOM_ENCODE_APPLY_SIGNING_KEY": signing_key()' not in local_drain
     assert "find-generic-password" not in local_drain
+
+
+def test_cloud_apply_uses_protected_signer_and_exact_artifact_discovery() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    encode_job = workflow.split("\n  encode:\n", 1)[1]
+    signing_step = workflow.split(
+        "- name: Encode --apply through protected signer", 1
+    )[1].split("- name: Discover applied artifacts", 1)[0]
+
+    assert 'python-version: "3.13"' in encode_job
+    assert 'go-version: "1.26.1"' in encode_job
+    assert "pull-requests: read" in encode_job
+    assert "Fetch pinned signed corpus release object from public registry" in encode_job
+    assert "rest/v1/release_objects?select=release_object" in encode_job
+    assert "NEXT_PUBLIC_SUPABASE_ANON_KEY" in encode_job
+    assert "git merge-base --is-ancestor" in encode_job
+    assert "python bulk/applied_artifacts.py" in encode_job
+    assert '--citation "$CITATION"' in encode_job
+    assert "git status --porcelain" not in encode_job
+    assert 'echo "manifest_rel=$manifest_rel"' in encode_job
+    assert "MANIFEST_REL: ${{ steps.encode.outputs.manifest_rel }}" in encode_job
+    assert 'manifest="$(cat "$GITHUB_WORKSPACE/$MANIFEST_REL")"' in encode_job
+    assert "find \"$GITHUB_WORKSPACE\" -path '*/.axiom/encoding-manifests/*'" not in encode_job
+    assert "Require merged queue dependencies" in encode_job
+    assert "Prepare reviewed encode context" in encode_job
+    assert "AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets." in signing_step
+    assert 'exec "$RUNNER_TEMP/axiom-encode-apply-signer" run' in signing_step
+    assert "--key-env AXIOM_ENCODE_APPLY_SIGNING_KEY" in signing_step
+    assert "| tee" not in signing_step
+    assert "jq " not in signing_step
+    assert "\n          python " not in signing_step
+
+
+def test_cloud_bulk_prs_remain_draft_without_auto_merge() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+
+    assert "--label bulk-encode --draft" in workflow
+    assert 'gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo' in workflow
+    assert 'gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto' in workflow
+    assert "--auto --squash" not in workflow
+    assert ".autoMergeRequest == null" in workflow
+    state_lookup = workflow.index('pr_json="$(retry gh pr list')
+    merged_guard = workflow.index('if [ "$pr_state" = "MERGED" ]; then')
+    branch_push = workflow.index('push -f origin "HEAD:$branch"')
+    assert state_lookup < merged_guard < branch_push
+    assert '--state all --head "$branch"' in workflow
+    assert "API failures remain failures" in workflow
+    assert "skipping stale pending queue entry before branch mutation" in workflow
+
+
+def test_cloud_companion_failure_classification_is_fail_closed() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    gate_step = workflow.split(
+        "- name: Discover applied artifacts and run the gate battery", 1
+    )[1].split("- name: Assemble PR body", 1)[0]
+
+    assert '--json "${test_file#"$juris"/}"' in gate_step
+    assert 'payload.get("success") is not False' in gate_step
+    assert "value_mismatch.fullmatch" in gate_step
+    assert 'echo "status=needs-fixtures"' in gate_step
+    assert 'echo "status=failed"' in gate_step
+    assert 'exit "$test_status"' in gate_step
+
+
+def test_cloud_gate_battery_uses_protected_current_command_plane() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    gate_step = workflow.split(
+        "- name: Discover applied artifacts and run the gate battery", 1
+    )[1].split("- name: Assemble PR body", 1)[0]
+
+    assert gate_step.count(
+        "/opt/axiom-verification/axiom-encode-signing-supervisor"
+    ) == 4
+    assert '--corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus"' in gate_step
+    assert "--expected-encoder-checkout" in gate_step
+    assert "--axiom-rules-engine-path" in gate_step
+    assert '--root "$GITHUB_WORKSPACE/$juris"' in gate_step
+    assert 'program-scope-sync --repo "$GITHUB_WORKSPACE"' in gate_step
+
+
+def test_bulk_workflow_pins_every_third_party_action() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    action_refs = {
+        line.strip().removeprefix("uses: ").split(" #", 1)[0]
+        for line in workflow.splitlines()
+        if line.strip().startswith("uses: ")
+    }
+
+    assert action_refs == {
+        "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+        "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+        "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+        "dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30",
+        "Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4",
+    }

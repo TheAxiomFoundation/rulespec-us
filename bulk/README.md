@@ -18,14 +18,11 @@ provisions to queue.
 | `.axiom/workflow-toolchain.toml` | Immutable checkout SHAs used by CI and generation. |
 | `bulk/local_drain.py` | Legacy recovery runner. Do not use it for signed apply with the current broker-only encoder. |
 | `bulk/applied_artifacts.py` | Validates the module, companion test, and signed manifest written by one encoder apply. |
-| `.github/workflows/bulk-encode.yml` | Fail-closed stub until the protected activation PR enables brokered generation. |
+| `.github/workflows/bulk-encode.yml` | Protected brokered cloud dispatcher for signed generation. |
 
 ## Running it
 
-Cloud generation is temporarily disabled by the protected migration base. The
-activation PR replaces the fail-closed stub only after this queue and runner
-support has passed review. After activation, dispatch from the Actions tab
-(**Bulk encode -> Run workflow**) or the CLI:
+Dispatch from the Actions tab (**Bulk encode -> Run workflow**) or the CLI:
 
 ```bash
 # Encode the first 8 pending batch-A entries:
@@ -35,7 +32,7 @@ gh workflow run bulk-encode.yml -f batch=A -f limit=8 --repo TheAxiomFoundation/
 gh workflow run bulk-encode.yml -f limit=12 --repo TheAxiomFoundation/rulespec-us
 ```
 
-After activation, the `schedule` trigger runs weekly and drains any remaining
+The `schedule` trigger runs weekly and drains any remaining
 `pending` entries with no human action. Parallelism is capped at 4
 (`max-parallel`) to stay under OpenAI rate limits; a top-level `concurrency`
 group serialises whole dispatches so two runs never fight over the same
@@ -43,7 +40,7 @@ group serialises whole dispatches so two runs never fight over the same
 
 ### Review-safe generation
 
-Once activated, signed apply runs only in the main-branch `bulk-encode.yml`
+Signed apply runs only in the main-branch `bulk-encode.yml`
 workflow. The workflow provisions a root-owned Python runtime and launches the
 current encoder through `axiom-encode-apply-signer`; the private key is consumed
 by the external signer and never reaches the encoder process. `allow_context`
@@ -63,9 +60,9 @@ then regenerated with `encode --apply`.
 | `AXIOM_ENCODE_APPLY_SIGNING_KEY` | Consumed only by the protected external signer. It must match `AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY`; the encoder never receives it. |
 | `BULK_ENCODE_TOKEN` | A `repo`+`workflow`-scoped token used to push the branch and open the draft PR. **Required**: PRs opened by the default `GITHUB_TOKEN` do **not** trigger the `pull_request` event, so required validation would never run. This token makes the PR a real event that triggers CI. |
 
-## Activated workflow
+## Workflow
 
-The protected activation PR supplies these jobs after the feature PR lands:
+The protected workflow supplies these jobs:
 
 1. **dispatch** — installs PyYAML, runs `compute_matrix.py --status pending`
    (optionally `--batch`, `--limit`), and emits the matrix.

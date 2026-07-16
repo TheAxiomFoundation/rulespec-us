@@ -1,20 +1,857 @@
 name: Bulk encode
 
-# Fail closed during the canonical-provenance migration. The protected signer
-# workflow is enabled only after its reviewed matrix and local runner support
-# land in the separate feature PR.
+# Durable queue -> runner -> PR loop for bulk RuleSpec encoding, independent of
+# any local session.
+#
+#   * The queue is bulk/worklist.yaml (committed). bulk/compute_matrix.py turns
+#     it into the job matrix.
+#   * Each matrix job encodes ONE already-ingested provision with
+#     `axiom-encode encode <citation> --apply` using the toolchain-pinned
+#     encoder (.axiom/workflow-toolchain.toml), so generation and downstream CI
+#     use the identical encoder version.
+#   * The job runs the same gate battery the PR CI runs (guard-generated is
+#     satisfied by the signed apply manifest; validate + companion test +
+#     proof-validate run locally as a fast fail-closed pre-check), and opens one
+#     draft PR per module on `bulk/<slug>` for the required review/fix cycle.
+#   * The job NEVER bypasses red. It never admin-merges. The authoritative gate
+#     is the repository's required `validate / validate` check on the PR; this
+#     workflow only queues work and pre-checks it.
+#
+# The encoder and gates own correctness. This workflow is plumbing: it never
+# edits generated values.
+
 on:
   workflow_dispatch:
+    inputs:
+      batch:
+        description: "Worklist batch label to encode (e.g. A, B). Empty = all pending."
+        required: false
+        type: string
+        default: ""
+      limit:
+        description: "Max modules to encode this run."
+        required: false
+        type: string
+        default: "8"
+  schedule:
+    # Weekly, off-peak, after the corpus/oracle cadence. Picks up any entries
+    # still `pending` in the worklist without a human dispatch.
+    - cron: "41 6 * * 2"
 
+# The default GITHUB_TOKEN is intentionally minimal; PR creation uses
+# BULK_ENCODE_TOKEN so the opened PR triggers the required validate CI.
 permissions:
   contents: read
 
+concurrency:
+  # One bulk run at a time so two dispatches never race on the same branches.
+  group: bulk-encode
+  cancel-in-progress: false
+
 jobs:
-  disabled:
-    name: disabled pending reviewed activation
+  dispatch:
+    name: dispatch
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.compute.outputs.matrix }}
+      count: ${{ steps.compute.outputs.count }}
     steps:
-      - name: Reject bulk dispatch while migration is incomplete
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install PyYAML
+        run: python -m pip install --upgrade pip pyyaml
+
+      - name: Compute matrix from worklist
+        id: compute
+        shell: bash
+        env:
+          BATCH: ${{ inputs.batch }}
+          LIMIT: ${{ inputs.limit || '8' }}
         run: |
-          echo "Bulk encoding is disabled pending the reviewed activation PR." >&2
-          exit 1
+          set -euo pipefail
+          args=(--status pending --format matrix --limit "$LIMIT")
+          if [ -n "$BATCH" ]; then
+            args+=(--batch "$BATCH")
+          fi
+          matrix="$(python bulk/compute_matrix.py "${args[@]}")"
+          count="$(python -c 'import json,sys; print(len(json.loads(sys.argv[1])["include"]))' "$matrix")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Selected $count pending module(s):"
+          python bulk/compute_matrix.py "${args[@]/--format matrix/--format table}" || true
+
+      - name: Fail if nothing to encode
+        if: ${{ steps.compute.outputs.count == '0' }}
+        run: |
+          echo "::warning::No pending worklist entries match this dispatch." >&2
+          # Not a hard failure: a scheduled run with an empty queue is normal.
+          exit 0
+
+  encode:
+    name: encode
+    needs: dispatch
+    if: ${{ needs.dispatch.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Independent modules: one red module must not cancel the others.
+      fail-fast: false
+      # Cap parallelism at 4 to stay well under OpenAI rate limits and keep
+      # engine builds cheap.
+      max-parallel: 4
+      matrix:
+        item: ${{ fromJSON(needs.dispatch.outputs.matrix).include }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout rules repository (leaf dir MUST be named rulespec-us)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          # BULK_ENCODE_TOKEN so the PR push/creation triggers the required
+          # validate CI (the default GITHUB_TOKEN would not).
+          token: ${{ secrets.BULK_ENCODE_TOKEN }}
+
+      - name: Guard - workspace must be named rulespec-us
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(basename "$GITHUB_WORKSPACE")"
+          if [ "$base" != "rulespec-us" ]; then
+            echo "::error::--apply resolver requires the checkout leaf dir to be 'rulespec-us' (got '$base')." >&2
+            exit 1
+          fi
+          echo "Workspace leaf dir: $base"
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.26.1"
+          cache: false
+
+      - name: Resolve pinned RuleSpec toolchain
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(
+              Path(".axiom/workflow-toolchain.toml").read_text()
+          )
+          t = data["workflow_toolchain"]
+          ref_keys = (
+              "axiom_encode_ref",
+              "axiom_rules_engine_ref",
+              "axiom_corpus_ref",
+          )
+          for key in ref_keys:
+              value = t.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+          version = t.get("axiom_encode_version")
+          if not isinstance(version, str) or re.fullmatch(r"[0-9]+(?:\.[0-9]+){2}", version) is None:
+              raise SystemExit("axiom_encode_version must be a semantic version")
+          print(f"axiom_encode_version={version}")
+
+          evidence = tomllib.loads(Path(".axiom/toolchain.toml").read_text())
+          if set(evidence) != {"toolchain"}:
+              raise SystemExit("evidence toolchain must contain only [toolchain]")
+          policy = evidence["toolchain"]
+          expected = {
+              "axiom_corpus_release",
+              "axiom_corpus_release_content_sha256",
+              "validation_waiver_set_sha256",
+          }
+          if not isinstance(policy, dict) or set(policy) != expected:
+              raise SystemExit("evidence toolchain has an invalid schema")
+          release = policy["axiom_corpus_release"]
+          content_sha = policy["axiom_corpus_release_content_sha256"]
+          if not isinstance(release, str) or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", release) is None:
+              raise SystemExit("axiom_corpus_release must be an immutable release name")
+          if not isinstance(content_sha, str) or re.fullmatch(r"[0-9a-f]{64}", content_sha) is None:
+              raise SystemExit("axiom_corpus_release_content_sha256 must be a lowercase sha256")
+          print(f"axiom_corpus_release={release}")
+          print(f"axiom_corpus_release_content_sha256={content_sha}")
+          PY
+          echo "Resolved toolchain:"
+          grep -E 'axiom_(encode|rules_engine|corpus)_ref|axiom_encode_version' "$GITHUB_OUTPUT" || true
+
+      - name: Checkout axiom-encode (pinned)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ steps.toolchain.outputs.axiom_encode_ref }}
+          path: _axiom/axiom-encode
+
+      - name: Checkout axiom-rules-engine (pinned)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          ref: ${{ steps.toolchain.outputs.axiom_rules_engine_ref }}
+          path: _axiom/axiom-rules-engine
+
+      - name: Checkout axiom-corpus (pinned)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: ${{ steps.toolchain.outputs.axiom_corpus_ref }}
+          path: _axiom/axiom-corpus
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+
+      - name: Cache axiom-rules-engine build
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: _axiom/axiom-rules-engine
+
+      - name: Install pinned axiom-encode
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pyyaml
+          python -m pip install -e _axiom/axiom-encode
+          rm -rf "$RUNNER_TEMP/axiom-verification-site-packages"
+          python -m pip install --target "$RUNNER_TEMP/axiom-verification-site-packages" \
+            _axiom/axiom-encode
+          # The protected runtime imports axiom_encode from a root-owned copy of
+          # the exact Git checkout so apply manifests retain verifiable commit
+          # provenance. Dependencies remain in the isolated site-packages tree.
+          rm -rf "$RUNNER_TEMP/axiom-verification-site-packages/axiom_encode"
+
+      - name: Fetch pinned signed corpus release object from public registry
+        shell: bash
+        env:
+          SUPABASE_URL: https://swocpijqqahhuwtuahwc.supabase.co
+          SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          RELEASE_NAME: ${{ steps.toolchain.outputs.axiom_corpus_release }}
+          RELEASE_CONTENT_SHA256: ${{ steps.toolchain.outputs.axiom_corpus_release_content_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ANON_KEY" || {
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY repository variable is required" >&2
+            exit 1
+          }
+          destination="$GITHUB_WORKSPACE/_axiom/axiom-corpus/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
+          mkdir -p "$(dirname "$destination")"
+          url="${SUPABASE_URL%/}/rest/v1/release_objects?select=release_object&release_name=eq.${RELEASE_NAME}&content_sha256=eq.${RELEASE_CONTENT_SHA256}&limit=2"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$destination.tmp" "$url"
+          python - "$destination.tmp" "$RELEASE_NAME" "$RELEASE_CONTENT_SHA256" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          path, expected_name, expected_sha = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          try:
+              rows = json.loads(path.read_bytes())
+          except (OSError, json.JSONDecodeError) as exc:
+              raise SystemExit(f"Corpus release acquisition error: invalid JSON: {exc}")
+          if not isinstance(rows, list) or len(rows) != 1:
+              raise SystemExit(
+                  "Corpus release acquisition error: public registry did not return "
+                  "exactly one immutable object"
+              )
+          payload = rows[0].get("release_object") if isinstance(rows[0], dict) else None
+          if not isinstance(payload, dict):
+              raise SystemExit("Corpus release acquisition error: missing release object")
+          if payload.get("release") != expected_name:
+              raise SystemExit("Corpus release acquisition error: release name mismatch")
+          content = payload.get("content")
+          if not isinstance(content, dict):
+              raise SystemExit("Corpus release acquisition error: missing content object")
+          actual = hashlib.sha256(json.dumps(
+              content, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+          ).encode()).hexdigest()
+          if payload.get("content_sha256") != actual or actual != expected_sha:
+              raise SystemExit(
+                  f"Corpus release acquisition error: content sha256 mismatch "
+                  f"({actual} != {expected_sha})"
+              )
+          destination = path.with_suffix("")
+          destination.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+          path.unlink()
+          PY
+
+      - name: Authenticate signed corpus provenance commit
+        shell: bash
+        env:
+          RELEASE_NAME: ${{ steps.toolchain.outputs.axiom_corpus_release }}
+          RELEASE_CONTENT_SHA256: ${{ steps.toolchain.outputs.axiom_corpus_release_content_sha256 }}
+          AXIOM_CORPUS_SHA: ${{ steps.toolchain.outputs.axiom_corpus_ref }}
+        run: |
+          set -euo pipefail
+          object="_axiom/axiom-corpus/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
+          release_commit="$(python - "$object" <<'PY'
+          import json
+          import sys
+          print(json.load(open(sys.argv[1]))["content"]["git"]["commit"])
+          PY
+          )"
+          if [[ ! "$release_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Signed release provenance is not a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          default_branch="$(git -C _axiom/axiom-corpus ls-remote --symref origin HEAD | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$#\1#p')"
+          test -n "$default_branch"
+          git -C _axiom/axiom-corpus fetch --no-tags origin \
+            "+refs/heads/$default_branch:refs/remotes/origin/$default_branch"
+          git -C _axiom/axiom-corpus merge-base --is-ancestor \
+            "$release_commit" "refs/remotes/origin/$default_branch" || {
+              echo "Signed release provenance $release_commit is not on the corpus default branch" >&2
+              exit 1
+            }
+          git -C _axiom/axiom-corpus merge-base --is-ancestor \
+            "$release_commit" "$AXIOM_CORPUS_SHA" || {
+              echo "Corpus checkout $AXIOM_CORPUS_SHA predates signed release provenance $release_commit" >&2
+              exit 1
+            }
+
+      - name: Build axiom-rules-engine
+        working-directory: _axiom/axiom-rules-engine
+        run: cargo build --verbose
+
+      - name: Expose engine and sibling checkouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine/target/debug" >> "$GITHUB_PATH"
+          # Sibling layout the resolver's default checkout discovery expects.
+          ln -sfn "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" "$GITHUB_WORKSPACE/../axiom-rules-engine"
+          ln -sfn "$GITHUB_WORKSPACE/_axiom/axiom-corpus" "$GITHUB_WORKSPACE/../axiom-corpus"
+
+      - name: Provision protected signing supervisor
+        shell: bash
+        env:
+          TRUST_APPLY_ROOT: ${{ vars.AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY }}
+          TRUST_EVAL_ROOT: ${{ vars.AXIOM_ENCODE_EVAL_SIGNING_PUBLIC_KEY }}
+          TRUST_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          pushd _axiom/axiom-encode >/dev/null
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \
+            -o "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            ./cmd/axiom-encode-signing-supervisor
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \
+            -o "$RUNNER_TEMP/axiom-encode-apply-signer" \
+            ./cmd/axiom-encode-apply-signer
+          popd >/dev/null
+          sudo rm -rf /opt/axiom-verification
+          sudo "$(command -v python)" \
+            _axiom/axiom-encode/scripts/provision_verification_supervisor.py \
+            --destination /opt/axiom-verification \
+            --supervisor "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            --site-packages "$RUNNER_TEMP/axiom-verification-site-packages" \
+            --apply-root "$TRUST_APPLY_ROOT" \
+            --eval-root "$TRUST_EVAL_ROOT" \
+            --corpus-release-root "$TRUST_CORPUS_RELEASE_ROOT"
+          sudo cp -a _axiom/axiom-encode \
+            /opt/axiom-verification/python/axiom-encode-checkout
+          sudo install -m 0755 "$(command -v git)" \
+            /opt/axiom-verification/python/bin/git.real
+          sudo tee /opt/axiom-verification/python/bin/git >/dev/null <<'EOF'
+          #!/bin/sh
+          exec /opt/axiom-verification/python/bin/git.real \
+            -c safe.directory=/opt/axiom-verification/python/axiom-encode-checkout "$@"
+          EOF
+          sudo chmod 0755 /opt/axiom-verification/python/bin/git
+          sudo chown -R 0:0 /opt/axiom-verification
+          sudo chmod -R go-w /opt/axiom-verification
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
+
+      - name: Require merged queue dependencies
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CITATION: ${{ matrix.item.citation }}
+          REQUIRED_CITATIONS: ${{ toJSON(matrix.item.requires_merged_citations) }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r dependency; do
+            slug="$(python -c \
+              'import sys; from bulk.compute_matrix import citation_slug; print(citation_slug(sys.argv[1]))' \
+              "$dependency")"
+            open_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+              --head "bulk/$slug" --json number --jq 'length')"
+            if [ "$open_count" -ne 0 ]; then
+              echo "::error::$CITATION is waiting for the open dependency PR for $dependency." >&2
+              exit 1
+            fi
+            merge_commit="$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged \
+              --head "bulk/$slug" --limit 100 --json mergedAt,mergeCommit \
+              --jq 'sort_by(.mergedAt) | last | .mergeCommit.oid // ""')"
+            if [ -z "$merge_commit" ]; then
+              echo "::error::$CITATION is waiting for merged dependency $dependency." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$merge_commit" HEAD; then
+              echo "::error::$CITATION dependency $dependency is not present in checked-out HEAD; dispatch again from updated main." >&2
+              exit 1
+            fi
+          done < <(jq -r '.[]' <<< "$REQUIRED_CITATIONS")
+
+      - name: Prepare reviewed encode context
+        shell: bash
+        env:
+          ALLOW_CONTEXT: ${{ toJSON(matrix.item.allow_context) }}
+        run: |
+          set -euo pipefail
+          jq -r '.[]' <<< "$ALLOW_CONTEXT" > "$RUNNER_TEMP/allow-context"
+          date +%s > "$RUNNER_TEMP/encode-start"
+
+      # Keep the signing secret on a single-purpose step. This shell performs
+      # only built-in argument assembly and immediately execs the hardened
+      # launcher, so no unrelated child process inherits the key.
+      - name: Encode --apply through protected signer
+        shell: bash
+        env:
+          CITATION: ${{ matrix.item.citation }}
+          BACKEND: ${{ matrix.item.backend }}
+          MODEL: ${{ matrix.item.model }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets.AXIOM_ENCODE_APPLY_SIGNING_KEY }}
+          AXIOM_CORPUS_REPO: ${{ github.workspace }}/_axiom/axiom-corpus
+          AXIOM_RULESPEC_REPO_ROOTS: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          encode_args=(
+            encode "$CITATION"
+            --backend "$BACKEND" --model "$MODEL"
+            --policy-repo-path "$GITHUB_WORKSPACE"
+            --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine"
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus"
+            --output "$RUNNER_TEMP/encode-out"
+            --apply --no-sync
+          )
+          while IFS= read -r context; do
+            encode_args+=(--allow-context "$GITHUB_WORKSPACE/$context")
+          done < "$RUNNER_TEMP/allow-context"
+
+          # --- Encode + apply (writes main YAML, companion test, signed manifest) ---
+          # `--apply` validates the generated main file, companion test, and
+          # direct dependents in a temporary overlay before installing. It exits
+          # non-zero and writes nothing on validation failure -> fail-closed.
+          exec "$RUNNER_TEMP/axiom-encode-apply-signer" run \
+            --scope apply_ed25519 \
+            --key-env AXIOM_ENCODE_APPLY_SIGNING_KEY \
+            --supervisor /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/axiom-encode-checkout/src \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/axiom-encode-checkout/src/axiom_encode \
+            --expected-github-repository TheAxiomFoundation/rulespec-us \
+            --allowed-workflow-ref TheAxiomFoundation/rulespec-us/.github/workflows/bulk-encode.yml@refs/heads/main \
+            --allowed-event-name workflow_dispatch \
+            --allowed-event-name schedule \
+            -- /opt/axiom-verification/axiom-encode "${encode_args[@]}"
+
+      - name: Discover applied artifacts and run the gate battery
+        id: encode
+        shell: bash
+        env:
+          CITATION: ${{ matrix.item.citation }}
+          PROGRAM_SCOPE_SYNC: ${{ toJSON(matrix.item.program_scope_sync) }}
+          AXIOM_CORPUS_REPO: ${{ github.workspace }}/_axiom/axiom-corpus
+          AXIOM_RULESPEC_REPO_ROOTS: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          start="$(<"$RUNNER_TEMP/encode-start")"
+          end=$(date +%s)
+          echo "wall_seconds=$((end - start))" >> "$GITHUB_OUTPUT"
+          echo "Encode wall time: $((end - start))s"
+
+          # Fail closed unless the reviewed helper finds exactly one generated
+          # module, its companion test, and the matching signed apply manifest.
+          # The helper also binds the generated module to the requested citation
+          # and rejects outputs written under the frozen legacy manual root.
+          mapfile -t applied < <(
+            python bulk/applied_artifacts.py \
+              --repo "$GITHUB_WORKSPACE" \
+              --citation "$CITATION"
+          )
+          if [ "${#applied[@]}" -ne 3 ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::error::Could not identify the exact applied artifacts for $CITATION." >&2
+            exit 1
+          fi
+
+          module="${applied[0]}"
+          test_file="${applied[1]}"
+          manifest_rel="${applied[2]}"
+          juris="${module%%/*}"
+          echo "module=$module" >> "$GITHUB_OUTPUT"
+          echo "test_file=$test_file" >> "$GITHUB_OUTPUT"
+          echo "manifest_rel=$manifest_rel" >> "$GITHUB_OUTPUT"
+          echo "Applied module: $module"
+          echo "Applied manifest: $manifest_rel"
+
+          composition_files=()
+          if [ "$PROGRAM_SCOPE_SYNC" != "null" ]; then
+            program_spec="$(jq -r '.program_spec' <<< "$PROGRAM_SCOPE_SYNC")"
+            scope="$(jq -r '.scope' <<< "$PROGRAM_SCOPE_SYNC")"
+            scope_args=(
+              program-scope-sync --repo "$GITHUB_WORKSPACE"
+              --program-spec "$program_spec" --scope "$scope"
+            )
+            while IFS= read -r value; do
+              scope_args+=(--add "$value")
+            done < <(jq -r '.add[]?' <<< "$PROGRAM_SCOPE_SYNC")
+            while IFS= read -r value; do
+              scope_args+=(--remove "$value")
+            done < <(jq -r '.remove[]?' <<< "$PROGRAM_SCOPE_SYNC")
+            axiom-encode "${scope_args[@]}"
+            composition_files+=("$program_spec")
+          fi
+
+          # Regenerate the provision -> rules reverse index so the committed
+          # .axiom/index/provisions_to_rules.json reflects the new module; the
+          # reverse-index CI check fails on a stale index. This is a generated
+          # artifact (not guarded RuleSpec), safe to write here.
+          index_file=".axiom/index/provisions_to_rules.json"
+          if [ -f "$GITHUB_WORKSPACE/tests/generate_reverse_index.py" ]; then
+            (cd "$GITHUB_WORKSPACE" && python tests/generate_reverse_index.py)
+          fi
+
+          # Declare the module's unmapped executable outputs in the
+          # oracle-coverage pending lane, using the same pinned encoder as
+          # generation. The changed-file oracle-coverage gate reclassifies
+          # declared outputs from `unmapped` to `pending_classification`, so this
+          # is what lets a new-state module's PR pass the required validate check
+          # instead of hanging on `... : unmapped`. `sync` rewrites
+          # oracle-coverage-pending.yaml to exactly the repo's current unmapped
+          # set; it is a no-op when the module's outputs are already mapped.
+          pending_file="oracle-coverage-pending.yaml"
+          axiom-encode oracle-coverage-pending sync \
+            --root "$GITHUB_WORKSPACE" \
+            --source bulk || {
+              echo "::error::oracle-coverage-pending sync failed for $CITATION." >&2
+              exit 1
+            }
+
+          # --- Gate battery (fail-closed pre-check; mirrors PR CI order) ---
+          # 1. guard-generated: applied files must carry a valid signed manifest.
+          # Stage ONLY the applied module, its companion test, its signed
+          # manifest, the regenerated reverse index, and the pending-lane
+          # declaration -- never `git add -A`, which would commit the _axiom/
+          # sibling checkouts and build artifacts.
+          git -C "$GITHUB_WORKSPACE" add -- \
+            "$module" "$test_file" "$manifest_rel" "$index_file" \
+            "${composition_files[@]}"
+          # Keep the pending declaration only when it has entries (a new unmapped
+          # output) or is already tracked. A fully-mapped module syncs an empty
+          # declaration; committing that empty repo-root file would needlessly
+          # flip the PR to full-matrix validation, so drop it and stay scoped.
+          if [ -f "$GITHUB_WORKSPACE/$pending_file" ]; then
+            if grep -q -- '- legal_id:' "$GITHUB_WORKSPACE/$pending_file" \
+               || git -C "$GITHUB_WORKSPACE" ls-files --error-unmatch "$pending_file" >/dev/null 2>&1; then
+              git -C "$GITHUB_WORKSPACE" add -- "$pending_file"
+            else
+              rm -f "$GITHUB_WORKSPACE/$pending_file"
+            fi
+          fi
+          git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
+            -c user.name="bulk-encode" commit -q -m "wip: $CITATION"
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/axiom-encode-checkout/src \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/axiom-encode-checkout/src/axiom_encode \
+            -- /opt/axiom-verification/axiom-encode guard-generated \
+            --repo "$GITHUB_WORKSPACE" \
+            --base-ref "origin/${{ github.event.repository.default_branch }}" \
+            --head-ref HEAD \
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+            --expected-encoder-checkout "$GITHUB_WORKSPACE/_axiom/axiom-encode"
+
+          # 2. validate (deterministic CI tier; no reviewers).
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/axiom-encode-checkout/src \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/axiom-encode-checkout/src/axiom_encode \
+            -- /opt/axiom-verification/axiom-encode validate \
+            "$GITHUB_WORKSPACE/$module" --skip-reviewers \
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+            --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine"
+
+          # 3. proof-validate (explicit proof trees + source claims).
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/axiom-encode-checkout/src \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/axiom-encode-checkout/src/axiom_encode \
+            -- /opt/axiom-verification/axiom-encode proof-validate \
+            "$GITHUB_WORKSPACE/$module" \
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus"
+
+          # 4. companion test. Only value expectation mismatches are classified
+          #    as the known #1060 generated-fixture ceiling. Discovery, schema,
+          #    engine, supervisor, and every other failure remain hard failures.
+          set +e
+          test_json="$RUNNER_TEMP/companion.json"
+          test_err="$RUNNER_TEMP/companion.err"
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/axiom-encode-checkout/src \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/axiom-encode-checkout/src/axiom_encode \
+            -- /opt/axiom-verification/axiom-encode test \
+            --root "$GITHUB_WORKSPACE/$juris" \
+            --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
+            --json "${test_file#"$juris"/}" >"$test_json" 2>"$test_err"
+          test_status=$?
+          set -e
+          cat "$test_json"
+          cat "$test_err" >&2
+
+          if [ "$test_status" -eq 0 ]; then
+            echo "status=green" >> "$GITHUB_OUTPUT"
+            echo "Companion tests passed."
+          elif python - "$test_json" <<'PY'
+          import json
+          import re
+          import sys
+
+          try:
+              payload = json.load(open(sys.argv[1]))
+          except (OSError, json.JSONDecodeError):
+              raise SystemExit(1)
+          failures = payload.get("failures") if isinstance(payload, dict) else None
+          value_mismatch = re.compile(
+              r"^[^:]+(?:\[[0-9]+\])?: expected .+, got .+$"
+          )
+          if (
+              payload.get("success") is not False
+              or not isinstance(failures, list)
+              or not failures
+              or any(
+                  not isinstance(item, dict)
+                  or not isinstance(item.get("message"), str)
+                  or value_mismatch.fullmatch(item["message"]) is None
+                  for item in failures
+              )
+          ):
+              raise SystemExit(1)
+          PY
+          then
+            echo "status=needs-fixtures" >> "$GITHUB_OUTPUT"
+            echo "::warning::Companion value fixtures mismatch for $CITATION (#1060 ceiling). Marking needs-fixtures; the draft requires an encoder fix and rerun." >&2
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::error::Companion test failed outside the #1060 value-fixture class for $CITATION." >&2
+            exit "$test_status"
+          fi
+
+      - name: Assemble PR body
+        id: prbody
+        # Only assemble/open a PR when the local gate battery actually passed.
+        # `status` is written `green`/`needs-fixtures` only after guard-generated
+        # + validate + proof-validate run; an apply failure writes `failed` and a
+        # guard/validate/proof failure exits the encode step BEFORE `status` is
+        # written, so in every non-passing case this condition is false and no PR
+        # body is assembled. (`needs-fixtures` is a soft companion-test fail and
+        # still opens the PR by design.) Replaces an `always() && module != ''`
+        # guard that assembled and pushed gate-failing generations
+        # (rulespec-uk#104 D2 / rulespec-us#605).
+        if: ${{ steps.encode.outputs.status == 'green' || steps.encode.outputs.status == 'needs-fixtures' }}
+        shell: bash
+        env:
+          CITATION: ${{ matrix.item.citation }}
+          MODULE: ${{ steps.encode.outputs.module }}
+          TEST_FILE: ${{ steps.encode.outputs.test_file }}
+          MANIFEST_REL: ${{ steps.encode.outputs.manifest_rel }}
+          ENC_STATUS: ${{ steps.encode.outputs.status }}
+          WALL: ${{ steps.encode.outputs.wall_seconds }}
+          MODEL: ${{ matrix.item.model }}
+          BACKEND: ${{ matrix.item.backend }}
+          ACCEPTANCE_CRITERIA: ${{ matrix.item.acceptance_criteria }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "## Bulk-encoded module"
+            echo
+            echo "- Citation: \`$CITATION\`"
+            echo "- Module: \`$MODULE\`"
+            echo "- Encoder: \`$BACKEND:$MODEL\` (toolchain-pinned axiom-encode ${{ steps.toolchain.outputs.axiom_encode_version }})"
+            echo "- Encode wall time: ${WALL}s"
+            echo "- Local gate status: **$ENC_STATUS**"
+            echo
+            echo "Produced by \`axiom-encode encode $CITATION --apply\` in the bulk-encode dispatcher"
+            echo "(\`.github/workflows/bulk-encode.yml\`). Values are the encoder's; this PR is plumbing."
+            echo
+            echo "### Manifest summary"
+            echo '```json'
+            # Use the exact signed manifest already bound to this module and
+            # citation by bulk/applied_artifacts.py. Basenames are not unique.
+            manifest="$(cat "$GITHUB_WORKSPACE/$MANIFEST_REL")"
+            echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ["citation","model","backend","run_id","axiom_encode_version","applied_files"]}, indent=2))' 2>/dev/null || echo "$manifest"
+            echo '```'
+            echo
+            echo "### Local gate battery output"
+            echo '```'
+            echo "guard-generated: pass (signed apply manifest present)"
+            echo "validate:        pass"
+            echo "proof-validate:  pass"
+            if [ "$ENC_STATUS" = "green" ]; then
+              echo "companion test:  pass"
+            else
+              echo "companion test:  needs-fixtures (#1060 ceiling) - follow-up fixture pass required"
+            fi
+            echo '```'
+            echo
+            echo "The authoritative gate is the required \`validate / validate\` check on this PR."
+            echo
+            echo "### Acceptance criteria"
+            echo
+            echo "$ACCEPTANCE_CRITERIA"
+            echo
+            echo "This PR remains draft until the independent review/fix cycle is complete."
+          } > "$body"
+          echo "path=$body" >> "$GITHUB_OUTPUT"
+
+      - name: Open draft PR for independent review
+        # Same gate-battery guard as "Assemble PR body": never force-push the
+        # bulk branch or open a PR for an encode whose gate
+        # battery did not pass. Under the old `always() && module != ''` guard a
+        # guard/validate/proof failure (which sets `module` but leaves `status`
+        # unwritten) still force-pushed the broken commit
+        # (rulespec-uk#104 D2 / rulespec-us#605).
+        if: ${{ steps.encode.outputs.status == 'green' || steps.encode.outputs.status == 'needs-fixtures' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BULK_ENCODE_TOKEN }}
+          CITATION: ${{ matrix.item.citation }}
+          SLUG: ${{ matrix.item.slug }}
+          ENC_STATUS: ${{ steps.encode.outputs.status }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          branch="bulk/$SLUG"
+
+          # Retry a command through transient GitHub API failures (the PR
+          # mutations below occasionally hit a 502/503 from the GraphQL API; an
+          # unattended weekly drain must self-heal rather than drop the module
+          # until the next run). Backs off; not applied to `gh pr reopen`, whose
+          # failure is a meaningful signal (orphaned head -> fresh-PR fallback).
+          retry() {
+            local n=1 max=5 delay=5
+            until "$@"; do
+              if [ "$n" -ge "$max" ]; then
+                echo "::error::\`$*\` failed after $max attempts." >&2
+                return 1
+              fi
+              echo "attempt $n/$max failed; retrying in ${delay}s: $*" >&2
+              sleep "$delay"; n=$((n + 1)); delay=$((delay * 2))
+            done
+          }
+
+          # Ensure the bulk-encode label exists.
+          gh label create bulk-encode --repo "$GITHUB_REPOSITORY" \
+            --color 1f6feb --description "Opened by the bulk-encode dispatcher" 2>/dev/null || true
+
+          title="Encode $CITATION (bulk)"
+          if [ "$ENC_STATUS" = "needs-fixtures" ]; then
+            title="Encode $CITATION (bulk, needs-fixtures)"
+          fi
+
+          # Reconcile the PR for this branch BEFORE touching the branch. A prior
+          # run may have left a CLOSED PR for bulk/<slug>. It must be reopened,
+          # but GitHub pins a closed PR to its head SHA and refuses to reopen
+          # once that head has
+          # been force-updated (`reopenPullRequest` returns "Could not open the
+          # pull request"). The force-push therefore MUST happen after the reopen,
+          # not before, so the closed head still matches the branch at reopen
+          # time. If the branch was already orphaned by an earlier failed run,
+          # reopen is impossible; open a fresh PR instead -- GitHub permits a new
+          # PR from a branch whose prior PR is closed.
+          # Query every state through the bounded retry wrapper. An empty JSON
+          # object is an explicit not-found result; API failures remain failures
+          # and cannot be mistaken for permission to mutate the branch.
+          pr_json="$(retry gh pr list --repo "$GITHUB_REPOSITORY" \
+            --state all --head "$branch" --limit 100 \
+            --json state,updatedAt \
+            --jq 'sort_by(.updatedAt) | last // {}')"
+          pr_state="$(jq -r '.state // ""' <<< "$pr_json")"
+          if [ "$pr_state" = "MERGED" ]; then
+            echo "::warning::$CITATION already has a merged PR on $branch; skipping stale pending queue entry before branch mutation." >&2
+            exit 0
+          fi
+          if [ "$pr_state" = "CLOSED" ]; then
+            if gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
+              echo "Reopened closed PR for $branch."
+            else
+              echo "::warning::Closed PR for $branch cannot be reopened (head orphaned by a prior force-push); opening a fresh PR." >&2
+              pr_state=""
+            fi
+          fi
+
+          # Push the applied commit onto the bulk branch. This updates the open or
+          # just-reopened PR, or stages the branch for a fresh PR below.
+          git -C "$GITHUB_WORKSPACE" -c user.email=bulk-encode@axiom \
+            -c user.name="bulk-encode" commit --amend -q \
+            -m "Encode $CITATION via bulk dispatcher" \
+            -m "" \
+            -m "Produced by axiom-encode encode $CITATION --apply (backend ${{ matrix.item.backend }}, model ${{ matrix.item.model }})." \
+            -m "" \
+            -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+          git -C "$GITHUB_WORKSPACE" push -f origin "HEAD:$branch"
+
+          if [ -z "$pr_state" ]; then
+            retry gh pr create --repo "$GITHUB_REPOSITORY" \
+              --base "$DEFAULT_BRANCH" --head "$branch" \
+              --title "$title" \
+              --body-file "${{ steps.prbody.outputs.path }}" \
+              --label bulk-encode --draft
+          else
+            retry gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body-file "${{ steps.prbody.outputs.path }}" \
+              --add-label bulk-encode
+          fi
+
+          # Generated PRs remain draft until an independent reviewer reports no
+          # actionable findings. Reused PRs can retain an auto-merge request
+          # from the legacy workflow, so explicitly remove it before restoring
+          # and verifying the draft state.
+          pr_json="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json isDraft,autoMergeRequest)"
+          if [ "$(jq -r '.autoMergeRequest != null' <<< "$pr_json")" = "true" ]; then
+            retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
+          fi
+          is_draft="$(jq -r .isDraft <<< "$pr_json")"
+          if [ "$is_draft" != "true" ]; then
+            retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
+          fi
+          if ! gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,autoMergeRequest \
+            --jq '.isDraft == true and .autoMergeRequest == null' | grep -qx true; then
+            echo "::error::$branch is not a draft with auto-merge disabled." >&2
+            exit 1
+          fi
+
+          echo "Draft PR opened for $CITATION on branch $branch (status: $ENC_STATUS; review required)."
