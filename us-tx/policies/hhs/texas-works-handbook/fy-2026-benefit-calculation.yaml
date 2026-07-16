@@ -1,0 +1,118 @@
+format: rulespec/v1
+module:
+  kind: composition
+  source_verification:
+    corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+  summary: |-
+    Texas SNAP FY 2026 benefit calculation composition, built on the federal
+    state-plan composition module. It binds Texas' eligibility determination
+    and shelter chain to the composed 7 CFR 273.10 whole-dollar computation:
+    the Works Handbook A-1420 utility standards (SUA per A-1429.3.1, BUA per
+    A-1429.3.2, telephone standard per A-1429.4, at the C-121.1 amounts)
+    select the applied allowance through qualification-flag inputs, and
+    eligibility composes residency, member, and income/resource judgments.
+imports:
+  - us:policies/usda/snap/state-plan-composition
+  - us:regulations/7-cfr/273/8
+  - us:regulations/7-cfr/273/9
+  - us-tx:policies/hhs/texas-works-handbook/snap-utility-allowance-amounts
+rules:
+  - name: tx_snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Texas SNAP eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_residency_eligible
+          and snap_household_member_eligible
+          and tx_income_and_resource_eligible
+
+  - name: snap_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Texas SNAP eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          tx_snap_eligible
+
+  # The applied utility standard: exactly one of Texas' three Works Handbook
+  # standards per household — the SUA (A-1429.3.1), else the BUA
+  # (A-1429.3.2), else the telephone standard (A-1429.4). Qualification
+  # facts are inputs; the replay and downstream consumers adjudicate them
+  # from the household's own utility circumstances.
+  - name: tx_applied_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas SNAP FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if household_qualifies_for_standard_utility_allowance:
+              tx_standard_utility_allowance_amount
+          else:
+              if household_qualifies_for_basic_utility_allowance:
+                  tx_basic_utility_allowance_amount
+              else:
+                  if household_qualifies_for_telephone_standard:
+                      tx_telephone_standard_amount
+                  else:
+                      0
+
+  - name: shelter_costs
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas SNAP shelter utility allowance composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_shelter_costs_incurred + tx_applied_utility_allowance
+
+  - name: snap_total_allowable_shelter_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas SNAP shelter utility allowance composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          shelter_costs
+
+  - name: snap_excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: Texas SNAP FY 2026 benefit calculation composition
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_excess_shelter_deduction_for_net_income
+
+  - name: tx_income_and_resource_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Texas SNAP categorical eligibility composition bridge
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_categorically_eligible_for_resource_exemption
+          or (
+            snap_resource_eligible
+            and snap_standard_income_eligible
+          )
