@@ -52,6 +52,9 @@ jobs:
   dispatch:
     name: dispatch
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       matrix: ${{ steps.compute.outputs.matrix }}
       count: ${{ steps.compute.outputs.count }}
@@ -73,9 +76,23 @@ jobs:
         env:
           BATCH: ${{ inputs.batch }}
           LIMIT: ${{ inputs.limit || '8' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          args=(--status pending --format matrix --limit "$LIMIT")
+          # Fetch every PR state before applying the dispatch limit. Exact bulk
+          # branches with an open or merged PR are removed from consideration,
+          # so stale pending entries cannot repeatedly consume the first slots
+          # and starve later queue work. Closed, unmerged PRs remain eligible for
+          # the workflow's reviewed reopen/recreate recovery path.
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" \
+            > "$RUNNER_TEMP/pulls.json"
+          args=(
+            --status pending --format matrix --limit "$LIMIT"
+            --exclude-prs "$RUNNER_TEMP/pulls.json"
+            --repo-full-name "$GITHUB_REPOSITORY"
+          )
           if [ -n "$BATCH" ]; then
             args+=(--batch "$BATCH")
           fi
@@ -83,7 +100,7 @@ jobs:
           count="$(python -c 'import json,sys; print(len(json.loads(sys.argv[1])["include"]))' "$matrix")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Selected $count pending module(s):"
+          echo "Selected $count pending module(s) without an open or merged bulk PR:"
           python bulk/compute_matrix.py "${args[@]/--format matrix/--format table}" || true
 
       - name: Fail if nothing to encode
@@ -644,7 +661,7 @@ jobs:
               raise SystemExit(1)
           failures = payload.get("failures") if isinstance(payload, dict) else None
           value_mismatch = re.compile(
-              r"^.+(?:\[[0-9]+\])?: expected .+, got .+$"
+              r"^(?:[a-z]{2}(?:-[a-z0-9-]+)?:[^#\s]+#[^:\s]+|[^:\s]+)(?:\[[0-9]+\])?: expected .+, got .+$"
           )
           if (
               payload.get("success") is not False

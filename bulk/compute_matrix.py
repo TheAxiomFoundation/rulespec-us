@@ -15,6 +15,10 @@ Usage:
   # Read one field (used by the runner to look up backend/model per entry):
   python bulk/compute_matrix.py --get us-ny/statute/TAX/673 --field model
 
+  # Cloud dispatch: exclude exact bulk branches with an open or merged PR:
+  python bulk/compute_matrix.py --status pending --exclude-prs pulls.json \
+    --repo-full-name TheAxiomFoundation/rulespec-us
+
 The matrix shape preserves the reviewed execution metadata needed by local
 jobs, in addition to the citation/backend/model fields used by cloud jobs.
 `slug` is the branch-safe citation slug used for `bulk/<slug>` branches and the
@@ -91,8 +95,49 @@ def entry_allow_context(entry: dict) -> list[str]:
     return values
 
 
-def select(data: dict, status: str, batch: str | None, limit: int | None) -> list[dict]:
+def active_pr_slugs(pages: object, repo_full_name: str) -> set[str]:
+    """Return bulk slugs already represented by an open or merged PR.
+
+    The GitHub REST API returns one list per page when ``gh api --slurp`` is
+    used. Closed, unmerged PRs remain eligible so the workflow can exercise its
+    reviewed reopen/recreate recovery path.
+    """
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise ValueError("pull request response must be a list of pages")
+
+    slugs: set[str] = set()
+    for page in pages:
+        for pull in page:
+            if not isinstance(pull, dict):
+                raise ValueError("pull request pages must contain mappings")
+            head = pull.get("head")
+            if not isinstance(head, dict):
+                continue
+            repo = head.get("repo")
+            ref = head.get("ref")
+            if (
+                not isinstance(repo, dict)
+                or repo.get("full_name") != repo_full_name
+                or not isinstance(ref, str)
+                or not ref.startswith("bulk/")
+            ):
+                continue
+            state = pull.get("state")
+            if state == "open" or pull.get("merged_at") is not None:
+                slugs.add(ref.removeprefix("bulk/"))
+    return slugs
+
+
+def select(
+    data: dict,
+    status: str,
+    batch: str | None,
+    limit: int | None,
+    *,
+    excluded_slugs: set[str] | None = None,
+) -> list[dict]:
     out: list[dict] = []
+    excluded_slugs = excluded_slugs or set()
     for entry in data["entries"]:
         if status != "any" and entry.get("status") != status:
             continue
@@ -140,6 +185,9 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                     f"{entry.get('citation')}: program_scope_sync must add or "
                     "remove at least one module"
                 )
+        slug = citation_slug(entry["citation"])
+        if slug in excluded_slugs:
+            continue
         out.append(
             {
                 "citation": entry["citation"],
@@ -147,7 +195,7 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                 "backend": entry_backend(data, entry),
                 "model": entry_model(data, entry),
                 "acceptance_criteria": entry.get("note", ""),
-                "slug": citation_slug(entry["citation"]),
+                "slug": slug,
                 "allow_context": entry_allow_context(entry),
                 "requires_merged_citations": dependencies,
                 "program_scope_sync": program_scope_sync,
@@ -187,6 +235,17 @@ def main() -> int:
         metavar=("CITATION", "STATUS"),
         default=None,
         help="LOCAL ONLY: set an entry's status in place.",
+    )
+    ap.add_argument(
+        "--exclude-prs",
+        type=Path,
+        default=None,
+        help="GitHub REST pull pages from `gh api --paginate --slurp`.",
+    )
+    ap.add_argument(
+        "--repo-full-name",
+        default=None,
+        help="Repository whose exact bulk branches may be excluded.",
     )
     args = ap.parse_args()
 
@@ -228,7 +287,23 @@ def main() -> int:
                 return 0
         raise SystemExit(f"citation not found: {args.get}")
 
-    selected = select(data, args.status, args.batch, args.limit)
+    if bool(args.exclude_prs) != bool(args.repo_full_name):
+        raise SystemExit("--exclude-prs and --repo-full-name must be used together")
+    excluded_slugs: set[str] = set()
+    if args.exclude_prs:
+        try:
+            pages = json.loads(args.exclude_prs.read_text(encoding="utf-8"))
+            excluded_slugs = active_pr_slugs(pages, args.repo_full_name)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise SystemExit(f"could not read pull request exclusions: {exc}") from exc
+
+    selected = select(
+        data,
+        args.status,
+        args.batch,
+        args.limit,
+        excluded_slugs=excluded_slugs,
+    )
 
     if args.format == "count":
         print(len(selected))

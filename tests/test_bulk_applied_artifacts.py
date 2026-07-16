@@ -28,6 +28,7 @@ _local_drain = _load_bulk_module("local_drain")
 changed_paths = _applied_artifacts.changed_paths
 discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
 select = _compute_matrix.select
+active_pr_slugs = _compute_matrix.active_pr_slugs
 
 
 def _write_manifest(path: Path, citation: str, applied_paths: set[str]) -> None:
@@ -551,6 +552,74 @@ def test_matrix_preserves_context_for_cloud_entry() -> None:
     assert selected[0]["allow_context"] == ["us/regulations/7-cfr/273/9.yaml"]
 
 
+def test_matrix_excludes_active_prs_before_applying_limit() -> None:
+    data = {
+        "entries": [
+            {"citation": "us-sc/manual/page-163", "status": "pending"},
+            {"citation": "us-sc/manual/page-165", "status": "pending"},
+        ]
+    }
+
+    selected = select(
+        data,
+        "pending",
+        None,
+        1,
+        excluded_slugs={"us-sc-manual-page-163"},
+    )
+
+    assert [item["citation"] for item in selected] == ["us-sc/manual/page-165"]
+
+
+def test_active_pr_slugs_excludes_open_and_merged_exact_repo_branches() -> None:
+    pages = [
+        [
+            {
+                "state": "open",
+                "merged_at": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-165",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "closed",
+                "merged_at": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-159",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "open",
+                "merged_at": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-159",
+                    "repo": {"full_name": "someone/fork"},
+                },
+            },
+        ]
+    ]
+
+    assert active_pr_slugs(pages, "TheAxiomFoundation/rulespec-us") == {
+        "us-sc-manual-page-163",
+        "us-sc-manual-page-165",
+    }
+
+
+def test_active_pr_slugs_rejects_unexpected_api_shape() -> None:
+    with pytest.raises(ValueError, match="list of pages"):
+        active_pr_slugs({"state": "open"}, "TheAxiomFoundation/rulespec-us")
+
+
 @pytest.mark.parametrize("status", ["pr-open", "needs-fixtures", "failed", "merged"])
 def test_matrix_preserves_context_after_local_status_transition(status: str) -> None:
     data = {
@@ -739,6 +808,8 @@ def test_cloud_companion_failure_classification_is_fail_closed() -> None:
     assert value_mismatch.fullmatch(
         "us:policies/example#amounts[2]: expected 10, got 12"
     )
+    assert value_mismatch.fullmatch("amount[2]: expected 10, got 12")
+    assert value_mismatch.fullmatch("compile failed: expected token, got eof") is None
     assert value_mismatch.fullmatch("missing output amount; got []") is None
     assert 'echo "status=needs-fixtures"' in gate_step
     assert 'echo "status=failed"' in gate_step

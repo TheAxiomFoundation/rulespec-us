@@ -64,8 +64,12 @@ then regenerated with `encode --apply`.
 
 The protected workflow supplies these jobs:
 
-1. **dispatch** — installs PyYAML, runs `compute_matrix.py --status pending`
-   (optionally `--batch`, `--limit`), and emits the matrix.
+1. **dispatch** — installs PyYAML, fetches all PR states, then runs
+   `compute_matrix.py --status pending` (optionally `--batch`, `--limit`) and
+   emits the matrix. Entries whose exact `bulk/<slug>` branch already has an
+   open or merged PR are excluded before the limit is applied, so a stale
+   `pending` status cannot starve later queue entries. Closed, unmerged PRs stay
+   eligible for the workflow's reopen/recreate recovery path.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
