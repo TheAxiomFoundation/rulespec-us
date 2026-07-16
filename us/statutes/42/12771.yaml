@@ -1,0 +1,131 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/12771/b
+  summary: |-
+    If funds reserved under subsection (a) remain uninvested for 24 months, the Secretary deducts those funds from the participating jurisdiction's HOME Investment Trust Fund line of credit and makes them available by direct reallocation to specified CHDO-related recipients or activities, with a preference for CHDOs serving the recaptured-funds jurisdiction.
+rules:
+  - name: reserved_funds_uninvested_recapture_month_threshold
+    kind: parameter
+    dtype: Count
+    source: 42 U.S.C. 12771(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/12771/b
+              excerpt: "remain uninvested for a period of 24 months"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          24
+
+  - name: reserved_funds_subject_to_recapture
+    kind: derived
+    entity: HomeInvestmentTrustFundReservation
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 12771(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/12771/b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/12771#reserved_funds_uninvested_recapture_month_threshold
+              output: reserved_funds_uninvested_recapture_month_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          uninvested_reserved_funds_amount > 0
+          and months_reserved_funds_remain_uninvested >= reserved_funds_uninvested_recapture_month_threshold
+
+  - name: recaptured_reserved_funds_amount
+    kind: derived
+    entity: HomeInvestmentTrustFundReservation
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 U.S.C. 12771(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/12771/b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/12771#reserved_funds_subject_to_recapture
+              output: reserved_funds_subject_to_recapture
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if reserved_funds_subject_to_recapture: uninvested_reserved_funds_amount else: 0
+
+  - name: direct_reallocation_for_other_jurisdiction_chdo_affordable_housing
+    kind: derived
+    entity: HomeDirectReallocation
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 12771(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/42/12771/b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          reallocation_is_to_other_participating_jurisdiction
+          and reallocation_is_for_affordable_housing_developed_sponsored_or_owned_by_community_housing_development_organizations
+
+  - name: direct_reallocation_for_nonprofit_intermediary_chdo_capacity
+    kind: derived
+    entity: HomeDirectReallocation
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 12771(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/42/12771/b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          reallocation_is_to_nonprofit_intermediary_organization
+          and reallocation_activity_develops_capacity_of_community_housing_development_organizations_consistent_with_section_12773
+
+  - name: reallocation_preference_for_chdos_serving_recaptured_funds_jurisdiction
+    kind: derived
+    entity: HomeDirectReallocation
+    dtype: Judgment
+    period: Month
+    source: 42 U.S.C. 12771(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/42/12771/b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          reallocation_candidate_is_community_housing_development_organization_serving_jurisdiction_from_which_funds_were_recaptured

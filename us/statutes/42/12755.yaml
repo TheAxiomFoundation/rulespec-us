@@ -1,0 +1,160 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/12755
+  summary: |-
+    42 USC 12755 requires leases for assisted rental affordable housing to be for not less than one year unless the tenant and owner mutually agree otherwise; limits termination or nonrenewal to serious or repeated lease violations, violations of applicable law, or other good cause, with written notice at least 30 days before the action except for specified threat grounds; requires maintenance in compliance with applicable housing quality standards and local code; and requires written tenant-selection policies meeting stated criteria, including consideration of families with a preference under section 1437d(c)(4)(A), chronological waiting-list selection insofar as practicable, and prompt written notice of rejection grounds.
+  deferred_outputs:
+    - output: us:statutes/42/12755#tenant_selection_policy_requirements_satisfied
+      reason: |-
+        The full tenant-selection policy requirement depends on identifying families that would have a preference under section 1437d(c)(4)(A). No copied context provides the exact upstream RuleSpec source for that cited preference.
+rules:
+  - name: minimum_lease_term_years
+    kind: parameter
+    dtype: Count
+    source: 42 USC 12755(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "shall be for not less than one year"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          1
+
+  - name: termination_notice_minimum_days
+    kind: parameter
+    dtype: Count
+    source: 42 USC 12755(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "preceded by not less than 30 days"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          30
+
+  - name: lease_term_requirement_satisfied
+    kind: derived
+    entity: Lease
+    dtype: Judgment
+    period: Year
+    source: 42 USC 12755(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "for not less than one year, unless by mutual agreement between the tenant and the owner"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/12755#minimum_lease_term_years
+              output: minimum_lease_term_years
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          lease_term_years >= minimum_lease_term_years
+          or tenant_and_owner_mutually_agreed_to_shorter_lease
+
+  - name: termination_or_nonrenewal_permitted
+    kind: derived
+    entity: TenancyAction
+    dtype: Judgment
+    period: Day
+    source: 42 USC 12755(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "except for serious or repeated violation ... violation of applicable Federal, State, or local law, or for other good cause"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "Such 30-day waiting period is not required if the grounds ... involve a direct threat ... or an imminent and serious threat"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/12755#termination_notice_minimum_days
+              output: termination_notice_minimum_days
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          owner_served_written_notice_specifying_grounds
+          and (
+            termination_or_nonrenewal_ground_is_serious_or_repeated_lease_violation
+            or termination_or_nonrenewal_ground_is_violation_of_applicable_federal_state_or_local_law
+            or termination_or_nonrenewal_ground_is_other_good_cause
+          )
+          and (
+            notice_served_days_before_action >= termination_notice_minimum_days
+            or (
+              (
+                termination_or_nonrenewal_ground_involves_direct_threat_to_safety_of_tenants_or_employees
+                or termination_or_nonrenewal_ground_involves_imminent_and_serious_threat_to_property
+              )
+              and termination_or_nonrenewal_is_in_accordance_with_state_or_local_law
+            )
+          )
+
+  - name: premises_maintenance_requirement_satisfied
+    kind: derived
+    entity: RentalHousing
+    dtype: Judgment
+    period: Year
+    source: 42 USC 12755(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "shall maintain the premises in compliance with all applicable housing quality standards and local code requirements"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          premises_maintained_in_compliance_with_all_applicable_housing_quality_standards
+          and premises_maintained_in_compliance_with_local_code_requirements
+
+  - name: tenant_selection_policy_nonpreference_requirements_satisfied
+    kind: derived
+    entity: TenantSelectionPolicy
+    dtype: Judgment
+    period: Year
+    source: 42 USC 12755(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/12755
+              excerpt: "adopt written tenant selection policies and criteria that ... are consistent ... are reasonably related ... provide for ... chronological order ... prompt notification in writing"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          owner_adopted_written_tenant_selection_policies_and_criteria
+          and policies_are_consistent_with_providing_housing_for_very_low_income_and_low_income_families
+          and policies_are_reasonably_related_to_program_eligibility_and_applicant_lease_obligations
+          and policies_provide_for_selection_from_written_waiting_list_in_chronological_order_insofar_as_practicable
+          and policies_provide_for_prompt_written_notification_to_rejected_applicant_of_rejection_grounds
