@@ -109,6 +109,59 @@ def entry_allow_context(entry: dict) -> list[str]:
     return values
 
 
+def _paged_mappings(pages: object, label: str):
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise ValueError(f"{label} response must be a list of pages")
+    for page in pages:
+        for item in page:
+            if not isinstance(item, dict):
+                raise ValueError(f"{label} pages must contain mappings")
+            yield item
+
+
+def _exact_repo_pulls(pages: object, repo_full_name: str):
+    for pull in _paged_mappings(pages, "pull request"):
+        head = pull.get("head")
+        repo = head.get("repo") if isinstance(head, dict) else None
+        if isinstance(repo, dict) and repo.get("full_name") == repo_full_name:
+            yield pull
+
+
+def _pull_state(pull: dict) -> str:
+    if pull.get("merged_at") is not None:
+        return "MERGED"
+    state = pull.get("state")
+    return state.upper() if isinstance(state, str) else ""
+
+
+def latest_exact_pr(pages: object, repo_full_name: str, branch: str) -> dict:
+    """Return the latest PR for an exact repository and head branch."""
+    matches = []
+    for pull in _exact_repo_pulls(pages, repo_full_name):
+        head = pull.get("head")
+        if not isinstance(head, dict) or head.get("ref") != branch:
+            continue
+        number = pull.get("number")
+        if not isinstance(number, int) or number <= 0:
+            raise ValueError("matching pull request has no positive number")
+        matches.append(pull)
+    if not matches:
+        return {}
+    pull = max(
+        matches,
+        key=lambda item: (
+            str(item.get("updated_at") or ""),
+            int(item["number"]),
+        ),
+    )
+    merge_commit = pull.get("merge_commit_sha")
+    return {
+        "number": pull["number"],
+        "state": _pull_state(pull),
+        "merge_commit": merge_commit if isinstance(merge_commit, str) else "",
+    }
+
+
 def active_pr_slugs(pages: object, repo_full_name: str) -> set[str]:
     """Return bulk slugs already represented by an open or merged PR.
 
@@ -116,29 +169,49 @@ def active_pr_slugs(pages: object, repo_full_name: str) -> set[str]:
     used. Closed, unmerged PRs remain eligible so the workflow can exercise its
     reviewed reopen/recreate recovery path.
     """
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-        raise ValueError("pull request response must be a list of pages")
-
     slugs: set[str] = set()
-    for page in pages:
-        for pull in page:
-            if not isinstance(pull, dict):
-                raise ValueError("pull request pages must contain mappings")
-            head = pull.get("head")
-            if not isinstance(head, dict):
-                continue
-            repo = head.get("repo")
-            ref = head.get("ref")
-            if (
-                not isinstance(repo, dict)
-                or repo.get("full_name") != repo_full_name
-                or not isinstance(ref, str)
-                or not ref.startswith("bulk/")
-            ):
-                continue
-            state = pull.get("state")
-            if state == "open" or pull.get("merged_at") is not None:
-                slugs.add(ref.removeprefix("bulk/"))
+    for pull in _exact_repo_pulls(pages, repo_full_name):
+        head = pull.get("head")
+        ref = head.get("ref") if isinstance(head, dict) else None
+        if (
+            isinstance(ref, str)
+            and ref.startswith("bulk/")
+            and _pull_state(pull) in {"OPEN", "MERGED"}
+        ):
+            slugs.add(ref.removeprefix("bulk/"))
+    return slugs
+
+
+def merged_pr_slugs(pages: object, repo_full_name: str) -> set[str]:
+    """Return exact repository bulk slugs whose PR has merged."""
+    slugs: set[str] = set()
+    for pull in _exact_repo_pulls(pages, repo_full_name):
+        head = pull.get("head")
+        ref = head.get("ref") if isinstance(head, dict) else None
+        if (
+            isinstance(ref, str)
+            and ref.startswith("bulk/")
+            and _pull_state(pull) == "MERGED"
+        ):
+            slugs.add(ref.removeprefix("bulk/"))
+    return slugs
+
+
+def failed_issue_slugs(pages: object) -> set[str]:
+    """Return citations held by an open workflow-created hard-failure issue."""
+    prefix = "Bulk encode hard failure: "
+    slugs: set[str] = set()
+    for issue in _paged_mappings(pages, "issue"):
+        title = issue.get("title")
+        if (
+            issue.get("state") == "open"
+            and "pull_request" not in issue
+            and isinstance(title, str)
+            and title.startswith(prefix)
+        ):
+            citation = title.removeprefix(prefix).strip()
+            if citation:
+                slugs.add(citation_slug(citation))
     return slugs
 
 
@@ -149,6 +222,7 @@ def select(
     limit: int | None,
     *,
     excluded_slugs: set[str] | None = None,
+    merged_slugs: set[str] | None = None,
 ) -> list[dict]:
     if limit is not None and not 0 <= limit <= MAX_MATRIX_ENTRIES:
         raise ValueError(f"limit must be between 0 and {MAX_MATRIX_ENTRIES}")
@@ -167,6 +241,11 @@ def select(
                 f"{entry.get('citation')}: requires_merged_citations must be "
                 "a list of non-empty strings"
             )
+        if merged_slugs is not None and any(
+            citation_slug(dependency) not in merged_slugs
+            for dependency in dependencies
+        ):
+            continue
         program_scope_sync = entry.get("program_scope_sync")
         if program_scope_sync is not None and not isinstance(program_scope_sync, dict):
             raise ValueError(
@@ -266,6 +345,17 @@ def main() -> int:
         default=None,
         help="Repository whose exact bulk branches may be excluded.",
     )
+    ap.add_argument(
+        "--exclude-failure-issues",
+        type=Path,
+        default=None,
+        help="Open failure issues from `gh api --paginate --slurp`.",
+    )
+    ap.add_argument(
+        "--find-pr-branch",
+        default=None,
+        help="Print the latest exact-repository PR record for this branch.",
+    )
     args = ap.parse_args()
 
     if args.status not in SELECTABLE_STATUSES | {"any"}:
@@ -309,12 +399,31 @@ def main() -> int:
     if bool(args.exclude_prs) != bool(args.repo_full_name):
         raise SystemExit("--exclude-prs and --repo-full-name must be used together")
     excluded_slugs: set[str] = set()
+    merged_slugs: set[str] | None = None
+    pages = None
     if args.exclude_prs:
         try:
             pages = json.loads(args.exclude_prs.read_text(encoding="utf-8"))
             excluded_slugs = active_pr_slugs(pages, args.repo_full_name)
+            merged_slugs = merged_pr_slugs(pages, args.repo_full_name)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise SystemExit(f"could not read pull request exclusions: {exc}") from exc
+    if args.find_pr_branch:
+        if pages is None:
+            raise SystemExit("--find-pr-branch requires --exclude-prs")
+        try:
+            print(json.dumps(latest_exact_pr(pages, args.repo_full_name, args.find_pr_branch)))
+        except ValueError as exc:
+            raise SystemExit(f"could not identify exact pull request: {exc}") from exc
+        return 0
+    if args.exclude_failure_issues:
+        try:
+            issue_pages = json.loads(
+                args.exclude_failure_issues.read_text(encoding="utf-8")
+            )
+            excluded_slugs.update(failed_issue_slugs(issue_pages))
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise SystemExit(f"could not read failure issue exclusions: {exc}") from exc
 
     selected = select(
         data,
@@ -322,6 +431,7 @@ def main() -> int:
         args.batch,
         args.limit,
         excluded_slugs=excluded_slugs,
+        merged_slugs=merged_slugs,
     )
 
     if args.format == "count":

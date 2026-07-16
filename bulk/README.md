@@ -64,13 +64,16 @@ then regenerated with `encode --apply`.
 
 The protected workflow supplies these jobs:
 
-1. **dispatch** — installs PyYAML, fetches all PR states, then runs
+1. **dispatch** — installs PyYAML, fetches all PR and hard-failure issue states,
+   then runs
    `compute_matrix.py --status pending` (optionally `--batch`, `--limit`) and
    emits the matrix. Entries whose exact `bulk/<slug>` branch already has an
-   open or merged PR are excluded before the limit is applied, so a stale
-   `pending` status cannot starve later queue entries. Closed, unmerged PRs stay
-   eligible for the workflow's reopen/recreate recovery path. Dispatch limits
-   are constrained to GitHub's `0..256` matrix capacity.
+   open or merged PR, an unresolved queue dependency, or an open
+   `bulk-encode-failed` issue are excluded before the limit is applied. This
+   keeps stale, blocked, and failed entries from starving later queue work.
+   Closed, unmerged PRs stay eligible for the workflow's reopen/recreate
+   recovery path. Dispatch limits are constrained to GitHub's `0..256` matrix
+   capacity.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
@@ -87,6 +90,9 @@ The protected workflow supplies these jobs:
      `.axiom/encoding-manifests/**/<sec>.json`.
    - Runs the gate battery in PR-CI order: `guard-generated` (manifest present),
      `validate --skip-reviewers`, `proof-validate`, then the companion `test`.
+   - Creates or refreshes a `bulk-encode-failed` issue when apply or a hard gate
+     fails. The open issue is durable retry state; closing it permits a fresh
+     dispatch after triage.
    - Opens `bulk/<slug>` as a draft with the acceptance criteria, manifest
      summary, and gate output in the PR body. It never enables auto-merge.
 
@@ -105,11 +111,13 @@ Set in `worklist.yaml`. The runner reads `pending`; humans/follow-ups own the re
 | `needs-fixtures` | Encoded + applied, but the gpt-5.5 companion fixtures hit the #1060 ceiling. The draft PR remains open for an encoder fix and rerun. |
 | `pr-open` | A draft PR exists and is waiting for its review/fix cycle and CI. |
 | `merged` | The PR merged to main. Terminal success. |
-| `failed` | Encode or a non-fixture gate failed. Needs human triage. Never auto-retried, never merged. |
+| `failed` | Encode or a non-fixture gate failed. An open `bulk-encode-failed` issue blocks automatic retry until triage; reconcile the worklist in a reviewable follow-up. Never merged. |
 
 Statuses are updated by committing to `worklist.yaml` (a reviewable diff), not by
 silent CI mutation. `compute_matrix.py --set-status <citation> <status>` is a
-local convenience.
+local convenience. Hard cloud failures additionally use an open issue as
+immediate durable retry state, because a status PR is not effective until it is
+reviewed and merged.
 
 ## The fixture-split follow-up loop
 

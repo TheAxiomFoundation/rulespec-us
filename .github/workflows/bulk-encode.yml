@@ -54,6 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: read
       pull-requests: read
     outputs:
       matrix: ${{ steps.compute.outputs.matrix }}
@@ -88,9 +89,14 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" \
             > "$RUNNER_TEMP/pulls.json"
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=bulk-encode-failed&per_page=100" \
+            > "$RUNNER_TEMP/failure-issues.json"
           args=(
             --status pending --format matrix --limit "$LIMIT"
             --exclude-prs "$RUNNER_TEMP/pulls.json"
+            --exclude-failure-issues "$RUNNER_TEMP/failure-issues.json"
             --repo-full-name "$GITHUB_REPOSITORY"
           )
           if [ -n "$BATCH" ]; then
@@ -100,7 +106,7 @@ jobs:
           count="$(python -c 'import json,sys; print(len(json.loads(sys.argv[1])["include"]))' "$matrix")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Selected $count pending module(s) without an open or merged bulk PR:"
+          echo "Selected $count ready module(s) without an active PR or hard-failure hold:"
           python bulk/compute_matrix.py "${args[@]/--format matrix/--format table}" || true
 
       - name: Fail if nothing to encode
@@ -125,6 +131,7 @@ jobs:
         item: ${{ fromJSON(needs.dispatch.outputs.matrix).include }}
     permissions:
       contents: read
+      issues: write
       pull-requests: read
     steps:
       - name: Checkout rules repository (leaf dir MUST be named rulespec-us)
@@ -405,23 +412,23 @@ jobs:
           REQUIRED_CITATIONS: ${{ toJSON(matrix.item.requires_merged_citations) }}
         run: |
           set -euo pipefail
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" \
+            > "$RUNNER_TEMP/dependency-pulls.json"
           while IFS= read -r dependency; do
             slug="$(python -c \
               'import sys; from bulk.compute_matrix import citation_slug; print(citation_slug(sys.argv[1]))' \
               "$dependency")"
-            open_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
-              --head "bulk/$slug" --json number --jq 'length')"
-            if [ "$open_count" -ne 0 ]; then
-              echo "::error::$CITATION is waiting for the open dependency PR for $dependency." >&2
-              exit 1
-            fi
-            merge_commit="$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged \
-              --head "bulk/$slug" --limit 100 --json mergedAt,mergeCommit \
-              --jq 'sort_by(.mergedAt) | last | .mergeCommit.oid // ""')"
-            if [ -z "$merge_commit" ]; then
+            dependency_pr="$(python bulk/compute_matrix.py \
+              --exclude-prs "$RUNNER_TEMP/dependency-pulls.json" \
+              --repo-full-name "$GITHUB_REPOSITORY" \
+              --find-pr-branch "bulk/$slug")"
+            if [ "$(jq -r '.state // ""' <<< "$dependency_pr")" != "MERGED" ]; then
               echo "::error::$CITATION is waiting for merged dependency $dependency." >&2
               exit 1
             fi
+            merge_commit="$(jq -r '.merge_commit // ""' <<< "$dependency_pr")"
             if ! git merge-base --is-ancestor "$merge_commit" HEAD; then
               echo "::error::$CITATION dependency $dependency is not present in checked-out HEAD; dispatch again from updated main." >&2
               exit 1
@@ -441,6 +448,7 @@ jobs:
       # only built-in argument assembly and immediately execs the hardened
       # launcher, so no unrelated child process inherits the key.
       - name: Encode --apply through protected signer
+        id: apply
         shell: bash
         env:
           CITATION: ${{ matrix.item.citation }}
@@ -685,6 +693,42 @@ jobs:
             exit "$test_status"
           fi
 
+      - name: Persist hard failure for triage
+        if: ${{ failure() && (steps.apply.outcome == 'failure' || steps.encode.outcome == 'failure') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CITATION: ${{ matrix.item.citation }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Bulk encode hard failure: $CITATION"
+          gh label create bulk-encode-failed --repo "$GITHUB_REPOSITORY" \
+            --color b60205 \
+            --description "Hard bulk-encode failure; excluded from automatic retry" \
+            2>/dev/null || true
+          issues="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label bulk-encode-failed --limit 1000 --json number,title)"
+          existing="$(python -c \
+            'import json,sys; title=sys.argv[1]; print(next((i["number"] for i in json.load(sys.stdin) if i.get("title") == title), ""))' \
+            "$title" <<< "$issues")"
+          body="The protected bulk encoder failed after generation started.
+
+          Citation: \`$CITATION\`
+          Run: $RUN_URL
+
+          This open issue is durable retry state: dispatch excludes the citation
+          until the failure is triaged. Fix the encoder, corpus, or reviewed queue
+          metadata as appropriate, then close this issue to permit a fresh run.
+          Generated RuleSpec and fixtures must not be edited manually."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Hard failure repeated: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --label bulk-encode-failed --body "$body"
+          fi
+
       - name: Assemble PR body
         id: prbody
         # Only assemble/open a PR when the local gate battery actually passed.
@@ -808,24 +852,30 @@ jobs:
           # time. If the branch was already orphaned by an earlier failed run,
           # reopen is impossible; open a fresh PR instead -- GitHub permits a new
           # PR from a branch whose prior PR is closed.
-          # Query every state through the bounded retry wrapper. An empty JSON
-          # object is an explicit not-found result; API failures remain failures
-          # and cannot be mistaken for permission to mutate the branch.
-          pr_json="$(retry gh pr list --repo "$GITHUB_REPOSITORY" \
-            --state all --head "$branch" --limit 100 \
-            --json state,updatedAt \
-            --jq 'sort_by(.updatedAt) | last // {}')"
+          # Query every state and bind reconciliation to this repository's exact
+          # head branch. A fork can use the same ref name; branch-only gh filters
+          # are therefore insufficient for any mutation.
+          retry gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100" \
+            > "$RUNNER_TEMP/reconcile-pulls.json"
+          pr_json="$(python bulk/compute_matrix.py \
+            --exclude-prs "$RUNNER_TEMP/reconcile-pulls.json" \
+            --repo-full-name "$GITHUB_REPOSITORY" \
+            --find-pr-branch "$branch")"
           pr_state="$(jq -r '.state // ""' <<< "$pr_json")"
+          pr_number="$(jq -r '.number // ""' <<< "$pr_json")"
           if [ "$pr_state" = "MERGED" ]; then
             echo "::warning::$CITATION already has a merged PR on $branch; skipping stale pending queue entry before branch mutation." >&2
             exit 0
           fi
           if [ "$pr_state" = "CLOSED" ]; then
-            if gh pr reopen "$branch" --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
+            if gh pr reopen "$pr_number" --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
               echo "Reopened closed PR for $branch."
             else
               echo "::warning::Closed PR for $branch cannot be reopened (head orphaned by a prior force-push); opening a fresh PR." >&2
               pr_state=""
+              pr_number=""
             fi
           fi
 
@@ -841,13 +891,19 @@ jobs:
           git -C "$GITHUB_WORKSPACE" push -f origin "HEAD:$branch"
 
           if [ -z "$pr_state" ]; then
-            retry gh pr create --repo "$GITHUB_REPOSITORY" \
+            pr_url="$(retry gh pr create --repo "$GITHUB_REPOSITORY" \
               --base "$DEFAULT_BRANCH" --head "$branch" \
               --title "$title" \
               --body-file "${{ steps.prbody.outputs.path }}" \
-              --label bulk-encode --draft
+              --label bulk-encode --draft)"
+            pr_url="${pr_url##*$'\n'}"
+            pr_number="${pr_url##*/}"
+            if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+              echo "::error::Could not identify created PR from $pr_url." >&2
+              exit 1
+            fi
           else
-            retry gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
+            retry gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" \
               --title "$title" --body-file "${{ steps.prbody.outputs.path }}" \
               --add-label bulk-encode
           fi
@@ -856,15 +912,15 @@ jobs:
           # actionable findings. Reused PRs can retain an auto-merge request
           # from the legacy workflow, so explicitly remove it before restoring
           # and verifying the draft state.
-          pr_json="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json isDraft,autoMergeRequest)"
+          pr_json="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json isDraft,autoMergeRequest)"
           if [ "$(jq -r '.autoMergeRequest != null' <<< "$pr_json")" = "true" ]; then
-            retry gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto
+            retry gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --disable-auto
           fi
           is_draft="$(jq -r .isDraft <<< "$pr_json")"
           if [ "$is_draft" != "true" ]; then
-            retry gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo
+            retry gh pr ready "$pr_number" --repo "$GITHUB_REPOSITORY" --undo
           fi
-          if ! gh pr view "$branch" --repo "$GITHUB_REPOSITORY" \
+          if ! gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,autoMergeRequest \
             --jq '.isDraft == true and .autoMergeRequest == null' | grep -qx true; then
             echo "::error::$branch is not a draft with auto-merge disabled." >&2

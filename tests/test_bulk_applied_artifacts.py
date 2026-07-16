@@ -30,7 +30,10 @@ changed_paths = _applied_artifacts.changed_paths
 discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
 select = _compute_matrix.select
 active_pr_slugs = _compute_matrix.active_pr_slugs
+failed_issue_slugs = _compute_matrix.failed_issue_slugs
+latest_exact_pr = _compute_matrix.latest_exact_pr
 matrix_limit = _compute_matrix.matrix_limit
+merged_pr_slugs = _compute_matrix.merged_pr_slugs
 
 
 def _write_manifest(path: Path, citation: str, applied_paths: set[str]) -> None:
@@ -573,6 +576,23 @@ def test_matrix_excludes_active_prs_before_applying_limit() -> None:
     assert [item["citation"] for item in selected] == ["us-sc/manual/page-165"]
 
 
+def test_matrix_excludes_blocked_dependencies_before_applying_limit() -> None:
+    data = {
+        "entries": [
+            {
+                "citation": "us-sc/manual/page-165",
+                "status": "pending",
+                "requires_merged_citations": ["us-sc/manual/page-163"],
+            },
+            {"citation": "us-sc/manual/page-159", "status": "pending"},
+        ]
+    }
+
+    selected = select(data, "pending", None, 1, merged_slugs=set())
+
+    assert [item["citation"] for item in selected] == ["us-sc/manual/page-159"]
+
+
 @pytest.mark.parametrize("limit", [-1, 257])
 def test_matrix_rejects_out_of_range_limit(limit: int) -> None:
     with pytest.raises(ValueError, match="between 0 and 256"):
@@ -637,6 +657,90 @@ def test_active_pr_slugs_excludes_open_and_merged_exact_repo_branches() -> None:
 def test_active_pr_slugs_rejects_unexpected_api_shape() -> None:
     with pytest.raises(ValueError, match="list of pages"):
         active_pr_slugs({"state": "open"}, "TheAxiomFoundation/rulespec-us")
+
+
+def test_latest_exact_pr_ignores_same_branch_from_fork() -> None:
+    pages = [
+        [
+            {
+                "number": 900,
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "updated_at": "2026-07-15T12:00:00Z",
+                "merge_commit_sha": "a" * 40,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "someone/fork"},
+                },
+            },
+            {
+                "number": 901,
+                "state": "open",
+                "merged_at": None,
+                "updated_at": "2026-07-15T11:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+        ]
+    ]
+
+    assert latest_exact_pr(
+        pages,
+        "TheAxiomFoundation/rulespec-us",
+        "bulk/us-sc-manual-page-163",
+    ) == {"number": 901, "state": "OPEN", "merge_commit": ""}
+
+
+def test_merged_pr_slugs_uses_exact_repository() -> None:
+    pages = [
+        [
+            {
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-165",
+                    "repo": {"full_name": "someone/fork"},
+                },
+            },
+        ]
+    ]
+
+    assert merged_pr_slugs(pages, "TheAxiomFoundation/rulespec-us") == {
+        "us-sc-manual-page-163"
+    }
+
+
+def test_failed_issue_slugs_only_reads_open_hard_failure_issues() -> None:
+    pages = [
+        [
+            {
+                "state": "open",
+                "title": "Bulk encode hard failure: us-sc/manual/page-163",
+            },
+            {
+                "state": "closed",
+                "title": "Bulk encode hard failure: us-sc/manual/page-165",
+            },
+            {
+                "state": "open",
+                "title": "Bulk encode hard failure: us-sc/manual/page-159",
+                "pull_request": {"url": "https://api.github.test/pulls/1"},
+            },
+        ]
+    ]
+
+    assert failed_issue_slugs(pages) == {"us-sc-manual-page-163"}
 
 
 @pytest.mark.parametrize("status", ["pr-open", "needs-fixtures", "failed", "merged"])
@@ -793,17 +897,45 @@ def test_cloud_bulk_prs_remain_draft_without_auto_merge() -> None:
     workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
 
     assert "--label bulk-encode --draft" in workflow
-    assert 'gh pr ready "$branch" --repo "$GITHUB_REPOSITORY" --undo' in workflow
-    assert 'gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --disable-auto' in workflow
+    assert 'gh pr ready "$pr_number" --repo "$GITHUB_REPOSITORY" --undo' in workflow
+    assert 'gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --disable-auto' in workflow
     assert "--auto --squash" not in workflow
     assert ".autoMergeRequest == null" in workflow
-    state_lookup = workflow.index('pr_json="$(retry gh pr list')
+    state_lookup = workflow.index('pr_json="$(python bulk/compute_matrix.py')
     merged_guard = workflow.index('if [ "$pr_state" = "MERGED" ]; then')
     branch_push = workflow.index('push -f origin "HEAD:$branch"')
     assert state_lookup < merged_guard < branch_push
-    assert '--state all --head "$branch"' in workflow
-    assert "API failures remain failures" in workflow
+    assert '--find-pr-branch "$branch"' in workflow
+    assert 'gh pr reopen "$pr_number"' in workflow
+    assert 'gh pr edit "$pr_number"' in workflow
+    assert 'gh pr view "$pr_number"' in workflow
     assert "skipping stale pending queue entry before branch mutation" in workflow
+
+
+def test_cloud_dispatch_persists_and_excludes_hard_failures() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+
+    assert "issues: write" in workflow
+    assert "--exclude-failure-issues" in workflow
+    assert "Bulk encode hard failure: $CITATION" in workflow
+    assert "steps.apply.outcome == 'failure'" in workflow
+    assert "steps.encode.outcome == 'failure'" in workflow
+    assert "close this issue to permit a fresh run" in workflow
+
+
+def test_cloud_dispatch_filters_dependencies_before_matrix_limit() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    compute_step = workflow.split("- name: Compute matrix from worklist", 1)[1].split(
+        "- name: Fail if nothing to encode", 1
+    )[0]
+
+    assert '--exclude-prs "$RUNNER_TEMP/pulls.json"' in compute_step
+    assert '--limit "$LIMIT"' in compute_step
+    assert "merged_slugs=merged_slugs" in Path(
+        root / "bulk/compute_matrix.py"
+    ).read_text()
 
 
 def test_cloud_companion_failure_classification_is_fail_closed() -> None:
