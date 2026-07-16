@@ -68,9 +68,9 @@ signed corpus provenance `21d898b8ad07f6f7a27b63b8190d76866ad14348`.
 Its public object verifies, exposes US state statutes, and restores the
 Michigan `206.30/2` fragment that was previously unavailable.
 
-The release is only a partial unblock for this campaign: it resolves 6 of the
-20 citations used by the 12 pilots. Source verification still lacks these 14
-active citation paths:
+The release is only a partial unblock for this campaign: strict CI resolves 3
+of the 20 citations used by the 12 pilots. Source verification still lacks
+these 17 active citation paths:
 
 - DC `47-1801.04`;
 - HI `235-51` and `235-2.4`;
@@ -81,8 +81,15 @@ active citation paths:
 - NM `7-2-7`;
 - OK `68-2355`;
 - OR `316.037`;
-- RI `44-30-2.6`; and
+- RI `44-30-2.6`;
+- WA `82/82.87/82/87/040`, `82/82.87/82/87/060`, and
+  `82/82.87/82/87/080`; and
 - WI `71.06`.
+
+The Washington pilot originally used dotted recovery identifiers. Live strict
+source validation exposed that mismatch, so the pilot now uses the canonical
+slash-normalized RCW identifiers shared by the existing atomic modules. Those
+canonical provisions still require a body-bearing successor release scope.
 
 The RuleSpec PR must remain draft until these primary-source provisions are
 recovered into a reviewed, signed successor release and strict source
