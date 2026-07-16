@@ -82,14 +82,14 @@ these 17 active citation paths:
 - OK `68-2355`;
 - OR `316.037`;
 - RI `44-30-2.6`;
-- WA `82/82.87/82/87/040`, `82/82.87/82/87/060`, and
-  `82/82.87/82/87/080`; and
+- WA `82/82.87/82.87.040`, `82/82.87/82.87.060`, and
+  `82/82.87/82.87.080`; and
 - WI `71.06`.
 
-The Washington pilot originally used dotted recovery identifiers. Live strict
-source validation exposed that mismatch, so the pilot now uses the canonical
-slash-normalized RCW identifiers shared by the existing atomic modules. Those
-canonical provisions still require a body-bearing successor release scope.
+Official Washington recovery commit `a3e1b4d3` now produces body-bearing
+provisions at the canonical dotted RCW corpus identifiers shared by the
+existing atomic modules. Strict RuleSpec CI will remain blocked until that
+recovery is integrated into a reviewed, signed successor corpus release.
 
 The RuleSpec PR must remain draft until these primary-source provisions are
 recovered into a reviewed, signed successor release and strict source
