@@ -1,0 +1,126 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-28-103.3
+  summary: |-
+    “Colorado tax stamp means a stamp that is affixed to, or an imprint or impression by a suitable metering machine approved by the department on a package containing cigarettes as evidence of the payment of tax.” After January 1, 2022, the tax equals the difference between the stamped tax paid and tax owed after a cigarette-tax increase. Timely remittance permits a three-percent deduction.
+rules:
+  - name: colorado_tax_stamp
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Day
+    source: C.R.S. § 39-28-103.3(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-28-103.3
+    versions:
+      - effective_from: '2022-01-02'
+        formula: |-
+          package_contains_cigarettes
+          and (colorado_tax_stamp_is_affixed_to_package or department_approved_metering_imprint_is_on_package)
+          and stamp_or_imprint_evidences_payment_of_article_28_tax_other_than_this_section_tax
+
+  - name: cigarette_inventory_rate_increase_tax
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Day
+    source: C.R.S. § 39-28-103.3(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-28-103.3
+              excerpt: "The tax is equal to the difference between the tax paid for the Colorado tax stamp currently affixed ... and the tax that will be owed ... after the increase."
+    versions:
+      - effective_from: '2022-01-02'
+        formula: |-
+          if colorado_tax_stamp and cigarette_package_is_in_wholesaler_or_wholesale_subcontractor_possession_or_control and cigarette_tax_rate_is_increased:
+            max(0, tax_owed_for_same_colorado_tax_stamp_after_rate_increase - tax_paid_for_current_colorado_tax_stamp)
+          else: 0
+
+  - name: timely_remittance_deduction_rate
+    kind: parameter
+    dtype: Rate
+    source: C.R.S. § 39-28-103.3(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-28-103.3
+              excerpt: "may deduct three percent of the tax imposed under this section"
+    versions:
+      - effective_from: '2022-01-02'
+        formula: |-
+          0.03
+
+  - name: remittance_deadline_day_of_month_following_required_inventory
+    kind: parameter
+    dtype: Integer
+    period: Month
+    source: C.R.S. § 39-28-103.3(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-28-103.3
+              excerpt: "on or before the tenth day of the month following the required inventory"
+    versions:
+      - effective_from: '2022-01-02'
+        formula: |-
+          10
+
+  - name: tax_payment_is_timely
+    kind: derived
+    entity: CigaretteTaxRemitter
+    dtype: Judgment
+    period: Month
+    source: C.R.S. § 39-28-103.3(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-28-103.3
+              excerpt: "remit the tax payment on or before the tenth day of the month following the required inventory"
+    versions:
+      - effective_from: '2022-01-02'
+        formula: |-
+          tax_payment_remittance_day_of_month_following_required_inventory <= remittance_deadline_day_of_month_following_required_inventory
+
+  - name: maximum_timely_remittance_deduction
+    kind: derived
+    entity: CigaretteTaxRemitter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: C.R.S. § 39-28-103.3(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-28-103.3
+              excerpt: "If payment is made on or before the due date, the wholesaler or wholesale subcontractor may deduct three percent of the tax imposed under this section."
+    versions:
+      - effective_from: '2022-01-02'
+        formula: |-
+          if tax_payment_is_timely:
+            timely_remittance_deduction_rate * tax_imposed_under_this_section
+          else: 0
