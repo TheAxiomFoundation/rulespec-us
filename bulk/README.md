@@ -18,14 +18,11 @@ provisions to queue.
 | `.axiom/workflow-toolchain.toml` | Immutable checkout SHAs used by CI and generation. |
 | `bulk/local_drain.py` | Legacy recovery runner. Do not use it for signed apply with the current broker-only encoder. |
 | `bulk/applied_artifacts.py` | Validates the module, companion test, and signed manifest written by one encoder apply. |
-| `.github/workflows/bulk-encode.yml` | Fail-closed stub until the protected activation PR enables brokered generation. |
+| `.github/workflows/bulk-encode.yml` | Protected brokered cloud dispatcher for signed generation. |
 
 ## Running it
 
-Cloud generation is temporarily disabled by the protected migration base. The
-activation PR replaces the fail-closed stub only after this queue and runner
-support has passed review. After activation, dispatch from the Actions tab
-(**Bulk encode -> Run workflow**) or the CLI:
+Dispatch from the Actions tab (**Bulk encode -> Run workflow**) or the CLI:
 
 ```bash
 # Encode the first 8 pending batch-A entries:
@@ -35,7 +32,7 @@ gh workflow run bulk-encode.yml -f batch=A -f limit=8 --repo TheAxiomFoundation/
 gh workflow run bulk-encode.yml -f limit=12 --repo TheAxiomFoundation/rulespec-us
 ```
 
-After activation, the `schedule` trigger runs weekly and drains any remaining
+The `schedule` trigger runs weekly and drains any remaining
 `pending` entries with no human action. Parallelism is capped at 4
 (`max-parallel`) to stay under OpenAI rate limits; a top-level `concurrency`
 group serialises whole dispatches so two runs never fight over the same
@@ -43,12 +40,14 @@ group serialises whole dispatches so two runs never fight over the same
 
 ### Review-safe generation
 
-Once activated, signed apply runs only in the main-branch `bulk-encode.yml`
+Signed apply runs only in the main-branch `bulk-encode.yml`
 workflow. The workflow provisions a root-owned Python runtime and launches the
-current encoder through `axiom-encode-apply-signer`; the private key is consumed
-by the external signer and never reaches the encoder process. `allow_context`
-and `program_scope_sync` metadata travel with each durable queue entry, so a
-restarted job reconstructs the same reviewed command without hand edits.
+   current encoder through `axiom-encode-apply-signer`; the private key is consumed
+   by the external signer and never reaches the encoder process. `allow_context`
+   and `program_scope_sync` metadata travel with each durable queue entry. The
+   entry's reviewed acceptance criteria are passed to the encoder through
+   `--review-findings`, so a restarted or review-triggered regeneration
+   reconstructs the same corrective command without hand edits.
 
 Every generated PR must complete the independent review/fix cycle and current
 CI before merge. RuleSpec YAML and companion fixtures are never hand-edited;
@@ -63,12 +62,25 @@ then regenerated with `encode --apply`.
 | `AXIOM_ENCODE_APPLY_SIGNING_KEY` | Consumed only by the protected external signer. It must match `AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY`; the encoder never receives it. |
 | `BULK_ENCODE_TOKEN` | A `repo`+`workflow`-scoped token used to push the branch and open the draft PR. **Required**: PRs opened by the default `GITHUB_TOKEN` do **not** trigger the `pull_request` event, so required validation would never run. This token makes the PR a real event that triggers CI. |
 
-## Activated workflow
+## Workflow
 
-The protected activation PR supplies these jobs after the feature PR lands:
+The protected workflow supplies these jobs:
 
-1. **dispatch** — installs PyYAML, runs `compute_matrix.py --status pending`
-   (optionally `--batch`, `--limit`), and emits the matrix.
+1. **dispatch** — installs PyYAML, fetches all PR and hard-failure issue states,
+   then runs
+   `compute_matrix.py --status pending` (optionally `--batch`, `--limit`) and
+   emits the matrix. Entries whose exact `bulk/<slug>` branch already has an
+   open or merged PR, an unresolved queue dependency, or an open
+   `bulk-encode-failed` issue are excluded before the limit is applied. This
+   keeps stale, blocked, and failed entries from starving later queue work.
+   Closed, unmerged PRs stay eligible for the workflow's reopen/recreate
+   recovery path. Dispatch limits are constrained to GitHub's `0..256` matrix
+   capacity.
+   A manual dispatch can set `citation` to one exact worklist citation to
+   regenerate its existing open draft after review or a `needs-fixtures`
+   result. This explicit path still blocks merged branches, unresolved
+   dependencies, and open hard-failure issues; close the failure issue after
+   triage before retrying.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
@@ -85,6 +97,9 @@ The protected activation PR supplies these jobs after the feature PR lands:
      `.axiom/encoding-manifests/**/<sec>.json`.
    - Runs the gate battery in PR-CI order: `guard-generated` (manifest present),
      `validate --skip-reviewers`, `proof-validate`, then the companion `test`.
+   - Creates or refreshes a `bulk-encode-failed` issue when apply or a hard gate
+     fails. The open issue is durable retry state; closing it permits a fresh
+     dispatch after triage.
    - Opens `bulk/<slug>` as a draft with the acceptance criteria, manifest
      summary, and gate output in the PR body. It never enables auto-merge.
 
@@ -103,11 +118,13 @@ Set in `worklist.yaml`. The runner reads `pending`; humans/follow-ups own the re
 | `needs-fixtures` | Encoded + applied, but the gpt-5.5 companion fixtures hit the #1060 ceiling. The draft PR remains open for an encoder fix and rerun. |
 | `pr-open` | A draft PR exists and is waiting for its review/fix cycle and CI. |
 | `merged` | The PR merged to main. Terminal success. |
-| `failed` | Encode or a non-fixture gate failed. Needs human triage. Never auto-retried, never merged. |
+| `failed` | Encode or a non-fixture gate failed. An open `bulk-encode-failed` issue blocks automatic retry until triage; reconcile the worklist in a reviewable follow-up. Never merged. |
 
 Statuses are updated by committing to `worklist.yaml` (a reviewable diff), not by
 silent CI mutation. `compute_matrix.py --set-status <citation> <status>` is a
-local convenience.
+local convenience. Hard cloud failures additionally use an open issue as
+immediate durable retry state, because a status PR is not effective until it is
+reviewed and merged.
 
 ## The fixture-split follow-up loop
 
@@ -118,7 +135,8 @@ runner marks the module `needs-fixtures` and still opens a draft PR so the
 encoded module and failure are reviewable.
 
 A follow-up pass fixes the encoder prompt, harness, source material, or other
-root cause and reruns `encode --apply`; generated fixtures are never hand-edited
+root cause and dispatches the exact worklist `citation` to rerun `encode
+--apply`; generated fixtures are never hand-edited
 or back-filled to make a test pass. Once the regenerated artifacts pass review
 and CI, the PR can merge. Update the worklist entry to `pr-open`, then `merged`.
 

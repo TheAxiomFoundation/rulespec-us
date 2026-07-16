@@ -15,6 +15,14 @@ Usage:
   # Read one field (used by the runner to look up backend/model per entry):
   python bulk/compute_matrix.py --get us-ny/statute/TAX/673 --field model
 
+  # Cloud dispatch: exclude exact bulk branches with an open or merged PR:
+  python bulk/compute_matrix.py --status pending --exclude-prs pulls.json \
+    --repo-full-name TheAxiomFoundation/rulespec-us
+
+  # Explicitly refresh one reviewed draft while keeping merge/failure guards:
+  python bulk/compute_matrix.py --status any --only-citation us-ny/statute/TAX/673 \
+    --exclude-prs pulls.json --repo-full-name TheAxiomFoundation/rulespec-us
+
 The matrix shape preserves the reviewed execution metadata needed by local
 jobs, in addition to the citation/backend/model fields used by cloud jobs.
 `slug` is the branch-safe citation slug used for `bulk/<slug>` branches and the
@@ -40,6 +48,20 @@ WORKLIST = Path(__file__).resolve().parent / "worklist.yaml"
 
 SELECTABLE_STATUSES = {"pending", "pending-local"}
 REPO_ROOT = WORKLIST.parents[1]
+MAX_MATRIX_ENTRIES = 256
+
+
+def matrix_limit(value: str) -> int:
+    """Parse a bounded GitHub Actions matrix limit."""
+    try:
+        limit = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("limit must be an integer") from exc
+    if not 0 <= limit <= MAX_MATRIX_ENTRIES:
+        raise argparse.ArgumentTypeError(
+            f"limit must be between 0 and {MAX_MATRIX_ENTRIES}"
+        )
+    return limit
 
 
 def citation_slug(citation: str) -> str:
@@ -91,9 +113,155 @@ def entry_allow_context(entry: dict) -> list[str]:
     return values
 
 
-def select(data: dict, status: str, batch: str | None, limit: int | None) -> list[dict]:
+def _paged_mappings(pages: object, label: str):
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise ValueError(f"{label} response must be a list of pages")
+    for page in pages:
+        for item in page:
+            if not isinstance(item, dict):
+                raise ValueError(f"{label} pages must contain mappings")
+            yield item
+
+
+def _exact_repo_pulls(pages: object, repo_full_name: str):
+    for pull in _paged_mappings(pages, "pull request"):
+        head = pull.get("head")
+        repo = head.get("repo") if isinstance(head, dict) else None
+        if isinstance(repo, dict) and repo.get("full_name") == repo_full_name:
+            yield pull
+
+
+def _pull_state(pull: dict) -> str:
+    if pull.get("merged_at") is not None:
+        return "MERGED"
+    state = pull.get("state")
+    return state.upper() if isinstance(state, str) else ""
+
+
+def latest_exact_pr(
+    pages: object,
+    repo_full_name: str,
+    branch: str,
+    required_state: str | None = None,
+) -> dict:
+    """Return the active or latest PR for an exact repository and head branch."""
+    matches = []
+    for pull in _exact_repo_pulls(pages, repo_full_name):
+        head = pull.get("head")
+        if not isinstance(head, dict) or head.get("ref") != branch:
+            continue
+        if required_state is not None and _pull_state(pull) != required_state:
+            continue
+        number = pull.get("number")
+        if not isinstance(number, int) or number <= 0:
+            raise ValueError("matching pull request has no positive number")
+        matches.append(pull)
+    if not matches:
+        return {}
+    pull = max(
+        matches,
+        key=lambda item: (
+            {"OPEN": 2, "MERGED": 1}.get(_pull_state(item), 0),
+            str(item.get("updated_at") or ""),
+            int(item["number"]),
+        ),
+    )
+    merge_commit = pull.get("merge_commit_sha")
+    return {
+        "number": pull["number"],
+        "state": _pull_state(pull),
+        "merge_commit": merge_commit if isinstance(merge_commit, str) else "",
+    }
+
+
+def active_pr_slugs(pages: object, repo_full_name: str) -> set[str]:
+    """Return bulk slugs already represented by an open or merged PR.
+
+    The GitHub REST API returns one list per page when ``gh api --slurp`` is
+    used. Closed, unmerged PRs remain eligible so the workflow can exercise its
+    reviewed reopen/recreate recovery path.
+    """
+    slugs: set[str] = set()
+    for pull in _exact_repo_pulls(pages, repo_full_name):
+        head = pull.get("head")
+        ref = head.get("ref") if isinstance(head, dict) else None
+        if (
+            isinstance(ref, str)
+            and ref.startswith("bulk/")
+            and _pull_state(pull) in {"OPEN", "MERGED"}
+        ):
+            slugs.add(ref.removeprefix("bulk/"))
+    return slugs
+
+
+def merged_pr_slugs(pages: object, repo_full_name: str) -> set[str]:
+    """Return exact repository bulk slugs whose PR has merged."""
+    slugs: set[str] = set()
+    for pull in _exact_repo_pulls(pages, repo_full_name):
+        head = pull.get("head")
+        ref = head.get("ref") if isinstance(head, dict) else None
+        if (
+            isinstance(ref, str)
+            and ref.startswith("bulk/")
+            and _pull_state(pull) == "MERGED"
+        ):
+            slugs.add(ref.removeprefix("bulk/"))
+    return slugs
+
+
+def failed_issue_slugs(pages: object) -> set[str]:
+    """Return citations held by an open workflow-created hard-failure issue."""
+    prefix = "Bulk encode hard failure: "
+    slugs: set[str] = set()
+    for issue in _paged_mappings(pages, "issue"):
+        title = issue.get("title")
+        if (
+            issue.get("state") == "open"
+            and "pull_request" not in issue
+            and isinstance(title, str)
+            and title.startswith(prefix)
+        ):
+            citation = title.removeprefix(prefix).strip()
+            if citation:
+                slugs.add(citation_slug(citation))
+    return slugs
+
+
+def dispatch_excluded_slugs(
+    active_slugs: set[str],
+    merged_slugs: set[str],
+    failure_slugs: set[str],
+    only_citation: str | None,
+) -> set[str]:
+    """Build queue exclusions, allowing only a guarded open-draft refresh."""
+    excluded = set(active_slugs)
+    if only_citation is not None:
+        refresh_slug = citation_slug(only_citation)
+        if refresh_slug not in merged_slugs:
+            excluded.discard(refresh_slug)
+    excluded.update(failure_slugs)
+    return excluded
+
+
+def select(
+    data: dict,
+    status: str,
+    batch: str | None,
+    limit: int | None,
+    *,
+    excluded_slugs: set[str] | None = None,
+    merged_slugs: set[str] | None = None,
+    only_citation: str | None = None,
+) -> list[dict]:
+    if limit is not None and not 0 <= limit <= MAX_MATRIX_ENTRIES:
+        raise ValueError(f"limit must be between 0 and {MAX_MATRIX_ENTRIES}")
     out: list[dict] = []
+    excluded_slugs = excluded_slugs or set()
+    citation_found = False
     for entry in data["entries"]:
+        if only_citation is not None and entry.get("citation") != only_citation:
+            continue
+        citation_found = True
         if status != "any" and entry.get("status") != status:
             continue
         if batch and str(entry.get("batch", "")).upper() != batch.upper():
@@ -106,6 +274,11 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                 f"{entry.get('citation')}: requires_merged_citations must be "
                 "a list of non-empty strings"
             )
+        if merged_slugs is not None and any(
+            citation_slug(dependency) not in merged_slugs
+            for dependency in dependencies
+        ):
+            continue
         program_scope_sync = entry.get("program_scope_sync")
         if program_scope_sync is not None and not isinstance(program_scope_sync, dict):
             raise ValueError(
@@ -140,6 +313,9 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                     f"{entry.get('citation')}: program_scope_sync must add or "
                     "remove at least one module"
                 )
+        slug = citation_slug(entry["citation"])
+        if slug in excluded_slugs:
+            continue
         out.append(
             {
                 "citation": entry["citation"],
@@ -147,12 +323,14 @@ def select(data: dict, status: str, batch: str | None, limit: int | None) -> lis
                 "backend": entry_backend(data, entry),
                 "model": entry_model(data, entry),
                 "acceptance_criteria": entry.get("note", ""),
-                "slug": citation_slug(entry["citation"]),
+                "slug": slug,
                 "allow_context": entry_allow_context(entry),
                 "requires_merged_citations": dependencies,
                 "program_scope_sync": program_scope_sync,
             }
         )
+    if only_citation is not None and not citation_found:
+        raise ValueError(f"citation not found: {only_citation}")
     if limit is not None:
         out = out[:limit]
     return out
@@ -167,7 +345,10 @@ def main() -> int:
         "--batch", default=None, help="Restrict to a batch label (A, B, ...)."
     )
     ap.add_argument(
-        "--limit", type=int, default=None, help="Cap the number of entries."
+        "--limit",
+        type=matrix_limit,
+        default=None,
+        help=f"Cap entries between 0 and {MAX_MATRIX_ENTRIES}.",
     )
     ap.add_argument(
         "--format",
@@ -187,6 +368,42 @@ def main() -> int:
         metavar=("CITATION", "STATUS"),
         default=None,
         help="LOCAL ONLY: set an entry's status in place.",
+    )
+    ap.add_argument(
+        "--exclude-prs",
+        type=Path,
+        default=None,
+        help="GitHub REST pull pages from `gh api --paginate --slurp`.",
+    )
+    ap.add_argument(
+        "--repo-full-name",
+        default=None,
+        help="Repository whose exact bulk branches may be excluded.",
+    )
+    ap.add_argument(
+        "--exclude-failure-issues",
+        type=Path,
+        default=None,
+        help="Open failure issues from `gh api --paginate --slurp`.",
+    )
+    ap.add_argument(
+        "--only-citation",
+        default=None,
+        help=(
+            "Select one exact worklist citation. Its open PR may be refreshed, "
+            "but merged PR and hard-failure exclusions still apply."
+        ),
+    )
+    ap.add_argument(
+        "--find-pr-branch",
+        default=None,
+        help="Print the latest exact-repository PR record for this branch.",
+    )
+    ap.add_argument(
+        "--find-pr-state",
+        choices=["OPEN", "CLOSED", "MERGED"],
+        default=None,
+        help="With --find-pr-branch, restrict the selected PR state.",
     )
     args = ap.parse_args()
 
@@ -228,7 +445,64 @@ def main() -> int:
                 return 0
         raise SystemExit(f"citation not found: {args.get}")
 
-    selected = select(data, args.status, args.batch, args.limit)
+    if bool(args.exclude_prs) != bool(args.repo_full_name):
+        raise SystemExit("--exclude-prs and --repo-full-name must be used together")
+    active_slugs: set[str] = set()
+    merged_slugs: set[str] | None = None
+    pages = None
+    if args.exclude_prs:
+        try:
+            pages = json.loads(args.exclude_prs.read_text(encoding="utf-8"))
+            active_slugs = active_pr_slugs(pages, args.repo_full_name)
+            merged_slugs = merged_pr_slugs(pages, args.repo_full_name)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise SystemExit(f"could not read pull request exclusions: {exc}") from exc
+    if args.only_citation is not None and merged_slugs is None:
+        raise SystemExit("--only-citation requires --exclude-prs")
+    if args.find_pr_branch:
+        if pages is None:
+            raise SystemExit("--find-pr-branch requires --exclude-prs")
+        try:
+            print(
+                json.dumps(
+                    latest_exact_pr(
+                        pages,
+                        args.repo_full_name,
+                        args.find_pr_branch,
+                        args.find_pr_state,
+                    )
+                )
+            )
+        except ValueError as exc:
+            raise SystemExit(f"could not identify exact pull request: {exc}") from exc
+        return 0
+    if args.find_pr_state:
+        raise SystemExit("--find-pr-state requires --find-pr-branch")
+    failure_slugs: set[str] = set()
+    if args.exclude_failure_issues:
+        try:
+            issue_pages = json.loads(
+                args.exclude_failure_issues.read_text(encoding="utf-8")
+            )
+            failure_slugs = failed_issue_slugs(issue_pages)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise SystemExit(f"could not read failure issue exclusions: {exc}") from exc
+
+    excluded_slugs = dispatch_excluded_slugs(
+        active_slugs,
+        merged_slugs or set(),
+        failure_slugs,
+        args.only_citation,
+    )
+    selected = select(
+        data,
+        args.status,
+        args.batch,
+        args.limit,
+        excluded_slugs=excluded_slugs,
+        merged_slugs=merged_slugs,
+        only_citation=args.only_citation,
+    )
 
     if args.format == "count":
         print(len(selected))

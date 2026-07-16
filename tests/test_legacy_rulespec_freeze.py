@@ -89,7 +89,9 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         assert value not in repository_checks
 
     bulk_encode = (ROOT / ".github/workflows/bulk-encode.yml").read_text()
-    assert "disabled pending reviewed activation" in bulk_encode
-    assert "exit 1" in bulk_encode
-    assert "axiom_encode.cli encode" not in bulk_encode
-    assert "schedule:" not in bulk_encode
+    assert '.axiom/workflow-toolchain.toml").read_text()' in bulk_encode
+    assert "steps.toolchain.outputs.axiom_encode_ref" in bulk_encode
+    assert "axiom-encode-apply-signer" in bulk_encode
+    assert "python bulk/applied_artifacts.py" in bulk_encode
+    assert "--label bulk-encode --draft" in bulk_encode
+    assert "--auto --squash" not in bulk_encode

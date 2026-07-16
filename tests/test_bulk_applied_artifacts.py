@@ -1,5 +1,7 @@
+import argparse
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +29,12 @@ _local_drain = _load_bulk_module("local_drain")
 changed_paths = _applied_artifacts.changed_paths
 discover_applied_artifacts = _applied_artifacts.discover_applied_artifacts
 select = _compute_matrix.select
+active_pr_slugs = _compute_matrix.active_pr_slugs
+failed_issue_slugs = _compute_matrix.failed_issue_slugs
+dispatch_excluded_slugs = _compute_matrix.dispatch_excluded_slugs
+latest_exact_pr = _compute_matrix.latest_exact_pr
+matrix_limit = _compute_matrix.matrix_limit
+merged_pr_slugs = _compute_matrix.merged_pr_slugs
 
 
 def _write_manifest(path: Path, citation: str, applied_paths: set[str]) -> None:
@@ -550,6 +558,321 @@ def test_matrix_preserves_context_for_cloud_entry() -> None:
     assert selected[0]["allow_context"] == ["us/regulations/7-cfr/273/9.yaml"]
 
 
+def test_matrix_excludes_active_prs_before_applying_limit() -> None:
+    data = {
+        "entries": [
+            {"citation": "us-sc/manual/page-163", "status": "pending"},
+            {"citation": "us-sc/manual/page-165", "status": "pending"},
+        ]
+    }
+
+    selected = select(
+        data,
+        "pending",
+        None,
+        1,
+        excluded_slugs={"us-sc-manual-page-163"},
+    )
+
+    assert [item["citation"] for item in selected] == ["us-sc/manual/page-165"]
+
+
+def test_matrix_explicit_citation_selects_only_reviewed_draft() -> None:
+    data = {
+        "entries": [
+            {"citation": "us-sc/manual/page-163", "status": "pr-open"},
+            {"citation": "us-sc/manual/page-165", "status": "pending"},
+        ]
+    }
+
+    selected = select(
+        data,
+        "any",
+        None,
+        1,
+        excluded_slugs=set(),
+        merged_slugs=set(),
+        only_citation="us-sc/manual/page-163",
+    )
+
+    assert [item["citation"] for item in selected] == ["us-sc/manual/page-163"]
+
+
+def test_matrix_explicit_citation_still_honors_exclusions() -> None:
+    citation = "us-sc/manual/page-163"
+    data = {"entries": [{"citation": citation, "status": "needs-fixtures"}]}
+
+    selected = select(
+        data,
+        "any",
+        None,
+        1,
+        excluded_slugs={"us-sc-manual-page-163"},
+        merged_slugs=set(),
+        only_citation=citation,
+    )
+
+    assert selected == []
+
+
+def test_explicit_refresh_bypasses_only_its_open_pr_exclusion() -> None:
+    citation = "us-sc/manual/page-163"
+    slug = "us-sc-manual-page-163"
+
+    assert dispatch_excluded_slugs({slug}, set(), set(), citation) == set()
+    assert dispatch_excluded_slugs({slug}, {slug}, set(), citation) == {slug}
+    assert dispatch_excluded_slugs({slug}, set(), {slug}, citation) == {slug}
+
+
+def test_matrix_explicit_citation_must_exist() -> None:
+    with pytest.raises(ValueError, match="citation not found"):
+        select(
+            {"entries": []},
+            "any",
+            None,
+            1,
+            only_citation="us-sc/manual/page-163",
+        )
+
+
+def test_matrix_excludes_blocked_dependencies_before_applying_limit() -> None:
+    data = {
+        "entries": [
+            {
+                "citation": "us-sc/manual/page-165",
+                "status": "pending",
+                "requires_merged_citations": ["us-sc/manual/page-163"],
+            },
+            {"citation": "us-sc/manual/page-159", "status": "pending"},
+        ]
+    }
+
+    selected = select(data, "pending", None, 1, merged_slugs=set())
+
+    assert [item["citation"] for item in selected] == ["us-sc/manual/page-159"]
+
+
+@pytest.mark.parametrize("limit", [-1, 257])
+def test_matrix_rejects_out_of_range_limit(limit: int) -> None:
+    with pytest.raises(ValueError, match="between 0 and 256"):
+        select({"entries": []}, "pending", None, limit)
+
+
+@pytest.mark.parametrize("value", ["-1", "257", "not-an-integer"])
+def test_matrix_limit_parser_rejects_unsafe_values(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError, match="limit must"):
+        matrix_limit(value)
+
+
+def test_matrix_limit_parser_accepts_github_capacity_bounds() -> None:
+    assert matrix_limit("0") == 0
+    assert matrix_limit("256") == 256
+
+
+def test_active_pr_slugs_excludes_open_and_merged_exact_repo_branches() -> None:
+    pages = [
+        [
+            {
+                "state": "open",
+                "merged_at": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-165",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "closed",
+                "merged_at": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-159",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "open",
+                "merged_at": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-159",
+                    "repo": {"full_name": "someone/fork"},
+                },
+            },
+        ]
+    ]
+
+    assert active_pr_slugs(pages, "TheAxiomFoundation/rulespec-us") == {
+        "us-sc-manual-page-163",
+        "us-sc-manual-page-165",
+    }
+
+
+def test_active_pr_slugs_rejects_unexpected_api_shape() -> None:
+    with pytest.raises(ValueError, match="list of pages"):
+        active_pr_slugs({"state": "open"}, "TheAxiomFoundation/rulespec-us")
+
+
+def test_latest_exact_pr_ignores_same_branch_from_fork() -> None:
+    pages = [
+        [
+            {
+                "number": 900,
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "updated_at": "2026-07-15T12:00:00Z",
+                "merge_commit_sha": "a" * 40,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "someone/fork"},
+                },
+            },
+            {
+                "number": 901,
+                "state": "open",
+                "merged_at": None,
+                "updated_at": "2026-07-15T11:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+        ]
+    ]
+
+    assert latest_exact_pr(
+        pages,
+        "TheAxiomFoundation/rulespec-us",
+        "bulk/us-sc-manual-page-163",
+    ) == {"number": 901, "state": "OPEN", "merge_commit": ""}
+
+
+def test_latest_exact_pr_can_select_merged_before_newer_closed_pr() -> None:
+    pages = [
+        [
+            {
+                "number": 901,
+                "state": "closed",
+                "merged_at": "2026-07-15T11:00:00Z",
+                "updated_at": "2026-07-15T11:00:00Z",
+                "merge_commit_sha": "a" * 40,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "number": 902,
+                "state": "closed",
+                "merged_at": None,
+                "updated_at": "2026-07-15T12:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+        ]
+    ]
+
+    assert latest_exact_pr(
+        pages,
+        "TheAxiomFoundation/rulespec-us",
+        "bulk/us-sc-manual-page-163",
+        "MERGED",
+    ) == {"number": 901, "state": "MERGED", "merge_commit": "a" * 40}
+
+
+def test_latest_exact_pr_prefers_open_before_newer_closed_pr() -> None:
+    pages = [
+        [
+            {
+                "number": 901,
+                "state": "open",
+                "merged_at": None,
+                "updated_at": "2026-07-15T11:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "number": 902,
+                "state": "closed",
+                "merged_at": None,
+                "updated_at": "2026-07-15T12:00:00Z",
+                "merge_commit_sha": None,
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+        ]
+    ]
+
+    assert latest_exact_pr(
+        pages,
+        "TheAxiomFoundation/rulespec-us",
+        "bulk/us-sc-manual-page-163",
+    ) == {"number": 901, "state": "OPEN", "merge_commit": ""}
+
+
+def test_merged_pr_slugs_uses_exact_repository() -> None:
+    pages = [
+        [
+            {
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-163",
+                    "repo": {"full_name": "TheAxiomFoundation/rulespec-us"},
+                },
+            },
+            {
+                "state": "closed",
+                "merged_at": "2026-07-15T12:00:00Z",
+                "head": {
+                    "ref": "bulk/us-sc-manual-page-165",
+                    "repo": {"full_name": "someone/fork"},
+                },
+            },
+        ]
+    ]
+
+    assert merged_pr_slugs(pages, "TheAxiomFoundation/rulespec-us") == {
+        "us-sc-manual-page-163"
+    }
+
+
+def test_failed_issue_slugs_only_reads_open_hard_failure_issues() -> None:
+    pages = [
+        [
+            {
+                "state": "open",
+                "title": "Bulk encode hard failure: us-sc/manual/page-163",
+            },
+            {
+                "state": "closed",
+                "title": "Bulk encode hard failure: us-sc/manual/page-165",
+            },
+            {
+                "state": "open",
+                "title": "Bulk encode hard failure: us-sc/manual/page-159",
+                "pull_request": {"url": "https://api.github.test/pulls/1"},
+            },
+        ]
+    ]
+
+    assert failed_issue_slugs(pages) == {"us-sc-manual-page-163"}
+
+
 @pytest.mark.parametrize("status", ["pr-open", "needs-fixtures", "failed", "merged"])
 def test_matrix_preserves_context_after_local_status_transition(status: str) -> None:
     data = {
@@ -665,3 +988,166 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert "Local signed generation is disabled" in local_drain
     assert '"AXIOM_ENCODE_APPLY_SIGNING_KEY": signing_key()' not in local_drain
     assert "find-generic-password" not in local_drain
+
+
+def test_cloud_apply_uses_protected_signer_and_exact_artifact_discovery() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    encode_job = workflow.split("\n  encode:\n", 1)[1]
+    signing_step = workflow.split(
+        "- name: Encode --apply through protected signer", 1
+    )[1].split("- name: Discover applied artifacts", 1)[0]
+
+    assert 'python-version: "3.13"' in encode_job
+    assert 'go-version: "1.26.1"' in encode_job
+    assert "pull-requests: read" in encode_job
+    assert "Fetch pinned signed corpus release object from public registry" in encode_job
+    assert "rest/v1/release_objects?select=release_object" in encode_job
+    assert "NEXT_PUBLIC_SUPABASE_ANON_KEY" in encode_job
+    assert "git merge-base --is-ancestor" in encode_job
+    assert "python bulk/applied_artifacts.py" in encode_job
+    assert '--citation "$CITATION"' in encode_job
+    assert "git status --porcelain" not in encode_job
+    assert 'echo "manifest_rel=$manifest_rel"' in encode_job
+    assert "MANIFEST_REL: ${{ steps.encode.outputs.manifest_rel }}" in encode_job
+    assert 'manifest="$(cat "$GITHUB_WORKSPACE/$MANIFEST_REL")"' in encode_job
+    assert "find \"$GITHUB_WORKSPACE\" -path '*/.axiom/encoding-manifests/*'" not in encode_job
+    assert "Require merged queue dependencies" in encode_job
+    assert "Prepare reviewed encode context" in encode_job
+    assert 'REVIEW_FINDINGS: ${{ matrix.item.acceptance_criteria }}' in encode_job
+    assert 'encode_args+=(--review-findings "$RUNNER_TEMP/review-findings.md")' in signing_step
+    assert "AXIOM_ENCODE_APPLY_SIGNING_KEY: ${{ secrets." in signing_step
+    assert 'exec "$RUNNER_TEMP/axiom-encode-apply-signer" run' in signing_step
+    assert "--key-env AXIOM_ENCODE_APPLY_SIGNING_KEY" in signing_step
+    assert "| tee" not in signing_step
+    assert "jq " not in signing_step
+    assert "\n          python " not in signing_step
+
+
+def test_cloud_bulk_prs_remain_draft_without_auto_merge() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+
+    assert "--label bulk-encode --draft" in workflow
+    assert 'gh pr ready "$number" --repo "$GITHUB_REPOSITORY" --undo' in workflow
+    assert 'gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --disable-auto' in workflow
+    assert "--auto --squash" not in workflow
+    assert ".autoMergeRequest == null" in workflow
+    state_lookup = workflow.index('pr_json="$(python bulk/compute_matrix.py')
+    merged_guard = workflow.index('if [ "$pr_state" = "MERGED" ]; then')
+    pre_push_hardening = workflow.index('harden_pr_for_review "$pr_number"')
+    branch_push = workflow.index('push -f origin "HEAD:$branch"')
+    assert state_lookup < merged_guard < pre_push_hardening < branch_push
+    assert '--find-pr-branch "$branch"' in workflow
+    assert "retry fetch_reconcile_pulls" in workflow
+    assert 'mv "$temporary" "$RUNNER_TEMP/reconcile-pulls.json"' in workflow
+    assert 'gh pr reopen "$pr_number"' in workflow
+    assert 'gh pr edit "$pr_number"' in workflow
+    assert 'gh pr view "$number"' in workflow
+    assert "skipping stale pending queue entry before branch mutation" in workflow
+    assert "trap rollback_reopened_pr EXIT" in workflow
+    assert 'retry gh pr close "$pr_number"' in workflow
+    assert "refresh_complete=true" in workflow
+
+
+def test_cloud_dispatch_persists_and_excludes_hard_failures() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+
+    assert "issues: write" in workflow
+    assert "--exclude-failure-issues" in workflow
+    assert "Bulk encode hard failure: $CITATION" in workflow
+    assert "steps.apply.outcome == 'failure'" in workflow
+    assert "steps.encode.outcome == 'failure'" in workflow
+    assert "close this issue to permit a fresh run" in workflow
+
+
+def test_cloud_dispatch_filters_dependencies_before_matrix_limit() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    compute_step = workflow.split("- name: Compute matrix from worklist", 1)[1].split(
+        "- name: Fail if nothing to encode", 1
+    )[0]
+
+    assert '--exclude-prs "$RUNNER_TEMP/pulls.json"' in compute_step
+    assert '--limit "$LIMIT"' in compute_step
+    assert "merged_slugs=merged_slugs" in Path(
+        root / "bulk/compute_matrix.py"
+    ).read_text()
+    assert '--find-pr-state MERGED' in workflow
+
+
+def test_cloud_dispatch_can_refresh_one_open_draft() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    compute_step = workflow.split("- name: Compute matrix from worklist", 1)[1].split(
+        "- name: Fail if nothing to encode", 1
+    )[0]
+
+    assert 'CITATION: ${{ inputs.citation }}' in compute_step
+    assert 'args+=(--status any --only-citation "$CITATION" --limit 1)' in compute_step
+    assert "dispatch_excluded_slugs" in Path(root / "bulk/compute_matrix.py").read_text()
+
+
+def test_cloud_companion_failure_classification_is_fail_closed() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    gate_step = workflow.split(
+        "- name: Discover applied artifacts and run the gate battery", 1
+    )[1].split("- name: Assemble PR body", 1)[0]
+
+    assert '--json "${test_file#"$juris"/}"' in gate_step
+    assert 'payload.get("success") is not False' in gate_step
+    assert "value_mismatch.fullmatch" in gate_step
+    pattern_match = re.search(
+        r'value_mismatch = re\.compile\(\s*r"([^"]+)"', gate_step
+    )
+    assert pattern_match is not None
+    value_mismatch = re.compile(pattern_match.group(1))
+    assert value_mismatch.fullmatch(
+        "us:statutes/26/61#gross_income: expected 10, got 12"
+    )
+    assert value_mismatch.fullmatch(
+        "us:policies/example#amounts[2]: expected 10, got 12"
+    )
+    assert value_mismatch.fullmatch("amount[2]: expected 10, got 12")
+    assert value_mismatch.fullmatch("compile failed: expected token, got eof") is None
+    assert value_mismatch.fullmatch("missing output amount; got []") is None
+    assert 'echo "status=needs-fixtures"' in gate_step
+    assert 'echo "status=failed"' in gate_step
+    assert 'exit "$test_status"' in gate_step
+
+
+def test_cloud_gate_battery_uses_protected_current_command_plane() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    gate_step = workflow.split(
+        "- name: Discover applied artifacts and run the gate battery", 1
+    )[1].split("- name: Assemble PR body", 1)[0]
+
+    assert gate_step.count(
+        "/opt/axiom-verification/axiom-encode-signing-supervisor"
+    ) == 4
+    assert '--corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus"' in gate_step
+    assert "--expected-encoder-checkout" in gate_step
+    assert "--axiom-rules-engine-path" in gate_step
+    assert '--root "$GITHUB_WORKSPACE/$juris"' in gate_step
+    assert 'program-scope-sync --repo "$GITHUB_WORKSPACE"' in gate_step
+
+
+def test_bulk_workflow_pins_every_third_party_action() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
+    action_refs = {
+        line.strip().removeprefix("uses: ").split(" #", 1)[0]
+        for line in workflow.splitlines()
+        if line.strip().startswith("uses: ")
+    }
+
+    assert action_refs == {
+        "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+        "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+        "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+        "dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30",
+        "Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4",
+    }
