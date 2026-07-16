@@ -1,0 +1,84 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-37-103
+  summary: |-
+    “Doing business in this state” includes specified in-state retail activity by a person maintaining an in-state place of business, or soliciting Colorado business after retail sales exceed twenty thousand dollars under the stated annual or current-year timing rules.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-37-103/d#firearm_manufacturing_machine_is_firearm_precursor_part
+      reason: The definition requires determining whether a machine or device is reasonably designed or intended to manufacture or produce a firearm; the referenced firearm definitions are unavailable.
+    - output: us-co:statutes/39/39-37-103/b#federal_or_tribal_law_enforcement_agency_is_law_enforcement_agency
+      reason: This inclusion defines an institutional classification not representable as an executable scalar output in the available entity schema.
+    - output: us-co:statutes/39/39-37-103/c#worthless_account_purchase_price_deduction
+      reason: The deduction depends on transaction-level returned-property, charge-off, collection, and tax-payment accounting not supplied by this source slice.
+    - output: us-co:statutes/39/39-37-103/b#federal_or_tribal_officer_is_peace_officer
+      reason: This inclusion defines a person-status classification, including the federal qualified-retired-officer definition, that is not independently computable from this source slice.
+    - output: us-co:statutes/39/39-37-103/b#purchase_price_includes_manufactured_or_made_to_order_item_price
+      reason: The inclusion requires transaction-level material, service, profit, and sale-price accounting not supplied by this source slice.
+rules:
+  - name: retail_sales_nexus_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-37-103(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-37-103
+              excerpt: "retail sales ... exceeding twenty thousand dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20000
+
+  - name: doing_business_in_state
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Year
+    source: 39-37-103(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-37-103
+              excerpt: "Doing business in this state means the selling, leasing, or delivering in this state"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-37-103
+              excerpt: "Maintains within this state ... an office, distribution facility, salesroom, warehouse, storage place"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-37-103
+              excerpt: "Solicits ... business from persons residing in this state"
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-37-103
+              excerpt: "An entire calendar year if, in the previous calendar year"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          retail_activity_in_state_for_in_state_use_storage_distribution_or_consumption
+          and (
+            maintains_in_state_place_of_business
+            or (
+              solicits_business_from_state_residents
+              and (
+                previous_calendar_year_retail_sales > retail_sales_nexus_threshold
+                or (
+                  current_calendar_year_retail_sales > retail_sales_nexus_threshold
+                  and current_period_is_on_or_after_first_day_of_month_after_ninetieth_day
+                )
+              )
+            )
+          )
