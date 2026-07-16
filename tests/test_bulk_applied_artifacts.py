@@ -992,21 +992,25 @@ def test_cloud_bulk_prs_remain_draft_without_auto_merge() -> None:
     workflow = (root / ".github/workflows/bulk-encode.yml").read_text()
 
     assert "--label bulk-encode --draft" in workflow
-    assert 'gh pr ready "$pr_number" --repo "$GITHUB_REPOSITORY" --undo' in workflow
-    assert 'gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --disable-auto' in workflow
+    assert 'gh pr ready "$number" --repo "$GITHUB_REPOSITORY" --undo' in workflow
+    assert 'gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --disable-auto' in workflow
     assert "--auto --squash" not in workflow
     assert ".autoMergeRequest == null" in workflow
     state_lookup = workflow.index('pr_json="$(python bulk/compute_matrix.py')
     merged_guard = workflow.index('if [ "$pr_state" = "MERGED" ]; then')
+    pre_push_hardening = workflow.index('harden_pr_for_review "$pr_number"')
     branch_push = workflow.index('push -f origin "HEAD:$branch"')
-    assert state_lookup < merged_guard < branch_push
+    assert state_lookup < merged_guard < pre_push_hardening < branch_push
     assert '--find-pr-branch "$branch"' in workflow
     assert "retry fetch_reconcile_pulls" in workflow
     assert 'mv "$temporary" "$RUNNER_TEMP/reconcile-pulls.json"' in workflow
     assert 'gh pr reopen "$pr_number"' in workflow
     assert 'gh pr edit "$pr_number"' in workflow
-    assert 'gh pr view "$pr_number"' in workflow
+    assert 'gh pr view "$number"' in workflow
     assert "skipping stale pending queue entry before branch mutation" in workflow
+    assert "trap rollback_reopened_pr EXIT" in workflow
+    assert 'retry gh pr close "$pr_number"' in workflow
+    assert "refresh_complete=true" in workflow
 
 
 def test_cloud_dispatch_persists_and_excludes_hard_failures() -> None:
