@@ -1,0 +1,88 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-37-109
+  summary: A vendor files a monthly electronic return and remits tax by the twentieth
+    day of the following month. For delinquency or noncompliance, the executive director
+    estimates tax and adds a penalty equal to the greater of fifteen dollars or ten
+    percent of unpaid tax plus one-half percent per month, capped at eighteen percent
+    in the aggregate.
+  deferred_outputs:
+  - output: us-co:statutes/39/39-37-109#delinquency_interest
+    reason: Interest is incorporated by reference to section 39-21-110.5, whose executable
+      interest calculation is not supplied in copied context.
+rules:
+- name: delinquency_penalty_base_rate
+  kind: parameter
+  dtype: Rate
+  source: C.R.S. 39-37-109(4)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-37-109
+          excerpt: Ten percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.10'
+- name: vendor_is_delinquent_or_noncompliant
+  kind: derived
+  entity: Vendor
+  dtype: Judgment
+  period: Month
+  source: C.R.S. 39-37-109(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/statute/39/39-37-109
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'vendor_neglects_or_refuses_to_file_timely_return_or_pay_tax
+
+      or vendor_fails_to_pay_or_correctly_account_for_tax
+
+      or vendor_fails_to_keep_complete_and_accurate_records'
+- name: local_delinquency_penalty
+  kind: derived
+  entity: Vendor
+  dtype: Money
+  unit: USD
+  period: Month
+  source: C.R.S. 39-37-109(4)(a)-(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-37-109
+          excerpt: a penalty equal to the greater of
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/statute/39/39-37-109
+          excerpt: Fifteen dollars
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-37-109
+          excerpt: Ten percent ... plus one-half percent per month ... not to exceed
+            eighteen percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: "if vendor_is_delinquent_or_noncompliant:\n  max(\n    minimum_delinquency_penalty,\n\
+      \    estimated_unpaid_or_unaccounted_for_tax\n    * (\n      delinquency_penalty_base_rate\n\
+      \      + min(\n        months_since_tax_was_due * monthly_delinquency_penalty_rate,\n\
+      \        aggregate_monthly_delinquency_penalty_rate_cap\n      )\n    )\n  )\n\
+      else: 0"
+imports:
+- us-co:statutes/39/39-26-118#aggregate_monthly_delinquency_penalty_rate_cap
+- us-co:statutes/39/39-26-118#minimum_delinquency_penalty
+- us-co:statutes/39/39-26-118#monthly_delinquency_penalty_rate
