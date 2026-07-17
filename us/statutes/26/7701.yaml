@@ -1,0 +1,154 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/7701
+  summary: |-
+    26 USC 7701 provides title-wide definitions and special rules. Encoded here are executable portions of subsection (h), which treats qualified motor vehicle operating agreements containing terminal rental adjustment clauses as leases and prevents lessee ownership treatment, and subsection (o), which states when a transaction has economic substance. Broader definition, residency, service-contract, and cross-reference surfaces are deferred.
+  deferred_outputs:
+    - output: us:statutes/26/7701/a#definitions_used_in_title
+      reason: Subsection (a) contains many title-wide definitions, repealed items, cross-references to unavailable provisions, and entity concepts not safely representable as one executable output in this artifact.
+    - output: us:statutes/26/7701/b#resident_alien_and_nonresident_alien_definitions
+      reason: Subsection (b) depends on immigration statuses, treaty treatment, unavailable cross-referenced sections, day-count rules, annual statements, and first/last-year residency mechanics that require a fuller upstream residency model.
+    - output: us:statutes/26/7701/e#certain_service_contracts_treated_as_leases
+      reason: Subsection (e) requires contract-or-arrangement classification, facility categories, related-entity rules, and cross-referenced facility and low-income housing definitions not fully available in copied context.
+    - output: us:statutes/26/7701/p#cross_references
+      reason: Subsection (p) is a non-operative cross-reference inventory to Title 1 definitions and section 7806(a), not a standalone computable rule.
+rules:
+  - name: motor_vehicle_business_use_minimum_fraction
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 7701(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/7701
+              excerpt: "more than 50 percent of the use of the property subject to such agreement is to be in a trade or business of the lessee"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.50
+  - name: qualified_motor_vehicle_operating_agreement
+    kind: derived
+    entity: MotorVehicleOperatingAgreement
+    dtype: Judgment
+    period: Year
+    source: 26 USC 7701(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7701
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/7701#motor_vehicle_business_use_minimum_fraction
+              output: motor_vehicle_business_use_minimum_fraction
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          agreement_is_with_respect_to_motor_vehicle_including_trailer
+          and lessor_personal_liability_plus_eligible_pledged_property_value_equals_or_exceeds_acquisition_financing
+          and lessee_separately_signed_perjury_certification_of_trade_or_business_use_fraction > motor_vehicle_business_use_minimum_fraction
+          and lessee_separately_signed_notice_that_lessee_will_not_be_treated_as_owner_for_federal_income_tax
+          and not lessor_knows_certification_is_false
+  - name: motor_vehicle_agreement_treated_as_lease
+    kind: derived
+    entity: MotorVehicleOperatingAgreement
+    dtype: Judgment
+    period: Year
+    source: 26 USC 7701(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7701
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/7701#qualified_motor_vehicle_operating_agreement
+              output: qualified_motor_vehicle_operating_agreement
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          qualified_motor_vehicle_operating_agreement
+          and agreement_contains_terminal_rental_adjustment_clause
+          and agreement_would_be_treated_as_lease_but_for_terminal_rental_adjustment_clause
+  - name: lessee_not_owner_during_motor_vehicle_operating_agreement
+    kind: derived
+    entity: MotorVehicleOperatingAgreement
+    dtype: Judgment
+    period: Year
+    source: 26 USC 7701(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7701
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/7701#qualified_motor_vehicle_operating_agreement
+              output: qualified_motor_vehicle_operating_agreement
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          qualified_motor_vehicle_operating_agreement
+          and agreement_contains_terminal_rental_adjustment_clause
+  - name: transaction_has_economic_substance
+    kind: derived
+    entity: Transaction
+    dtype: Judgment
+    period: Year
+    source: 26 USC 7701(o)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7701
+              excerpt: "changes in a meaningful way (apart from Federal income tax effects) the taxpayer's economic position"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7701
+              excerpt: "the taxpayer has a substantial purpose (apart from Federal income tax effects)"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          economic_substance_doctrine_is_relevant_to_transaction
+          and transaction_changes_taxpayer_economic_position_meaningfully_apart_from_federal_income_tax_effects
+          and taxpayer_has_substantial_non_federal_income_tax_purpose_for_transaction
+  - name: profit_potential_taken_into_account_for_economic_substance
+    kind: derived
+    entity: Transaction
+    dtype: Judgment
+    period: Year
+    source: 26 USC 7701(o)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7701
+              excerpt: "only if the present value of the reasonably expected pre-tax profit from the transaction is substantial in relation to the present value of the expected net tax benefits"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          transaction_relies_on_profit_potential_for_economic_substance
+          and present_value_of_reasonably_expected_pretax_profit_is_substantial_in_relation_to_expected_net_tax_benefits
