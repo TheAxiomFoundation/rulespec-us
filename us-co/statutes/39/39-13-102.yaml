@@ -1,0 +1,149 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-13-102
+  summary: |-
+    A documentary fee is imposed on a person offering for recording an instrument conveying title to Colorado real property. No fee is payable where total consideration is five hundred dollars or less; otherwise the fee is one cent for each one hundred dollars, or major fraction thereof. Commercial or industrial real-property consideration excludes separately evidenced personal-property consideration.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-13-102/4#county_documentary_fee_portion
+      reason: The county-specific allocation requires a county clerk and recorder entity and transaction-to-county allocation relation not supported by this artifact.
+    - output: us-co:statutes/39/39-13-102/5/a#residential_documentary_fee_consideration
+      reason: The residential consideration exception depends on a related declaration filed under section 39-14-102, which is not available as copied RuleSpec context.
+    - output: us-co:statutes/39/39-13-102/5/c#submitted_evidence_confidentiality
+      reason: The record-handling, transmission, confidentiality, and public-inspection requirements are administrative duties not represented as a computable output.
+rules:
+  - name: documentary_fee_no_fee_consideration_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-13-102(2)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "five hundred dollars or less, no documentary fee shall be payable"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          500
+
+  - name: documentary_fee_consideration_increment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-13-102(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "one hundred dollars, or major fraction thereof"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          100
+
+  - name: documentary_fee_per_consideration_increment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-13-102(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "one cent for each one hundred dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.01
+
+  - name: documentary_fee_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: 39-13-102(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "every person offering for recording ... any deed or instrument in writing wherein or whereby title to real property situated in this state is granted or conveyed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_offers_instrument_for_recording
+          and instrument_grants_or_conveys_real_property_title
+          and real_property_is_situated_in_colorado
+
+  - name: documentary_fee_payable
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Day
+    unit: USD
+    source: 39-13-102(2)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "exceeds five hundred dollars, the documentary fee payable shall be computed at the rate of one cent for each one hundred dollars, or major fraction thereof"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if documentary_fee_applies: if total_consideration_paid <= documentary_fee_no_fee_consideration_threshold: 0 else: documentary_fee_per_consideration_increment * ceil(total_consideration_paid / documentary_fee_consideration_increment) else: 0
+
+  - name: commercial_or_industrial_real_property_consideration
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Day
+    unit: USD
+    source: 39-13-102(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "the total amount of the sales price to the purchaser shall be deemed to be paid for the grant or conveyance of real property unless evidence of the separate consideration paid for personal property is submitted"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if property_is_commercial_or_industrial: if separate_personal_property_consideration_is_evidenced_on_use_tax_return or separate_personal_property_consideration_is_evidenced_on_declaration: max(0, total_sales_price_to_purchaser - separate_consideration_paid_for_personal_property) else: total_sales_price_to_purchaser else: 0
+
+  - name: property_regarded_as_residential_for_documentary_fee
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Day
+    source: 39-13-102(5)(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: default
+            source:
+              corpus_citation_path: us-co/statute/39/39-13-102
+              excerpt: "will be regarded as residential unless the deed or other instrument includes a conspicuous statement or notation that the property is not to be regarded as residential"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not instrument_conspicuously_states_property_is_not_residential

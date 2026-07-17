@@ -1,0 +1,155 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-21-110
+  summary: |-
+    Interest is allowed on overpayments at the section 39-21-110.5 rate; a purchaser refund-claim timing rule applies only after more than one hundred eighty days. If total payments are more than twice actual tax liability, the taxpayer bears the preponderance burden. No interest is allowed for an overpayment refunded within ninety days after the unextended filing due date.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-21-110/1#overpayment_interest_amount
+      reason: The applicable interest rate is imposed under section 39-21-110.5, which is not available as RuleSpec context, and the statutory accrual start and end dates cannot be represented as money computation inputs here.
+    - output: us-co:statutes/39/39-21-110/2#erroneous_refund_interest_amount
+      reason: This interest amount depends on the rate imposed under unavailable section 39-21-110.5.
+    - output: us-co:statutes/39/39-21-110/4#net_operating_loss_carryback_interest_computation
+      reason: The carryback rule requires date-based interest computation through the taxable year in which the loss arises.
+rules:
+  - name: actual_liability_multiple_for_taxpayer_burden
+    kind: parameter
+    dtype: Decimal
+    source: 39-21-110(1.5)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "more than twice the amount of the actual tax liability"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2
+  - name: refund_interest_end_date_maximum_lead_days
+    kind: parameter
+    dtype: Count
+    source: 39-21-110(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "preceding the date of the refund by not more than thirty days"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          30
+  - name: purchaser_refund_interest_delay_days
+    kind: parameter
+    dtype: Count
+    source: 39-21-110(1)(c)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "more than one hundred eighty days from the date the claim for refund was filed"
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          180
+  - name: timely_refund_interest_free_period_days
+    kind: parameter
+    dtype: Count
+    source: 39-21-110(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "refunded within ninety days after the last date prescribed for filing the return"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+  - name: taxpayer_bears_orderly_discharge_burden
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 39-21-110(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "If a taxpayer's total payments are more than twice the amount of the actual tax liability, then the taxpayer shall bear the burden"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          total_payments > actual_liability_multiple_for_taxpayer_burden * actual_tax_liability
+  - name: department_bears_orderly_discharge_burden
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 39-21-110(1.5)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "If a taxpayer's total payments are less than or equal to twice the amount of the actual tax liability, then the department shall bear the burden"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          total_payments <= actual_liability_multiple_for_taxpayer_burden * actual_tax_liability
+  - name: purchaser_refund_interest_timing_applies
+    kind: derived
+    entity: RefundClaim
+    dtype: Judgment
+    period: Day
+    source: 39-21-110(1)(c)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "refund claim made by a purchaser for sales or use tax paid to a vendor under section 39-26-703 (2)"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "on or after July 1, 2022, but before July 1, 2026"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110
+              excerpt: "only if the date of the refund is more than one hundred eighty days from the date the claim for refund was filed"
+    versions:
+      - effective_from: '2022-07-01'
+        formula: |-
+          refund_claim_is_made_by_purchaser
+          and refund_claim_concerns_sales_or_use_tax_paid_to_vendor_under_section_39_26_703_2
+          and refund_claim_is_in_temporary_effective_window
+          and days_from_refund_claim_filing_to_refund > purchaser_refund_interest_delay_days
