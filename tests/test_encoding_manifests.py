@@ -18,11 +18,16 @@ KNOWN_ORPHANED_ENCODING_MANIFESTS: list[str] = []
 
 
 def test_encoding_manifest_roots_are_empty() -> None:
-    """The canonical-provenance hard cut retires every historical manifest."""
+    """The canonical-provenance hard cut retires every historical manifest.
+
+    `_axiom/` holds workflow-provisioned dependency checkouts pinned at
+    foreign refs; their manifests are not this repo's and are excluded.
+    """
     manifests = [
         path.relative_to(ROOT).as_posix()
         for path in ROOT.rglob("*.json")
         if "encoding-manifests" in path.parts
+        and "_axiom" not in path.relative_to(ROOT).parts
     ]
 
     assert manifests == []
