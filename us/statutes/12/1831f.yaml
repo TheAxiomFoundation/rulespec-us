@@ -1,0 +1,228 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/12/1831f
+    source_sha256: 8c61a767da86b4f34cc41ecc5010d790430fd691a02145234ddb5012a325334b
+  summary: |-
+    12 USC 1831f restricts brokered deposits by insured depository institutions that are not well capitalized; treats renewals and rollovers at troubled institutions as acceptance of funds; authorizes case-by-case waivers for adequately capitalized institutions; limits conservatorship exceptions; restricts interest rates paid by covered insured depository institutions; authorizes additional Corporation restrictions; defines deposit broker with exclusions and inclusions; restricts high-rate deposit solicitation by undercapitalized institutions; and provides a limited exception for reciprocal deposits, including a $5,000,000,000 or 20 percent liabilities cap.
+  deferred_outputs:
+    - output: us:statutes/12/1831f/g#deposit_broker
+      reason: Deposit broker definition depends on exclusions and inclusions using unavailable cited definitions in sections 401(d), 403(a), and 1831o, including qualified plan and well-capitalized mechanics.
+    - output: us:statutes/12/1831f/h#deposit_solicitation_restricted_for_undercapitalized_institution
+      reason: Subsection (h) depends on the meaning of undercapitalized as defined in section 1831o, which is not available in copied RuleSpec context.
+rules:
+  - name: reciprocal_deposit_limit_dollar_cap
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 12 USC 1831f(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/12/1831f
+              excerpt: "$5,000,000,000"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          5000000000
+
+  - name: reciprocal_deposit_limit_liability_ratio
+    kind: parameter
+    dtype: Rate
+    source: 12 USC 1831f(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/12/1831f
+              excerpt: "20 percent of the total liabilities"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.20
+
+  - name: reciprocal_deposit_limit
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Money
+    period: Day
+    unit: USD
+    source: 12 USC 1831f(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(reciprocal_deposit_limit_dollar_cap, reciprocal_deposit_limit_liability_ratio * total_liabilities)
+
+  - name: reciprocal_deposits_not_brokered_funds
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          institution_is_agent_institution
+          and reciprocal_deposits_amount <= reciprocal_deposit_limit
+
+  - name: accepts_brokered_deposits_prohibited
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          institution_is_insured_depository_institution
+          and not institution_is_well_capitalized
+          and funds_obtained_by_or_through_deposit_broker_for_deposit_accounts
+          and not subsection_c_waiver_applies
+          and not subsection_d_conservatorship_exception_applies
+          and not reciprocal_deposits_not_brokered_funds
+
+  - name: troubled_institution_renewal_or_rollover_treated_as_acceptance
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          institution_is_troubled_institution
+          and (account_renewal_in_such_troubled_institution or amount_rollover_on_deposit_in_such_account)
+
+  - name: subsection_c_waiver_applies
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          institution_is_adequately_capitalized_but_not_well_capitalized
+          and institution_applied_for_waiver
+          and corporation_waives_applicability_on_case_by_case_basis
+          and corporation_finds_acceptance_does_not_constitute_unsafe_or_unsound_practice
+
+  - name: conservatorship_exception_initial_days
+    kind: parameter
+    dtype: Count
+    source: 12 USC 1831f(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/12/1831f
+              excerpt: "Effective 90 days after the date on which the institution was placed in conservatorship"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          90
+
+  - name: subsection_d_conservatorship_exception_applies
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          corporation_has_been_appointed_conservator_for_institution
+          and days_since_institution_placed_in_conservatorship < conservatorship_exception_initial_days
+          and corporation_determines_acceptance_is_not_unsafe_or_unsound_practice
+          and corporation_determines_acceptance_is_necessary_to_meet_depositor_demands_or_pay_ordinary_obligations
+          and corporation_determines_acceptance_is_consistent_with_conservator_fiduciary_duty_to_minimize_losses
+
+  - name: covered_insured_depository_institution
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          accepts_brokered_funds_under_subsection_c_or_d
+          or (acting_as_agent_institution_under_subsection_i and accepts_reciprocal_deposits and not institution_is_well_capitalized)
+
+  - name: interest_rate_restriction_applies
+    kind: derived
+    entity: InsuredDepositoryInstitution
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1831f(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/12/1831f
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          covered_insured_depository_institution
+          and pays_interest_on_funds_or_reciprocal_deposits_described_in_subsection_e
+          and interest_rate_at_acceptance_significantly_exceeds_applicable_limit

@@ -1,0 +1,126 @@
+format: rulespec/v1
+imports:
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-308
+  summary: |-
+    “An amount equal to one dollar per ton” is allowed for Colorado coal purchased and delivered in excess of the 1988 base-year amount, for income tax years commencing on or after January 1, 1989, but before January 1, 2005. Colorado coal is coal mined in Colorado and certified by its producer.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-308#colorado_coal_credit_carryforward_available
+      reason: The three-year carryforward requires tax-year-specific credit-origin and carryforward ordering records not represented by the available entity inputs.
+    - output: us-co:statutes/39/39-22-308#transferred_colorado_coal_credit_for_producer
+      reason: The transferred-credit provision requires a purchaser-producer written-agreement relationship and purchaser-specific credit calculation that are not represented by an available structural relation.
+    - output: us-co:statutes/39/39-22-308#coal_purchase_price_reduction_for_transferred_credit
+      reason: The required purchase-price reduction is tied to the unavailable purchaser-producer transfer-agreement relationship.
+rules:
+  - name: colorado_coal_credit_per_ton
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: C.R.S. 39-22-308(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "an amount equal to one dollar per ton"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          1
+
+  - name: colorado_coal_credit_carryforward_maximum_years
+    kind: parameter
+    dtype: Count
+    source: C.R.S. 39-22-308(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "for a period not exceeding three years"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          3
+
+  - name: colorado_coal_tons_in_excess_of_base_year
+    kind: derived
+    entity: TaxUnit
+    dtype: Count
+    period: Year
+    source: C.R.S. 39-22-308(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "in excess of the number of tons of Colorado coal purchased by and delivered to the taxpayer in the income tax year commencing on or after January 1, 1988"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          max(0, colorado_coal_tons_purchased_and_delivered - colorado_coal_tons_purchased_and_delivered_in_base_year)
+
+  - name: colorado_coal_purchase_credit_available
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: C.R.S. 39-22-308(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "For income tax years commencing on or after January 1, 1989, but prior to January 1, 2005"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "Colorado coal means coal mined in Colorado, as certified by the producer"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "for each ton of Colorado coal purchased by and delivered to the taxpayer in excess"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          income_tax_year_is_within_colorado_coal_credit_period
+          and purchased_coal_is_colorado_coal_certified_by_producer
+          and colorado_coal_tons_in_excess_of_base_year > 0
+
+  - name: colorado_coal_purchase_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    source: C.R.S. 39-22-308(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "an amount equal to one dollar per ton for each ton of Colorado coal purchased by and delivered to the taxpayer in excess"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-308
+              excerpt: "one dollar per ton"
+    versions:
+      - effective_from: '1989-01-01'
+        formula: |-
+          if colorado_coal_purchase_credit_available: colorado_coal_credit_per_ton * colorado_coal_tons_in_excess_of_base_year else: 0

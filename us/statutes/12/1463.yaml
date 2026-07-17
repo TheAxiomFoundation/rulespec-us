@@ -1,0 +1,196 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/12/1463
+    source_sha256: 9028146cc71de8861431e5721fede096abd6b8747fb59ef28eca5dba3efb81f2
+  summary: |-
+    12 USC 1463(e) prohibits savings associations from dealing in lottery tickets or substitute bets, publicizing lotteries or participants/winners, or permitting office use/access for those purposes, with an exception for lawful services for a State lottery. 12 USC 1463(g) permits interest up to the greater of 1 percent above the 90-day commercial paper discount rate or the State-law rate, and imposes forfeiture/recovery consequences for knowingly charging more.
+rules:
+  - name: lottery_minimum_participant_count
+    kind: parameter
+    dtype: Count
+    source: 12 USC 1463(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/12/1463
+              excerpt: "3 or more persons"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: minimum_winner_count
+    kind: parameter
+    dtype: Count
+    source: 12 USC 1463(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/12/1463
+              excerpt: "1 or more but not all"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+
+  - name: arrangement_is_lottery
+    kind: derived
+    entity: Arrangement
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1463(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1463
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          participant_count >= lottery_minimum_participant_count
+          and participants_advance_money_or_credit
+          and winner_count >= minimum_winner_count
+          and winner_count < participant_count
+          and winners_receive_more_than_advanced_by_reason_of_advances
+          and (winner_identity_determined_by_random_selection or winner_identity_determined_by_game_race_or_contest or winner_identity_determined_by_event_record_or_tabulation)
+          and not arrangement_is_savings_promotion_raffle
+
+  - name: savings_association_lottery_participation_prohibited
+    kind: derived
+    entity: SavingsAssociation
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1463(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/12/1463
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (deals_in_lottery_tickets or deals_in_bets_used_as_lottery_substitute or announces_advertises_or_publicizes_lottery or announces_advertises_or_publicizes_lottery_participant_or_winner)
+          and not lawful_state_lottery_service_exception_applies
+
+  - name: savings_association_lottery_facility_use_prohibited
+    kind: derived
+    entity: SavingsAssociation
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1463(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/12/1463
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (permits_office_use_for_lottery_forbidden_purpose or permits_public_direct_access_from_office_to_lottery_forbidden_premises)
+          and not lawful_state_lottery_service_exception_applies
+
+  - name: maximum_excess_rate_over_discount_rate
+    kind: parameter
+    dtype: Rate
+    source: 12 USC 1463(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/12/1463
+              excerpt: "not more than 1 percent in excess"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.01
+
+  - name: savings_association_maximum_interest_rate
+    kind: derived
+    entity: SavingsAssociation
+    dtype: Rate
+    period: Day
+    source: 12 USC 1463(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/12/1463
+              excerpt: "whichever is greater"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(discount_rate_on_90_day_commercial_paper_in_federal_reserve_district + maximum_excess_rate_over_discount_rate, state_law_interest_rate)
+
+  - name: usury_forfeiture_applies
+    kind: derived
+    entity: SavingsAssociation
+    dtype: Judgment
+    period: Day
+    source: 12 USC 1463(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/12/1463
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          charged_interest_rate > savings_association_maximum_interest_rate
+          and charged_greater_rate_knowingly
+
+  - name: recovery_multiplier_for_paid_excess_interest
+    kind: parameter
+    dtype: Decimal
+    source: 12 USC 1463(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/12/1463
+              excerpt: "twice the amount of the interest paid"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2
+
+  - name: usury_recoverable_amount
+    kind: derived
+    entity: SavingsAssociation
+    dtype: Money
+    unit: USD
+    period: Day
+    source: 12 USC 1463(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/12/1463
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if usury_forfeiture_applies and civil_action_commenced_not_later_than_2_years_after_payment: interest_paid * recovery_multiplier_for_paid_excess_interest else: 0

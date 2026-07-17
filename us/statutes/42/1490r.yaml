@@ -1,0 +1,191 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/1490r
+    source_sha256: df31143a8a71090458acbed7d93448ada92f96eb0bb6ebcadcf2c7add630ffc3
+  summary: |-
+    The Secretary shall carry out a rural housing voucher program, to the extent or in amounts approved in appropriation Acts, to assist very low-income families and persons to reside in rental housing in rural areas. Monthly assistance equals the payment standard over 30 percent of monthly adjusted income, capped at rent including allowed utilities over 10 percent of monthly gross income. The Secretary shall coordinate with sections 1485 and 1490m and enter contracts for not more than 5000 units in any fiscal year.
+  deferred_outputs:
+    - output: us:statutes/42/1490r#rural_housing_voucher_program_coordination_required
+      reason: The coordination duty depends on activities assisted under 42 USC 1485 and 42 USC 1490m, and no copied RuleSpec context provides those cited sources.
+rules:
+  - name: adjusted_income_payment_contribution_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 1490r(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1490r
+              excerpt: "30 per centum of the family's monthly adjusted income"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.30
+
+  - name: gross_income_rent_cap_contribution_rate
+    kind: parameter
+    dtype: Rate
+    source: 42 USC 1490r(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1490r
+              excerpt: "10 per centum of the family's monthly gross income"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.10
+
+  - name: annual_contract_unit_limit
+    kind: parameter
+    dtype: Count
+    source: 42 USC 1490r(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/1490r
+              excerpt: "not more than 5000 units in any fiscal year"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          5000
+
+  - name: rural_housing_voucher_program_assistance_available
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Month
+    source: 42 USC 1490r(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/1490r
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          appropriation_act_approves_rural_housing_voucher_assistance
+          and family_or_person_is_very_low_income
+          and family_or_person_resides_or_will_reside_in_rental_housing_in_rural_area
+
+  - name: monthly_assistance_payment_before_rent_cap
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 USC 1490r(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1490r
+              excerpt: "the amount by which the payment standard for the area exceeds 30 per centum of the family's monthly adjusted income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1490r#adjusted_income_payment_contribution_rate
+              output: adjusted_income_payment_contribution_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          max(0, payment_standard_for_area - adjusted_income_payment_contribution_rate * family_monthly_adjusted_income)
+
+  - name: monthly_assistance_payment_rent_cap
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 USC 1490r(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1490r
+              excerpt: "shall not exceed the amount which the rent for the dwelling unit (including the amount allowed for utilities in the case of a unit with separate utility metering) exceeds 10 per centum of the family's monthly gross income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1490r#gross_income_rent_cap_contribution_rate
+              output: gross_income_rent_cap_contribution_rate
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          max(0, dwelling_unit_rent_including_allowed_utilities - gross_income_rent_cap_contribution_rate * family_monthly_gross_income)
+
+  - name: monthly_rural_housing_voucher_assistance_payment
+    kind: derived
+    entity: Family
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 USC 1490r(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1490r
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1490r#monthly_assistance_payment_before_rent_cap
+              output: monthly_assistance_payment_before_rent_cap
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1490r#monthly_assistance_payment_rent_cap
+              output: monthly_assistance_payment_rent_cap
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if rural_housing_voucher_program_assistance_available: min(monthly_assistance_payment_before_rent_cap, monthly_assistance_payment_rent_cap) else: 0
+
+  - name: annual_contract_units_within_limit
+    kind: derived
+    entity: RuralHousingVoucherProgram
+    dtype: Judgment
+    period: Year
+    source: 42 USC 1490r(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/42/1490r
+              excerpt: "enter into contracts for assistance for not more than 5000 units in any fiscal year"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/1490r#annual_contract_unit_limit
+              output: annual_contract_unit_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          fiscal_year_contract_units_for_assistance <= annual_contract_unit_limit

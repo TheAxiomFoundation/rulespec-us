@@ -1,0 +1,197 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-21-110.5
+  summary: |-
+    Except for specified refunds, the annual interest rate is the highest prime rate reported by the Wall Street Journal plus three points, rounded to the nearest full percent. For refunds issued on or after January 1, 2004, refunds below five thousand dollars or below ten percent of net tax liability receive that rate; other refunds receive the rounded prime rate unless the taxpayer demonstrates good cause.
+rules:
+  - name: standard_interest_rate_addition
+    kind: parameter
+    dtype: Rate
+    source: 39-21-110.5(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "the prime rate, as reported by the Wall Street Journal, plus three points"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.03
+
+  - name: full_percent_rounding_increment
+    kind: parameter
+    dtype: Rate
+    source: 39-21-110.5(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "rounded to the nearest full percent"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.01
+
+  - name: refund_amount_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-21-110.5(4)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "the amount of the refund is less than five thousand dollars"
+    versions:
+      - effective_from: '2004-01-01'
+        formula: |-
+          5000
+
+  - name: refund_net_tax_liability_ratio_threshold
+    kind: parameter
+    dtype: Rate
+    source: 39-21-110.5(4)(a)-(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "ten percent of the taxpayer's net tax liability for the period for which the tax is paid"
+    versions:
+      - effective_from: '2004-01-01'
+        formula: |-
+          0.10
+
+  - name: adjusted_annual_interest_rate
+    kind: derived
+    entity: InterestComputation
+    dtype: Rate
+    period: Year
+    source: 39-21-110.5(2)-(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "the highest rate shall be utilized"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-21-110.5#standard_interest_rate_addition
+              output: standard_interest_rate_addition
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-21-110.5#full_percent_rounding_increment
+              output: full_percent_rounding_increment
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          floor(
+            (
+              (highest_wall_street_journal_prime_rate + standard_interest_rate_addition)
+              / full_percent_rounding_increment
+            )
+            + (1 / 2)
+          ) * full_percent_rounding_increment
+
+  - name: refund_annual_interest_rate
+    kind: derived
+    entity: InterestComputation
+    dtype: Rate
+    period: Year
+    source: 39-21-110.5(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "If the amount of the refund is less than five thousand dollars"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "less than ten percent of the taxpayer's net tax liability"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-21-110.5
+              excerpt: "the overpayment of tax necessitating such refund was due to good cause as determined by the executive director"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-21-110.5#refund_amount_threshold
+              output: refund_amount_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-21-110.5#refund_net_tax_liability_ratio_threshold
+              output: refund_net_tax_liability_ratio_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-21-110.5#standard_interest_rate_addition
+              output: standard_interest_rate_addition
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-21-110.5#full_percent_rounding_increment
+              output: full_percent_rounding_increment
+              hash: sha256:local
+    versions:
+      - effective_from: '2004-01-01'
+        formula: |-
+          if refund_amount < refund_amount_threshold:
+            floor(
+              (
+                (highest_wall_street_journal_prime_rate + standard_interest_rate_addition)
+                / full_percent_rounding_increment
+              )
+              + (1 / 2)
+            ) * full_percent_rounding_increment
+          else:
+            if refund_amount < refund_net_tax_liability_ratio_threshold * taxpayer_net_tax_liability:
+              floor(
+                (
+                  (highest_wall_street_journal_prime_rate + standard_interest_rate_addition)
+                  / full_percent_rounding_increment
+                )
+                + (1 / 2)
+              ) * full_percent_rounding_increment
+            else:
+              if taxpayer_demonstrates_overpayment_due_to_good_cause_as_determined_by_executive_director:
+                floor(
+                  (
+                    (highest_wall_street_journal_prime_rate + standard_interest_rate_addition)
+                    / full_percent_rounding_increment
+                  )
+                  + (1 / 2)
+                ) * full_percent_rounding_increment
+              else:
+                floor(
+                  (highest_wall_street_journal_prime_rate / full_percent_rounding_increment)
+                  + (1 / 2)
+                ) * full_percent_rounding_increment
