@@ -14,11 +14,18 @@ from test_repository_layout import (
     jurisdiction_dirs,
 )
 
-KNOWN_ORPHANED_ENCODING_MANIFESTS = [
-    # The module moved to us-ca/policies/cdss/snap/standard-utility-allowance.yaml
-    # during subtree absorption; its manifest stayed at the old guidance path.
-    "us-ca/guidance/cdss/acin-2025-i-46-25/standard-utility-allowance.yaml",
-]
+KNOWN_ORPHANED_ENCODING_MANIFESTS: list[str] = []
+
+
+def test_encoding_manifest_roots_are_empty() -> None:
+    """The canonical-provenance hard cut retires every historical manifest."""
+    manifests = [
+        path.relative_to(ROOT).as_posix()
+        for path in ROOT.rglob("*.json")
+        if "encoding-manifests" in path.parts
+    ]
+
+    assert manifests == []
 
 # Manifest-sync guard: axiom-encode writes an applied-rulespec manifest
 # (schema axiom-encode/applied-rulespec/v1) next to every encoding run,

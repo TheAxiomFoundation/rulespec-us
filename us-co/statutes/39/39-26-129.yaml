@@ -1,0 +1,177 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-26-129
+  summary: |-
+    “Broadband provider” means a person that provides broadband service. “Broadband service” has specified transmission capacity and speed requirements or the faster FCC definition. “Target area” includes an unincorporated county area or a municipality with a population below thirty thousand. Eligible providers may claim qualifying state sales and use tax refunds for calendar years before January 1, 2027, subject to annual proration.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-26-129/4#refund_application_complies_with_submission_requirements
+      reason: The application timing, documentary proof, and department-required information process cannot be represented as a computable annual refund application record with the available entities and date types.
+    - output: us-co:statutes/39/39-26-129/5#refund_payment_after_proration
+      reason: Annual proration requires the aggregate of all approved taxpayer refund applications and department payment administration, which are not available as a source-grounded relation in this module.
+rules:
+  - name: minimum_broadband_download_speed
+    kind: parameter
+    dtype: Decimal
+    source: 39-26-129(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+              excerpt: "at least four megabits per second for download"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          4
+
+  - name: minimum_broadband_upload_speed
+    kind: parameter
+    dtype: Decimal
+    source: 39-26-129(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+              excerpt: "one megabit per second for upload"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          1
+
+  - name: target_area_population_limit
+    kind: parameter
+    dtype: Count
+    source: 39-26-129(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+              excerpt: "population of less than thirty thousand people"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          30000
+
+  - name: annual_refund_cap
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-26-129(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+              excerpt: "may not exceed one million dollars for a calendar year"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          1000000
+
+  - name: broadband_provider
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Year
+    source: 39-26-129(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          provides_broadband_service
+
+  - name: broadband_service
+    kind: derived
+    entity: CommunicationService
+    dtype: Judgment
+    period: Year
+    source: 39-26-129(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          communication_service_has_capacity_to_transmit_required_data
+          and (
+            (
+              download_speed_megabits_per_second >= minimum_broadband_download_speed
+              and upload_speed_megabits_per_second >= minimum_broadband_upload_speed
+            )
+            or service_meets_fcc_definition_of_broadband
+          )
+
+  - name: target_area
+    kind: derived
+    entity: TargetArea
+    dtype: Judgment
+    period: Year
+    source: 39-26-129(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          is_unincorporated_part_of_a_county
+          or (
+            is_municipality
+            and most_recently_available_census_population < target_area_population_limit
+          )
+
+  - name: refund_claim_amount_before_annual_limit
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-26-129(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+              excerpt: "a broadband provider is allowed to claim a refund of all the state sales and use tax"
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-26-129
+              excerpt: "prior to January 1, 2027"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if broadband_provider
+          and tax_paid_in_refund_eligible_calendar_year
+          and tangible_personal_property_installed_in_target_area_for_broadband_service:
+            state_sales_and_use_tax_paid_on_qualifying_tangible_personal_property
+          else: 0
