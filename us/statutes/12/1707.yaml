@@ -1,0 +1,208 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/12/1707
+  summary: |-
+    As used in section 1709, "mortgage" includes specified first mortgages on fee simple real estate, qualifying leaseholds, and one-family units in multifamily projects; "maturity date" is the date on which mortgage indebtedness would be extinguished by the mortgage's periodic payments; "family member" includes specified relatives and treated children; "child" includes sons, stepsons, daughters, and stepdaughters; and "real estate" means land, natural resources, and permanently affixed structures including residential buildings and stationary manufactured housing.
+  deferred_outputs:
+    - output: us:statutes/12/1707/c#maturity_date
+      reason: The provision defines a date-valued mortgage term, but the supported RuleSpec dtypes do not include a date-valued executable output.
+rules:
+  - name: renewable_lease_minimum_years
+    kind: parameter
+    dtype: Count
+    source: 12 USC 1707(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/12/1707
+              excerpt: "under a lease for not less than ninety-nine years which is renewable"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          99
+
+  - name: lease_years_beyond_maturity_minimum
+    kind: parameter
+    dtype: Count
+    source: 12 USC 1707(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/12/1707
+              excerpt: "under a lease having a period of not less than ten years to run beyond the maturity date"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: first_mortgage
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 12 USC 1707(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1707
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          lien_class_commonly_secures_real_estate_advances_under_state_law
+          or lien_class_commonly_secures_unpaid_real_estate_purchase_price_under_state_law
+
+  - name: real_estate
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 12 USC 1707(g)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1707
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          asset_is_land
+          or asset_is_natural_resource_permanently_affixed_to_land
+          or asset_is_structure_permanently_affixed_to_land
+          or asset_is_residential_building_permanently_affixed_to_land
+          or asset_is_stationary_manufactured_housing_permanently_affixed_to_land
+
+  - name: mortgage
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 12 USC 1707(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1707
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/12/1707#first_mortgage
+              output: first_mortgage
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/12/1707#real_estate
+              output: real_estate
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          first_mortgage
+          and (
+            (real_estate and mortgage_is_on_fee_simple_interest)
+            or (
+              mortgage_is_on_leasehold_on_real_estate
+              and (
+                (lease_years >= renewable_lease_minimum_years and lease_is_renewable)
+                or lease_years_to_run_beyond_maturity_date >= lease_years_beyond_maturity_minimum
+              )
+            )
+            or (
+              mortgage_secures_unpaid_purchase_price_of_fee_or_long_term_leasehold_interest
+              and property_consists_of_one_family_unit_in_multifamily_project
+              and mortgage_includes_undivided_interest_in_common_areas_and_facilities_serving_project
+            )
+          )
+
+  - name: child
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 12 USC 1707(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1707
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_mortgagor_son
+          or person_is_mortgagor_stepson
+          or person_is_mortgagor_daughter
+          or person_is_mortgagor_stepdaughter
+
+  - name: child_treated_as_child_by_blood
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 12 USC 1707(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1707
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          person_is_legally_adopted_son_or_daughter_of_individual
+          or person_is_household_child_placed_by_authorized_agency_for_legal_adoption_by_individual
+          or person_is_foster_child_of_individual
+
+  - name: family_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 12 USC 1707(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1707
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/12/1707#child
+              output: child
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/12/1707#child_treated_as_child_by_blood
+              output: child_treated_as_child_by_blood
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          child
+          or child_treated_as_child_by_blood
+          or person_is_parent_of_mortgagor
+          or person_is_grandparent_of_mortgagor
+          or person_is_child_of_mortgagor_spouse
+          or person_is_parent_of_mortgagor_spouse
+          or person_is_grandparent_of_mortgagor_spouse
