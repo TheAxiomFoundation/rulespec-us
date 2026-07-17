@@ -1,0 +1,171 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-4705
+  summary: Money withdrawn from a first-time home buyer savings account is subject
+    to recapture if withdrawn less than a year after the first deposit or used for
+    an unauthorized purpose. A penalty of five percent applies through ten years and
+    ten percent thereafter, except for specified out-of-state purchases and beneficiary-death
+    circumstances.
+  deferred_outputs:
+  - output: us-co:statutes/39/39-22-4705/2#recapture_amount
+    reason: The recapture amount depends on the proportion of the account subtracted
+      under section 39-22-104(4)(w)(I), for which the copied section 39-22-104(4)
+      context has no executable output.
+  - output: us-co:statutes/39/39-22-4705/4#recapture_amount_after_account_holder_death
+    reason: Computing the amount requires the portion of account money previously
+      subtracted from taxable income, which is not executable from the available section
+      39-22-104(4) context.
+rules:
+- name: minimum_account_holding_period
+  kind: parameter
+  dtype: Count
+  unit: year
+  source: 39-22-4705(2)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+          excerpt: less than a year since the first deposit
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '1'
+- name: lower_penalty_rate
+  kind: parameter
+  dtype: Rate
+  source: 39-22-4705(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+          excerpt: penalty is equal to five percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.05'
+- name: higher_penalty_rate
+  kind: parameter
+  dtype: Rate
+  source: 39-22-4705(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+          excerpt: penalty is equal to ten percent
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '0.10'
+- name: lower_penalty_period_limit
+  kind: parameter
+  dtype: Count
+  unit: year
+  source: 39-22-4705(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+          excerpt: ten or fewer years after the first deposit
+  versions:
+  - effective_from: '0001-01-01'
+    formula: '10'
+- name: withdrawal_subject_to_recapture
+  kind: derived
+  entity: FirstTimeHomeBuyerSavingsAccount
+  dtype: Judgment
+  period: Year
+  source: 39-22-4705(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'account_age_at_withdrawal_in_years < minimum_account_holding_period
+
+      or withdrawal_used_for_unpermitted_purpose'
+- name: out_of_state_purchase_penalty_exception_applies
+  kind: derived
+  entity: FirstTimeHomeBuyerSavingsAccount
+  dtype: Judgment
+  period: Year
+  source: 39-22-4705(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+          excerpt: money is used for eligible expenses related to a qualified beneficiary's
+            purchase of his or her primary residence outside of the state
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'withdrawal_used_for_unpermitted_purpose
+
+      and money_used_for_eligible_expenses_for_qualified_beneficiary_primary_residence_outside_state'
+- name: beneficiary_death_penalty_exception_applies
+  kind: derived
+  entity: FirstTimeHomeBuyerSavingsAccount
+  dtype: Judgment
+  period: Year
+  source: 39-22-4705(3)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'qualified_beneficiary_died
+
+      and not new_qualified_beneficiary_designated_during_same_taxable_year'
+- name: penalty_due
+  kind: derived
+  entity: FirstTimeHomeBuyerSavingsAccount
+  dtype: Money
+  unit: USD
+  period: Year
+  source: 39-22-4705(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-4705
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-co:statutes/39/39-22-4705#out_of_state_purchase_penalty_exception_applies
+          output: out_of_state_purchase_penalty_exception_applies
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-co:statutes/39/39-22-4705#beneficiary_death_penalty_exception_applies
+          output: beneficiary_death_penalty_exception_applies
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'if withdrawal_used_for_unpermitted_purpose and not out_of_state_purchase_penalty_exception_applies
+      and not beneficiary_death_penalty_exception_applies: amount_subject_to_recapture
+      * (if account_age_at_withdrawal_in_years <= lower_penalty_period_limit: lower_penalty_rate
+      else: higher_penalty_rate) else: 0'
