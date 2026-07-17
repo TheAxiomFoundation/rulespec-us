@@ -1,0 +1,194 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-549
+  summary: |-
+    For income tax years commencing on or after January 1, 2024, but before January 1, 2031, eligible consortium members and equipment purchasers may receive credits based on eighty-five percent or seventy-five percent of specified expenditures, less specified awards or grants. A certificate is required to claim the credit; excess credit is refundable and may not be carried forward.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-549/a#amount_certain_spent_by_consortium_member
+      reason: The definition depends on consortium subsidy coverage and duties under section 35-1-117, which is not available as RuleSpec context.
+    - output: us-co:statutes/39/39-22-549/b#consortium_duties_and_responsibilities
+      reason: The definition incorporates duties and responsibilities under section 35-1-117, which is not available as RuleSpec context.
+    - output: us-co:statutes/39/39-22-549/c#member_of_the_consortium
+      reason: Consortium membership is defined by section 35-1-117, which is not available as RuleSpec context.
+    - output: us-co:statutes/39/39-22-549/d#purchase_price
+      reason: The definition applies to equipment defined by section 35-1-117, which is not available as RuleSpec context.
+    - output: us-co:statutes/39/39-22-549/e#purchaser
+      reason: The definition depends on small-food-retailer and small-family-farm meanings supplied through section 35-1-117, which is not available as RuleSpec context.
+    - output: us-co:statutes/39/39-22-549/g#small_food_business_recovery_and_resilience_grant_program_equipment
+      reason: The equipment list is incorporated from section 35-1-117, which is not available as RuleSpec context.
+    - output: us-co:statutes/39/39-22-549/4-5#tax_credit_certificate_issuance
+      reason: Certificate issuance order and the annual aggregate allocation process require department administration and applicant records outside the supported entity model.
+      source_values:
+        - us-co:statutes/39/39-22-549#annual_tax_credit_certificate_limit
+        - us-co:statutes/39/39-22-549#completed_application_review_deadline_days
+rules:
+  - name: consortium_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 39-22-549(3)(a)(I)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "commencing on or after January 1, 2024, but before January 1, 2025"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "eighty-five percent"
+          - path: versions[1].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "commencing on or after January 1, 2025, but before January 1, 2031"
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "seventy-five percent"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.85
+      - effective_from: '2025-01-01'
+        formula: |-
+          0.75
+  - name: equipment_purchaser_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 39-22-549(3)(a)(II)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "eighty-five percent of the purchase price"
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "seventy-five percent of the purchase price"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.85
+      - effective_from: '2025-01-01'
+        formula: |-
+          0.75
+  - name: annual_tax_credit_certificate_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-22-549(4)(b), 39-22-549(5)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "a total of ten million dollars for the income tax year"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          10000000
+  - name: completed_application_review_deadline_days
+    kind: parameter
+    dtype: Count
+    source: 39-22-549(5)(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "not to exceed ninety days"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          90
+  - name: tax_credit_before_certificate
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-549(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "amount certain spent ... minus any amount awarded"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "purchase price ... minus the amount of any grant awarded"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if taxable_year_is_within_credit_availability_period:
+            if applicant_is_consortium_member:
+              max(0, consortium_credit_rate * amount_certain_spent_on_consortium_duties - consortium_duties_award_amount)
+            else:
+              if applicant_is_equipment_purchaser:
+                max(0, equipment_purchaser_credit_rate * equipment_purchase_price - equipment_purchase_grant_amount)
+              else: 0
+          else: 0
+  - name: tax_credit_claim_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-549(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "No tax credit is allowed ... unless ... provides a copy of the tax credit certificate"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "the amount stated on the tax credit certificate"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if taxable_year_is_within_credit_availability_period and tax_credit_certificate_attached_to_state_income_tax_return:
+            max(0, tax_credit_certificate_amount)
+          else: 0
+  - name: refundable_excess_credit_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-549(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-549
+              excerpt: "the excess credit may not be carried forward and is refundable"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          max(0, tax_credit_claim_amount - income_tax_due)

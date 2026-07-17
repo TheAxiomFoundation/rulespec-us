@@ -1,0 +1,165 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-507.5
+  summary: |-
+    The credit for an income tax year shall not exceed actual tax liability up to five thousand dollars plus twenty-five percent of liability exceeding five thousand dollars. Controlled-group and regulated-investment-company or real-estate-investment-trust rules modify the five-thousand-dollar threshold.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-507.5#investment_tax_credit_amount
+      reason: The credit amount depends on federal investment-tax-credit amounts and carryovers/carrybacks under unavailable federal provisions.
+      source_values:
+        - us-co:statutes/39/39-22-507.5#colorado_share_of_federal_investment_credit_rate
+    - output: us-co:statutes/39/39-22-507.5#investment_tax_credit_carryback
+      reason: Carryback availability depends on the unresolved federal-reference credit amount and cross-year credit mechanics.
+      source_values:
+        - us-co:statutes/39/39-22-507.5#investment_tax_credit_carryback_year_limit
+    - output: us-co:statutes/39/39-22-507.5#investment_tax_credit_carryover
+      reason: Carryover availability depends on the unresolved federal-reference credit amount and cross-year credit mechanics.
+      source_values:
+        - us-co:statutes/39/39-22-507.5#investment_tax_credit_carryover_year_limit
+    - output: us-co:statutes/39/39-22-507.5#enterprise_zone_investment_credit
+      reason: The replacement credit amount is designated in section 39-30-104, whose copied RuleSpec context is deferred and has no executable export.
+rules:
+  - name: colorado_share_of_federal_investment_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: C.R.S. § 39-22-507.5(1)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "Ten percent of that part of the credit allowed"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          0.10
+
+  - name: credit_liability_full_credit_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: C.R.S. § 39-22-507.5(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "such liability does not exceed five thousand dollars"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          5000
+
+  - name: credit_liability_excess_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: C.R.S. § 39-22-507.5(3)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "Twenty-five percent of that portion"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          0.25
+
+  - name: investment_tax_credit_carryback_year_limit
+    kind: parameter
+    dtype: Integer
+    source: C.R.S. § 39-22-507.5(7)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "each of the three income tax years preceding"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          3
+
+  - name: investment_tax_credit_carryover_year_limit
+    kind: parameter
+    dtype: Integer
+    source: C.R.S. § 39-22-507.5(7)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "each of the seven income tax years following"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          7
+
+  - name: adjusted_credit_liability_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: C.R.S. § 39-22-507.5(5)-(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "five thousand dollars shall be apportioned among the members"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "five thousand dollars multiplied by the taxable income"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          if taxpayer_is_regulated_investment_company_or_real_estate_investment_trust:
+            credit_liability_full_credit_threshold * taxable_income / (taxable_income + dividends_paid_deduction)
+          else:
+            if taxpayer_is_member_of_controlled_group:
+              if controlled_group_members_agree_on_threshold_allocation:
+                controlled_group_allocated_threshold
+              else:
+                credit_liability_full_credit_threshold / controlled_group_member_count
+            else:
+              credit_liability_full_credit_threshold
+
+  - name: investment_tax_credit_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: C.R.S. § 39-22-507.5(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-507.5
+              excerpt: "shall not exceed ... tax liability ... plus ... twenty-five percent"
+    versions:
+      - effective_from: '1979-01-01'
+        formula: |-
+          min(actual_tax_liability, adjusted_credit_liability_threshold)
+          + credit_liability_excess_credit_rate
+          * max(0, actual_tax_liability - adjusted_credit_liability_threshold)
