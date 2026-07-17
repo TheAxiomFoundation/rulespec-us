@@ -1,0 +1,103 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-545
+  summary: |-
+    For income tax years commencing on or after January 1, 2023, but before January 1, 2024, a purchaser installing a residential or commercial heat pump system or heat pump water heater into real property in this state is allowed a credit equal to ten percent of purchase price, subject to installation certification requirements.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-545/c#heat_pump_system_definition
+      reason: The referenced definitions of air-source, ground-source, water-source, and variable refrigerant flow heat pump systems are unavailable.
+    - output: us-co:statutes/39/39-22-545/f#purchaser_definition
+      reason: Purchaser is defined as a taxpayer, but the taxpayer definition depends on unavailable tax-exemption and insurance-premium-tax provisions.
+    - output: us-co:statutes/39/39-22-545/g#seller_definition
+      reason: Seller is defined by reference to a purchaser, whose taxpayer-based definition cannot be fully computed from available dependencies.
+    - output: us-co:statutes/39/39-22-545/h#taxpayer_definition
+      reason: The definition depends on unavailable sections 39-22-112 and 10-3-209.
+    - output: us-co:statutes/39/39-22-545/b#credit_tax_year_allocation
+      reason: Allocating the credit to the tax year of purchase requires purchase-year event data not defined by this source.
+    - output: us-co:statutes/39/39-22-545/5#assigned_credit
+      reason: Assignment, seller compensation, reporting, and filing obligations require seller and purchaser legal-status definitions that are not fully executable here.
+    - output: us-co:statutes/39/39-22-545/6#seller_refundable_credit
+      reason: Refundability applies to a seller receiving an assigned credit; the assignment surface is deferred.
+rules:
+  - name: heat_pump_credit_rate
+    kind: parameter
+    dtype: Rate
+    source: 39-22-545(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-545
+              excerpt: "an amount equal to ten percent of the purchase price"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.10
+
+  - name: purchase_price
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-545(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-545
+              excerpt: "amount actually paid ... including charges for sales tax and freight, but not including any charges for assembly, installation, or other construction services, or permit fees"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          tangible_personal_property_amount
+          + sales_tax_charge
+          + freight_charge
+
+  - name: heat_pump_credit_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-545(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-545
+              excerpt: "any purchaser that installs a residential or commercial heat pump system ... or heat pump water heater into real property in this state is allowed a credit"
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-545
+              excerpt: "commencing on or after January 1, 2023, but before January 1, 2024"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-545
+              excerpt: "Subject to the provisions of subsection (4)"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-545
+              excerpt: "ten percent of the purchase price"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          if taxable_year_is_credit_effective_window:
+            if heat_pump_or_water_heater_is_installed_in_state_real_property:
+              if installation_complies_with_certification_requirement_if_applicable:
+                heat_pump_credit_rate * purchase_price
+              else: 0
+            else: 0
+          else: 0

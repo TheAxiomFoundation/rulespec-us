@@ -1,0 +1,155 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-504
+  summary: Corporate net operating losses generated in income tax years commencing
+    on or after January 1, 2021, may be carried forward for twenty years. For temporary
+    tax years, the maximum subtraction is two hundred fifty thousand dollars; prohibited
+    losses receive an additional carryforward year and a three and one-quarter percent
+    annual interest addition.
+rules:
+- name: corporate_net_operating_loss_carryforward_years
+  kind: parameter
+  dtype: Count
+  source: 39-22-504(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+          excerpt: may be carried forward for twenty years
+  versions:
+  - effective_from: '2021-01-01'
+    formula: '20'
+- name: temporary_net_operating_loss_subtraction_cap
+  kind: parameter
+  dtype: Money
+  unit: USD
+  source: 39-22-504(6)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: amount
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+          excerpt: is two hundred fifty thousand dollars
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '250000'
+- name: additional_carryforward_years_for_temporary_limitation
+  kind: parameter
+  dtype: Count
+  source: 39-22-504(6)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+          excerpt: carried forward one additional year
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '1'
+- name: temporary_limitation_interest_rate
+  kind: parameter
+  dtype: Rate
+  source: 39-22-504(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+          excerpt: three and one-quarter percent per annum
+  versions:
+  - effective_from: '2011-01-01'
+    formula: '0.0325'
+- name: twenty_year_carryforward_period
+  kind: derived
+  entity: Corporation
+  dtype: Count
+  period: Year
+  source: 39-22-504(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+  versions:
+  - effective_from: '2021-01-01'
+    formula: 'if corporate_loss_generated_in_income_tax_year_after_carryforward_rule_change:
+      corporate_net_operating_loss_carryforward_years else: 0'
+- name: net_operating_loss_subtraction_after_temporary_limitation
+  kind: derived
+  entity: Corporation
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 39-22-504(6)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'if tax_year_is_in_temporary_net_operating_loss_limitation_window: min(net_operating_loss_subtraction_before_temporary_limitation,
+      temporary_net_operating_loss_subtraction_cap) else: net_operating_loss_subtraction_before_temporary_limitation'
+- name: net_operating_loss_carryforward_extension
+  kind: derived
+  entity: Corporation
+  dtype: Count
+  period: Year
+  source: 39-22-504(6)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'if tax_year_is_in_temporary_net_operating_loss_limitation_window and
+      corporation_is_prohibited_from_subtracting_net_operating_loss: additional_carryforward_years_for_temporary_limitation
+      else: 0'
+- name: net_operating_loss_interest_addition
+  kind: derived
+  entity: Corporation
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 39-22-504(c)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-co/statute/39/39-22-504
+          excerpt: prohibited ... from subtracting ... multiplied by a rate of interest
+            equal to three and one-quarter percent per annum
+  versions:
+  - effective_from: '2011-01-01'
+    formula: 'if tax_year_is_in_temporary_net_operating_loss_limitation_window: net_operating_loss_amount_prohibited_from_subtraction
+      * temporary_limitation_interest_rate * years_net_operating_loss_is_prohibited
+      else: 0'
