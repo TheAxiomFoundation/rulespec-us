@@ -38,6 +38,9 @@ from pathlib import Path
 import yaml
 
 MANIFEST_FORMAT_VERSION = 1
+# The compiled-artifact format generation (rulespec/v1). Bumped only on a
+# breaking artifact-format change; the engine negotiates against it on load.
+ARTIFACT_SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -110,6 +113,32 @@ def composer_version() -> str:
         return "unknown"
 
 
+def toolchain_binding(root: Path) -> dict:
+    """Read the pinned toolchain identities from .axiom/toolchain.toml.
+
+    These are the SHAs the release artifacts are actually built against: the
+    engine ref is the exact axiom-rules-engine commit CI checks out and builds,
+    and the corpus ref is the axiom-corpus commit the validation toolchain binds.
+    Reading only — this never modifies the pin. Returns empty strings if the
+    file or keys are absent so local builds outside CI still produce a manifest.
+    """
+    path = root / ".axiom" / "toolchain.toml"
+    if not path.exists():
+        return {}
+    try:
+        import tomllib
+
+        data = tomllib.loads(path.read_text()).get("toolchain", {})
+    except Exception:
+        return {}
+    return {
+        "engine_ref": str(data.get("axiom_rules_engine_ref", "")),
+        "corpus_ref": str(data.get("axiom_corpus_ref", "")),
+        "encode_ref": str(data.get("axiom_encode_ref", "")),
+        "encode_version": str(data.get("axiom_encode_version", "")),
+    }
+
+
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -175,6 +204,7 @@ def main() -> int:
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()
+    toolchain = toolchain_binding(root)
 
     manifest_programs = []
     unexpected_failures: list[str] = []
@@ -208,12 +238,29 @@ def main() -> int:
         if spec_rel in allowlist:
             unexpected_successes.append(spec_rel)
 
+        # The four-field compatibility contract, self-describing inside each
+        # artifact so a consumer can negotiate with the engine before loading:
+        #   artifact_schema           — compiled-artifact format generation
+        #   built_by_engine           — provenance (never used for gating)
+        #   requires_engine.min_version/capabilities — the negotiation floor
+        compat = {
+            "artifact_schema": ARTIFACT_SCHEMA_VERSION,
+            "built_by_engine": {
+                "version": engine_version,
+                "git_sha": toolchain.get("engine_ref", ""),
+            },
+            "requires_engine": {
+                "min_version": engine_version,
+                "capabilities": [],
+            },
+        }
         provenance = {
             "corpus": corpus,
             "spec_path": spec_rel,
             "spec_sha256": sha256_file(root / build.spec_path),
             "composer_version": composer,
             "engine_version": engine_version,
+            "compat": compat,
         }
         stamp_provenance(artifact_path, provenance)
 
@@ -231,6 +278,7 @@ def main() -> int:
                 "outputs": build.outputs,
                 "artifact": artifact_path.name,
                 "artifact_sha256": sha256_file(artifact_path),
+                "compat": compat,
                 "counts": {
                     "derived": len(program.get("derived", [])),
                     "parameters": len(program.get("parameters", [])),
@@ -247,7 +295,25 @@ def main() -> int:
         "format_version": MANIFEST_FORMAT_VERSION,
         "corpus": corpus,
         "composer_version": composer,
+        # Kept for backward compatibility (was the only engine identity);
+        # `engine.git_sha` below is the real, non-stale one consumers should read.
         "engine_version": engine_version,
+        "engine": {
+            "version": engine_version,
+            "git_sha": toolchain.get("engine_ref", ""),
+        },
+        # The axiom-corpus commit the pinned validation toolchain binds. This is
+        # the truthful, available corpus identity. NOTE: the published corpus
+        # *release* (name + content_sha256) that these artifacts should cite is a
+        # separate, deliberate binding — the toolchain pins a commit, not a
+        # release, and the two currently diverge. Resolving `corpus_release`
+        # against axiom-corpus/manifests/releases/* is the follow-up (see the PR).
+        "corpus_binding": {
+            "repo": "axiom-corpus",
+            "commit": toolchain.get("corpus_ref", ""),
+            "release": None,
+        },
+        "artifact_schema": ARTIFACT_SCHEMA_VERSION,
         "programs": manifest_programs,
     }
     (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
