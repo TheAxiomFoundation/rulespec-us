@@ -38,6 +38,13 @@ from pathlib import Path
 import yaml
 
 MANIFEST_FORMAT_VERSION = 1
+# The compiled-artifact format generation (rulespec/v1). Bumped only on a
+# breaking artifact-format change; the engine negotiates against it on load.
+ARTIFACT_SCHEMA_VERSION = 1
+# The fixed, tested lower bound an artifact requires of the engine. A floor, not
+# the building engine's version — any engine >= this that supports the artifact
+# schema can load it. Raise only when an emitted feature demands a newer engine.
+MIN_ENGINE_VERSION = "0.1.0"
 
 
 @dataclass
@@ -108,6 +115,109 @@ def composer_version() -> str:
         return version("axiom-compose")
     except Exception:
         return "unknown"
+
+
+def validation_toolchain(root: Path) -> dict:
+    """Read the pinned *validation* toolchain from .axiom/toolchain.toml.
+
+    IMPORTANT: these are the pins the org validate-rulespec workflow uses to
+    revalidate the repo — they are NOT, in general, the build provenance of
+    these artifacts. Composition here loads only the rulespec-us root (the
+    encoded modules already carry their corpus provisions inline with per-module
+    source_verification pins); the program-artifacts workflow does not check out
+    axiom-corpus. So the corpus pin below describes what the artifacts are
+    *validated against*, not what compiled them. Reading only — never modifies
+    the pin. Empty dict if absent, so local builds still produce a manifest.
+    """
+    path = root / ".axiom" / "toolchain.toml"
+    if not path.exists():
+        return {}
+    try:
+        import tomllib
+
+        data = tomllib.loads(path.read_text()).get("toolchain", {})
+    except Exception:
+        return {}
+    return {
+        "axiom_rules_engine_ref": str(data.get("axiom_rules_engine_ref", "")),
+        "axiom_corpus_ref": str(data.get("axiom_corpus_ref", "")),
+        "axiom_encode_ref": str(data.get("axiom_encode_ref", "")),
+        "axiom_encode_version": str(data.get("axiom_encode_version", "")),
+    }
+
+
+def engine_build_sha(engine_bin: str) -> str:
+    """The git SHA of the axiom-rules-engine checkout the binary was built from.
+
+    This is real build provenance, not a pin: prefer an explicit
+    AXIOM_RULES_ENGINE_SHA (CI can set it from the engine checkout), else derive
+    it by walking up from the binary path to its git repo and reading HEAD.
+    Returns "" if neither is available (e.g. a relocated binary) — callers must
+    treat "" as "unknown", never substitute a pin.
+    """
+    explicit = os.environ.get("AXIOM_RULES_ENGINE_SHA", "").strip()
+    if explicit:
+        return explicit
+    try:
+        # .../<engine-checkout>/target/{release,debug}/axiom-rules-engine
+        bin_path = Path(engine_bin).resolve()
+        for parent in bin_path.parents:
+            if (parent / ".git").exists():
+                return git_output(parent, "rev-parse", "HEAD")
+    except Exception:
+        pass
+    return ""
+
+
+def build_compat(engine_version: str, engine_sha: str) -> dict:
+    """The four-field compatibility contract carried by every artifact.
+
+    - artifact_schema: the compiled-artifact format generation (gating).
+    - built_by_engine: pure provenance (version + real build sha) — never gates.
+    - requires_engine: the negotiation floor. min_version is a FIXED tested
+      lower bound (not the building engine's version): every engine >= this that
+      still supports artifact_schema can load the artifact. Raise it only when an
+      emitted feature actually requires a newer engine.
+    """
+    return {
+        "artifact_schema": ARTIFACT_SCHEMA_VERSION,
+        "built_by_engine": {"version": engine_version, "git_sha": engine_sha},
+        "requires_engine": {"min_version": MIN_ENGINE_VERSION, "capabilities": []},
+    }
+
+
+def assemble_manifest(
+    programs: list,
+    corpus: dict,
+    composer: str,
+    engine_version: str,
+    engine_sha: str,
+    toolchain: dict,
+) -> dict:
+    """Assemble the top-level manifest. Pure function so it is directly testable
+    with real inputs (the fields below must come from here, not a test's copy)."""
+    return {
+        "format_version": MANIFEST_FORMAT_VERSION,
+        # What actually composed these artifacts (rulespec-us repo provenance).
+        "corpus": corpus,
+        "composer_version": composer,
+        # Kept for backward compatibility (was the only engine identity);
+        # `engine.git_sha` is the real, non-stale one consumers should read.
+        "engine_version": engine_version,
+        "engine": {"version": engine_version, "git_sha": engine_sha},
+        # The pins the repo is VALIDATED against — provenance of validation, not
+        # of the build. Explicitly labeled to avoid the "corpus that compiled
+        # this" misreading; the published corpus *release* identity is a
+        # separate deliberate binding (see corpus_release).
+        "validation_toolchain": toolchain,
+        # The immutable published corpus release these artifacts cite. Left null
+        # until bound authoritatively: the toolchain pins a corpus *commit*, and
+        # a release name may be stamped only when an axiom-corpus release
+        # manifest's provenance commit exactly equals that pin.
+        "corpus_release": None,
+        "artifact_schema": ARTIFACT_SCHEMA_VERSION,
+        "programs": programs,
+    }
 
 
 def sha256_file(path: Path) -> str:
@@ -182,6 +292,20 @@ def main() -> int:
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()
+    toolchain = validation_toolchain(root)
+    engine_sha = engine_build_sha(engine_bin)
+    if not engine_sha:
+        print(
+            "WARN: could not derive engine build sha (relocated binary?); "
+            "manifest engine.git_sha will be empty",
+            file=sys.stderr,
+        )
+    elif toolchain.get("axiom_rules_engine_ref") and engine_sha != toolchain["axiom_rules_engine_ref"]:
+        print(
+            f"WARN: built engine {engine_sha[:12]} != validation pin "
+            f"{toolchain['axiom_rules_engine_ref'][:12]} — stamping the real build sha",
+            file=sys.stderr,
+        )
 
     manifest_programs = []
     unexpected_failures: list[str] = []
@@ -215,12 +339,16 @@ def main() -> int:
         if spec_rel in allowlist:
             unexpected_successes.append(spec_rel)
 
+        # The four-field compatibility contract, self-describing inside each
+        # artifact so a consumer can negotiate with the engine before loading.
+        compat = build_compat(engine_version, engine_sha)
         provenance = {
             "corpus": corpus,
             "spec_path": spec_rel,
             "spec_sha256": sha256_file(root / build.spec_path),
             "composer_version": composer,
             "engine_version": engine_version,
+            "compat": compat,
         }
         stamp_provenance(artifact_path, provenance)
 
@@ -238,6 +366,7 @@ def main() -> int:
                 "outputs": build.outputs,
                 "artifact": artifact_path.name,
                 "artifact_sha256": sha256_file(artifact_path),
+                "compat": compat,
                 "counts": {
                     "derived": len(program.get("derived", [])),
                     "parameters": len(program.get("parameters", [])),
@@ -250,13 +379,9 @@ def main() -> int:
             f"({manifest_programs[-1]['counts']['derived']}d)"
         )
 
-    manifest = {
-        "format_version": MANIFEST_FORMAT_VERSION,
-        "corpus": corpus,
-        "composer_version": composer,
-        "engine_version": engine_version,
-        "programs": manifest_programs,
-    }
+    manifest = assemble_manifest(
+        manifest_programs, corpus, composer, engine_version, engine_sha, toolchain
+    )
     (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
     if unexpected_successes:
