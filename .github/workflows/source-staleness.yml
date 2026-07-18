@@ -71,39 +71,51 @@ jobs:
       - name: Checkout rules repository
         uses: actions/checkout@v6.0.2
 
-      - name: Resolve pinned axiom-encode ref
+      - name: Resolve pinned source-verification toolchain
         id: toolchain
         shell: bash
         run: |
           set -euo pipefail
-          encode_ref="main"
-          if [ -f .axiom/toolchain.toml ]; then
-            encode_ref="$(python - <<'PY'
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
           import tomllib
           from pathlib import Path
 
-          data = tomllib.loads(Path(".axiom/toolchain.toml").read_text())
-          table = data.get("toolchain", data)
-          print(table.get("axiom_encode_ref", "main"))
+          workflow = tomllib.loads(
+              Path(".axiom/workflow-toolchain.toml").read_text()
+          )["workflow_toolchain"]
+          for key in ("axiom_encode_ref", "axiom_corpus_ref"):
+              value = workflow.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+
+          evidence = tomllib.loads(Path(".axiom/toolchain.toml").read_text())["toolchain"]
+          print(f"axiom_corpus_release={evidence['axiom_corpus_release']}")
+          print(
+              "axiom_corpus_release_content_sha256="
+              f"{evidence['axiom_corpus_release_content_sha256']}"
+          )
           PY
-          )"
-          fi
-          echo "axiom_encode_ref=$encode_ref" >> "$GITHUB_OUTPUT"
-          echo "Pinned axiom-encode ref: $encode_ref"
 
       - name: Set up Python
         uses: actions/setup-python@v6.2.0
         with:
-          python-version: "3.14"
+          python-version: "3.13"
 
-      # axiom-corpus is checked out at main on purpose: staleness detection
-      # must see the latest corpus text so it can flag pins that the corpus has
-      # since moved past.
-      - name: Checkout axiom-corpus @ main
+      - name: Set up Go
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version: "1.26.1"
+          cache: false
+
+      # Source pins are meaningful only against authenticated release content;
+      # mutable corpus main is not a legal evidence boundary.
+      - name: Checkout pinned axiom-corpus
         uses: actions/checkout@v6.0.2
         with:
           repository: TheAxiomFoundation/axiom-corpus
-          ref: main
+          ref: ${{ steps.toolchain.outputs.axiom_corpus_ref }}
           path: _axiom/axiom-corpus
 
       - name: Checkout axiom-encode (pinned)
@@ -117,6 +129,80 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e _axiom/axiom-encode
+          rm -rf "$RUNNER_TEMP/axiom-verification-site-packages"
+          python -m pip install --target "$RUNNER_TEMP/axiom-verification-site-packages" \
+            _axiom/axiom-encode
+
+      - name: Fetch pinned signed corpus release object from public registry
+        shell: bash
+        env:
+          SUPABASE_URL: https://swocpijqqahhuwtuahwc.supabase.co
+          SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          RELEASE_NAME: ${{ steps.toolchain.outputs.axiom_corpus_release }}
+          RELEASE_CONTENT_SHA256: ${{ steps.toolchain.outputs.axiom_corpus_release_content_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ANON_KEY"
+          destination="$GITHUB_WORKSPACE/_axiom/axiom-corpus/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
+          mkdir -p "$(dirname "$destination")"
+          url="${SUPABASE_URL%/}/rest/v1/release_objects?select=release_object&release_name=eq.${RELEASE_NAME}&content_sha256=eq.${RELEASE_CONTENT_SHA256}&limit=2"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$destination.tmp" "$url"
+          python - "$destination.tmp" "$destination" "$RELEASE_NAME" "$RELEASE_CONTENT_SHA256" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          source, destination = Path(sys.argv[1]), Path(sys.argv[2])
+          expected_name, expected_sha = sys.argv[3], sys.argv[4]
+          rows = json.loads(source.read_bytes())
+          if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+              raise SystemExit("public release registry did not return exactly one object")
+          payload = rows[0].get("release_object")
+          if not isinstance(payload, dict) or payload.get("release") != expected_name:
+              raise SystemExit("public release registry returned the wrong object")
+          content = payload.get("content")
+          actual = hashlib.sha256(json.dumps(
+              content, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+          ).encode()).hexdigest()
+          if payload.get("content_sha256") != actual or actual != expected_sha:
+              raise SystemExit("public release registry returned a content-address mismatch")
+          destination.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+          source.unlink()
+          PY
+
+      - name: Provision protected corpus-release verifier
+        shell: bash
+        env:
+          TRUST_APPLY_ROOT: ${{ vars.AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY }}
+          TRUST_EVAL_ROOT: ${{ vars.AXIOM_ENCODE_EVAL_SIGNING_PUBLIC_KEY }}
+          TRUST_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          pushd _axiom/axiom-encode >/dev/null
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \
+            -o "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            ./cmd/axiom-encode-signing-supervisor
+          popd >/dev/null
+          sudo rm -rf /opt/axiom-staleness-verification
+          sudo "$(command -v python)" \
+            _axiom/axiom-encode/scripts/provision_verification_supervisor.py \
+            --destination /opt/axiom-staleness-verification \
+            --supervisor "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            --site-packages "$RUNNER_TEMP/axiom-verification-site-packages" \
+            --apply-root "$TRUST_APPLY_ROOT" \
+            --eval-root "$TRUST_EVAL_ROOT" \
+            --corpus-release-root "$TRUST_CORPUS_RELEASE_ROOT"
+          sudo install -m 0755 "$(command -v git)" \
+            /opt/axiom-staleness-verification/python/bin/git
+          sudo chown -R 0:0 /opt/axiom-staleness-verification
+          sudo chmod -R go-w /opt/axiom-staleness-verification
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
 
       - name: Report unpinned-module counts
         id: pins
@@ -196,7 +282,12 @@ jobs:
           echo '## check-source-staleness output' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           set +e
-          axiom-encode check-source-staleness \
+          /opt/axiom-staleness-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-staleness-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-staleness-verification/python \
+            --trusted-python-import-root /opt/axiom-staleness-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-staleness-verification/python/lib/python3.13/site-packages/axiom_encode \
+            -- /opt/axiom-staleness-verification/axiom-encode check-source-staleness \
             --rulespec-root "$GITHUB_WORKSPACE" \
             --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
             | tee -a "$RUNNER_TEMP/staleness-report.txt" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -204,9 +295,12 @@ jobs:
           set -e
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "check-source-staleness exit status: $status"
-          # Surface the status for humans, but do not fail the job: this is the
-          # report-only phase. The job-level continue-on-error also guards this.
-          exit "$status"
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::check-source-staleness reported exit status $status; see the job summary and uploaded report."
+          fi
+          # This phase is explicitly report-only until source verification has
+          # been migrated repo-wide. Preserve the result without failing CI.
+          exit 0
 
       - name: Upload staleness report artifact
         if: ${{ always() }}
