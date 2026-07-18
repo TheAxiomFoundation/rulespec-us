@@ -99,9 +99,9 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "workflow_toolchain"
     ]
     assert toolchain == {
-        "axiom_encode_version": "0.2.1268",
+        "axiom_encode_version": "0.2.1269",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
-        "axiom_encode_ref": "1d44d71080df90bfeb514283be2f3ff4ffc04776",
+        "axiom_encode_ref": "192d9accf2d64c65c9cc1686156033fbe5a57c85",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
         "axiom_corpus_ref": "df57dc57cf0152c5747696c078929a12ed2d2239",
         "rulespec_us_ref": "0f291b367bf7e15555f9973112278c5cbf221653",
