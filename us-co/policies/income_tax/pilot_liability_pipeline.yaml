@@ -1,0 +1,82 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-co/statute/39/39-22-104
+      - us-co/statute/39/39-22-627
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-co/statute/39/39-22-104
+        - us-co/statute/39/39-22-627
+      rationale: |-
+        This pipeline computes the Colorado section 39-22-104 individual
+        income-tax liability before credits for the ordinary resident slice:
+        the flat tax prescribed by subsection (1.7)(c) — four and forty
+        one-hundredths percent for taxable years commencing on or after
+        January 1, 2022 — applied to Colorado taxable income, which
+        subsection (2) defines as federal taxable income modified by the
+        subsection (3) additions and subsection (4) subtractions. The rate is
+        imported from the encoded 39-22-104(1.7)(c) module rather than
+        restated, so this pipeline adds no numeric literals of its own.
+        The caller supplies adjusted gross income and the federal
+        deductions that take it to section 63 federal taxable income (the
+        subsection (1.7)(c) base is federal taxable income "as determined
+        pursuant to section 63 of the internal revenue code"), plus single
+        aggregate subsection (3) addition and subsection (4) subtraction
+        amounts, pending executable composition of those chains: their child
+        modules are individually encoded, but the 39-22-104 aggregate parent
+        defers composition across their distinct legal entities and adjusted
+        federal taxable-income bases (see its deferred_outputs), mirroring
+        the Alabama and California pilots' supplied-deduction pattern. The
+        section 39-22-627 temporary rate reduction is a distinct
+        revenue-triggered mechanism and is out of scope for this pilot slice.
+imports:
+  - us-co:statutes/39/39-22-104/1.7/c#individual_estate_trust_income_tax_rate
+rules:
+  - name: co_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-104 subsection 2, section 63 federal taxable income from the supplied adjusted gross income and federal deductions, modified by the supplied additions and subtractions, floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "the federal taxable income shall be modified as provided in"
+    versions:
+      - effective_from: '2022-01-01'
+        formula: |-
+          max(0, co_pit_pilot_adjusted_gross_income - co_pit_pilot_supplied_federal_deductions + co_pit_pilot_supplied_additions - co_pit_pilot_supplied_subtractions)
+  - name: co_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-104 subsection 1.7 paragraph c, the four and forty one-hundredths percent tax imposed on modified federal taxable income for taxable years commencing on or after January 1, 2022, via the imported encoded rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:statutes/39/39-22-104/1.7/c#individual_estate_trust_income_tax_rate
+              output: individual_estate_trust_income_tax_rate
+              hash: sha256:4d1715dc9dea486e37a50708f2079aff7b235a5b6de816188cf3ef437c6401b1
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "a tax of four and forty one-hundredths percent is imposed"
+    versions:
+      - effective_from: '2022-01-01'
+        formula: |-
+          individual_estate_trust_income_tax_rate * co_pit_pilot_taxable_income
