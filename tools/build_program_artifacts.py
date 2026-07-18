@@ -125,12 +125,19 @@ def compose_spec(root: Path, build: SpecBuild, out_path: Path) -> None:
 
 def engine_compile(root: Path, module: Path, artifact: Path, engine_bin: str) -> str:
     """Run the engine compiler; returns its reported engine_version."""
-    env = dict(os.environ, AXIOM_RULESPEC_REPO_ROOTS=str(root))
     result = subprocess.run(
-        [engine_bin, "compile", "--program", str(module), "--output", str(artifact)],
+        [
+            engine_bin,
+            "compile-composed",
+            "--program",
+            str(module),
+            "--rulespec-root",
+            str(root),
+            "--output",
+            str(artifact),
+        ],
         capture_output=True,
         text=True,
-        env=env,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
@@ -187,7 +194,7 @@ def main() -> int:
     # modules into the artifact (observed: a legacy per-state repo resolving an
     # import the pinned corpus cannot). Neutral cwd keeps local builds
     # byte-identical to CI.
-    workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-"))
+    workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-")).resolve()
 
     for build in builds:
         spec_rel = str(build.spec_path)
