@@ -1,0 +1,249 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/4851b
+  summary: |-
+    42 USC 4851b provides definitions for this chapter, including “deteriorated paint,” “friction surface,” “impact surface,” “residential dwelling,” “residential real property,” and “target housing,” defined as housing constructed prior to 1978 except housing for the elderly or persons with disabilities or any 0-bedroom dwelling unless a child less than 6 years of age resides or is expected to reside there.
+  deferred_outputs:
+    - output: us:statutes/42/4851b#lead_based_paint
+      reason: The definition depends on lead-content limits established under missing section 4822(c).
+    - output: us:statutes/42/4851b#inspection
+      reason: The definition depends on section 4822(c), which is not available in copied RuleSpec context.
+    - output: us:statutes/42/4851b#federally_assisted_housing
+      reason: The definition depends partly on missing or deferred cited housing-assistance provisions, including sections 1715l(d)(3), 1715z-1, 1437f, and 1484.
+    - output: us:statutes/42/4851b#priority_housing
+      reason: The definition depends on qualification as affordable housing under section 12745 and assistance under deferred section 1437f; no exact executable imported definition is available.
+    - output: us:statutes/42/4851b#public_housing
+      reason: The term has the same meaning as section 1437a(b), but the copied 1437a context does not export that definition.
+rules:
+  - name: target_housing_default_construction_year_cutoff
+    kind: parameter
+    dtype: Integer
+    source: 42 USC 4851b(27)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/4851b
+              excerpt: "housing constructed prior to 1978"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          1978
+
+  - name: target_housing_excluded_bedroom_count
+    kind: parameter
+    dtype: Count
+    source: 42 USC 4851b(27)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/4851b
+              excerpt: "any 0-bedroom dwelling"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          0
+
+  - name: target_housing_child_age_limit_years
+    kind: parameter
+    dtype: Count
+    source: 42 USC 4851b(27)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/4851b
+              excerpt: "any child who is less than 6 years of age"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          6
+
+  - name: target_housing_child_age_exception_applies
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(27)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+              excerpt: "unless any child who is less than 6 years of age resides or is expected to reside in such housing"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/4851b#target_housing_child_age_limit_years
+              output: target_housing_child_age_limit_years
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          child_resides_or_expected_to_reside_in_housing
+          and youngest_resident_or_expected_child_age_years < target_housing_child_age_limit_years
+
+  - name: target_housing
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(27)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/4851b#target_housing_default_construction_year_cutoff
+              output: target_housing_default_construction_year_cutoff
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/4851b#target_housing_excluded_bedroom_count
+              output: target_housing_excluded_bedroom_count
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/4851b#target_housing_child_age_exception_applies
+              output: target_housing_child_age_exception_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          (
+            (
+              not secretary_designated_earlier_target_housing_date_for_jurisdiction
+              and housing_construction_year < target_housing_default_construction_year_cutoff
+            )
+            or (
+              secretary_designated_earlier_target_housing_date_for_jurisdiction
+              and housing_constructed_before_secretary_designated_earlier_target_housing_date
+            )
+          )
+          and (
+            (
+              not housing_for_elderly_or_persons_with_disabilities
+              and dwelling_bedroom_count != target_housing_excluded_bedroom_count
+            )
+            or target_housing_child_age_exception_applies
+          )
+
+  - name: residential_dwelling
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(23)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          single_family_dwelling_including_attached_structures
+          or (
+            single_family_dwelling_unit_in_structure_with_more_than_one_separate_residential_dwelling_unit
+            and dwelling_unit_used_or_intended_as_home_or_residence
+          )
+
+  - name: residential_real_property
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(24)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+              excerpt: "real property on which there is situated 1 or more residential dwellings"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          real_property_has_one_or_more_residential_dwellings_used_or_intended_as_home_or_residence
+
+  - name: deteriorated_paint
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          interior_or_exterior_paint
+          and (
+            paint_is_peeling_chipping_chalking_or_cracking
+            or paint_on_surface_or_fixture_that_is_damaged_or_deteriorated
+          )
+
+  - name: friction_surface
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(10)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          interior_or_exterior_surface
+          and surface_subject_to_abrasion_or_friction
+
+  - name: impact_surface
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Year
+    source: 42 USC 4851b(11)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/4851b
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          interior_or_exterior_surface
+          and surface_subject_to_damage_by_repeated_impacts
