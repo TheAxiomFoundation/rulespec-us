@@ -32,14 +32,14 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
 
-def test_classifier_covers_legacy_yaml_and_its_apply_manifest() -> None:
+def test_classifier_covers_only_legacy_yaml() -> None:
     checker = _load_checker()
 
     assert checker._is_legacy_rulespec_path("us-mo/block-1.yaml")
     assert checker._is_legacy_rulespec_path("us-mo/manual/snap/block-1.yaml")
     assert not checker._is_legacy_rulespec_path("us-mo/policies/snap/block-1.yaml")
     assert not checker._is_legacy_rulespec_path("us-mo/programs/snap/fy-2026.yaml")
-    assert checker._is_frozen_artifact_path(
+    assert not checker._is_frozen_artifact_path(
         ".axiom/encoding-manifests/us-mo/manual/dss/snap/1115-000-00/"
         "1115-035-00/1115-035-25/block-1.json"
     )
@@ -61,11 +61,11 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "workflow_toolchain"
     ]
     assert toolchain == {
-        "axiom_encode_version": "0.2.1258",
-        "axiom_encode_ref": "0c3ccc6ba77e6099f1e0f9b4e6ebc68e6e1dfd8b",
+        "axiom_encode_version": "0.2.1263",
+        "axiom_encode_ref": "1d11a50a9d8c60130aab65c808c1d4919b2aeb49",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
-        "axiom_corpus_ref": "21d898b8ad07f6f7a27b63b8190d76866ad14348",
-        "rulespec_us_ref": "8a35bfaceb5754a38c111f4f246e69891de6c2d3",
+        "axiom_corpus_ref": "df57dc57cf0152c5747696c078929a12ed2d2239",
+        "rulespec_us_ref": "0f291b367bf7e15555f9973112278c5cbf221653",
     }
 
     source_staleness = (ROOT / ".github/workflows/source-staleness.yml").read_text()

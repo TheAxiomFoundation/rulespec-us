@@ -14,12 +14,6 @@ ATOMIC_ROOTS = frozenset({"legislation", "policies", "regulations", "statutes"})
 NON_RULESPEC_ROOTS = frozenset({"programs"})
 JURISDICTION_RE = re.compile(r"us(?:-[a-z]{2})?")
 MANIFEST_PATH = Path(".axiom/legacy-rulespec-freeze.json")
-LEGACY_APPLY_MANIFESTS = frozenset(
-    {
-        ".axiom/encoding-manifests/us-mo/manual/dss/snap/1115-000-00/"
-        "1115-035-00/1115-035-25/block-1.json"
-    }
-)
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -45,7 +39,7 @@ def _is_legacy_rulespec_path(raw_path: str) -> bool:
 
 
 def _is_frozen_artifact_path(raw_path: str) -> bool:
-    return _is_legacy_rulespec_path(raw_path) or raw_path in LEGACY_APPLY_MANIFESTS
+    return _is_legacy_rulespec_path(raw_path)
 
 
 def check(root: Path, *, base_ref: str | None = None) -> None:
