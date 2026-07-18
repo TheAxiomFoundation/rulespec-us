@@ -86,7 +86,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
 
     assert "legacy-rulespec-freeze:" in workflow
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
-    assert "d96c5d81f4e386a4e48b5d4f2a7435a13e28c812" in workflow
+    assert "77ef591e63a21fa85b1585455be6fee75792a1a5" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     assert (
         "run-generated-guard: ${{ github.event_name != 'pull_request' || "
