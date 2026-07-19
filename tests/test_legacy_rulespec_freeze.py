@@ -88,10 +88,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
     assert "77ef591e63a21fa85b1585455be6fee75792a1a5" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
-    assert (
-        "run-generated-guard: ${{ github.event_name != 'pull_request' || "
-        "github.event.pull_request.number != 911 }}"
-    ) in workflow
+    assert "run-generated-guard: true" in workflow
 
 
 def test_generation_workflows_use_immutable_toolchain() -> None:
@@ -99,9 +96,9 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "workflow_toolchain"
     ]
     assert toolchain == {
-        "axiom_encode_version": "0.2.1269",
+        "axiom_encode_version": "0.2.1293",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
-        "axiom_encode_ref": "192d9accf2d64c65c9cc1686156033fbe5a57c85",
+        "axiom_encode_ref": "aea54ba8ffaf1c36c5505c485de9a80fde277214",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
         "axiom_corpus_ref": "0323f669419828e886fdd5f5dc30ed56793fddc6",
         "rulespec_us_ref": "0f291b367bf7e15555f9973112278c5cbf221653",
