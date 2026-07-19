@@ -107,6 +107,8 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
     source_staleness = (ROOT / ".github/workflows/source-staleness.yml").read_text()
     assert '.axiom/workflow-toolchain.toml").read_text()' in source_staleness
     assert 'ref: "main"' not in source_staleness
+    assert '--git "$(command -v git)"' in source_staleness
+    assert "sudo install -m 0755" not in source_staleness
 
     repository_checks = (ROOT / ".github/workflows/repository-checks.yml").read_text()
     assert '.axiom/workflow-toolchain.toml").read_text()' in repository_checks
