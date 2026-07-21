@@ -20,6 +20,17 @@ KNOWN_ORPHANED_ENCODING_MANIFESTS: list[str] = []
 KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
     ".axiom/encoding-manifests/us-co/policies/income_tax/pilot_liability_pipeline.json",
     ".axiom/encoding-manifests/us-co/policies/income_tax/eitc_pilot_pipeline.json",
+    ".axiom/encoding-manifests/us-sc/policies/dss/snap-policy-manual/page-215.json",
+    ".axiom/encoding-manifests/us-sc/policies/dss/snap-policy-manual/page-345.json",
+    ".axiom/encoding-manifests/us-sc/policies/dss/snap-policy-manual/page-385.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/552.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/555.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/557.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/558.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/559.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/561.json",
+    ".axiom/encoding-manifests/us/regulations/42-cfr/435/563.json",
+    ".axiom/encoding-manifests/us/statutes/42/1396a/xx.json",
 })
 
 
