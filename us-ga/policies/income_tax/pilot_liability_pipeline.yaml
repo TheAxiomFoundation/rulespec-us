@@ -3,58 +3,22 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-ga/statute/48/48-7-20
-      - us-ga/statute/48/48-7-27
-    upstream_source_check:
-      status: composed_from_supplied_current_authority
-      checked_paths:
-        - us-ga/statute/48/48-7-20
-        - us-ga/statute/48/48-7-27
-      rationale: |-
-        This pipeline computes the Georgia section 48-7-20 individual income-tax
-        liability for the ordinary resident wage-earner slice: the flat tax on
-        Georgia taxable net income (Georgia adjusted gross income less the section
-        48-7-27 standard deduction). Section 48-7-20 imposes a single flat rate on
-        Georgia taxable net income and steps that rate down by session law toward
-        the 4.99-per-cent floor, and section 48-7-27(a)(1)(B), as amended by
-        Georgia HB463 (2025-2026), sets the standard deduction to $15,000 for a
-        single taxpayer or head of household and $30,000 for a married couple
-        filing a joint return effective tax year 2026, so the operative 2026 rate
-        (4.99 per cent) and standard deduction are the current values PolicyEngine
-        applies. To reach a liability comparable to PolicyEngine ga_income_tax to
-        the cent, every amount this pipeline needs is a declared caller-supplied
-        input: the 4.99-per-cent rate and the section 48-7-27 standard deduction
-        supplied as the AGI-to-taxable-income subtraction. Georgia imposes the flat
-        rate from the first dollar of taxable net income and, for these childless
-        cases, allows no personal exemption (section 48-7-26 sets the taxpayer and
-        dependent exemptions to zero for the taxpayer/spouse under the HB1437
-        restructuring) and no per-exemption tax credit, so the supplied bracket
-        floor, bracket base, and nonrefundable credit are zero. The pipeline adds
-        no numeric literals of its own; it wires the flat-rate mechanics only, in
-        the same supplied-schedule form as the Arizona and Kentucky flat pilots.
+    corpus_citation_path: us-ga/statute/48/48-7-20
   summary: |-
-    Composed Georgia individual income-tax liability pipeline for the oracle slice
-    at the 2026 tax year. It exposes a TaxUnit-level path from a supplied Georgia
-    adjusted gross income into the section 48-7-20 flat tax on Georgia taxable net
-    income (Georgia AGI less the supplied section 48-7-27 standard deduction), so
-    an end-to-end comparison against PolicyEngine
-    (ga_income_tax_before_non_refundable_credits) and TAXSIM (siitax) does not
-    require the caller to supply the bracket application. Georgia levies a single
-    flat rate under section 48-7-20, so the schedule is wired in the general
-    bracket-base-plus-marginal form with the supplied bracket floor and base tax
-    set to zero and the supplied marginal rate carrying the flat rate; that
-    reproduces the statutory flat tax while keeping the same shape as the
-    progressive pilots. It deliberately models only the ordinary resident wage
-    earner and excludes the section 48-7-29 credits, the low-income credit, and
-    the nonrefundable child and dependent care credit, all of which are zero for
-    the childless wage-earner grid, so ga_income_tax_before_non_refundable_credits
-    equals the final ga_income_tax here. Georgia AGI, filing status, the standard
-    deduction, the flat rate, and the credit are supplied inputs; the enacted
-    schedule steps the rate down over time and HB463 raises the standard deduction
-    from tax year 2026, so this 2026 pipeline is compared against PolicyEngine at
-    2026 and against TAXSIM's latest 2024 law year with the 2024-to-2026
-    rate-and-deduction vintage dispositioned.
+    Composed Georgia individual income-tax pipeline for the 2026 before-
+    nonrefundable-credit target. It accepts one TaxUnit-level completed-return
+    Georgia taxable-income boundary, floors it at zero, and applies the rate
+    imported from the encoded O.C.G.A. § 48-7-20 module. It deliberately
+    excludes nonrefundable credits and makes no independent claim about the
+    upstream federal or Georgia adjustment chain. The codified section is the
+    tax-imposition authority, the imported session-law-backed module supplies
+    the fixed 4.99-per-cent rate, and zero is only the nonnegative taxable-
+    income floor. This narrow boundary is suitable for comparison with
+    PolicyEngine's ga_taxable_income feeding
+    ga_income_tax_before_non_refundable_credits for full-year resident tax
+    units.
+imports:
+  - us-ga:statutes/48/48-7-20#individual_income_tax_rate
 rules:
   - name: ga_pit_pilot_taxable_income
     kind: derived
@@ -62,26 +26,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 48-7-20 and 48-7-27, Georgia taxable net income after the supplied standard deduction
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ga/statute/48/48-7-27
-              excerpt: "Georgia taxable net income of an individual is federal adjusted gross income less specified deductions"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, ga_pit_pilot_adjusted_gross_income - ga_pit_pilot_supplied_standard_deduction)
-  - name: ga_pit_pilot_schedule_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 48-7-20, flat tax as the supplied bracket base plus the supplied marginal rate on income above the supplied bracket floor
+    source: O.C.G.A. § 48-7-20, supplied completed-return Georgia taxable net income floored at zero
     metadata:
       proof:
         atoms:
@@ -89,28 +34,35 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-ga/statute/48/48-7-20
-              excerpt: "A tax is imposed upon every resident of this state with respect to the resident's Georgia taxable net income"
+              excerpt: "A tax is imposed upon every resident of this state with respect to the Georgia taxable net income of the taxpayer"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          ga_pit_pilot_supplied_bracket_base
-          + ga_pit_pilot_supplied_marginal_rate * max(0, ga_pit_pilot_taxable_income - ga_pit_pilot_supplied_bracket_floor)
+          max(0, ga_pit_pilot_state_taxable_income)
   - name: ga_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 48-7-20 flat tax less the supplied nonrefundable credit, floored at zero
+    source: O.C.G.A. § 48-7-20(a.1), 4.99 per cent of Georgia taxable net income before nonrefundable credits
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-20#individual_income_tax_rate
+              output: individual_income_tax_rate
+              hash: sha256:3b14bace271098396b2e7f91054f8f5453fdd291c7ba60a776f47b1f55d5fd02
+          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us-ga/statute/48/48-7-20
-              excerpt: "A tax is imposed upon every resident of this state with respect to the resident's Georgia taxable net income"
+              excerpt: "The tax imposed pursuant to subsection (a) of this Code section shall be computed"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, ga_pit_pilot_schedule_tax - ga_pit_pilot_supplied_nonrefundable_credit)
+          ga_pit_pilot_taxable_income * individual_income_tax_rate
