@@ -13,16 +13,48 @@ from test_repository_layout import (
 
 KNOWN_ORPHANED_ENCODING_MANIFESTS: list[str] = []
 
-# Decrement-only: v1-schema hmac manifests merged to main by the CO
-# income-tax pilot lane (#942/#943) after this test hardened. They predate
-# the v5 apply signer and are tracked for re-signing in rulespec-us#944;
-# nothing new may join this list.
+# Decrement-only: v1-schema HMAC manifests that predate the protected v5 apply
+# signer. They are tracked for encoder-driven re-signing in rulespec-us#944;
+# the migration may only remove entries from this explicit inventory.
 KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
-    ".axiom/encoding-manifests/us-co/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ar/policies/income_tax/pilot_liability_pipeline.json",
     ".axiom/encoding-manifests/us-co/policies/income_tax/eitc_pilot_pipeline.json",
+    ".axiom/encoding-manifests/us-co/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-dc/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ga/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ga/statutes/48/48-7-20.json",
+    ".axiom/encoding-manifests/us-ga/statutes/48/48-7-26.json",
+    ".axiom/encoding-manifests/us-ga/statutes/48/48-7-27.json",
+    ".axiom/encoding-manifests/us-ga/statutes/48/48-7-29/10.json",
+    ".axiom/encoding-manifests/us-ga/statutes/48/48-7A-3.json",
+    ".axiom/encoding-manifests/us-hi/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ia/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-il/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-in/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ks/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-la/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-mo/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ms/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-mt/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-nc/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-nc/statutes/105/105-153/7.json",
+    ".axiom/encoding-manifests/us-nd/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-nh/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-nj/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-nm/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ok/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-or/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-pa/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ri/policies/income_tax/pilot_liability_pipeline.json",
     ".axiom/encoding-manifests/us-sc/policies/dss/snap-policy-manual/page-215.json",
     ".axiom/encoding-manifests/us-sc/policies/dss/snap-policy-manual/page-345.json",
     ".axiom/encoding-manifests/us-sc/policies/dss/snap-policy-manual/page-385.json",
+    ".axiom/encoding-manifests/us-sc/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-ut/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-vt/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-wa/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-wi/policies/income_tax/pilot_liability_pipeline.json",
+    ".axiom/encoding-manifests/us-wv/policies/income_tax/pilot_liability_pipeline.json",
     ".axiom/encoding-manifests/us/regulations/42-cfr/435/552.json",
     ".axiom/encoding-manifests/us/regulations/42-cfr/435/555.json",
     ".axiom/encoding-manifests/us/regulations/42-cfr/435/557.json",
@@ -43,28 +75,36 @@ def test_encoding_manifests_use_current_signed_schema() -> None:
     ``guard-generated`` workflow.
     """
     problems: list[str] = []
+    seen_manifests: set[str] = set()
     canonical_root = ROOT / ".axiom" / "encoding-manifests"
     for path in ROOT.rglob("*.json"):
         relative = path.relative_to(ROOT)
         if "encoding-manifests" not in path.parts or "_axiom" in relative.parts:
             continue
+        relative_text = relative.as_posix()
+        seen_manifests.add(relative_text)
         if not path.is_relative_to(canonical_root):
-            problems.append(f"{relative.as_posix()}: legacy manifest location")
-            continue
-        if relative.as_posix() in KNOWN_RETIRED_SCHEMA_MANIFESTS:
+            problems.append(f"{relative_text}: legacy manifest location")
             continue
         payload = json.loads(path.read_text())
+        if relative_text in KNOWN_RETIRED_SCHEMA_MANIFESTS:
+            if payload.get("schema_version") == "axiom-encode/applied-rulespec/v5":
+                problems.append(f"{relative_text}: remove stale retired-schema allowance")
+            continue
         if payload.get("schema_version") != "axiom-encode/applied-rulespec/v5":
-            problems.append(f"{relative.as_posix()}: retired manifest schema")
+            problems.append(f"{relative_text}: retired manifest schema")
         signature = payload.get("signature")
         if not isinstance(signature, dict) or set(signature) != {
             "algorithm",
             "key_id",
             "value",
         }:
-            problems.append(f"{relative.as_posix()}: missing signature envelope")
+            problems.append(f"{relative_text}: missing signature envelope")
         elif signature.get("algorithm") != "ed25519-domain-v1":
-            problems.append(f"{relative.as_posix()}: unsupported signature algorithm")
+            problems.append(f"{relative_text}: unsupported signature algorithm")
+
+    for missing in sorted(KNOWN_RETIRED_SCHEMA_MANIFESTS - seen_manifests):
+        problems.append(f"{missing}: remove missing retired-schema allowance")
 
     assert problems == []
 
