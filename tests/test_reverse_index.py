@@ -35,7 +35,13 @@ def test_is_jurisdiction_dir_matches_convention():
 def test_citation_paths_collects_module_and_proof_atoms():
     payload = {
         "module": {
-            "source_verification": {"corpus_citation_path": "us/statute/26/32"},
+            "source_verification": {
+                "corpus_citation_path": "us/statute/26/32",
+                "corpus_citation_paths": [
+                    "us/statute/26/32",
+                    " us/statute/26/63 ",
+                ],
+            },
         },
         "rules": [
             {
@@ -53,12 +59,18 @@ def test_citation_paths_collects_module_and_proof_atoms():
     }
     refs = gen.citation_paths_for_module(payload)
     assert refs["us/statute/26/32"] == {gen.MODULE_REFERENCE, gen.PROOF_ATOM_REFERENCE}
+    assert refs["us/statute/26/63"] == {gen.MODULE_REFERENCE}
     assert refs["us/statute/26/152/c"] == {gen.PROOF_ATOM_REFERENCE}
 
 
 def test_citation_paths_ignores_blank_and_non_string():
     payload = {
-        "module": {"source_verification": {"corpus_citation_path": "  "}},
+        "module": {
+            "source_verification": {
+                "corpus_citation_path": "  ",
+                "corpus_citation_paths": ["", 123],
+            }
+        },
         "rules": [
             {"metadata": {"proof": {"atoms": [{"source": {"corpus_citation_path": 123}}]}}}
         ],

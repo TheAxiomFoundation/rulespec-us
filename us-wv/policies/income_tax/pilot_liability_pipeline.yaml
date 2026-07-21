@@ -1,0 +1,108 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-wv/statute/11-21-3
+      - us-wv/statute/11-21-4J
+      - us-wv/statute/11-21-4H
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-wv/statute/chapter-11/article-21
+        - us-wv/statute/11-21-3
+        - us-wv/statute/11-21-4J
+        - us-wv/statute/11-21-4H
+      rationale: |-
+        The complete official Article 21 package contains the tax imposition in
+        section 3, the operative 2026 individual schedules in section 4J, and
+        the future-reduction mechanism in section 4H. Section 4H applies from
+        January 1, 2027 in lieu of section 4J. This narrow composition accepts
+        completed-return West Virginia taxable income and the active 2026
+        bracket's cumulative base tax, floor, and marginal rate as supplied
+        inputs. Beginning in 2027 it switches to a separately supplied section
+        4H schedule result, preventing the 2026 section 4J schedule from being
+        silently carried across the statutory boundary.
+  summary: |-
+    West Virginia individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied completed-
+    return West Virginia taxable income and applies the supplied active section
+    4J bracket in cumulative-base-plus-marginal form before nonrefundable
+    credits. It matches PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2
+    `wv_income_tax_before_non_refundable_credits` exactly on the standard six-
+    case childless age-40 wage grid. A second schedule-tax version begins on
+    January 1, 2027 and accepts the then-current section 4H result as supplied,
+    preserving the future-trigger boundary without predicting a rate
+    determination that the statute leaves to later revenue certifications.
+rules:
+  - name: wv_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-4J, supplied West Virginia taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-4J
+              excerpt: "on the West Virginia taxable income of every individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, wv_pit_pilot_supplied_taxable_income)
+
+  - name: wv_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code sections 11-21-4J and 11-21-4H, bounded schedules
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-4J
+              excerpt: "For taxable years beginning on and after January 1, 2026, the tax imposed by §11-21-3"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-4J
+              excerpt: "Over $60,000 $1,950.50 plus 4.58% of excess over $60,000"
+          - path: versions[1].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-4H
+              excerpt: "shall apply for all taxable years beginning on and after January 1, 2027, and shall be in lieu of the rates of tax specified in §11-21-4j"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          wv_pit_pilot_supplied_bracket_base
+          + wv_pit_pilot_supplied_marginal_rate * max(0, wv_pit_pilot_taxable_income - wv_pit_pilot_supplied_bracket_floor)
+      - effective_from: '2027-01-01'
+        formula: max(0, wv_pit_pilot_supplied_section_4h_schedule_tax)
+
+  - name: wv_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-3, tax imposed before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-3
+              excerpt: "A tax determined in accordance with the rates hereinafter set forth in this article is hereby imposed"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, wv_pit_pilot_schedule_tax)

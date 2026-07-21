@@ -1,0 +1,111 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nd/statute/57/57-38-30.3
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-nd/statute/57/57-38-30.3
+      rationale: |-
+        N.D.C.C. section 57-38-30.3(1) imposes tax on North Dakota taxable
+        income under the filing-status schedules in subdivisions a through d,
+        and subdivision g directs the Tax Commissioner to prescribe indexed
+        replacement schedules. The official corpus record overlays the
+        Commissioner's operative 2026 schedule: single filers pay zero through
+        $49,575, 1.95 percent through $250,400, and then $3,916.09 plus 2.50
+        percent; joint filers pay zero through $82,800, 1.95 percent through
+        $304,850, and then $4,329.98 plus 2.50 percent. This narrow composition
+        accepts completed-return North Dakota taxable income and the active
+        bracket's cumulative base tax, floor, and marginal rate as caller-
+        supplied current-authority inputs. Adjustments, credits, part-year
+        allocation, farm-income averaging, and special income classes remain
+        outside this rate-section module.
+  summary: |-
+    Composed North Dakota individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied completed-
+    return North Dakota taxable income and applies the supplied active N.D.C.C.
+    section 57-38-30.3 bracket in cumulative-base-plus-marginal form before
+    credits. Its closest PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2 analog is
+    `nd_income_tax_before_credits` on the six-case childless age-40 grid:
+    single at $30,000/$60,000/$150,000 of wages and one-earner joint at
+    $60,000/$120,000/$300,000. PolicyEngine supplies completed taxable income;
+    expected outputs are independently hand-computed from the official 2026
+    overlay. Three zero cases match exactly. The other three expose
+    PolicyEngine's stale carry-forward of the 2025 $48,475/$80,975 thresholds
+    instead of the official 2026 $49,575/$82,800 thresholds.
+rules:
+  - name: nd_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(2), supplied North Dakota taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: 'For purposes of this section, "North Dakota taxable income" means the federal taxable'
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, nd_pit_pilot_supplied_taxable_income)
+
+  - name: nd_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(1)(a)-(b), official 2026 overlay
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "$0 | $49,575 | $0.00 + 0.00% | $0"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "$49,575 | $250,400 | $0.00 + 1.95% | $49,575"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "$0 | $82,800 | $0.00 + 0.00% | $0"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "$82,800 | $304,850 | $0.00 + 1.95% | $82,800"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          nd_pit_pilot_supplied_bracket_base
+          + nd_pit_pilot_supplied_marginal_rate * max(0, nd_pit_pilot_taxable_income - nd_pit_pilot_supplied_bracket_floor)
+
+  - name: nd_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(1), individual income tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "A tax is hereby imposed for each taxable year upon income earned or received in that"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, nd_pit_pilot_schedule_tax)

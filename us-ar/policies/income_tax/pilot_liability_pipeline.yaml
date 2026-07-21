@@ -1,0 +1,107 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ar/statute/act-2-2026/section-1
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ar/statute/act-2-2026
+        - us-ar/statute/act-2-2026/section-1
+      rationale: |-
+        Section 1 of Arkansas Act 2 of 2026 amends Ark. Code section
+        26-51-201(a)(4) for tax years beginning on or after January 1, 2026. It
+        supplies the full progressive schedule through $94,700, a separate
+        high-income schedule above $94,700, and the complete 29-row bracket-
+        adjustment table for net income from $94,701 through $97,600. This
+        narrow composition accepts completed-return Arkansas net taxable
+        income and the active bracket's cumulative base tax, floor, marginal
+        rate, and applicable adjustment as caller-supplied current-authority
+        inputs. Deductions, exemptions, low-income tables, special income
+        classes, and credits remain outside this rate-section module.
+  summary: |-
+    Composed Arkansas individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied completed-
+    return Arkansas net taxable income and applies the supplied active Act 2
+    bracket in cumulative-base-plus-marginal form, less the supplied bracket
+    adjustment, before nonrefundable credits. Its exact PolicyEngine 4.18.9 /
+    PolicyEngine-US 1.752.2 analog is
+    `ar_income_tax_before_non_refundable_credits_unit` on the six-case
+    childless age-40 grid: single at $30,000/$60,000/$150,000 of wages and
+    one-earner joint at $60,000/$120,000/$300,000. PolicyEngine supplies
+    completed taxable income; expected outputs are independently hand-computed
+    from Act 2. None of the standard grid cases falls in the $94,701-$97,600
+    adjustment interval, so its supplied adjustment is zero in all six cases.
+rules:
+  - name: ar_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Arkansas Act 2 of 2026 section 1, supplied Arkansas net taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/statute/act-2-2026/section-1
+              excerpt: "Every resident, individual, trust, or estate having"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ar_pit_pilot_supplied_taxable_income)
+
+  - name: ar_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Arkansas Act 2 of 2026 section 1, dual schedules and bracket adjustment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/statute/act-2-2026/section-1
+              excerpt: "For tax years beginning on or after January 1, 2026:"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/statute/act-2-2026/section-1
+              excerpt: "3.7%"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/statute/act-2-2026/section-1
+              excerpt: "shall reduce the amount of income tax due as determined"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0,
+            ar_pit_pilot_supplied_bracket_base
+            + ar_pit_pilot_supplied_marginal_rate * max(0, ar_pit_pilot_taxable_income - ar_pit_pilot_supplied_bracket_floor)
+            - ar_pit_pilot_supplied_bracket_adjustment
+          )
+
+  - name: ar_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Arkansas Act 2 of 2026 section 1, resident tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/statute/act-2-2026/section-1
+              excerpt: "shall determine the amount of income tax due under this subsection"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ar_pit_pilot_schedule_tax)
