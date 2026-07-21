@@ -96,11 +96,11 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "workflow_toolchain"
     ]
     assert toolchain == {
-        "axiom_encode_version": "0.2.1295",
+        "axiom_encode_version": "0.2.1303",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
-        "axiom_encode_ref": "c83398020922a2a38ccc0b98ae66ebe59b7f3d92",
+        "axiom_encode_ref": "bbe58db563fb878f38406449dc6efaf34ef4d5df",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
-        "axiom_corpus_ref": "633f60849862927914a14fc186d09ab816c8ff8b",
+        "axiom_corpus_ref": "9bcd8345798c0e0a9b54ab3f5962abbb3663c049",
         "rulespec_us_ref": "0f291b367bf7e15555f9973112278c5cbf221653",
     }
 
