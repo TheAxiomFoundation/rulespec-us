@@ -5,26 +5,19 @@ module:
   source_verification:
     corpus_citation_path: us-nc/statute/105/105-153.7
   summary: |-
-    Composed North Carolina individual income-tax liability pipeline for the
-    oracle slice at the 2026 tax year. It exposes a TaxUnit-level path from a
-    supplied North Carolina adjusted gross income into the section 105-153.7 flat
-    tax on North Carolina taxable income (North Carolina AGI less the supplied
-    section 105-153.5(a) standard deduction), so an end-to-end comparison against
-    PolicyEngine (nc_income_tax_before_credits) and TAXSIM (siitax) does not
-    require the caller to supply the bracket application. North Carolina levies a
-    single flat rate under section 105-153.7, so the schedule is wired in the
-    general bracket-base-plus-marginal form with the supplied bracket floor and
-    base tax set to zero and the supplied marginal rate carrying the flat rate;
-    that reproduces the statutory flat tax while keeping the same shape as the
-    progressive pilots. It deliberately models only the ordinary resident wage
-    earner and excludes the child deduction, the section 105-153.10 credits, and
-    the nonrefundable child and dependent care credit, all of which are zero for
-    the childless wage-earner grid, so nc_income_tax_before_credits equals the
-    final nc_income_tax here. North Carolina AGI, filing status, the standard
-    deduction, the flat rate, and the credit are supplied inputs; the enacted
-    schedule steps the rate down over time, so this 2026 pipeline is compared
-    against PolicyEngine at 2026 and against TAXSIM's latest 2024 law year with the
-    2024-to-2026 rate-schedule vintage dispositioned.
+    Composed North Carolina individual income-tax pipeline for the 2026
+    before-credit target. It accepts one TaxUnit-level completed-return North
+    Carolina taxable-income boundary, floors it at zero, and applies the rate
+    imported from the encoded section 105-153.7 module. It deliberately excludes
+    all credits and makes no independent claim about the upstream federal and
+    state adjustment chain. The imported rate is policy-bearing; zero is only
+    the nonnegative taxable-income floor. Because subsection (a1) may change
+    the rate beginning in 2027, both rules are bounded to tax year 2026. This
+    narrow boundary is suitable for comparison with PolicyEngine's
+    nc_taxable_income feeding nc_income_tax_before_credits for full-year
+    resident tax units.
+imports:
+  - us-nc:statutes/105/105-153/7#individual_income_tax_rate
 rules:
   - name: nc_pit_pilot_taxable_income
     kind: derived
@@ -32,26 +25,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 105-153.7 and 105-153.5, North Carolina taxable income after the supplied standard deduction
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-nc/statute/105/105-153.5/a
-              excerpt: "In calculating North Carolina taxable income, a taxpayer may deduct from adjusted gross income either the standard deduction amount or the itemized deduction amount"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, nc_pit_pilot_adjusted_gross_income - nc_pit_pilot_supplied_standard_deduction)
-  - name: nc_pit_pilot_schedule_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 105-153.7, flat tax as the supplied bracket base plus the supplied marginal rate on income above the supplied bracket floor
+    source: N.C. Gen. Stat. 105-153.7, supplied completed-return state taxable income floored at zero
     metadata:
       proof:
         atoms:
@@ -62,25 +36,32 @@ rules:
               excerpt: "A tax is imposed for each taxable year on the North Carolina taxable income of every individual"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          nc_pit_pilot_supplied_bracket_base
-          + nc_pit_pilot_supplied_marginal_rate * max(0, nc_pit_pilot_taxable_income - nc_pit_pilot_supplied_bracket_floor)
+          max(0, nc_pit_pilot_state_taxable_income)
   - name: nc_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 105-153.7 flat tax less the supplied nonrefundable credit, floored at zero
+    source: N.C. Gen. Stat. 105-153.7(a), the 3.99 per cent flat tax on North Carolina taxable income before credits
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nc:statutes/105/105-153/7#individual_income_tax_rate
+              output: individual_income_tax_rate
+              hash: sha256:c0306fd55fd67ea700a1abdc65cdbfa473c781522aa15e9f4d2b4fecc2277e0d
+          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us-nc/statute/105/105-153.7
-              excerpt: "A tax is imposed for each taxable year on the North Carolina taxable income of every individual"
+              excerpt: "the tax is a percentage of the taxpayer's North Carolina taxable income computed as follows"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, nc_pit_pilot_schedule_tax - nc_pit_pilot_supplied_nonrefundable_credit)
+          nc_pit_pilot_taxable_income * individual_income_tax_rate
