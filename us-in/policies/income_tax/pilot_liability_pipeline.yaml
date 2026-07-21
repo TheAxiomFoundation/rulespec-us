@@ -3,94 +3,61 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-in/statute/6-3-2-1
-      - us-in/statute/6-3-1-3.5
-    upstream_source_check:
-      status: composed_from_supplied_current_authority
-      checked_paths:
-        - us-in/statute/6-3-2-1
-        - us-in/statute/6-3-1-3.5
-      rationale: |-
-        This pipeline computes the Indiana individual income-tax liability
-        for the ordinary resident wage-earner slice at tax year 2026. The
-        supplied-current primary authority establishes the flat tax on Indiana
-        adjusted gross income and the relevant personal exemptions. Values
-        that vary by filing status, bracket, annual indexing, or the choice
-        between standard and itemized deductions remain declared caller inputs:
-        pre-exemption adjusted gross income, the statutory subtraction, the active
-        bracket floor, cumulative tax at that floor, and marginal rate. The
-        module adds no numeric tax-law literals; it wires those supplied values
-        into the statutory adjusted-gross-income and schedule mechanics. The
-        direct PolicyEngine schedule analog is in_agi_tax. The six companion
-        cases have no 529-plan contribution, so in_529_plan_credit is zero and
-        the same values also compare to in_income_tax_before_refundable_credits.
+    corpus_citation_path: us-in/statute/6-3-2-1
   summary: |-
-    Composed Indiana individual income-tax liability pipeline for the 2026
-    ordinary resident childless wage-earner oracle slice. It computes Indiana
-    adjusted gross income from supplied pre-exemption adjusted gross income and
-    the supplied statutory subtraction, then applies the active flat bracket as supplied
-    cumulative base tax plus the supplied marginal rate on income above the
-    supplied floor. The nonrefundable Indiana 529-plan credit and special income
-    classes are outside this schedule-tax core; the credit is zero in every
-    companion case. All tax-law amounts are inputs so the composition is
-    source-grounded without embedding an unencoded annual schedule.
+    Composed Indiana individual adjusted-gross-income tax pipeline for tax year
+    2026. It accepts one TaxUnit-level completed-return Indiana adjusted gross
+    income boundary, applies the 2.95 per cent rate imported from the encoded
+    IC 6-3-2-1 module, and floors the resulting state tax at zero. This matches
+    PolicyEngine's in_agi feeding in_agi_tax. The boundary already reflects all
+    upstream federal income, Indiana add-backs, deductions, and exemptions, so
+    this module makes no independent claim about that upstream chain. Indiana
+    county tax is a separate levy and is excluded. The nonrefundable Indiana
+    529-plan credit and all other credits are also excluded. Both the imported
+    rate and this calculation are bounded to 2026 so adjacent years fail closed.
+imports:
+  - us-in:statutes/6-3-2-1#individual_adjusted_gross_income_tax_rate
 rules:
-  - name: in_pit_pilot_taxable_income
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: IC 6-3-1-3.5, Indiana adjusted gross income after the supplied subtraction
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-in/statute/6-3-1-3.5
-              excerpt: "Subtract one thousand dollars ($1,000), or in the case of a joint return filed by a husband and wife, subtract for each spouse one thousand dollars ($1,000)."
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, in_pit_pilot_adjusted_gross_income - in_pit_pilot_supplied_taxable_income_subtraction)
-  - name: in_pit_pilot_schedule_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: IC 6-3-2-1, flat tax using the supplied active bracket
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-in/statute/6-3-2-1
-              excerpt: "For taxable years beginning after December 31, 2025, and before January 1, 2027, two and ninety-five hundredths percent (2.95%)."
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          in_pit_pilot_supplied_bracket_base
-          + in_pit_pilot_supplied_marginal_rate * max(0, in_pit_pilot_taxable_income - in_pit_pilot_supplied_bracket_floor)
   - name: in_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: IC 6-3-2-1, tax imposed on Indiana adjusted gross income
+    source: IC 6-3-2-1(b)(7), 2.95 per cent of Indiana adjusted gross income for tax year 2026 before credits and excluding county tax
     metadata:
       proof:
         atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-in:statutes/6-3-2-1#individual_adjusted_gross_income_tax_rate
+              output: individual_adjusted_gross_income_tax_rate
+              hash: sha256:8aec1f0c1c8ea38b1d3f461c7d84174200b48e414833ae3414f2cbb6773b9033
           - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us-in/statute/6-3-2-1
               excerpt: "For taxable years beginning after December 31, 2025, and before January 1, 2027, two and ninety-five hundredths percent (2.95%)."
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-1
+              excerpt: "For taxable years beginning after December 31, 2025"
+          - path: versions[0].effective_to
+            kind: effective_period
+            source:
+              corpus_citation_path: us-in/statute/6-3-2-1
+              excerpt: "and before January 1, 2027"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, in_pit_pilot_schedule_tax)
+          max(0, in_pit_pilot_indiana_adjusted_gross_income * individual_adjusted_gross_income_tax_rate)
+inputs:
+  - name: in_pit_pilot_indiana_adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return Indiana adjusted gross income supplied by the caller as an upstream oracle boundary.
