@@ -1,0 +1,141 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-co/statute/39/39-22-555
+  summary: |-
+    A qualified retailer is allowed a five-hundred-dollar credit for each qualifying retail sale of a new qualified electric bicycle; the credit is reduced by fifty percent when the specified June revenue forecast condition applies. A required discount is the lesser of four hundred fifty dollars or purchase price, and the retailer may retain an administrative fee not exceeding fifty dollars.
+  deferred_outputs:
+    - output: us-co:statutes/39/39-22-555/a#colorado_energy_office
+      reason: Institutional definition identifies an office created under unavailable section 24-38.5-101 and does not establish a computable policy output.
+    - output: us-co:statutes/39/39-22-555/b#department
+      reason: Institutional definition identifies the department of revenue and does not establish a computable policy output.
+    - output: us-co:statutes/39/39-22-555/e#qualified_electric_bicycle
+      reason: Qualification depends on Colorado energy office approval standards and the unavailable electric-bicycle definition in section 42-1-102.
+    - output: us-co:statutes/39/39-22-555/f#qualified_purchaser
+      reason: The purchaser definition is person-scoped, while the operative per-sale credit surface requires a retailer-sale relation not supplied by this source slice.
+    - output: us-co:statutes/39/39-22-555/g#qualified_retailer
+      reason: Retailer qualification requires registration and sales-tax filing and payment records administered by the department; the source provides no representable retailer-record relation.
+    - output: us-co:statutes/39/39-22-555/e/I#quarterly_retailer_report_and_affidavit_submission
+      reason: Quarterly reporting, affidavit inspection, and department-prescribed reporting content are administrative processes rather than computable outputs.
+    - output: us-co:statutes/39/39-22-555/3/b#required_purchase_discount
+      reason: The discount calculation depends on “purchase price,” whose controlling definition in section 39-26-102 is unavailable as an executable RuleSpec dependency.
+      source_values:
+        - us-co:statutes/39/39-22-555#maximum_required_purchase_discount
+    - output: us-co:statutes/39/39-22-555/3/e/II#advance_credit_payment
+      reason: Advance payment mechanics are specified in unavailable section 39-22-629.
+    - output: us-co:statutes/39/39-22-555/5#refundable_excess_credit
+      reason: Refundability depends on the qualified retailer's income-tax due and credit aggregation across retail sales, neither of which is represented by this source slice.
+    - output: us-co:statutes/39/39-22-555/7#low_cost_financing_technical_assistance
+      reason: Technical assistance and financing access are administrative functions, not computable policy outputs.
+rules:
+  - name: credit_amount_per_qualified_sale
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-22-555(3)(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+              excerpt: "an amount equal to five hundred dollars for each retail sale"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          500
+
+  - name: maximum_required_purchase_discount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-22-555(3)(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+              excerpt: "the lesser of four hundred fifty dollars or the purchase price"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          450
+
+  - name: maximum_retailer_administrative_fee
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 39-22-555(3)(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+              excerpt: "an administrative fee not to exceed fifty dollars"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          50
+
+  - name: revenue_forecast_credit_reduction_rate
+    kind: parameter
+    dtype: Rate
+    source: 39-22-555(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+              excerpt: "is reduced by fifty percent"
+    versions:
+      - effective_from: '2025-01-01'
+        formula: |-
+          0.5
+
+  - name: credit_amount_per_eligible_retail_sale
+    kind: derived
+    entity: ElectricBicycleRetailSale
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 39-22-555(3)(a), 39-22-555(3)(b), 39-22-555(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+              excerpt: "a qualified retailer ... for each retail sale of new qualified electric bicycles ... to a qualified purchaser"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+              excerpt: "the amount of the credit ... is reduced by fifty percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-555
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          if retail_sale_is_made_by_qualified_retailer
+          and retail_sale_is_new_qualified_electric_bicycle
+          and retail_sale_is_to_qualified_purchaser
+          and retail_sale_is_in_credit_eligible_period
+          and retailer_provided_required_purchase_discount:
+            if revenue_forecast_requires_credit_reduction:
+              credit_amount_per_qualified_sale * (1 - revenue_forecast_credit_reduction_rate)
+            else:
+              credit_amount_per_qualified_sale
+          else:
+            0

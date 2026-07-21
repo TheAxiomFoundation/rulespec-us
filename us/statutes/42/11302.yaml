@@ -1,0 +1,150 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/42/11302
+  summary: |-
+    Defines "homeless", "homeless individual", and "homeless person" to include individuals or families lacking a fixed, regular, and adequate nighttime residence; residing in places not meant for regular sleeping accommodation, temporary shelters, certain institutional-exit situations, imminent housing loss evidenced by 14-day limits, specified youth/family instability, and violence-related unsafe housing. A homeless individual is eligible for chapter assistance only if otherwise applicable income requirements are met, except for title I of the Workforce Innovation and Opportunity Act. The definition excludes individuals imprisoned or otherwise detained pursuant to federal or State law, and references to homeless individuals or groups include persons or groups experiencing homelessness.
+  deferred_outputs:
+    - output: us:statutes/42/11302/a#homeless_family
+      reason: The source definition applies to both individuals and families, but this artifact exposes the individual/person definition; family-level aggregation is deferred pending a source-specific family membership relation.
+    - output: us:statutes/42/11302/e#references_to_persons_experiencing_homelessness
+      reason: Subsection (e) is an interpretive reference-construction clause rather than an independent computable eligibility or amount output.
+rules:
+  - name: eviction_order_leave_within_days_limit
+    kind: parameter
+    dtype: Count
+    source: 42 USC 11302(a)(5)(A)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "must leave within 14 days"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          14
+
+  - name: hotel_motel_resources_days_limit
+    kind: parameter
+    dtype: Count
+    source: 42 USC 11302(a)(5)(A)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "lack the resources necessary to reside there for more than 14 days"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          14
+
+  - name: owner_or_renter_allow_stay_days_limit
+    kind: parameter
+    dtype: Count
+    source: 42 USC 11302(a)(5)(A)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "will not allow the individual or family to stay for more than 14 days"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          14
+
+  - name: homeless_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 USC 11302(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/42/11302
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "shall consider to be homeless any individual or family"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "does not include any individual imprisoned or otherwise detained"
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          (
+            lacks_fixed_regular_adequate_nighttime_residence
+            or primary_nighttime_residence_is_place_not_designed_or_ordinarily_used_as_regular_sleeping_accommodation
+            or living_in_supervised_shelter_designated_temporary_living_arrangements
+            or (resided_in_shelter_or_place_not_meant_for_human_habitation and exiting_institution_where_temporarily_resided)
+            or (
+              (
+                (court_order_resulting_from_eviction_action_notifies_must_leave and days_until_must_leave_under_eviction_order <= eviction_order_leave_within_days_limit)
+                or (primary_nighttime_residence_is_hotel_or_motel_room and hotel_motel_resources_remaining_days <= hotel_motel_resources_days_limit)
+                or (credible_evidence_owner_or_renter_will_not_allow_stay and owner_or_renter_remaining_allowed_stay_days <= owner_or_renter_allow_stay_days_limit)
+              )
+              and no_subsequent_residence_identified
+              and lacks_resources_or_support_networks_needed_to_obtain_other_permanent_housing
+            )
+            or (
+              unaccompanied_youth_or_member_of_homeless_family_with_children_and_youth_defined_as_homeless_under_other_federal_statutes
+              and experienced_long_term_period_without_living_independently_in_permanent_housing
+              and experienced_persistent_instability_measured_by_frequent_moves
+              and expected_to_continue_in_status_for_extended_period_because_of_listed_barrier
+            )
+            or (
+              experiencing_trauma_lack_of_safety_or_fleeing_violence_related_conditions_in_current_housing
+              and no_other_safe_residence
+              and lacks_resources_to_obtain_other_safe_permanent_housing
+            )
+          )
+          and
+          not imprisoned_or_detained_pursuant_to_act_of_congress_or_state_law
+
+  - name: chapter_program_assistance_eligible_for_homeless_individual
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 USC 11302(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "only if the individual complies with the income eligibility requirements otherwise applicable"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/42/11302
+              excerpt: "eligible for assistance under title I of the Workforce Innovation and Opportunity Act"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/42/11302#homeless_individual
+              output: homeless_individual
+              hash: sha256:local
+    versions:
+      - effective_from: '2024-01-01'
+        formula: |-
+          homeless_individual
+          and (program_is_title_i_workforce_innovation_and_opportunity_act or complies_with_income_eligibility_requirements_otherwise_applicable_to_program)

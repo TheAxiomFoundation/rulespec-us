@@ -1,0 +1,112 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/12/1715r
+  summary: |-
+    For purposes of this section, "approved percentage" means the percentage figure authorized under applicable provisions of this chapter, except repair or rehabilitation mortgages with no proceeds used to finance purchase of land or structure use 100 per centum. "Actual cost" includes stated construction or repair/rehabilitation costs, specified land/acquisition/refinancing additions, exclusions for kickbacks, rebates, or trade discounts, and special builder's/sponsor's profit and risk allowances of 10 per centum or a lesser percentage prescribed by regulation for listed insured mortgages.
+rules:
+  - name: repair_rehabilitation_no_purchase_approved_percentage
+    kind: parameter
+    dtype: Rate
+    source: 12 USC 1715r(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/12/1715r
+              excerpt: "the approved percentage shall be 100 per centum"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1.0
+
+  - name: builder_sponsor_profit_risk_allowance_rate
+    kind: parameter
+    dtype: Rate
+    source: 12 USC 1715r(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/12/1715r
+              excerpt: "an allowance for builder's and sponsor's profit and risk of 10 per centum"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.10
+
+  - name: approved_percentage
+    kind: derived
+    entity: Mortgage
+    dtype: Rate
+    period: Year
+    source: 12 USC 1715r(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1715r
+              excerpt: "except that if the mortgage is to assist the financing of repair or rehabilitation and no part of the proceeds will be used to finance the purchase of the land or structure involved, the approved percentage shall be 100 per centum"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if mortgage_assists_repair_or_rehabilitation and no_proceeds_used_to_finance_purchase_of_land_or_structure: repair_rehabilitation_no_purchase_approved_percentage else: secretary_authorized_percentage_under_applicable_provisions
+
+  - name: actual_cost_new_construction
+    kind: derived
+    entity: Mortgage
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12 USC 1715r(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1715r
+              excerpt: "in case the mortgage is to assist the financing of new construction, the term means the actual cost to the mortgagor of such construction"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          new_construction_cost_items
+          + (if mortgagor_is_also_builder and not special_builder_sponsor_allowance_mortgage: reasonable_builder_profit_allowance else: 0)
+          + land_or_leasehold_value_for_new_construction
+          - kickbacks_rebates_or_trade_discounts_received_for_construction
+          + (if special_builder_sponsor_allowance_mortgage and mortgagor_is_also_builder: applicable_builder_sponsor_profit_risk_rate * special_allowance_base_excluding_land_leasehold_and_clause_ii_additions else: 0)
+          + (if special_builder_sponsor_allowance_mortgage and not mortgagor_is_also_builder: applicable_sponsor_profit_risk_rate * special_sponsor_allowance_base_excluding_land_leasehold_clause_ii_additions_and_general_construction_contract else: 0)
+
+  - name: actual_cost_repair_or_rehabilitation
+    kind: derived
+    entity: Mortgage
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12 USC 1715r(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/12/1715r
+              excerpt: "in case the mortgage is to assist the financing of repair or rehabilitation the term means the actual cost to the mortgagor of such repair or rehabilitation"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          repair_or_rehabilitation_cost_items
+          + (if mortgagor_is_also_builder and not special_builder_sponsor_allowance_mortgage: reasonable_builder_profit_allowance else: 0)
+          + (if land_and_improvements_to_be_acquired_and_purchase_price_financed_with_mortgage_proceeds: min(purchase_price_of_land_and_improvements_before_repair_or_rehabilitation, secretary_estimated_fair_market_value_before_repair_or_rehabilitation) else: 0)
+          + (if land_and_improvements_owned_subject_to_indebtedness_refinanced_with_mortgage_proceeds: min(outstanding_indebtedness_secured_by_land_and_improvements, approved_percentage * secretary_estimated_fair_market_value_before_repair_or_rehabilitation) else: 0)
+          - kickbacks_rebates_or_trade_discounts_received_for_construction
+          + (if special_builder_sponsor_allowance_mortgage and mortgagor_is_also_builder: applicable_builder_sponsor_profit_risk_rate * special_allowance_base_excluding_land_leasehold_and_clause_ii_additions else: 0)
+          + (if special_builder_sponsor_allowance_mortgage and not mortgagor_is_also_builder: applicable_sponsor_profit_risk_rate * special_sponsor_allowance_base_excluding_land_leasehold_clause_ii_additions_and_general_construction_contract else: 0)
