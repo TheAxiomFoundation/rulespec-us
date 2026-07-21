@@ -38,9 +38,9 @@ from pathlib import Path
 import yaml
 
 MANIFEST_FORMAT_VERSION = 1
-# The compiled-artifact format generation (rulespec/v1). Bumped only on a
+# The compiled-artifact format generation. Bumped only on a
 # breaking artifact-format change; the engine negotiates against it on load.
-ARTIFACT_SCHEMA_VERSION = 1
+ARTIFACT_SCHEMA_VERSION = 2
 # The fixed, tested lower bound an artifact requires of the engine. A floor, not
 # the building engine's version — any engine >= this that supports the artifact
 # schema can load it. Raise only when an emitted feature demands a newer engine.
