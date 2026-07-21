@@ -13,41 +13,28 @@ module:
         - us-ut/statute/59-10-1018
       rationale: |-
         This pipeline computes the Utah Code 59-10-104 flat individual income tax
-        on Utah taxable income for the ordinary resident wage-earner slice at the
-        2026 tax year, before the section 59-10-1018 taxpayer tax credit. Section
-        59-10-104(2) imposes a single flat rate on the state taxable income of a
-        resident individual; the encoded us-ut/statutes/59-10-104 module carries
-        the rate, and the legislature reduced it to 4.45 per cent for taxable
-        years beginning in 2026 (H.B. 106 of 2025). This pipeline supplies that
-        operative 4.45 per cent rate as a declared caller-supplied
-        current-authority input so the flat application runs end to end without
-        importing the encoded rate. Utah taxable income for the resident wage
-        earner is federal adjusted gross income (Utah levies no separate standard
-        deduction; the section 59-10-1018 taxpayer tax credit, itself a function
-        of the federal deduction and personal exemptions, plays the deduction
-        role); this before-credit core supplies the taxable base and excludes the
-        section 59-10-1018 credit, which is cited as the boundary authority and
-        carried by its own encoded module. The pipeline adds no numeric literals
-        of its own; it wires the flat-tax mechanics only.
+        on Utah taxable income for full-year resident tax units at the 2026 tax
+        year, before the section 59-10-1018 taxpayer tax credit. Section
+        59-10-104(2) imposes a single flat rate on a resident individual's state
+        taxable income. The caller supplies that completed-return state taxable
+        income as the explicit upstream boundary; this module does not claim to
+        reconstruct the federal and Utah adjustments that produce the boundary.
+        The encoded us-ut/statutes/59-10-104 module supplies the operative 4.45
+        per cent rate, which this pipeline imports instead of accepting from the
+        caller. The section 59-10-1018 credit and all other credits remain outside
+        this before-credit target. The pipeline adds no policy-bearing numeric
+        literal of its own; zero is only the nonnegative taxable-income floor.
   summary: |-
-    Composed Utah individual income-tax liability pipeline for the oracle slice
-    at the 2026 tax year. It exposes a TaxUnit-level path from a supplied Utah
-    adjusted gross income into the Utah Code 59-10-104(2) flat tax, so an
-    end-to-end comparison against PolicyEngine (ut_income_tax_before_credits) and
-    TAXSIM (siitax) does not require the caller to supply the section 59-10-104
-    rate. It wires: Utah taxable income (AGI less any supplied subtractions, zero
-    for this wage slice); and the liability as the flat 4.45 per cent rate on
-    that taxable income. Because Utah levies a single statutory rate on this
-    slice, the composed liability equals PolicyEngine's before-credit value
-    exactly. It deliberately excludes the section 59-10-1018 taxpayer tax credit
-    (the phased-out credit that PolicyEngine nets in
-    ut_income_tax_before_non_refundable_credits), the section 59-10-1002 through
-    59-10-1044 credits, the at-home-parent and retirement credits, and the
-    business-income and part-year mechanics, all supplied as zero or omitted for
-    this slice. Utah AGI, the subtractions, and the flat rate are supplied
-    inputs; the legislature sets the rate by session law (4.45 per cent for
-    2026), so this 2026 pipeline is compared against PolicyEngine at 2026 and
-    against TAXSIM's latest 2024 law year with the rate vintage dispositioned.
+    Composed Utah individual income-tax pipeline for the 2026 before-credit
+    target. It accepts one TaxUnit-level completed-return Utah taxable-income
+    boundary, floors it at zero, and applies the rate imported from the encoded
+    Utah Code 59-10-104 module. It deliberately excludes the section 59-10-1018
+    taxpayer tax credit and all other credits, and it makes no independent claim
+    about the upstream federal or Utah adjustment chain. This narrow boundary is
+    suitable for comparison with PolicyEngine's ut_taxable_income feeding
+    ut_income_tax_before_credits for full-year resident tax units.
+imports:
+  - us-ut:statutes/59-10-104#resident_individual_income_tax_rate
 rules:
   - name: ut_pit_pilot_taxable_income
     kind: derived
@@ -55,7 +42,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: Utah Code 59-10-104, Utah taxable income after any supplied subtractions
+    source: Utah Code 59-10-104, supplied completed-return state taxable income floored at zero
     metadata:
       proof:
         atoms:
@@ -67,7 +54,7 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          max(0, ut_pit_pilot_adjusted_gross_income - ut_pit_pilot_supplied_subtractions)
+          max(0, ut_pit_pilot_state_taxable_income)
   - name: ut_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
@@ -79,6 +66,12 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ut:statutes/59-10-104#resident_individual_income_tax_rate
+              output: resident_individual_income_tax_rate
+              hash: sha256:a6a9d878c99572670d08eb55745c3357b16d2fde709cd1b4be9a17bbab08b703
+          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us-ut/statute/59-10-104
@@ -86,4 +79,4 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          ut_pit_pilot_taxable_income * ut_pit_pilot_supplied_rate
+          ut_pit_pilot_taxable_income * resident_individual_income_tax_rate
