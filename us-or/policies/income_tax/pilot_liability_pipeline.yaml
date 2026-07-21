@@ -1,0 +1,99 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-or/statute/316.037
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-or/statute/316.037
+      rationale: |-
+        The staged 2026-05-06 primary text of ORS 316.037 imposes Oregon's four
+        ordinary-income rates and directs the Department of Revenue to replace
+        the printed table each year with cost-of-living-adjusted bracket
+        amounts, while leaving the rates unchanged and the top threshold
+        unindexed. This candidate therefore accepts Oregon taxable income and the
+        active bracket's 2026 indexed base, floor, and rate as declared caller
+        inputs because this rate section does not prove the upstream Oregon AGI
+        adjustments and deductions. It models the before-credit resident
+        wage-earner core and adds no operative numeric literals.
+  summary: |-
+    Candidate Oregon individual income-tax liability pipeline for the 2026
+    ordinary full-year resident wage-earner slice. It normalizes supplied Oregon
+    taxable income and applies the active ORS 316.037 bracket in base-plus-marginal
+    form, before credits. Its exact PolicyEngine 4.18.9 analog is
+    `or_income_tax_before_credits` on the six-case childless age-40 resident wage
+    grid: single at $30,000/$60,000/$150,000 and one-earner joint at
+    $60,000/$120,000/$300,000. PolicyEngine supplies the taxable-income and indexed
+    schedule inputs; expected outputs are independently hand-computed.
+  deferred_outputs:
+    - output: us-or:statutes/316.037/d#us_city_average_consumer_price_index_definition
+      reason: |-
+        Paragraph (1)(d) defines the federal CPI series used by Oregon's annual
+        bracket-indexing calculation. This pilot accepts the completed 2026 indexed
+        bracket as a current-authority input; deriving it would additionally require
+        the upstream Bureau of Labor Statistics index observations and the full
+        subsection (1)(b) through (e) adjustment and rounding pipeline.
+rules:
+  - name: or_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: ORS 316.037, supplied Oregon taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/statute/316.037
+              excerpt: "on the entire taxable income of every resident of this state"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, or_pit_pilot_supplied_taxable_income)
+  - name: or_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: ORS 316.037(1), supplied active indexed bracket base plus marginal tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/statute/316.037
+              excerpt: "The amount of the tax shall be determined in accordance with the following table"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-or/statute/316.037
+              excerpt: "the minimum and maximum dollar amounts for each bracket for which a tax is imposed shall be increased by the cost-of-living adjustment for the calendar year"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          or_pit_pilot_supplied_bracket_base
+          + or_pit_pilot_supplied_marginal_rate * max(0, or_pit_pilot_taxable_income - or_pit_pilot_supplied_bracket_floor)
+  - name: or_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: ORS 316.037 resident tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-or/statute/316.037
+              excerpt: "A tax is imposed for each taxable year"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: or_pit_pilot_schedule_tax

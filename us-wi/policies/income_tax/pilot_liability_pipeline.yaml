@@ -1,0 +1,126 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-wi/statute/71.06
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-wi/statute/71.06
+      rationale: |-
+        Wisconsin Statutes section 71.06(1r) and (2)(k) prescribe four
+        individual-income-tax brackets after 2024, at 3.50, 4.40, 5.30, and
+        7.65 percent, and section 71.06(2e)(bm) indexes the bracket amounts after
+        2025 and section 71.06(2e)(c) requires the indexed amounts to be rounded
+        to the nearest $10. Wisconsin taxable income and the legally indexed,
+        rounded 2026 bracket floors are caller-supplied inputs. This rate-section
+        module applies the marginal schedule without claiming that section 71.06
+        proves upstream deductions or exemptions.
+  summary: |-
+    Composed Wisconsin individual-income-tax pipeline for the ordinary resident
+    wage-earner slice in 2026. It accepts supplied completed-return Wisconsin
+    taxable income, then applies the section 71.06 four-bracket schedule using
+    the 2025 statutory floors indexed by the August 2024-to-August 2025 CPI-U
+    change and rounded to the nearest $10 as section 71.06(2e)(c) requires. The
+    companion cases compare to wi_income_tax_before_credits and intentionally
+    expose PolicyEngine's stale/unrounded bracket projection as an oracle
+    residual. Credits and upstream taxable-income computations are out of scope.
+  deferred_outputs:
+    - output: us-wi:statutes/71.06/a#legacy_nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(a) applies only to nonresident and part-year-resident tax
+        years beginning after 1996 and before 1998. This pilot covers ordinary
+        full-year residents in 2026; encoding the historical rule would require a
+        separate historical version plus Wisconsin and federal adjusted-gross-income
+        inputs and domicile-period classifications.
+    - output: us-wi:statutes/71.06/b#legacy_nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(b) applies only to nonresident and part-year-resident tax
+        years beginning after 1997 and before 2000. It is outside this full-year
+        resident 2026 pilot and requires historical brackets, adjusted-gross-income
+        inputs, and domicile-period classifications.
+    - output: us-wi:statutes/71.06/c#legacy_nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(c) applies only to nonresident and part-year-resident tax
+        years beginning after 1999 and before 2001. It is outside this full-year
+        resident 2026 pilot and requires historical brackets, adjusted-gross-income
+        inputs, and domicile-period classifications.
+    - output: us-wi:statutes/71.06/d#nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(d) apportions brackets for nonresidents and part-year
+        residents using Wisconsin and federal adjusted gross income and domicile
+        periods. This pilot is limited to ordinary full-year residents in 2026;
+        the nonresident branch requires those additional upstream classifications.
+rules:
+  - name: wi_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Wis. Stat. s. 71.06, supplied completed-return Wisconsin taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, wi_pit_pilot_supplied_taxable_income)
+
+  - name: wi_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Wis. Stat. s. 71.06(1r), (2)(k), four-bracket marginal schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "3.50 percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "7.65 percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "rounded to the nearest multiple of $10"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, min(wi_pit_pilot_taxable_income, wi_pit_pilot_supplied_bracket_floor_2) - wi_pit_pilot_supplied_bracket_floor_1) * wi_pit_pilot_supplied_bracket_rate_1
+          + max(0, min(wi_pit_pilot_taxable_income, wi_pit_pilot_supplied_bracket_floor_3) - wi_pit_pilot_supplied_bracket_floor_2) * wi_pit_pilot_supplied_bracket_rate_2
+          + max(0, min(wi_pit_pilot_taxable_income, wi_pit_pilot_supplied_bracket_floor_4) - wi_pit_pilot_supplied_bracket_floor_3) * wi_pit_pilot_supplied_bracket_rate_3
+          + max(0, wi_pit_pilot_taxable_income - wi_pit_pilot_supplied_bracket_floor_4) * wi_pit_pilot_supplied_bracket_rate_4
+
+  - name: wi_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Wis. Stat. s. 71.06 individual income tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, wi_pit_pilot_schedule_tax)

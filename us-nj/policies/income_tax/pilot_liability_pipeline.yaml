@@ -1,0 +1,89 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nj/statute/54a:2-1
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-nj/statute/54a:2-1
+      rationale: |-
+        N.J. Stat. section 54A:2-1 imposes tax on New Jersey taxable income
+        under separate post-2020 schedules for joint and single filers. This
+        narrow 2026 composition accepts completed-return New Jersey taxable
+        income and the applicable bracket's cumulative base tax, floor, and
+        marginal rate as caller-supplied current-authority inputs. It therefore
+        owns only the statutory active-bracket mechanics and does not claim that
+        the rate section proves upstream gross-income modifications, deductions,
+        exemptions, or credits. The six companion cases use the schedule inputs
+        selected by PolicyEngine for the standard resident wage grid.
+  summary: |-
+    Composed New Jersey individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied New Jersey
+    taxable income, applies the supplied active section 54A:2-1 bracket in
+    cumulative-base-plus-marginal form, and exposes the resulting main income
+    tax. Its exact PolicyEngine 4.18.9 analog is `nj_main_income_tax` on the
+    six-case childless age-40 grid: single at $30,000/$60,000/$150,000 of wages
+    and one-earner joint at $60,000/$120,000/$300,000. PolicyEngine supplies the
+    completed taxable income and active schedule inputs; expected outputs are
+    independently hand-computed from those inputs and the official statute.
+rules:
+  - name: nj_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.J. Stat. section 54A:2-1, supplied completed-return taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "subject to the deductions, limitations and modifications hereinafter provided, determined in accordance with the following tables with respect to taxpayers' taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, nj_pit_pilot_supplied_taxable_income)
+
+  - name: nj_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.J. Stat. section 54A:2-1(a)(7) and (b)(7), supplied active bracket
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "for taxable years beginning on or after January 1, 2020: If the taxable income is: The tax is:"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          nj_pit_pilot_supplied_bracket_base
+          + nj_pit_pilot_supplied_marginal_rate * max(0, nj_pit_pilot_taxable_income - nj_pit_pilot_supplied_bracket_floor)
+
+  - name: nj_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.J. Stat. section 54A:2-1 main income tax before downstream credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "There is hereby imposed a tax for each taxable year"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, nj_pit_pilot_schedule_tax)

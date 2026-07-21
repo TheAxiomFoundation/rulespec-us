@@ -1,0 +1,108 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-wa/statute/82/82.87/82.87.040
+      - us-wa/statute/82/82.87/82.87.060
+      - us-wa/statute/82/82.87/82.87.080
+    upstream_source_check:
+      status: composed_from_grounded_modules
+      checked_paths:
+        - us-wa/statute/82/82.87/82.87.040
+        - us-wa/statute/82/82.87/82.87.060
+        - us-wa/statute/82/82.87/82.87.080
+      rationale: |-
+        RCW 82.87.040 imposes a seven-percent excise tax on Washington capital
+        gains and, beginning in 2025, an additional 2.90 percent on the portion
+        exceeding $1,000,000. RCW 82.87.060 allows an inflation-adjusted standard
+        deduction whose statutory base is $250,000, and RCW 82.87.080 allows a
+        deduction for adjusted qualified charitable donations subject to indexed
+        limits. The operative 2026 standard and charitable deductions are
+        therefore declared caller-supplied inputs, as are the two rates and
+        threshold, while this pipeline owns the supplied pre-deduction Washington-
+        capital-gains-to-taxable-gains and marginal tax mechanics. The six
+        companion cases use PolicyEngine's 2026 projected $284,000 standard
+        deduction and a zero charitable deduction.
+  summary: |-
+    Composed Washington capital-gains income-tax pipeline for the 2026 oracle
+    slice. It maps supplied pre-deduction Washington capital gains through the
+    supplied RCW 82.87.060 standard deduction and RCW 82.87.080 charitable
+    deduction, then applies the RCW 82.87.040 seven-percent base tax plus the
+    2.90-percent additional tax above the supplied threshold. It excludes
+    asset-sourcing and loss-carryforward rules and accepts their completed-return
+    result as supplied Washington capital gains. The result is comparable to PolicyEngine
+    wa_income_tax_before_refundable_credits when Washington working-family and
+    other refundable credits are excluded.
+rules:
+  - name: wa_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: RCW 82.87.060(1) and 82.87.080(1), Washington capital gains after supplied deductions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wa/statute/82/82.87/82.87.060
+              excerpt: "A standard deduction of $250,000 per individual"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wa/statute/82/82.87/82.87.080
+              excerpt: "a taxpayer may deduct from the person's Washington capital gains"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, wa_pit_pilot_supplied_washington_capital_gains - wa_pit_pilot_supplied_standard_deduction - wa_pit_pilot_supplied_charitable_deduction)
+
+  - name: wa_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: RCW 82.87.040(1), base and additional excise taxes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wa/statute/82/82.87/82.87.040
+              excerpt: "seven percent multiplied by an individual's Washington capital gains"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wa/statute/82/82.87/82.87.040
+              excerpt: "equals 2.90 percent multiplied by the portion of an individual's Washington capital gains exceeding $1,000,000"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          wa_pit_pilot_supplied_base_rate * wa_pit_pilot_taxable_income
+          + wa_pit_pilot_supplied_additional_rate * max(0, wa_pit_pilot_taxable_income - wa_pit_pilot_supplied_additional_threshold)
+
+  - name: wa_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: RCW 82.87.040, Washington capital-gains excise tax before refundable credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wa/statute/82/82.87/82.87.040
+              excerpt: "Only individuals are subject to payment of the tax"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, wa_pit_pilot_schedule_tax)

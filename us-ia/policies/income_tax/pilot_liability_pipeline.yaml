@@ -1,0 +1,94 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ia/statute/422.5
+      - us-ia/statute/422.7
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ia/statute/422.5
+        - us-ia/statute/422.7
+      rationale: |-
+        This pipeline computes the Iowa individual income-tax liability
+        for the ordinary resident wage-earner slice at tax year 2026. The
+        supplied-current primary authority establishes the flat tax
+        on taxable income and the relevant federal standard deduction embedded in Iowa net income. Values
+        that vary by filing status, bracket, annual indexing, or the choice
+        between standard and itemized deductions remain declared caller inputs:
+        adjusted gross income, the AGI-to-taxable-income subtraction, the active
+        bracket floor, cumulative tax at that floor, and marginal rate. The
+        module adds no numeric tax-law literals; it wires those supplied values
+        into the statutory taxable-income and schedule mechanics. The six
+        companion cases use the current values PolicyEngine applies at 2026 and
+        compare to ia_income_tax_before_credits.
+  summary: |-
+    Composed Iowa individual income-tax liability pipeline for the 2026
+    ordinary resident childless wage-earner oracle slice. It computes taxable
+    income from supplied adjusted gross income and supplied deductions or
+    exemptions, then applies the active flat bracket as supplied
+    cumulative base tax plus the supplied marginal rate on income above the
+    supplied floor. Credits and special income classes are outside this
+    before-credit core. All tax-law amounts are inputs so the composition is
+    source-grounded without embedding an unencoded annual schedule.
+rules:
+  - name: ia_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.7, taxable income after the supplied subtraction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.7
+              excerpt: "The term “net income” means the taxable income as properly computed for federal income tax purposes under section 63 of the Internal Revenue Code"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ia_pit_pilot_adjusted_gross_income - ia_pit_pilot_supplied_taxable_income_subtraction)
+  - name: ia_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.5, flat tax using the supplied active bracket
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.5
+              excerpt: "A tax is imposed upon every resident and nonresident of the state"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ia_pit_pilot_supplied_bracket_base
+          + ia_pit_pilot_supplied_marginal_rate * max(0, ia_pit_pilot_taxable_income - ia_pit_pilot_supplied_bracket_floor)
+  - name: ia_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Iowa Code section 422.5, tax imposed on taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/statute/422.5
+              excerpt: "A tax is imposed upon every resident and nonresident of the state"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, ia_pit_pilot_schedule_tax)

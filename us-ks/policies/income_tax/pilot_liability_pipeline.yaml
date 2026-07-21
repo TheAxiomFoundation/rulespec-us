@@ -1,0 +1,103 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ks/statute/79-32-110
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ks/statute/79-32-110
+        - us-ks/statute/79-32-110c
+        - us-ks/statute/79-32-116
+      rationale: |-
+        K.S.A. 79-32,110(a) imposes tax on Kansas taxable income and supplies
+        the schedules effective for tax year 2024 and thereafter: joint filers
+        pay 5.2 percent through $46,000 and $2,392 plus 5.58 percent of excess
+        over $46,000; other individuals pay 5.2 percent through $23,000 and
+        $1,196 plus 5.58 percent of excess over $23,000. Section 79-32,110c
+        establishes the later rate-reduction mechanism, and section 79-32,116
+        defines Kansas taxable income. This narrow composition accepts
+        completed-return Kansas taxable income and the active bracket's
+        cumulative base tax, floor, and marginal rate as caller-supplied
+        current-authority inputs. Deductions, exemptions, special income
+        classes, credits, and any future section 79-32,110c adjustment remain
+        outside this rate-section module.
+  summary: |-
+    Composed Kansas individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied completed-
+    return Kansas taxable income and applies the supplied active K.S.A.
+    79-32,110(a) bracket in cumulative-base-plus-marginal form before credits.
+    Its closest PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2 analog is
+    `ks_income_tax_before_credits` on the six-case childless age-40 grid:
+    single at $30,000/$60,000/$150,000 of wages and one-earner joint at
+    $60,000/$120,000/$300,000. PolicyEngine supplies completed taxable income;
+    expected outputs are independently hand-computed from the statutory 2026
+    schedule. The four upper-bracket cases differ from PolicyEngine by less
+    than one cent because its parameter starts the upper rate at $23,001 or
+    $46,001 instead of applying the statute's cumulative base above $23,000 or
+    $46,000.
+rules:
+  - name: ks_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: K.S.A. 79-32,110(a) and 79-32,116, supplied completed-return Kansas taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/statute/79-32-110
+              excerpt: "a tax is hereby imposed upon the Kansas taxable income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ks_pit_pilot_supplied_taxable_income)
+
+  - name: ks_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: K.S.A. 79-32,110(a), schedules effective for 2024 and thereafter
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/statute/79-32-110
+              excerpt: "Not over $46,000 | 5.2% of Kansas taxable income Over $46,000 | $2,392 plus 5.58% of excess over $46,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/statute/79-32-110
+              excerpt: "Not over $23,000 | 5.2% of Kansas taxable income Over $23,000 | $1,196 plus 5.58% of excess over $23,000"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ks_pit_pilot_supplied_bracket_base
+          + ks_pit_pilot_supplied_marginal_rate * max(0, ks_pit_pilot_taxable_income - ks_pit_pilot_supplied_bracket_floor)
+
+  - name: ks_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: K.S.A. 79-32,110(a), resident individual income tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/statute/79-32-110
+              excerpt: "a tax is hereby imposed upon the Kansas taxable income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ks_pit_pilot_schedule_tax)

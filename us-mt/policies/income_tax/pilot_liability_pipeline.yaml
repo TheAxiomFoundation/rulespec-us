@@ -1,0 +1,104 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mt/statute/15-30-2103
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-mt/statute/15-30-2103
+      rationale: |-
+        This candidate composes the temporary Montana section 15-30-2103
+        ordinary-income schedule that applies through December 31, 2026. The
+        staged 2026-05-05 primary text imposes 4.7 percent through $47,500 for
+        single filers and $95,000 for joint filers, then 5.65 percent above the
+        applicable threshold. The ordinary resident wage-earner grid has no
+        capital gains, so subsection (2)'s separate capital-gain schedule does
+        not apply. Montana taxable income and the filing-status schedule are
+        declared caller-supplied inputs because this rate section does not prove
+        the upstream deductions and exemptions. The module adds no operative
+        numeric literals and only applies the supplied current-authority brackets.
+  summary: |-
+    Candidate 2026 Montana individual income-tax liability pipeline for an
+    ordinary full-year resident wage earner. It normalizes supplied Montana
+    taxable income, applies the two supplied section 15-30-2103 ordinary-income
+    brackets, and exposes the resulting liability. Its exact PolicyEngine 4.18.9
+    analog is `mt_income_tax` on the six-case childless age-40 resident wage grid:
+    single at $30,000/$60,000/$150,000 and one-earner joint at
+    $60,000/$120,000/$300,000. No capital gains or credits are active. PolicyEngine
+    supplies the fixture taxable-income and schedule inputs; expected outputs are
+    independently hand-computed from those inputs.
+  deferred_outputs:
+    - output: us-mt:statutes/15-30-2103/a#net_long_term_capital_gains_definition
+      reason: |-
+        The section's net-long-term-capital-gains definition supports the separate
+        capital-gain schedule in subsection (2). This pilot is limited to ordinary
+        income for resident wage earners with no capital gains; encoding that branch
+        additionally requires the upstream Internal Revenue Code section 1222 gain
+        classification and the Montana capital-gain/nonqualified-income split.
+    - output: us-mt:statutes/15-30-2103/b#nonqualified_taxable_income_definition
+      reason: |-
+        The section's nonqualified-taxable-income definition is used to coordinate
+        the separate capital-gain schedule in subsection (2) with ordinary income.
+        This no-capital-gains pilot does not encode that branch; doing so requires
+        upstream capital-gain classification and the Montana taxable-income split.
+rules:
+  - name: mt_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: MCA 15-30-2103, supplied Montana taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2103
+              excerpt: "on the Montana taxable income of each taxpayer subject to this chapter"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, mt_pit_pilot_supplied_taxable_income)
+  - name: mt_pit_pilot_bracket_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: MCA 15-30-2103(1), marginal tax across the supplied ordinary-income brackets
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2103
+              excerpt: "a tax on the brackets of taxable income as follows"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, min(mt_pit_pilot_taxable_income, mt_pit_pilot_supplied_bracket_floor_2) - mt_pit_pilot_supplied_bracket_floor_1) * mt_pit_pilot_supplied_bracket_rate_1
+          + max(0, mt_pit_pilot_taxable_income - mt_pit_pilot_supplied_bracket_floor_2) * mt_pit_pilot_supplied_bracket_rate_2
+  - name: mt_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: MCA 15-30-2103 ordinary-income tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mt/statute/15-30-2103
+              excerpt: "there must be levied, collected, and paid for each tax year"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          mt_pit_pilot_bracket_tax

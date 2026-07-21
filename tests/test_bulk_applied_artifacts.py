@@ -318,6 +318,31 @@ def test_pr_lookup_failure_pauses_without_permanent_failure(monkeypatch) -> None
     _local_drain._PAUSE.clear()
 
 
+def test_encode_failure_persists_complete_output(monkeypatch, tmp_path: Path) -> None:
+    slug = "us-mi-statute-206-30-8"
+    leaf = tmp_path / "wt" / slug / "rulespec-us"
+    leaf.mkdir(parents=True)
+    monkeypatch.setattr(_local_drain, "WT_ROOT", tmp_path / "wt")
+    monkeypatch.setattr(_local_drain, "already_handled", lambda _slug: False)
+    monkeypatch.setattr(_local_drain, "make_worktree", lambda _slug, _ref: leaf)
+    monkeypatch.setattr(_local_drain, "signing_key", lambda: "test-key")
+    monkeypatch.setattr(_local_drain, "encode_command", lambda *_args: ["encode"])
+    monkeypatch.setattr(
+        _local_drain,
+        "run",
+        lambda *_args, **_kwargs: (1, "resolver failed with full diagnostic\n"),
+    )
+
+    result = _local_drain.encode_entry(
+        {"citation": "us-mi/statute/206.30/8", "slug": slug}
+    )
+
+    failure_log = tmp_path / "wt" / slug / "encode-failure.log"
+    assert result["status"] == "failed"
+    assert result["detail"] == f"encode/apply failed (rc=1); see {failure_log}"
+    assert failure_log.read_text() == "resolver failed with full diagnostic\n"
+
+
 def test_wait_for_checks_rejects_stale_validation(monkeypatch) -> None:
     monkeypatch.setattr(
         _local_drain,
@@ -401,8 +426,8 @@ def test_matrix_preserves_acceptance_criteria() -> None:
 def test_program_scope_sync_uses_pinned_encoder(monkeypatch, tmp_path: Path) -> None:
     calls = []
 
-    def fake_run(command, **_kwargs):
-        calls.append(command)
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
         return 0, "updated\n"
 
     monkeypatch.setattr(_local_drain, "run", fake_run)
@@ -415,15 +440,20 @@ def test_program_scope_sync_uses_pinned_encoder(monkeypatch, tmp_path: Path) -> 
         }
     }
 
-    changed = _local_drain.apply_program_scope_sync(tmp_path, item, {})
+    changed = _local_drain.apply_program_scope_sync(
+        tmp_path,
+        item,
+        {"AXIOM_ENCODE_APPLY_SIGNING_KEY": "raw-secret"},
+    )
 
     assert changed == ["programs/us-sc/snap/fy-2026.yaml"]
-    assert calls == [[
+    assert calls[0][0] == [
         str(_local_drain.COV_AE), "program-scope-sync", "--repo", str(tmp_path),
         "--program-spec", "programs/us-sc/snap/fy-2026.yaml", "--scope", "state",
         "--add", "policies/dss/snap-policy-manual/page-159",
         "--remove", "policies/dss/snap-policy-manual/page-369",
-    ]]
+    ]
+    assert calls[0][1]["env"]["AXIOM_ENCODE_APPLY_SIGNING_KEY"] is None
 
 
 def test_program_scope_sync_rejects_empty_mapping(tmp_path: Path) -> None:
@@ -573,7 +603,7 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert 'return "checks complete; draft review required"' in local_drain
     assert "could not determine PR state" in local_drain
     assert "before push" in local_drain
-    assert "COV_ENCODER_REF = \"f2b7e2393447deecbadf398c86d2b5f07ec5bfdd\"" in local_drain
+    assert "COV_ENCODER_REF = \"ffb0e7ccde22f6e136dc52aecaf4b5ed3ea6c6b7\"" in local_drain
     assert '"program-scope-sync", "--help"' in local_drain
     assert "COV_ORACLES_REF = \"9901e2479ac39bba865b8232e1c7d879ba447d8d\"" in local_drain
     assert local_drain.count("require_coverage_ref()") >= 5
