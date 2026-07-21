@@ -62,9 +62,10 @@ def test_engine_build_sha_unknown_returns_empty(tmp_path, monkeypatch):
 
 def test_build_compat_contract_shape_and_floor():
     compat = bpa.build_compat(engine_version="0.1.0", engine_sha="e19f1b75cafe")
-    assert compat["artifact_schema"] == 1
+    assert compat["artifact_schema"] == 2
     # Provenance carries the real build sha; gating carries the FIXED floor,
-    # not the building version (so older schema-1 engines aren't rejected).
+    # not the building version. Artifact readers separately require the exact
+    # schema generation, so v1 and v2 engines fail closed across this boundary.
     assert compat["built_by_engine"] == {"version": "0.1.0", "git_sha": "e19f1b75cafe"}
     assert compat["requires_engine"]["min_version"] == bpa.MIN_ENGINE_VERSION == "0.1.0"
     assert compat["requires_engine"]["capabilities"] == []
