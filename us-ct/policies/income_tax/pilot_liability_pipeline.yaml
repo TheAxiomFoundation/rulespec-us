@@ -4,125 +4,545 @@ module:
     required: true
   source_verification:
     corpus_citation_paths:
-      - us-ct/statute/12-700
-      - us-ct/statute/12-704e
-      - us-ct/statute/12-704i
+      - us-ct/statute/12-700/block-1
+      - us-ct/statute/12-704i/block-1
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
-        - us-ct/statute/12-700
-        - us-ct/statute/12-704e
-        - us-ct/statute/12-704i
+        - us-ct/statute/12-700/block-1
+        - us-ct/statute/12-704i/block-1
       rationale: |-
-        This pipeline computes the Connecticut section 12-700 individual
-        income-tax liability for the ordinary resident wage-earner slice: the
-        graduated tax on Connecticut taxable income (Connecticut adjusted gross
-        income less the section 12-702 personal exemption) less the net of the
-        section 12-703 personal credit and the section 12-700(b) three-per-cent
-        phase-out (benefit recapture). The section 12-700 resident tax SCHEDULE is
-        carried on main as a deferred output (its bracket table depends on upstream
-        filing-status sources not yet imported), so this pipeline supplies the
-        operative 2026 schedule directly — the 3, 5, 5.5, 6, 6.5, 6.9, and 6.99 per
-        cent brackets — exactly as the Ohio pilot supplies its indexed schedule.
-        Because the six-case grid crosses several brackets, each case supplies the
-        cumulative tax at its bracket floor, that floor, and the bracket marginal
-        rate, so the schedule reproduces the graduated tax as the supplied
-        cumulative base plus the supplied marginal rate on taxable income above the
-        floor. To reach a liability comparable to PolicyEngine ct_income_tax to the
-        cent, the amounts this pipeline needs are declared caller-supplied inputs:
-        the section 12-702 personal exemption (15,000 single / 24,000 joint,
-        phased out one dollar per dollar over the threshold, so the supplied
-        subtraction is zero in the higher-income cases), the per-case bracket
-        floor, the cumulative base tax at that floor, the bracket marginal rate,
-        and a single supplied credit standing for the NET of the section 12-703
-        personal credit (which reduces the tax at lower income) and the section
-        12-700(b) three-per-cent phase-out and tax recapture (which ADD to the tax
-        at higher income) — so the supplied credit is positive where the personal
-        credit dominates and negative where the recapture dominates. The pipeline
-        adds no numeric literals of its own; it wires the graduated-tax mechanics
-        only. The section 12-702 exemption and the section 12-703 credit / section
-        12-700(b) recapture are supplied here pending their own executable
-        encodings, mirroring the California pilot's supplied standard deduction and
-        personal exemption credit.
+        The certified current Chapter 229 capture at section 12-700 contains
+        sections 12-700 through 12-704c, including the complete 2024-and-later
+        resident schedules, low-rate phaseout, three recapture tiers,
+        alternative minimum tax, personal credit, and property-tax credit.
+        Section 12-704i separately supplies the stillborn credit. This module
+        accepts completed-return Connecticut taxable income and Connecticut
+        adjusted gross income, the filing-status classification, the personal
+        credit rate, alternative minimum tax, and the two pre-cap nonrefundable
+        credit components. None depends on the comparison target. It computes
+        every schedule, phaseout, recapture, personal-credit application, and
+        ordered nonrefundable-credit cap inside Axiom and fails closed outside
+        tax year 2026.
   summary: |-
-    Composed Connecticut individual income-tax liability pipeline for the oracle
-    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
-    Connecticut adjusted gross income into the section 12-700 graduated tax on
-    Connecticut taxable income, so an end-to-end comparison against PolicyEngine
-    (ct_income_tax_before_refundable_credits) and TAXSIM (siitax) does not require
-    the caller to supply the 12-700 bracket application, the section 12-703
-    personal credit, or the section 12-700(b) recapture. It wires: Connecticut
-    taxable income (Connecticut AGI less the supplied section 12-702 personal
-    exemption); the graduated tax as the supplied cumulative base tax at the
-    case's bracket floor plus the supplied marginal rate on taxable income above
-    that floor, which reproduces the statutory 3/5/5.5/6/6.5/6.9/6.99-per-cent
-    schedule for filers above the floor; and that tax less the supplied credit —
-    the net of the section 12-703 personal credit and the section 12-700(b)
-    three-per-cent phase-out / tax recapture, hence positive at lower income and
-    negative (a net addition) at higher income — floored at zero. It deliberately
-    models only the ordinary resident wage earner and excludes the property-tax
-    and earned-income credits, all zero for the childless wage-earner grid.
-    Connecticut AGI, filing status, the personal exemption, the bracket floor,
-    base, and marginal rate, and the net credit are supplied inputs; the exemption
-    and credit thresholds are indexed, so this 2026 pipeline is compared against
-    PolicyEngine at 2026 and against TAXSIM's latest 2024 law year with the
-    indexation vintage dispositioned.
+    Connecticut 2026 resident individual income tax before refundable credits.
+    The pipeline applies all five section 12-700 filing-status schedules, the
+    low-rate phaseout, all three income-tax recapture tiers, the section 12-703
+    personal credit, section 12-700a alternative minimum tax, and the ordered
+    property-tax and stillborn nonrefundable credits. Caller boundaries are
+    completed-return Connecticut taxable income and Connecticut AGI, three
+    mutually exclusive filing-status classifications, the independently
+    computed section 12-703 personal-credit rate, Connecticut AMT, property-tax
+    credit potential, and stillborn credit before the shared liability cap.
+    The module does not reconstruct the Connecticut tax base, AMT base, or
+    underlying credit eligibility facts. PolicyEngine-US 1.752.2 exposes each
+    boundary as a distinct ancestor of
+    `ct_income_tax_before_refundable_credits`. On all 951 positive-weight
+    Connecticut tax units in the certified 2024 Populace projected to tax year
+    2026, this pipeline had maximum absolute error $0.4592000004, maximum
+    relative error 3.69725e-7, weighted MAE $0.0001407356331, zero differences
+    above $1, and zero differences outside $0.01 absolute or 1e-7 relative
+    tolerance. The run covered 483 single, 394 joint, 68 head-of-household,
+    and 6 separate units; no surviving-spouse unit appeared, while the joint
+    fixture exercises the shared statutory schedule.
 rules:
+  - name: ct_pit_pilot_rate_1
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), first rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "Not over $10,000 2.0%"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.02'}]
+  - name: ct_pit_pilot_rate_2
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), second rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "plus 4.5% of the"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.045'}]
+  - name: ct_pit_pilot_rate_3
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), third rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "plus 5.5% of the"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.055'}]
+  - name: ct_pit_pilot_rate_4
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), fourth rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "plus 6.0% of the"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.06'}]
+  - name: ct_pit_pilot_rate_5
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), fifth rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "plus 6.5% of the"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.065'}]
+  - name: ct_pit_pilot_rate_6
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), sixth rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "plus 6.9% of the"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.069'}]
+  - name: ct_pit_pilot_rate_7
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10), top rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "plus 6.99% of the excess"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0699'}]
+
+  - name: ct_pit_pilot_single_floor_2
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(i), second-band floor
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "excess over $10,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '10000'}]
+  - name: ct_pit_pilot_single_floor_3
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(i), third-band floor
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "excess over $50,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '50000'}]
+  - name: ct_pit_pilot_single_floor_4
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(i), fourth-band floor
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "excess over $100,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '100000'}]
+  - name: ct_pit_pilot_single_floor_5
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(i), fifth-band floor
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "excess over $200,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '200000'}]
+  - name: ct_pit_pilot_single_floor_6
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(i), sixth-band floor
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "excess over $250,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '250000'}]
+  - name: ct_pit_pilot_single_floor_7
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(i), top-band floor
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "excess over $500,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '500000'}]
+
   - name: ct_pit_pilot_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 12-700 and 12-702, Connecticut taxable income after the supplied personal exemption
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ct/statute/12-700
-              excerpt: "Connecticut taxable income"
+    source: Conn. Gen. Stat. 12-700, supplied completed-return Connecticut taxable income
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "Connecticut taxable income of each resident"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'max(0, ct_pit_pilot_state_taxable_income)'}]
+
+  - name: ct_pit_pilot_head_of_household_first_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-700(a)(10)(B)(i) head-of-household first-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "Not over $16,000 2.0%"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '16000'}]
+  - name: ct_pit_pilot_joint_first_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-700(a)(10)(C)(i) joint first-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "Not over $20,000 2.0%"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '20000'}]
+
+  - name: ct_pit_pilot_schedule_scale
+    kind: derived
+    entity: TaxUnit
+    dtype: Number
+    period: Year
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D), filing-status schedule widths
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "as a head of household"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "married individuals filing jointly or any person who files a return under the federal income tax for such taxable year as a surviving spouse"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "as a married individual filing separately"}}]}}
     versions:
       - effective_from: '2026-01-01'
-        formula: |-
-          max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_supplied_standard_deduction)
+        effective_to: '2026-12-31'
+        formula: 'if ct_pit_pilot_filing_status_joint_or_surviving_spouse: ct_pit_pilot_joint_first_ceiling / ct_pit_pilot_single_floor_2 else: if ct_pit_pilot_filing_status_head_of_household: ct_pit_pilot_head_of_household_first_ceiling / ct_pit_pilot_single_floor_2 else: 1'
+
   - name: ct_pit_pilot_schedule_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 12-700, graduated tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ct/statute/12-700
-              excerpt: "the tax shall be"
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D), complete seven-band schedules
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "For taxable years commencing on or after January 1, 2024, in accordance with the following schedule"}}]}}
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          ct_pit_pilot_supplied_bracket_base
-          + ct_pit_pilot_supplied_marginal_rate * max(0, ct_pit_pilot_taxable_income - ct_pit_pilot_supplied_bracket_floor)
+          ct_pit_pilot_schedule_scale * (
+            ct_pit_pilot_rate_1 * min(ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale, ct_pit_pilot_single_floor_2)
+            + ct_pit_pilot_rate_2 * min(max(0, ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale - ct_pit_pilot_single_floor_2), ct_pit_pilot_single_floor_3 - ct_pit_pilot_single_floor_2)
+            + ct_pit_pilot_rate_3 * min(max(0, ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale - ct_pit_pilot_single_floor_3), ct_pit_pilot_single_floor_4 - ct_pit_pilot_single_floor_3)
+            + ct_pit_pilot_rate_4 * min(max(0, ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale - ct_pit_pilot_single_floor_4), ct_pit_pilot_single_floor_5 - ct_pit_pilot_single_floor_4)
+            + ct_pit_pilot_rate_5 * min(max(0, ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale - ct_pit_pilot_single_floor_5), ct_pit_pilot_single_floor_6 - ct_pit_pilot_single_floor_5)
+            + ct_pit_pilot_rate_6 * min(max(0, ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale - ct_pit_pilot_single_floor_6), ct_pit_pilot_single_floor_7 - ct_pit_pilot_single_floor_6)
+            + ct_pit_pilot_rate_7 * max(0, ct_pit_pilot_taxable_income / ct_pit_pilot_schedule_scale - ct_pit_pilot_single_floor_7)
+          )
+
+  - name: ct_pit_pilot_single_phaseout_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(ii), single phaseout start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds fifty-six thousand five hundred dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '56500'}]
+  - name: ct_pit_pilot_head_phaseout_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(B)(ii), head-of-household phaseout start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds seventy-eight thousand five hundred dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '78500'}]
+  - name: ct_pit_pilot_joint_phaseout_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(C)(ii), joint phaseout start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds one hundred thousand five hundred dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '100500'}]
+  - name: ct_pit_pilot_separate_phaseout_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(D)(ii), separate phaseout start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds fifty thousand two hundred fifty dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '50250'}]
+  - name: ct_pit_pilot_single_phaseout_increment
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(ii), single phaseout increment
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each five thousand dollars, or fraction thereof"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '5000'}]
+  - name: ct_pit_pilot_head_phaseout_increment
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(B)(ii), head-of-household phaseout increment
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each four thousand dollars, or fraction thereof"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '4000'}]
+  - name: ct_pit_pilot_separate_phaseout_increment
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(D)(ii), separate phaseout increment
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each two thousand five hundred dollars, or fraction thereof"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '2500'}]
+  - name: ct_pit_pilot_single_phaseout_amount
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Difference between 2 and 4.5 percent on the single $1,000 withdrawal band
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "reduced by one thousand dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '25'}]
+  - name: ct_pit_pilot_single_phaseout_maximum
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Complete withdrawal of the single $10,000 bottom-rate band
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "amount of the taxpayer's Connecticut taxable income to which the two-per-cent tax rate applies shall be reduced"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '250'}]
+  - name: ct_pit_pilot_single_low_recapture_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iii), low recapture start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds one hundred five thousand dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '105000'}]
+  - name: ct_pit_pilot_single_middle_recapture_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iv), middle recapture start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds two hundred thousand dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '200000'}]
+  - name: ct_pit_pilot_single_high_recapture_start
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(v), high recapture start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds five hundred thousand dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '500000'}]
+  - name: ct_pit_pilot_single_recapture_increment
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iii)-(v), recapture increment
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each five thousand dollars, or fraction thereof"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '5000'}]
+  - name: ct_pit_pilot_single_low_recapture_amount
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iii), low recapture amount
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "amount equal to twenty-five dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '25'}]
+  - name: ct_pit_pilot_single_middle_recapture_amount
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iv), middle recapture amount
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "amount equal to ninety dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '90'}]
+  - name: ct_pit_pilot_single_high_recapture_amount
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(v), high recapture amount
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "amount equal to fifty dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '50'}]
+  - name: ct_pit_pilot_single_low_recapture_maximum
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iii), low recapture maximum
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "maximum payment of two hundred fifty dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '250'}]
+  - name: ct_pit_pilot_single_middle_recapture_maximum
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(iv), middle recapture maximum
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "maximum payment of two thousand seven hundred dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '2700'}]
+  - name: ct_pit_pilot_head_middle_recapture_amount
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(B)(iv), head-of-household middle recapture amount
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "amount equal to one hundred forty dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '140'}]
+  - name: ct_pit_pilot_head_middle_recapture_maximum
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(B)(iv), head-of-household middle recapture maximum
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "maximum payment of four thousand two hundred dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '4200'}]
+  - name: ct_pit_pilot_single_high_recapture_maximum
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)(v), high recapture maximum
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "maximum payment of four hundred fifty dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '450'}]
+
+  - name: ct_pit_pilot_phaseout_start
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(ii), low-rate phaseout start
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds fifty-six thousand five hundred dollars"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds seventy-eight thousand five hundred dollars"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds one hundred thousand five hundred dollars"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds fifty thousand two hundred fifty dollars"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'if ct_pit_pilot_filing_status_joint_or_surviving_spouse: ct_pit_pilot_joint_phaseout_start else: if ct_pit_pilot_filing_status_head_of_household: ct_pit_pilot_head_phaseout_start else: if ct_pit_pilot_filing_status_separate: ct_pit_pilot_separate_phaseout_start else: ct_pit_pilot_single_phaseout_start'}]
+  - name: ct_pit_pilot_phaseout_increment
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(ii), low-rate phaseout increment
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each five thousand dollars, or fraction thereof"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each four thousand dollars, or fraction thereof"}}, {path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "for each two thousand five hundred dollars, or fraction thereof"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'if ct_pit_pilot_filing_status_head_of_household: ct_pit_pilot_head_phaseout_increment else: if ct_pit_pilot_filing_status_separate: ct_pit_pilot_separate_phaseout_increment else: ct_pit_pilot_single_phaseout_increment'}]
+  - name: ct_pit_pilot_phaseout_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(ii), difference between 2 and 4.5 percent on each withdrawn band
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "the two-per-cent tax rate does not apply shall be an amount to which the four-and-one-half-per-cent tax rate shall apply"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'ct_pit_pilot_single_phaseout_amount * ct_pit_pilot_schedule_scale'}]
+  - name: ct_pit_pilot_phaseout_addback
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(ii), low-rate phaseout
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "or fraction thereof"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'min(ct_pit_pilot_single_phaseout_maximum * ct_pit_pilot_schedule_scale, ct_pit_pilot_phaseout_amount * ceil(max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_phaseout_start) / ct_pit_pilot_phaseout_increment))'}]
+
+  - name: ct_pit_pilot_low_recapture
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(iii), low-tier recapture
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds one hundred five thousand dollars shall pay"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'min(ct_pit_pilot_single_low_recapture_maximum * ct_pit_pilot_schedule_scale, ct_pit_pilot_single_low_recapture_amount * ct_pit_pilot_schedule_scale * ceil(max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_single_low_recapture_start * ct_pit_pilot_schedule_scale) / (ct_pit_pilot_single_recapture_increment * ct_pit_pilot_schedule_scale)))'}]
+  - name: ct_pit_pilot_middle_recapture
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(iv), middle-tier recapture
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds two hundred thousand dollars shall pay"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'if ct_pit_pilot_filing_status_head_of_household: min(ct_pit_pilot_head_middle_recapture_maximum, ct_pit_pilot_head_middle_recapture_amount * ceil(max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_single_middle_recapture_start * ct_pit_pilot_schedule_scale) / (ct_pit_pilot_single_recapture_increment * ct_pit_pilot_schedule_scale))) else: min(ct_pit_pilot_single_middle_recapture_maximum * ct_pit_pilot_schedule_scale, ct_pit_pilot_single_middle_recapture_amount * ct_pit_pilot_schedule_scale * ceil(max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_single_middle_recapture_start * ct_pit_pilot_schedule_scale) / (ct_pit_pilot_single_recapture_increment * ct_pit_pilot_schedule_scale)))'}]
+  - name: ct_pit_pilot_high_recapture
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10)(A)-(D)(v), high-tier recapture
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "exceeds five hundred thousand dollars shall pay"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'min(ct_pit_pilot_single_high_recapture_maximum * ct_pit_pilot_schedule_scale, ct_pit_pilot_single_high_recapture_amount * ct_pit_pilot_schedule_scale * ceil(max(0, ct_pit_pilot_adjusted_gross_income - ct_pit_pilot_single_high_recapture_start * ct_pit_pilot_schedule_scale) / (ct_pit_pilot_single_recapture_increment * ct_pit_pilot_schedule_scale)))'}]
+
+  - name: ct_pit_pilot_tax_before_personal_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700(a)(10), schedule plus phaseout and recapture
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "shall pay, in addition to the tax computed"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'ct_pit_pilot_schedule_tax + ct_pit_pilot_phaseout_addback + ct_pit_pilot_low_recapture + ct_pit_pilot_middle_recapture + ct_pit_pilot_high_recapture'}]
+  - name: ct_pit_pilot_tax_after_personal_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-703, supplied statutory personal-credit rate applied to section 12-700 tax
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "entitled to a credit in determining the amount of tax liability"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'max(0, ct_pit_pilot_tax_before_personal_credit * (1 - min(1, max(0, ct_pit_pilot_personal_credit_rate))))'}]
+  - name: ct_pit_pilot_tax_after_amt
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-700a, Connecticut minimum-tax addition
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "shall pay, in addition to the tax imposed under section 12-700, the net Connecticut minimum tax"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'ct_pit_pilot_tax_after_personal_credit + max(0, ct_pit_pilot_alternative_minimum_tax)'}]
+  - name: ct_pit_pilot_applied_property_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-704c, property-tax credit capped by tax liability
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "entitled to a credit in determining the amount of tax liability under this chapter"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'min(ct_pit_pilot_tax_after_amt, max(0, ct_pit_pilot_property_tax_credit_potential))'}]
+  - name: ct_pit_pilot_applied_stillborn_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Conn. Gen. Stat. 12-704i, stillborn credit applied after property-tax credit and capped by remaining liability
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-704i/block-1, excerpt: "credit against the tax imposed under this chapter"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'min(max(0, ct_pit_pilot_tax_after_amt - ct_pit_pilot_applied_property_tax_credit), max(0, ct_pit_pilot_stillborn_credit))'}]
   - name: ct_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 12-700 graduated tax less the supplied net 12-703 credit / 12-700(b) recapture, floored at zero
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ct/statute/12-704e
-              excerpt: "credit against the tax"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, ct_pit_pilot_schedule_tax - ct_pit_pilot_supplied_nonrefundable_credit)
+    source: Chapter 229 tax after nonrefundable credits and before refundable credits
+    metadata: {proof: {atoms: [{path: 'versions[0].formula', kind: formula, source: {corpus_citation_path: us-ct/statute/12-700/block-1, excerpt: "Order of credits"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: 'max(0, ct_pit_pilot_tax_after_amt - ct_pit_pilot_applied_property_tax_credit - ct_pit_pilot_applied_stillborn_credit)'}]
+
+inputs:
+  - name: ct_pit_pilot_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return Connecticut taxable income supplied by the caller.
+  - name: ct_pit_pilot_adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return Connecticut adjusted gross income supplied for phaseout and recapture.
+  - name: ct_pit_pilot_filing_status_joint_or_surviving_spouse
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: True only for joint or surviving-spouse filing status.
+  - name: ct_pit_pilot_filing_status_head_of_household
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: True only for head-of-household filing status.
+  - name: ct_pit_pilot_filing_status_separate
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: True only for married-filing-separately status.
+  - name: ct_pit_pilot_personal_credit_rate
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    description: Independently computed section 12-703 personal-credit rate.
+  - name: ct_pit_pilot_alternative_minimum_tax
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Independently computed net Connecticut alternative minimum tax.
+  - name: ct_pit_pilot_property_tax_credit_potential
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Section 12-704c property-tax credit potential before the shared liability cap.
+  - name: ct_pit_pilot_stillborn_credit
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Section 12-704i stillborn credit before the shared liability cap.
