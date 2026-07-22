@@ -3,89 +3,236 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-md/statute/gtg/10-105
-      - us-md/statute/gtg/10-211
+    corpus_citation_path: us-md/statute/gtg/10-105
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-md/statute/gtg/10-105
-        - us-md/statute/gtg/10-211
       rationale: |-
-        This pipeline computes the Maryland Tax-General section 10-105 STATE
-        individual income-tax liability for the ordinary resident wage-earner
-        slice: the graduated state tax on Maryland taxable income (Maryland
-        adjusted gross income less the standard deduction and the section 10-211
-        personal exemptions). The encoded 10-105 module carries the statutory
-        state rate schedule — 2 per cent on the first 1,000 dollars, 3 per cent to
-        2,000, 4 per cent to 3,000, 4.75 per cent to 100,000 (single) / 150,000
-        (joint), then 5, 5.25, 5.5, and 5.75 per cent bands above. Because the
-        six-case grid crosses several brackets, each case supplies the cumulative
-        state tax at its bracket floor, that floor, and the bracket marginal rate,
-        so the schedule reproduces the graduated state tax as the supplied
-        cumulative base plus the supplied marginal rate on taxable income above the
-        floor. This pipeline models the STATE tax only: the county income tax
-        (Tax-General section 10-103, a separate PolicyEngine variable md_county_tax)
-        is out of scope, so the target is PolicyEngine
-        md_income_tax_before_refundable_credits (the state analog) and no county
-        rate is supplied. To reach a liability comparable to that variable to the
-        cent, the amounts this pipeline needs are declared caller-supplied inputs:
-        the standard-deduction-plus-section-10-211-exemption subtraction (which
-        the section 10-211 exemption phase-out reduces at higher income), the
-        per-case bracket floor, the cumulative base tax at that floor, and the
-        bracket marginal rate. Maryland allows no per-exemption state tax credit on
-        this grid, so the supplied credit is zero. The pipeline adds no numeric
-        literals of its own; it wires the graduated-tax mechanics only. The
-        standard deduction and section 10-211 exemption amounts are supplied here
-        pending their own executable encodings, mirroring the California pilot's
-        supplied standard deduction.
+        Maryland Code, Tax-General section 10-105(a)(1) and (2) supplies the
+        complete graduated State individual-income-tax rate schedules. Schedule
+        I applies to individuals other than spouses filing jointly, surviving
+        spouses, and heads of household. Schedule II applies to those three
+        caller-classified groups. This narrow tax-year-2026 module accepts only
+        completed-return Maryland taxable net income and a caller-supplied
+        Schedule-II indicator, floors the supplied amount at zero, and applies
+        the statutory marginal bands without caller-supplied bracket values.
+
+        The module does not derive filing status or taxable income. It excludes
+        the additional capital-gain tax in section 10-105(a)(3)-(4), county tax,
+        credits and recapture, deductions and exemptions, adjusted-gross-income
+        construction, residency and allocation, and fiduciary, corporate, and
+        pass-through-entity calculations. Maryland return instructions require
+        filers below $100,000 of taxable income to use tax tables, which are not
+        present in the cited corpus authority. Accordingly, the public output is
+        the unrounded statutory regular schedule component, not filed tax-table
+        tax or final liability. Any exact return or oracle certification must be
+        limited to taxable income of at least $100,000 and cases with no
+        additional capital-gain tax.
   summary: |-
-    Composed Maryland STATE individual income-tax liability pipeline for the
-    oracle slice at the 2026 tax year. It exposes a TaxUnit-level path from a
-    supplied Maryland adjusted gross income into the section 10-105 graduated
-    state tax on Maryland taxable income, so an end-to-end comparison against
-    PolicyEngine (md_income_tax_before_refundable_credits) and TAXSIM (siitax)
-    does not require the caller to supply the 10-105 bracket application. It
-    wires: Maryland taxable income (Maryland AGI less the supplied standard
-    deduction and section 10-211 exemptions); the graduated state tax as the
-    supplied cumulative base tax at the case's bracket floor plus the supplied
-    marginal rate on taxable income above that floor, which reproduces the
-    statutory 2/3/4/4.75/5/5.25/5.5/5.75-per-cent state schedule for filers above
-    the floor; and that tax less the supplied credit (zero for Maryland), floored
-    at zero. It deliberately models only the resident wage earner and the STATE
-    tax; the county income tax (section 10-103) and refundable credits are
-    excluded. Maryland AGI, filing status, the deduction/exemption subtraction,
-    the bracket floor, base, and marginal rate, and the credit are supplied
-    inputs; PolicyEngine is compared at the 2026 tax year and TAXSIM at its latest
-    2024 law year, with the 2024-to-2026 vintage and TAXSIM's inclusion of the
-    Maryland local tax dispositioned rather than absorbed by tolerance.
+    Maryland tax-year-2026 regular State individual-income-tax schedule. The
+    caller supplies completed Maryland taxable net income and whether the
+    section 10-105(a)(2) Schedule-II classification applies (spouses filing
+    jointly, surviving spouses, or heads of household). The module normalizes
+    negative taxable income to zero and applies all ten statutory marginal
+    bands for the selected schedule.
+
+    `md_pit_pilot_regular_state_schedule_tax` is an unrounded statutory schedule
+    component only. It is not sub-$100,000 filed tax-table tax, additional
+    capital-gain tax, county tax, tax after credits, or final liability. All
+    executable rules fail closed outside tax year 2026.
 rules:
-  - name: md_pit_pilot_taxable_income
+  - name: md_pit_pilot_marginal_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    indexed_by: md_pit_pilot_schedule_bracket
+    source: Md. Code, Tax-General § 10-105(a)(1)-(2), common marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "the State income tax rate is: (i) 2% of Maryland taxable income of $1 through $1,000; (ii) 3% of Maryland taxable income of $1,001 through $2,000; (iii) 4% of Maryland taxable income of $2,001 through $3,000"
+              table: {header: "State income tax rate", row_key: bracket, column_key: marginal rate}
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "(iv) 4.75% of Maryland taxable income of $3,001 through $100,000; (v) 5% of Maryland taxable income of $100,001 through $125,000; (vi) 5.25% of Maryland taxable income of $125,001 through $150,000; (vii) 5.5% of Maryland taxable income of $150,001 through $250,000; (viii) 5.75% of Maryland taxable income of $250,001 through $500,000; (ix) 6.25% of Maryland taxable income of $500,001 through $1,000,000; and (x) 6.50% of Maryland taxable income in excess of $1,000,000."
+              table: {header: "State income tax rate", row_key: bracket, column_key: marginal rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values:
+          0: 0.02
+          1: 0.03
+          2: 0.04
+          3: 0.0475
+          4: 0.05
+          5: 0.0525
+          6: 0.055
+          7: 0.0575
+          8: 0.0625
+          9: 0.065
+
+  - name: md_pit_pilot_schedule_i_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: md_pit_pilot_schedule_bracket
+    source: Md. Code, Tax-General § 10-105(a)(1), Schedule-I bracket ceilings
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "(i) 2% of Maryland taxable income of $1 through $1,000; (ii) 3% of Maryland taxable income of $1,001 through $2,000; (iii) 4% of Maryland taxable income of $2,001 through $3,000"
+              table: {header: "paragraph (1) State income tax rate", row_key: bracket, column_key: ceiling}
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "(iv) 4.75% of Maryland taxable income of $3,001 through $100,000; (v) 5% of Maryland taxable income of $100,001 through $125,000; (vi) 5.25% of Maryland taxable income of $125,001 through $150,000; (vii) 5.5% of Maryland taxable income of $150,001 through $250,000; (viii) 5.75% of Maryland taxable income of $250,001 through $500,000; (ix) 6.25% of Maryland taxable income of $500,001 through $1,000,000; and (x) 6.50% of Maryland taxable income in excess of $1,000,000."
+              table: {header: "paragraph (1) State income tax rate", row_key: bracket, column_key: ceiling}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values:
+          0: 1000
+          1: 2000
+          2: 3000
+          3: 100000
+          4: 125000
+          5: 150000
+          6: 250000
+          7: 500000
+          8: 1000000
+
+  - name: md_pit_pilot_schedule_ii_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: md_pit_pilot_schedule_bracket
+    source: Md. Code, Tax-General § 10-105(a)(2), Schedule-II bracket ceilings
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "(i) 2% of Maryland taxable income of $1 through $1,000; (ii) 3% of Maryland taxable income of $1,001 through $2,000; (iii) 4% of Maryland taxable income of $2,001 through $3,000"
+              table: {header: "paragraph (2) State income tax rate", row_key: bracket, column_key: ceiling}
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "(iv) 4.75% of Maryland taxable income of $3,001 through $150,000; (v) 5% of Maryland taxable income of $150,001 through $175,000; (vi) 5.25% of Maryland taxable income of $175,001 through $225,000; (vii) 5.5% of Maryland taxable income of $225,001 through $300,000; (viii) 5.75% of Maryland taxable income of $300,001 through $600,000; (ix) 6.25% of Maryland taxable income of $600,001 through $1,200,000; and (x) 6.50% of Maryland taxable income in excess of $1,200,000."
+              table: {header: "paragraph (2) State income tax rate", row_key: bracket, column_key: ceiling}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values:
+          0: 1000
+          1: 2000
+          2: 3000
+          3: 150000
+          4: 175000
+          5: 225000
+          6: 300000
+          7: 600000
+          8: 1200000
+
+  - name: md_pit_pilot_taxable_net_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 10-105 and 10-211, Maryland taxable income after the supplied deduction and exemptions
+    source: Md. Code, Tax-General § 10-105(a), supplied completed-return Maryland taxable net income
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-md/statute/gtg/10-211
-              excerpt: "An individual may deduct exemptions for the taxpayer"
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "2% of Maryland taxable income of $1 through $1,000"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, md_pit_pilot_completed_return_taxable_net_income)
+
+  - name: md_pit_pilot_schedule_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Md. Code, Tax-General § 10-105(a)(1)-(2), bracket selected from taxable income and schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "2% of Maryland taxable income of $1 through $1,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "6.50% of Maryland taxable income in excess of $1,000,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-md/statute/gtg/10-105
+              excerpt: "6.50% of Maryland taxable income in excess of $1,200,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, md_pit_pilot_adjusted_gross_income - md_pit_pilot_supplied_standard_deduction)
-  - name: md_pit_pilot_schedule_tax
+          if md_pit_pilot_schedule_ii_applies:
+            if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[0]: 0
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[1]: 1
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[2]: 2
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[3]: 3
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[4]: 4
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[5]: 5
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[6]: 6
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[7]: 7
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_ii_ceiling[8]: 8
+            else: 9
+          else:
+            if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[0]: 0
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[1]: 1
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[2]: 2
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[3]: 3
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[4]: 4
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[5]: 5
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[6]: 6
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[7]: 7
+            else: if md_pit_pilot_taxable_net_income <= md_pit_pilot_schedule_i_ceiling[8]: 8
+            else: 9
+
+  - name: md_pit_pilot_regular_state_schedule_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 10-105, graduated state tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
+    source: Md. Code, Tax-General § 10-105(a)(1)-(2), regular State tax rate schedules
     metadata:
       proof:
         atoms:
@@ -93,28 +240,35 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-md/statute/gtg/10-105
-              excerpt: "State income tax rate schedules for individuals"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          md_pit_pilot_supplied_bracket_base
-          + md_pit_pilot_supplied_marginal_rate * max(0, md_pit_pilot_taxable_income - md_pit_pilot_supplied_bracket_floor)
-  - name: md_pit_pilot_income_tax_liability
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 10-105 graduated state tax less the supplied credit (zero for Maryland), floored at zero
-    metadata:
-      proof:
-        atoms:
+              excerpt: "For an individual other than an individual described in paragraph (2) of this subsection, the State income tax rate is"
           - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us-md/statute/gtg/10-105
-              excerpt: "the State income tax is the sum of"
+              excerpt: "For spouses filing a joint return or for a surviving spouse"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, md_pit_pilot_schedule_tax - md_pit_pilot_supplied_nonrefundable_credit)
+          if md_pit_pilot_schedule_ii_applies:
+            md_pit_pilot_marginal_rate[0] * min(md_pit_pilot_taxable_net_income, md_pit_pilot_schedule_ii_ceiling[0])
+            + md_pit_pilot_marginal_rate[1] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[0]), md_pit_pilot_schedule_ii_ceiling[1] - md_pit_pilot_schedule_ii_ceiling[0])
+            + md_pit_pilot_marginal_rate[2] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[1]), md_pit_pilot_schedule_ii_ceiling[2] - md_pit_pilot_schedule_ii_ceiling[1])
+            + md_pit_pilot_marginal_rate[3] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[2]), md_pit_pilot_schedule_ii_ceiling[3] - md_pit_pilot_schedule_ii_ceiling[2])
+            + md_pit_pilot_marginal_rate[4] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[3]), md_pit_pilot_schedule_ii_ceiling[4] - md_pit_pilot_schedule_ii_ceiling[3])
+            + md_pit_pilot_marginal_rate[5] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[4]), md_pit_pilot_schedule_ii_ceiling[5] - md_pit_pilot_schedule_ii_ceiling[4])
+            + md_pit_pilot_marginal_rate[6] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[5]), md_pit_pilot_schedule_ii_ceiling[6] - md_pit_pilot_schedule_ii_ceiling[5])
+            + md_pit_pilot_marginal_rate[7] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[6]), md_pit_pilot_schedule_ii_ceiling[7] - md_pit_pilot_schedule_ii_ceiling[6])
+            + md_pit_pilot_marginal_rate[8] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[7]), md_pit_pilot_schedule_ii_ceiling[8] - md_pit_pilot_schedule_ii_ceiling[7])
+            + md_pit_pilot_marginal_rate[9] * max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_ii_ceiling[8])
+          else:
+            md_pit_pilot_marginal_rate[0] * min(md_pit_pilot_taxable_net_income, md_pit_pilot_schedule_i_ceiling[0])
+            + md_pit_pilot_marginal_rate[1] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[0]), md_pit_pilot_schedule_i_ceiling[1] - md_pit_pilot_schedule_i_ceiling[0])
+            + md_pit_pilot_marginal_rate[2] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[1]), md_pit_pilot_schedule_i_ceiling[2] - md_pit_pilot_schedule_i_ceiling[1])
+            + md_pit_pilot_marginal_rate[3] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[2]), md_pit_pilot_schedule_i_ceiling[3] - md_pit_pilot_schedule_i_ceiling[2])
+            + md_pit_pilot_marginal_rate[4] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[3]), md_pit_pilot_schedule_i_ceiling[4] - md_pit_pilot_schedule_i_ceiling[3])
+            + md_pit_pilot_marginal_rate[5] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[4]), md_pit_pilot_schedule_i_ceiling[5] - md_pit_pilot_schedule_i_ceiling[4])
+            + md_pit_pilot_marginal_rate[6] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[5]), md_pit_pilot_schedule_i_ceiling[6] - md_pit_pilot_schedule_i_ceiling[5])
+            + md_pit_pilot_marginal_rate[7] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[6]), md_pit_pilot_schedule_i_ceiling[7] - md_pit_pilot_schedule_i_ceiling[6])
+            + md_pit_pilot_marginal_rate[8] * min(max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[7]), md_pit_pilot_schedule_i_ceiling[8] - md_pit_pilot_schedule_i_ceiling[7])
+            + md_pit_pilot_marginal_rate[9] * max(0, md_pit_pilot_taxable_net_income - md_pit_pilot_schedule_i_ceiling[8])
