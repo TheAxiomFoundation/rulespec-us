@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER_PATH = ROOT / "tools/check_legacy_rulespec_freeze.py"
 FROZEN_PATH = Path("us-mo/manual/snap/block-1.yaml")
+RETIRED_SCHEMA_PATH = Path("us-ar/policies/income_tax/pilot.yaml")
 
 
 def _load_checker():
@@ -41,12 +42,26 @@ def _write_manifest(root: Path, artifacts: dict[str, str]) -> None:
     )
 
 
+def _write_retired_schema_manifest(root: Path, artifacts: dict[str, str]) -> None:
+    path = root / ".axiom/retired-schema-freeze.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "format": "axiom/retired-schema-freeze/v1",
+                "artifacts": artifacts,
+            }
+        )
+    )
+
+
 def _freeze_repo(tmp_path: Path) -> tuple[Path, Path]:
     artifact = tmp_path / FROZEN_PATH
     artifact.parent.mkdir(parents=True)
     artifact.write_text("value: original\n")
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     _write_manifest(tmp_path, {str(FROZEN_PATH): digest})
+    _write_retired_schema_manifest(tmp_path, {})
     allowlist = tmp_path / "tests/test_encoding_manifests.py"
     allowlist.parent.mkdir()
     allowlist.write_text(
@@ -69,6 +84,12 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         assert hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest() == (
             expected_digest
         )
+
+    retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
+    assert len(retired["artifacts"]) == 26
+    for relative_path, expected_digest in retired["artifacts"].items():
+        artifact = ROOT / relative_path
+        assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
 
 
 def test_classifier_covers_only_legacy_yaml() -> None:
@@ -220,4 +241,54 @@ def test_freeze_rejects_retired_schema_allowlist_growth(tmp_path: Path) -> None:
     _git(root, "commit", "-qm", "grow retired schema allowlist")
 
     with pytest.raises(ValueError, match="decrement-only; added=new.json"):
+        _load_checker().check(root, base_ref=base)
+
+
+def test_freeze_rejects_unlisted_retired_schema_module(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    upstream_source_check: {}\n"
+    )
+    _git(root, "add", ".")
+
+    with pytest.raises(ValueError, match="retired-schema.*unlisted"):
+        _load_checker().check(root)
+
+
+def test_freeze_rejects_retired_schema_digest_change(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
+    )
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    _write_retired_schema_manifest(root, {str(RETIRED_SCHEMA_PATH): digest})
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "add frozen retired schema")
+    artifact.write_text(artifact.read_text() + "# changed\n")
+
+    with pytest.raises(ValueError, match="retired-schema freeze digest mismatch"):
+        _load_checker().check(root)
+
+
+def test_retired_schema_freeze_is_decrement_only(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    base = _git(root, "rev-parse", "HEAD")
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    upstream_source_check: {}\n"
+    )
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    _write_retired_schema_manifest(root, {str(RETIRED_SCHEMA_PATH): digest})
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "grow retired schema freeze")
+
+    with pytest.raises(ValueError, match="retired-schema freeze is decrement-only"):
         _load_checker().check(root, base_ref=base)
