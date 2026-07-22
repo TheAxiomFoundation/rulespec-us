@@ -115,11 +115,41 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
     assert "4dd0974e6064617b43a2dd4f9f5d05bacb09c62d" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
-    assert (
-        "run-generated-guard: ${{ github.event_name != 'pull_request' || "
-        "github.event.pull_request.number != 911 }}" in workflow
+    guard_expression = (
+        "run-generated-guard: ${{ !((github.event_name == 'pull_request' && "
+        "github.event.pull_request.number == 911) || (github.event_name == 'push' "
+        "&& github.ref == 'refs/heads/main' && "
+        "contains(github.event.head_commit.message, '#911'))) }}"
     )
+    assert guard_expression in workflow
     assert "run-generated-guard: false" not in workflow
+
+
+@pytest.mark.parametrize(
+    ("event_name", "pr_number", "ref", "head_message", "expected"),
+    [
+        ("pull_request", 911, "refs/pull/911/merge", "", False),
+        ("pull_request", 912, "refs/pull/912/merge", "", True),
+        ("push", None, "refs/heads/main", "Merge pull request #911", False),
+        ("push", None, "refs/heads/main", "ordinary push", True),
+        ("push", None, "refs/heads/topic", "Merge pull request #911", True),
+        ("schedule", None, "refs/heads/main", "", True),
+    ],
+)
+def test_generated_guard_migration_exception_truth_table(
+    event_name: str,
+    pr_number: int | None,
+    ref: str,
+    head_message: str,
+    expected: bool,
+) -> None:
+    migration_pr = event_name == "pull_request" and pr_number == 911
+    migration_merge = (
+        event_name == "push"
+        and ref == "refs/heads/main"
+        and "#911" in head_message
+    )
+    assert (not (migration_pr or migration_merge)) is expected
 
 
 def test_generation_workflows_use_immutable_toolchain() -> None:
