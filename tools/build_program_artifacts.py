@@ -148,8 +148,13 @@ def validation_toolchain(root: Path) -> dict:
     }
 
 
-def corpus_release(root: Path, toolchain: dict) -> dict | None:
-    """Bind the signed corpus release identity to its validation checkout."""
+def corpus_release(root: Path) -> dict | None:
+    """Read the repository-pinned signed release identity.
+
+    The validation checkout may be a descendant of the commit recorded inside
+    the signed release object. Do not synthesize release provenance from that
+    checkout pin; the build workflow does not acquire and verify the object.
+    """
     path = root / ".axiom" / "toolchain.toml"
     if not path.exists():
         return None
@@ -162,7 +167,6 @@ def corpus_release(root: Path, toolchain: dict) -> dict | None:
     release = {
         "name": str(data.get("axiom_corpus_release", "")),
         "content_sha256": str(data.get("axiom_corpus_release_content_sha256", "")),
-        "git_commit": str(toolchain.get("axiom_corpus_ref", "")),
     }
     return release if all(release.values()) else None
 
@@ -232,8 +236,9 @@ def assemble_manifest(
         # this" misreading; the published corpus *release* identity is a
         # separate deliberate binding (see corpus_release).
         "validation_toolchain": toolchain,
-        # The immutable published corpus release these artifacts cite, bound to
-        # the exact axiom-corpus checkout used by repository validation.
+        # The immutable published corpus release these artifacts cite. Commit
+        # provenance is omitted because this build does not verify the signed
+        # release object that carries it.
         "corpus_release": release,
         "artifact_schema": ARTIFACT_SCHEMA_VERSION,
         "programs": programs,
@@ -313,7 +318,7 @@ def main() -> int:
     corpus = corpus_provenance(root)
     composer = composer_version()
     toolchain = validation_toolchain(root)
-    release = corpus_release(root, toolchain)
+    release = corpus_release(root)
     engine_sha = engine_build_sha(engine_bin)
     if not engine_sha:
         print(

@@ -36,7 +36,7 @@ def test_validation_toolchain_absent_is_empty(tmp_path: Path):
     assert bpa.validation_toolchain(tmp_path) == {}
 
 
-def test_corpus_release_binds_release_to_validation_commit(tmp_path: Path):
+def test_corpus_release_reads_pinned_identity_without_inventing_commit(tmp_path: Path):
     axiom = tmp_path / ".axiom"
     axiom.mkdir()
     (axiom / "toolchain.toml").write_text(
@@ -45,20 +45,16 @@ def test_corpus_release_binds_release_to_validation_commit(tmp_path: Path):
         'axiom_corpus_release_content_sha256 = "' + "d" * 64 + '"\n'
     )
 
-    release = bpa.corpus_release(
-        tmp_path,
-        {"axiom_corpus_ref": "7661f3c9a3655e93fc9b2420048d70d231e7d44b"},
-    )
+    release = bpa.corpus_release(tmp_path)
 
     assert release == {
         "name": "us-rulespec-snap-2026-07-21",
         "content_sha256": "d" * 64,
-        "git_commit": "7661f3c9a3655e93fc9b2420048d70d231e7d44b",
     }
 
 
 def test_corpus_release_requires_complete_identity(tmp_path: Path):
-    assert bpa.corpus_release(tmp_path, {}) is None
+    assert bpa.corpus_release(tmp_path) is None
 
 
 def test_engine_build_sha_prefers_explicit_env(monkeypatch):
@@ -108,7 +104,6 @@ def test_assemble_manifest_stamps_real_engine_sha_not_stale():
     release = {
         "name": "us-rulespec-snap-2026-07-21",
         "content_sha256": "d" * 64,
-        "git_commit": "7661f3c9",
     }
     m = bpa.assemble_manifest(
         programs=[{"program_id": "co-snap", "compat": bpa.build_compat("0.1.0", "cafef00dbabe")}],
