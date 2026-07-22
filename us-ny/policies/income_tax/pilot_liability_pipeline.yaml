@@ -3,59 +3,58 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-ny/statute/TAX/601
-      - us-ny/statute/TAX/614
+    corpus_citation_path: us-ny/statute/TAX/601
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-ny/statute/TAX/601
-        - us-ny/statute/TAX/614
       rationale: |-
-        This pipeline computes the Tax Law section 601 resident tax on New York
-        taxable income and adds the section 601(d) supplemental tax (the tax-
-        table benefit recapture) to reach the New York income-tax liability for
-        the ordinary resident wage-earner slice. The encoded Tax Law section 601
-        and section 614 modules are both deferred with empty rule sets: section
-        601 computes tax from tables that section 601(a) sets and section 601-a
-        indexes by the cost-of-living adjustment, and section 614 states the
-        standard deduction amounts that section 601-a likewise indexes, neither
-        of which the encoding could ground without the section 601-a adjustment
-        and the filing-status classifications the RuleSpec guidance declines to
-        model as local status inputs. Because the Department of Taxation and
-        Finance had not published the tax-year-2026 Form IT-201 rate schedule and
-        standard-deduction table at authoring (the 2026 rate reductions enacted
-        under Chapter 59 of the Laws of 2025 are reflected in the 2026 withholding
-        methods NYS-50-T-NYS, but the IT-201 return schedule issues near the end
-        of the tax year), every indexed amount this pipeline needs is a declared
-        caller-supplied input: the bracket floors and their rates, the standard
-        deduction, and the section 601(d) supplemental recapture. The pipeline
-        adds no numeric literals of its own; it wires the progressive-tax
-        mechanics only, and the oracle disposition records the indexation vintage
-        against TAXSIM's 2024 law year.
+        Tax Law section 601(a)(1)(B)(vii), (b)(1)(B)(vii), and
+        (c)(1)(B)(vii) provide the complete individual-income-tax rate tables
+        for taxable years beginning after 2025 and before 2027. The three
+        tables apply respectively to joint and surviving-spouse returns,
+        head-of-household returns, and single or married-separate returns.
+        They fix every threshold, cumulative base amount, and marginal rate,
+        including the 9.65, 10.3, and 10.9 percent high-income bands.
+
+        This module accepts completed-return New York taxable income plus two
+        mutually exclusive filing-status classifications as its only caller
+        boundaries. Upstream adjusted-gross-income modifications, deductions,
+        exemptions, residency, and allocation decisions remain outside this
+        rate-schedule module. It preserves the statute's published cumulative
+        base amounts rather than normalizing them into a continuous marginal
+        scale, and fails closed outside tax year 2026.
   summary: |-
-    Composed New York personal income-tax liability pipeline for the oracle
-    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
-    New York adjusted gross income into the Tax Law section 601 resident tax plus
-    the section 601(d) supplemental tax, so an end-to-end comparison against
-    PolicyEngine (ny_income_tax) and TAXSIM (siitax) does not require the caller
-    to supply the section 601 bracket-application or section 614 standard-
-    deduction stage boundaries. It wires: New York taxable income (AGI less the
-    supplied standard deduction); the resident tax as the marginal sum across the
-    first six brackets (3.9, 4.4, 5.15, 5.4, 5.9, and 6.85 per cent), which cover
-    the entire ordinary-wage grid up to the 1,077,550-dollar single / 2,155,350-
-    dollar joint 9.65 per cent bracket floor; and the section 601 tax plus the
-    supplied section 601(d) supplemental recapture. It deliberately excludes the
-    nonresident and part-year-resident source-fraction proration, the section 606
-    credits, the New York City and Yonkers local taxes, the itemized deduction,
-    and the dependent-exemption and household-credit surfaces, all of which are
-    supplied as zero or omitted for this resident wage-earner slice. New York
-    AGI, filing status, the bracket floors and rates, the standard deduction, and
-    the section 601(d) supplemental recapture are supplied inputs; the Department
-    of Taxation and Finance indexes the brackets and standard deduction each
-    year, so this 2026 pipeline is compared against PolicyEngine at 2026 and
-    against TAXSIM's latest 2024 law year with the indexation vintage
-    dispositioned.
+    New York 2026 main resident individual-income-tax schedule before the
+    section 601(d-5) supplemental tax and all credits. The caller supplies
+    completed-return New York taxable income and Boolean classifications for
+    joint-or-surviving-spouse and head-of-household returns. When both are
+    false, the single/married-separate schedule applies. The module selects
+    and applies every statutory bracket through the 10.9-percent top band.
+
+    PolicyEngine-US 1.752.2 feeds `ny_taxable_income` and `filing_status`
+    directly into the distinct `ny_main_income_tax` target. PolicyEngine
+    models section 601's tables as continuous marginal scales, while the
+    statute publishes rounded cumulative base amounts. Across all 3,741
+    positive-weight New York TaxUnits in the certified Populace, the direct
+    statutory tables differ from that target by at most $2.12.
+  deferred_outputs:
+    - output: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_supplemental_tax
+      reason: |-
+        Tax Law section 601(d-5) is intentionally deferred. Its special
+        low-taxable-income provisos are operative for seven certified-Populace
+        TaxUnits, and PolicyEngine-US 1.752.2 substitutes fixed scale amounts
+        for the statute's flat-rate-minus-main-tax calculation. The resulting
+        discrepancy reaches $117.86, so encoding PolicyEngine's behavior as
+        law would not be source-faithful.
+    - output: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_income_tax_before_credits
+      reason: |-
+        Main tax plus section 601(d-5) supplemental tax remains deferred until
+        the operative PolicyEngine supplemental-tax divergence is resolved.
+    - output: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_income_tax
+      reason: |-
+        Section 606 credits and final New York income tax are outside the
+        narrow non-circular `ny_main_income_tax` comparison target.
 rules:
   - name: ny_pit_pilot_taxable_income
     kind: derived
@@ -63,27 +62,9 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: Tax Law s.614 and s.601, New York taxable income after the supplied standard deduction
+    source: Tax Law § 601, completed-return New York taxable income
     metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ny/statute/TAX/614
-              excerpt: "standard deduction"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, ny_pit_pilot_adjusted_gross_income - ny_pit_pilot_supplied_standard_deduction)
-  - name: ny_pit_pilot_main_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: Tax Law s.601, progressive resident tax as the marginal sum across the supplied bracket floors and rates
-    metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -93,20 +74,16 @@ rules:
               excerpt: "There is hereby imposed for each taxable year on the New York taxable income"
     versions:
       - effective_from: '2026-01-01'
-        formula: |-
-          max(0, min(ny_pit_pilot_taxable_income, ny_pit_pilot_supplied_bracket_floor_2) - ny_pit_pilot_supplied_bracket_floor_1) * ny_pit_pilot_supplied_bracket_rate_1
-          + max(0, min(ny_pit_pilot_taxable_income, ny_pit_pilot_supplied_bracket_floor_3) - ny_pit_pilot_supplied_bracket_floor_2) * ny_pit_pilot_supplied_bracket_rate_2
-          + max(0, min(ny_pit_pilot_taxable_income, ny_pit_pilot_supplied_bracket_floor_4) - ny_pit_pilot_supplied_bracket_floor_3) * ny_pit_pilot_supplied_bracket_rate_3
-          + max(0, min(ny_pit_pilot_taxable_income, ny_pit_pilot_supplied_bracket_floor_5) - ny_pit_pilot_supplied_bracket_floor_4) * ny_pit_pilot_supplied_bracket_rate_4
-          + max(0, min(ny_pit_pilot_taxable_income, ny_pit_pilot_supplied_bracket_floor_6) - ny_pit_pilot_supplied_bracket_floor_5) * ny_pit_pilot_supplied_bracket_rate_5
-          + max(0, ny_pit_pilot_taxable_income - ny_pit_pilot_supplied_bracket_floor_6) * ny_pit_pilot_supplied_bracket_rate_6
-  - name: ny_pit_pilot_income_tax_liability
+        effective_to: '2026-12-31'
+        formula: max(0, ny_pit_pilot_state_taxable_income)
+
+  - name: ny_pit_pilot_main_income_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Tax Law s.601 resident tax plus the s.601(d) supplemental tax (tax-table benefit recapture), before section 606 credits
+    source: Tax Law § 601(a)(1)(B)(vii), (b)(1)(B)(vii), and (c)(1)(B)(vii), complete 2026 main tax
     metadata:
       proof:
         atoms:
@@ -114,8 +91,820 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-ny/statute/TAX/601
-              excerpt: "supplemental tax"
+              excerpt: "For taxable years beginning after two thousand twenty-five and before two thousand twenty-seven the following rates shall apply"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_joint_or_surviving_bracket_base
+              output: ny_pit_pilot_joint_or_surviving_bracket_base
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_joint_or_surviving_bracket_floor
+              output: ny_pit_pilot_joint_or_surviving_bracket_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_joint_or_surviving_bracket_rate
+              output: ny_pit_pilot_joint_or_surviving_bracket_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_head_of_household_bracket_base
+              output: ny_pit_pilot_head_of_household_bracket_base
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_head_of_household_bracket_floor
+              output: ny_pit_pilot_head_of_household_bracket_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_head_of_household_bracket_rate
+              output: ny_pit_pilot_head_of_household_bracket_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_single_or_separate_bracket_base
+              output: ny_pit_pilot_single_or_separate_bracket_base
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_single_or_separate_bracket_floor
+              output: ny_pit_pilot_single_or_separate_bracket_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ny:policies/income_tax/pilot_liability_pipeline#ny_pit_pilot_single_or_separate_bracket_rate
+              output: ny_pit_pilot_single_or_separate_bracket_rate
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, ny_pit_pilot_main_tax + ny_pit_pilot_supplied_supplemental_recapture)
+          if ny_pit_pilot_filing_status_joint_or_surviving_spouse:
+              ny_pit_pilot_joint_or_surviving_bracket_base[ny_pit_pilot_joint_or_surviving_bracket_selector]
+              + ny_pit_pilot_joint_or_surviving_bracket_rate[ny_pit_pilot_joint_or_surviving_bracket_selector]
+              * max(0, ny_pit_pilot_taxable_income - ny_pit_pilot_joint_or_surviving_bracket_floor[ny_pit_pilot_joint_or_surviving_bracket_selector])
+          else:
+              if ny_pit_pilot_filing_status_head_of_household:
+                  ny_pit_pilot_head_of_household_bracket_base[ny_pit_pilot_head_of_household_bracket_selector]
+                  + ny_pit_pilot_head_of_household_bracket_rate[ny_pit_pilot_head_of_household_bracket_selector]
+                  * max(0, ny_pit_pilot_taxable_income - ny_pit_pilot_head_of_household_bracket_floor[ny_pit_pilot_head_of_household_bracket_selector])
+              else:
+                  ny_pit_pilot_single_or_separate_bracket_base[ny_pit_pilot_single_or_separate_bracket_selector]
+                  + ny_pit_pilot_single_or_separate_bracket_rate[ny_pit_pilot_single_or_separate_bracket_selector]
+                  * max(0, ny_pit_pilot_taxable_income - ny_pit_pilot_single_or_separate_bracket_floor[ny_pit_pilot_single_or_separate_bracket_selector])
+
+  - name: ny_pit_pilot_joint_or_surviving_bracket_selector
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse bracket selection
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "For taxable years beginning after two thousand twenty-five and before two thousand twenty-seven the following rates shall apply"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_first_upper_bound: 0
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_second_upper_bound: 1
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_third_upper_bound: 2
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_fourth_upper_bound: 3
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_fifth_upper_bound: 4
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_sixth_upper_bound: 5
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_seventh_upper_bound: 6
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_joint_or_surviving_eighth_upper_bound: 7
+          else: 8
+
+  - name: ny_pit_pilot_head_of_household_bracket_selector
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household bracket selection
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "For taxable years beginning after two thousand twenty-five and before two thousand twenty-seven the following rates shall apply"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_first_upper_bound: 0
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_second_upper_bound: 1
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_third_upper_bound: 2
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_fourth_upper_bound: 3
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_fifth_upper_bound: 4
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_sixth_upper_bound: 5
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_seventh_upper_bound: 6
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_head_of_household_eighth_upper_bound: 7
+          else: 8
+
+  - name: ny_pit_pilot_single_or_separate_bracket_selector
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate bracket selection
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "For taxable years beginning after two thousand twenty-five and before two thousand twenty-seven the following rates shall apply"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_first_upper_bound: 0
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_second_upper_bound: 1
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_third_upper_bound: 2
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_fourth_upper_bound: 3
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_fifth_upper_bound: 4
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_sixth_upper_bound: 5
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_seventh_upper_bound: 6
+          else: if ny_pit_pilot_taxable_income <= ny_pit_pilot_single_or_separate_eighth_upper_bound: 7
+          else: 8
+
+  - name: ny_pit_pilot_joint_or_surviving_first_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse first upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Not over $17,150                      3.90% of the New York taxable"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '17150'
+
+  - name: ny_pit_pilot_joint_or_surviving_second_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse second upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $17,150 but not over $23,600     $669 plus 4.40% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '23600'
+
+  - name: ny_pit_pilot_joint_or_surviving_third_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse third upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $23,600 but not over $27,900     $953 plus 5.15% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '27900'
+
+  - name: ny_pit_pilot_joint_or_surviving_fourth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse fourth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $27,900 but not over $161,550    $1,174 plus 5.40% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '161550'
+
+  - name: ny_pit_pilot_joint_or_surviving_fifth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse fifth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $161,550 but not over $323,200   $8,391 plus 5.90% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '323200'
+
+  - name: ny_pit_pilot_joint_or_surviving_sixth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse sixth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $323,200 but not over            $17,928 plus 6.85% of excess
+                $2,155,350                            over $323,200
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '2155350'
+
+  - name: ny_pit_pilot_joint_or_surviving_seventh_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse seventh upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $2,155,350 but not over          $143,430 plus 9.65% of excess
+                $5,000,000                            over $2,155,350
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '5000000'
+
+  - name: ny_pit_pilot_joint_or_surviving_eighth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse eighth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $5,000,000 but not over          $417,939 plus 10.30% of excess
+                $25,000,000                           over $5,000,000
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '25000000'
+
+  - name: ny_pit_pilot_head_of_household_first_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household first upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Not over $12,800                      3.90% of the New York taxable"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '12800'
+
+  - name: ny_pit_pilot_head_of_household_second_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household second upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $12,800 but not over             $499 plus 4.40% of excess over
+                $17,650                               $12,800
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '17650'
+
+  - name: ny_pit_pilot_head_of_household_third_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household third upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $17,650 but not over             $712 plus 5.15% of excess over
+                $20,900                               $17,650
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '20900'
+
+  - name: ny_pit_pilot_head_of_household_fourth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household fourth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $20,900 but not over             $879 plus 5.40% of excess over
+                $107,650                              $20,900
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '107650'
+
+  - name: ny_pit_pilot_head_of_household_fifth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household fifth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $107,650 but not over            $5,564 plus 5.90% of excess
+                $269,300                              over $107,650
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '269300'
+
+  - name: ny_pit_pilot_head_of_household_sixth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household sixth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $269,300 but not over            $15,101 plus 6.85% of excess
+                $1,616,450                            over $269,300
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '1616450'
+
+  - name: ny_pit_pilot_head_of_household_seventh_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household seventh upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $1,616,450 but not over          $107,381 plus 9.65% of excess
+                $5,000,000                            over $1,616,450
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '5000000'
+
+  - name: ny_pit_pilot_head_of_household_eighth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household eighth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $5,000,000 but not over          $433,894 plus 10.30% of excess
+                $25,000,000                           over $5,000,000
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '25000000'
+
+  - name: ny_pit_pilot_single_or_separate_first_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate first upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Not over $8,500                       3.90% of the New York taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '8500'
+
+  - name: ny_pit_pilot_single_or_separate_second_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate second upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $8,500 but not over $11,700      $332 plus 4.40% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '11700'
+
+  - name: ny_pit_pilot_single_or_separate_third_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate third upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $11,700 but not over $13,900     $473 plus 5.15% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '13900'
+
+  - name: ny_pit_pilot_single_or_separate_fourth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate fourth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $13,900 but not over $80,650     $586 plus 5.40% of excess over"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '80650'
+
+  - name: ny_pit_pilot_single_or_separate_fifth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate fifth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: "Over $80,650 but not over $215,400    $4,191 plus 5.90% of excess"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '215400'
+
+  - name: ny_pit_pilot_single_or_separate_sixth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate sixth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $215,400 but not over            $12,141 plus 6.85% of excess
+                $1,077,550                            over $215,400
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '1077550'
+
+  - name: ny_pit_pilot_single_or_separate_seventh_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate seventh upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $1,077,550 but not over          $71,198 plus 9.65% of excess
+                $5,000,000                            over $1,077,550
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '5000000'
+
+  - name: ny_pit_pilot_single_or_separate_eighth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate eighth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              excerpt: |-
+                Over $5,000,000 but not over          $449,714 plus 10.30% of excess
+                $25,000,000                           over $5,000,000
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '25000000'
+
+  - name: ny_pit_pilot_joint_or_surviving_bracket_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: ny_pit_pilot_joint_or_surviving_bracket_selector
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse excess floors
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "joint and surviving-spouse 2026 rate schedule", row_key: bracket, column_key: excess_floor}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 17150, 2: 23600, 3: 27900, 4: 161550, 5: 323200, 6: 2155350, 7: 5000000, 8: 25000000}
+
+  - name: ny_pit_pilot_joint_or_surviving_bracket_base
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: ny_pit_pilot_joint_or_surviving_bracket_selector
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse cumulative base tax
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "joint and surviving-spouse 2026 rate schedule", row_key: bracket, column_key: base_tax}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 669, 2: 953, 3: 1174, 4: 8391, 5: 17928, 6: 143430, 7: 417939, 8: 2477939}
+
+  - name: ny_pit_pilot_joint_or_surviving_bracket_rate
+    kind: parameter
+    dtype: Rate
+    indexed_by: ny_pit_pilot_joint_or_surviving_bracket_selector
+    source: Tax Law § 601(a)(1)(B)(vii), joint and surviving-spouse marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "joint and surviving-spouse 2026 rate schedule", row_key: bracket, column_key: marginal_rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.039, 1: 0.044, 2: 0.0515, 3: 0.054, 4: 0.059, 5: 0.0685, 6: 0.0965, 7: 0.103, 8: 0.109}
+  - name: ny_pit_pilot_head_of_household_bracket_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: ny_pit_pilot_head_of_household_bracket_selector
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household excess floors
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "head-of-household 2026 rate schedule", row_key: bracket, column_key: excess_floor}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 12800, 2: 17650, 3: 20900, 4: 107650, 5: 269300, 6: 1616450, 7: 5000000, 8: 25000000}
+
+  - name: ny_pit_pilot_head_of_household_bracket_base
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: ny_pit_pilot_head_of_household_bracket_selector
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household cumulative base tax
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "head-of-household 2026 rate schedule", row_key: bracket, column_key: base_tax}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 499, 2: 712, 3: 879, 4: 5564, 5: 15101, 6: 107381, 7: 433894, 8: 2493894}
+
+  - name: ny_pit_pilot_head_of_household_bracket_rate
+    kind: parameter
+    dtype: Rate
+    indexed_by: ny_pit_pilot_head_of_household_bracket_selector
+    source: Tax Law § 601(b)(1)(B)(vii), head-of-household marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "head-of-household 2026 rate schedule", row_key: bracket, column_key: marginal_rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.039, 1: 0.044, 2: 0.0515, 3: 0.054, 4: 0.059, 5: 0.0685, 6: 0.0965, 7: 0.103, 8: 0.109}
+
+  - name: ny_pit_pilot_single_or_separate_bracket_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: ny_pit_pilot_single_or_separate_bracket_selector
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate excess floors
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "single and married-separate 2026 rate schedule", row_key: bracket, column_key: excess_floor}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 8500, 2: 11700, 3: 13900, 4: 80650, 5: 215400, 6: 1077550, 7: 5000000, 8: 25000000}
+
+  - name: ny_pit_pilot_single_or_separate_bracket_base
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: ny_pit_pilot_single_or_separate_bracket_selector
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate cumulative base tax
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "single and married-separate 2026 rate schedule", row_key: bracket, column_key: base_tax}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 332, 2: 473, 3: 586, 4: 4191, 5: 12141, 6: 71198, 7: 449714, 8: 2509714}
+
+  - name: ny_pit_pilot_single_or_separate_bracket_rate
+    kind: parameter
+    dtype: Rate
+    indexed_by: ny_pit_pilot_single_or_separate_bracket_selector
+    source: Tax Law § 601(c)(1)(B)(vii), single and married-separate marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ny/statute/TAX/601
+              table: {header: "single and married-separate 2026 rate schedule", row_key: bracket, column_key: marginal_rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.039, 1: 0.044, 2: 0.0515, 3: 0.054, 4: 0.059, 5: 0.0685, 6: 0.0965, 7: 0.103, 8: 0.109}
