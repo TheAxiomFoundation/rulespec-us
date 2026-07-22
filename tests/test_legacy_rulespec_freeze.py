@@ -86,7 +86,7 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 26
+    assert len(retired["artifacts"]) == 27
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
@@ -113,7 +113,12 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
 
     assert "legacy-rulespec-freeze:" in workflow
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
-    assert "4dd0974e6064617b43a2dd4f9f5d05bacb09c62d" in workflow
+    assert "c4956b1a06940ca63247a98d6ddcff4d2ad782be" in workflow
+    assert (
+        "retired-schema-bootstrap-sha256: >-\n"
+        "        ${{ ((github.event_name == 'pull_request'"
+    ) in workflow
+    assert "716b26d3f6ea960a91facce92042a2501e3dd1bd0adc01eaab6785e5160d4923" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     guard_expression = (
         "${{ !((github.event_name == 'pull_request' && "
@@ -170,8 +175,8 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
         "axiom_encode_ref": "c7eb9fe291d5fc0c5d12b7689c68db18aa8dde12",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
-        "axiom_corpus_ref": "1979c15c654b8b52578722ea19bac45ec110d3fc",
-        "rulespec_us_ref": "0f291b367bf7e15555f9973112278c5cbf221653",
+        "axiom_corpus_ref": "c5af541326e024e04cb533bbf5709ae04e6305f6",
+        "rulespec_us_ref": "e4d467d64fc3137fa0514d740b130b855c7964e1",
     }
     release_toolchain = tomllib.loads((ROOT / ".axiom/toolchain.toml").read_text())[
         "toolchain"
