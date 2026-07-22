@@ -3,59 +3,143 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_path: us-ks/statute/79-32-110
+    corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-ks/statute/79-32-110
         - us-ks/statute/79-32-110c
         - us-ks/statute/79-32-116
       rationale: |-
-        K.S.A. 79-32,110(a) imposes tax on Kansas taxable income and supplies
-        the schedules effective for tax year 2024 and thereafter: joint filers
-        pay 5.2 percent through $46,000 and $2,392 plus 5.58 percent of excess
-        over $46,000; other individuals pay 5.2 percent through $23,000 and
-        $1,196 plus 5.58 percent of excess over $23,000. Section 79-32,110c
-        establishes the later rate-reduction mechanism, and section 79-32,116
-        defines Kansas taxable income. This narrow composition accepts
-        completed-return Kansas taxable income and the active bracket's
-        cumulative base tax, floor, and marginal rate as caller-supplied
-        current-authority inputs. Deductions, exemptions, special income
-        classes, credits, and any future section 79-32,110c adjustment remain
-        outside this rate-section module.
+        K.S.A. 79-32,110(a) imposes tax on Kansas taxable income and provides
+        the underlying schedules, while 79-32,110c makes those rates subject to
+        an annual rate-reduction determination and 79-32,116 defines Kansas
+        taxable income. The Kansas Department of Revenue's official 2026 Form
+        K-40ES, revised August 26, 2025, is therefore the controlling current
+        parameter source: it publishes the schedules actually applicable for
+        tax year 2026 after the 2025 determination window. This narrow
+        composition accepts only completed-return Kansas taxable income and
+        whether the taxpayer files jointly. Deductions, exemptions, special
+        income classes, credits, nonresident apportionment, and future annual
+        rate adjustments remain outside the module.
   summary: |-
-    Composed Kansas individual-income-tax schedule for the 2026 ordinary
-    full-year resident wage-earner slice. It normalizes supplied completed-
-    return Kansas taxable income and applies the supplied active K.S.A.
-    79-32,110(a) bracket in cumulative-base-plus-marginal form before credits.
-    Its closest PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2 analog is
-    `ks_income_tax_before_credits` on the six-case childless age-40 grid:
-    single at $30,000/$60,000/$150,000 of wages and one-earner joint at
-    $60,000/$120,000/$300,000. PolicyEngine supplies completed taxable income;
-    expected outputs are independently hand-computed from the statutory 2026
-    schedule. The four upper-bracket cases differ from PolicyEngine by less
-    than one cent because its parameter starts the upper rate at $23,001 or
-    $46,001 instead of applying the statute's cumulative base above $23,000 or
-    $46,000.
+    Composed Kansas resident individual-income-tax schedule for tax year 2026.
+    It accepts one TaxUnit-level completed-return Kansas taxable-income boundary
+    plus a joint-filer flag, floors taxable income at zero, and applies the
+    official K-40ES tax-year-2026 schedule before credits. The closest
+    PolicyEngine-US 1.752.2 target is `ks_income_tax_before_credits`. Besides
+    Kansas taxable income, filing status, and the rate table, that oracle reads
+    `ks_agi` through a filing-status zero-tax threshold. On all 989
+    positive-weight Kansas tax units in the certified 2024 Populace routed to
+    tax year 2026, there were zero cases where that AGI gate suppressed a
+    positive K-40ES schedule result; every unit was within one dollar of this
+    legal calculation. The module therefore does not import the model-specific
+    zero-tax threshold. PolicyEngine starts each upper rate at $23,001 or
+    $46,001 and uses float32 microsimulation values; K-40ES supplies exact
+    cumulative bases above $23,000 or $46,000. Credits and all upstream
+    taxable-income construction are deliberately excluded.
 rules:
+  - name: ks_pit_pilot_lower_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Kansas 2026 Form K-40ES, tax computation schedules, lower rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: table_cell
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              table:
+                header: "TAX COMPUTATION SCHEDULES"
+                row: "$0.00 through $46,000; $0.00 through $23,000"
+                column: "Enter on line 6"
+              excerpt: "5.2% of line 5"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.052'
+
+  - name: ks_pit_pilot_upper_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Kansas 2026 Form K-40ES, tax computation schedules, upper rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: table_cell
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              table:
+                header: "TAX COMPUTATION SCHEDULES"
+                row: "Over $46,000; Over $23,000"
+                column: "Enter on line 6"
+              excerpt: "5.58% of excess over $46,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.0558'
+
+  - name: ks_pit_pilot_joint_lower_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Kansas 2026 Form K-40ES, Schedule I joint lower-bracket ceiling
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$ 0.00 $46,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '46000'
+
+  - name: ks_pit_pilot_other_lower_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Kansas 2026 Form K-40ES, Schedule II nonjoint lower-bracket ceiling
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$ 0.00 $23,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '23000'
+
   - name: ks_pit_pilot_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: K.S.A. 79-32,110(a) and 79-32,116, supplied completed-return Kansas taxable income
+    source: Kansas 2026 Form K-40ES line 5, supplied completed-return Kansas taxable income
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ks/statute/79-32-110
-              excerpt: "a tax is hereby imposed upon the Kansas taxable income of every resident individual"
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "5. Kansas taxable income (subtract line 4 from line 1)"
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, ks_pit_pilot_supplied_taxable_income)
+        effective_to: '2026-12-31'
+        formula: max(0, ks_pit_pilot_state_taxable_income)
 
   - name: ks_pit_pilot_schedule_tax
     kind: derived
@@ -63,25 +147,30 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: K.S.A. 79-32,110(a), schedules effective for 2024 and thereafter
+    source: Kansas 2026 Form K-40ES, individual tax computation schedules
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ks/statute/79-32-110
-              excerpt: "Not over $46,000 | 5.2% of Kansas taxable income Over $46,000 | $2,392 plus 5.58% of excess over $46,000"
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$46,000 ................................................. $2,392 plus 5.58% of excess over $46,000"
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ks/statute/79-32-110
-              excerpt: "Not over $23,000 | 5.2% of Kansas taxable income Over $23,000 | $1,196 plus 5.58% of excess over $23,000"
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$23,000 ................................................. $1,196 plus 5.58% of excess over $23,000"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          ks_pit_pilot_supplied_bracket_base
-          + ks_pit_pilot_supplied_marginal_rate * max(0, ks_pit_pilot_taxable_income - ks_pit_pilot_supplied_bracket_floor)
+          if ks_pit_pilot_filing_status_joint:
+            ks_pit_pilot_lower_rate * min(ks_pit_pilot_taxable_income, ks_pit_pilot_joint_lower_bracket_ceiling)
+            + ks_pit_pilot_upper_rate * max(0, ks_pit_pilot_taxable_income - ks_pit_pilot_joint_lower_bracket_ceiling)
+          else:
+            ks_pit_pilot_lower_rate * min(ks_pit_pilot_taxable_income, ks_pit_pilot_other_lower_bracket_ceiling)
+            + ks_pit_pilot_upper_rate * max(0, ks_pit_pilot_taxable_income - ks_pit_pilot_other_lower_bracket_ceiling)
 
   - name: ks_pit_pilot_income_tax_liability
     kind: derived
@@ -89,15 +178,16 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: K.S.A. 79-32,110(a), resident individual income tax before credits
+    source: Kansas 2026 Form K-40ES line 6, income tax liability before credits
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ks/statute/79-32-110
-              excerpt: "a tax is hereby imposed upon the Kansas taxable income of every resident individual"
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "6. Estimated Kansas tax liability (use the Tax Computation Schedules below)"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: max(0, ks_pit_pilot_schedule_tax)
