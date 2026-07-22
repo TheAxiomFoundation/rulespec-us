@@ -118,7 +118,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "716b26d3f6ea960a91facce92042a2501e3dd1bd0adc01eaab6785e5160d4923" in workflow
+    assert "6157d16ded390075ca1e73d90f148926e592e84cf413e33c84797821ddfb24f9" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     guard_expression = (
         "${{ !((github.event_name == 'pull_request' && "
@@ -176,7 +176,7 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "axiom_encode_ref": "c7eb9fe291d5fc0c5d12b7689c68db18aa8dde12",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
         "axiom_corpus_ref": "c5af541326e024e04cb533bbf5709ae04e6305f6",
-        "rulespec_us_ref": "e4d467d64fc3137fa0514d740b130b855c7964e1",
+        "rulespec_us_ref": "f55e459ca81dc0c93f621669abe51c59ced4c9a9",
     }
     release_toolchain = tomllib.loads((ROOT / ".axiom/toolchain.toml").read_text())[
         "toolchain"
