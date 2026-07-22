@@ -47,6 +47,12 @@ def _freeze_repo(tmp_path: Path) -> tuple[Path, Path]:
     artifact.write_text("value: original\n")
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     _write_manifest(tmp_path, {str(FROZEN_PATH): digest})
+    allowlist = tmp_path / "tests/test_encoding_manifests.py"
+    allowlist.parent.mkdir()
+    allowlist.write_text(
+        "KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = "
+        "frozenset({'old.json'})\n"
+    )
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "freeze-test@example.com")
     _git(tmp_path, "config", "user.name", "Freeze Test")
@@ -88,7 +94,11 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
     assert "4dd0974e6064617b43a2dd4f9f5d05bacb09c62d" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
-    assert "run-generated-guard: false" in workflow
+    assert (
+        "run-generated-guard: ${{ github.event_name != 'pull_request' || "
+        "github.event.pull_request.number != 911 }}" in workflow
+    )
+    assert "run-generated-guard: false" not in workflow
 
 
 def test_generation_workflows_use_immutable_toolchain() -> None:
@@ -103,6 +113,12 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "axiom_corpus_ref": "1979c15c654b8b52578722ea19bac45ec110d3fc",
         "rulespec_us_ref": "0f291b367bf7e15555f9973112278c5cbf221653",
     }
+    release_toolchain = tomllib.loads((ROOT / ".axiom/toolchain.toml").read_text())[
+        "toolchain"
+    ]
+    assert release_toolchain["validation_waiver_set_sha256"] == hashlib.sha256(
+        (ROOT / "known-validation-gaps.yaml").read_bytes()
+    ).hexdigest()
 
     source_staleness = (ROOT / ".github/workflows/source-staleness.yml").read_text()
     assert '.axiom/workflow-toolchain.toml").read_text()' in source_staleness
@@ -189,4 +205,19 @@ def test_freeze_rejects_base_ref_change_even_after_digest_update(
     _git(root, "commit", "-qm", "change frozen artifact")
 
     with pytest.raises(ValueError, match="pull request changes frozen"):
+        _load_checker().check(root, base_ref=base)
+
+
+def test_freeze_rejects_retired_schema_allowlist_growth(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    base = _git(root, "rev-parse", "HEAD")
+    allowlist = root / "tests/test_encoding_manifests.py"
+    allowlist.write_text(
+        "KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = "
+        "frozenset({'old.json', 'new.json'})\n"
+    )
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "grow retired schema allowlist")
+
+    with pytest.raises(ValueError, match="decrement-only; added=new.json"):
         _load_checker().check(root, base_ref=base)

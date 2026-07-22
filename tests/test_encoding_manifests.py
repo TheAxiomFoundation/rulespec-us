@@ -89,8 +89,20 @@ def test_encoding_manifests_use_current_signed_schema() -> None:
             continue
         payload = json.loads(path.read_text())
         if relative_text in KNOWN_RETIRED_SCHEMA_MANIFESTS:
-            if payload.get("schema_version") == "axiom-encode/applied-rulespec/v5":
-                problems.append(f"{relative_text}: remove stale retired-schema allowance")
+            if payload.get("schema_version") != "axiom-encode/applied-rulespec/v1":
+                problems.append(f"{relative_text}: retired allowance must cover exact v1")
+            signature = payload.get("signature")
+            if not isinstance(signature, dict) or set(signature) != {
+                "algorithm",
+                "key_id",
+                "value",
+            }:
+                problems.append(f"{relative_text}: invalid legacy signature envelope")
+            elif (
+                signature.get("algorithm") != "hmac-sha256"
+                or signature.get("key_id") != "axiom-encode-apply-v1"
+            ):
+                problems.append(f"{relative_text}: invalid legacy signature identity")
             continue
         if payload.get("schema_version") != "axiom-encode/applied-rulespec/v5":
             problems.append(f"{relative_text}: retired manifest schema")

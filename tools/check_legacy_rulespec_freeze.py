@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import re
@@ -14,6 +15,7 @@ ATOMIC_ROOTS = frozenset({"legislation", "policies", "regulations", "statutes"})
 NON_RULESPEC_ROOTS = frozenset({"programs"})
 JURISDICTION_RE = re.compile(r"us(?:-[a-z]{2})?")
 MANIFEST_PATH = Path(".axiom/legacy-rulespec-freeze.json")
+RETIRED_SCHEMA_TEST_PATH = Path("tests/test_encoding_manifests.py")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -40,6 +42,32 @@ def _is_legacy_rulespec_path(raw_path: str) -> bool:
 
 def _is_frozen_artifact_path(raw_path: str) -> bool:
     return _is_legacy_rulespec_path(raw_path)
+
+
+def _retired_schema_allowlist(source: str) -> frozenset[str]:
+    tree = ast.parse(source)
+    for node in tree.body:
+        target = node.target if isinstance(node, ast.AnnAssign) else None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+        if not isinstance(target, ast.Name) or target.id != "KNOWN_RETIRED_SCHEMA_MANIFESTS":
+            continue
+        value = node.value
+        if (
+            not isinstance(value, ast.Call)
+            or not isinstance(value.func, ast.Name)
+            or value.func.id != "frozenset"
+            or len(value.args) != 1
+            or value.keywords
+        ):
+            raise ValueError("retired-schema allowlist must be one literal frozenset")
+        parsed = ast.literal_eval(value.args[0])
+        if not isinstance(parsed, (set, list, tuple)) or not all(
+            isinstance(item, str) for item in parsed
+        ):
+            raise ValueError("retired-schema allowlist must contain only paths")
+        return frozenset(parsed)
+    raise ValueError("retired-schema allowlist is missing")
 
 
 def check(root: Path, *, base_ref: str | None = None) -> None:
@@ -89,6 +117,24 @@ def check(root: Path, *, base_ref: str | None = None) -> None:
                 "pull request changes frozen legacy RuleSpec artifacts: "
                 + ", ".join(changed_legacy)
             )
+
+        allowlist_path = root / RETIRED_SCHEMA_TEST_PATH
+        if allowlist_path.is_file():
+            base_source = subprocess.run(
+                ["git", "show", f"{base_ref}:{RETIRED_SCHEMA_TEST_PATH.as_posix()}"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            current = _retired_schema_allowlist(allowlist_path.read_text())
+            base = _retired_schema_allowlist(base_source)
+            additions = sorted(current - base)
+            if additions:
+                raise ValueError(
+                    "retired-schema allowlist is decrement-only; added="
+                    + ", ".join(additions)
+                )
 
 
 def main() -> int:

@@ -118,7 +118,7 @@ def composer_version() -> str:
 
 
 def validation_toolchain(root: Path) -> dict:
-    """Read the pinned *validation* toolchain from .axiom/toolchain.toml.
+    """Read the immutable validation checkout pins.
 
     IMPORTANT: these are the pins the org validate-rulespec workflow uses to
     revalidate the repo — they are NOT, in general, the build provenance of
@@ -129,21 +129,42 @@ def validation_toolchain(root: Path) -> dict:
     *validated against*, not what compiled them. Reading only — never modifies
     the pin. Empty dict if absent, so local builds still produce a manifest.
     """
-    path = root / ".axiom" / "toolchain.toml"
+    path = root / ".axiom" / "workflow-toolchain.toml"
     if not path.exists():
         return {}
     try:
         import tomllib
 
-        data = tomllib.loads(path.read_text()).get("toolchain", {})
+        data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
     except Exception:
         return {}
     return {
+        "axiom_compose_ref": str(data.get("axiom_compose_ref", "")),
         "axiom_rules_engine_ref": str(data.get("axiom_rules_engine_ref", "")),
         "axiom_corpus_ref": str(data.get("axiom_corpus_ref", "")),
         "axiom_encode_ref": str(data.get("axiom_encode_ref", "")),
         "axiom_encode_version": str(data.get("axiom_encode_version", "")),
+        "rulespec_us_ref": str(data.get("rulespec_us_ref", "")),
     }
+
+
+def corpus_release(root: Path, toolchain: dict) -> dict | None:
+    """Bind the signed corpus release identity to its validation checkout."""
+    path = root / ".axiom" / "toolchain.toml"
+    if not path.exists():
+        return None
+    try:
+        import tomllib
+
+        data = tomllib.loads(path.read_text()).get("toolchain", {})
+    except Exception:
+        return None
+    release = {
+        "name": str(data.get("axiom_corpus_release", "")),
+        "content_sha256": str(data.get("axiom_corpus_release_content_sha256", "")),
+        "git_commit": str(toolchain.get("axiom_corpus_ref", "")),
+    }
+    return release if all(release.values()) else None
 
 
 def engine_build_sha(engine_bin: str) -> str:
@@ -193,6 +214,7 @@ def assemble_manifest(
     engine_version: str,
     engine_sha: str,
     toolchain: dict,
+    release: dict | None,
 ) -> dict:
     """Assemble the top-level manifest. Pure function so it is directly testable
     with real inputs (the fields below must come from here, not a test's copy)."""
@@ -210,11 +232,9 @@ def assemble_manifest(
         # this" misreading; the published corpus *release* identity is a
         # separate deliberate binding (see corpus_release).
         "validation_toolchain": toolchain,
-        # The immutable published corpus release these artifacts cite. Left null
-        # until bound authoritatively: the toolchain pins a corpus *commit*, and
-        # a release name may be stamped only when an axiom-corpus release
-        # manifest's provenance commit exactly equals that pin.
-        "corpus_release": None,
+        # The immutable published corpus release these artifacts cite, bound to
+        # the exact axiom-corpus checkout used by repository validation.
+        "corpus_release": release,
         "artifact_schema": ARTIFACT_SCHEMA_VERSION,
         "programs": programs,
     }
@@ -293,6 +313,7 @@ def main() -> int:
     corpus = corpus_provenance(root)
     composer = composer_version()
     toolchain = validation_toolchain(root)
+    release = corpus_release(root, toolchain)
     engine_sha = engine_build_sha(engine_bin)
     if not engine_sha:
         print(
@@ -380,7 +401,13 @@ def main() -> int:
         )
 
     manifest = assemble_manifest(
-        manifest_programs, corpus, composer, engine_version, engine_sha, toolchain
+        manifest_programs,
+        corpus,
+        composer,
+        engine_version,
+        engine_sha,
+        toolchain,
+        release,
     )
     (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 

@@ -15,20 +15,50 @@ import build_program_artifacts as bpa  # noqa: E402
 def test_validation_toolchain_reads_pins(tmp_path: Path):
     axiom = tmp_path / ".axiom"
     axiom.mkdir()
-    (axiom / "toolchain.toml").write_text(
-        "[toolchain]\n"
+    (axiom / "workflow-toolchain.toml").write_text(
+        "[workflow_toolchain]\n"
         'axiom_encode_version = "0.2.1200"\n'
+        'axiom_encode_ref = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n'
+        'axiom_compose_ref = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"\n'
         'axiom_rules_engine_ref = "e19f1b7573c74512f20a6b71a0c55dbbf333d41b"\n'
         'axiom_corpus_ref = "7661f3c9a3655e93fc9b2420048d70d231e7d44b"\n'
+        'rulespec_us_ref = "cccccccccccccccccccccccccccccccccccccccc"\n'
     )
     t = bpa.validation_toolchain(tmp_path)
     assert t["axiom_rules_engine_ref"] == "e19f1b7573c74512f20a6b71a0c55dbbf333d41b"
     assert t["axiom_corpus_ref"] == "7661f3c9a3655e93fc9b2420048d70d231e7d44b"
     assert t["axiom_encode_version"] == "0.2.1200"
+    assert t["axiom_compose_ref"] == "b" * 40
+    assert t["rulespec_us_ref"] == "c" * 40
 
 
 def test_validation_toolchain_absent_is_empty(tmp_path: Path):
     assert bpa.validation_toolchain(tmp_path) == {}
+
+
+def test_corpus_release_binds_release_to_validation_commit(tmp_path: Path):
+    axiom = tmp_path / ".axiom"
+    axiom.mkdir()
+    (axiom / "toolchain.toml").write_text(
+        "[toolchain]\n"
+        'axiom_corpus_release = "us-rulespec-snap-2026-07-21"\n'
+        'axiom_corpus_release_content_sha256 = "' + "d" * 64 + '"\n'
+    )
+
+    release = bpa.corpus_release(
+        tmp_path,
+        {"axiom_corpus_ref": "7661f3c9a3655e93fc9b2420048d70d231e7d44b"},
+    )
+
+    assert release == {
+        "name": "us-rulespec-snap-2026-07-21",
+        "content_sha256": "d" * 64,
+        "git_commit": "7661f3c9a3655e93fc9b2420048d70d231e7d44b",
+    }
+
+
+def test_corpus_release_requires_complete_identity(tmp_path: Path):
+    assert bpa.corpus_release(tmp_path, {}) is None
 
 
 def test_engine_build_sha_prefers_explicit_env(monkeypatch):
@@ -75,6 +105,11 @@ def test_build_compat_contract_shape_and_floor():
 
 def test_assemble_manifest_stamps_real_engine_sha_not_stale():
     toolchain = {"axiom_rules_engine_ref": "e19f1b75", "axiom_corpus_ref": "7661f3c9"}
+    release = {
+        "name": "us-rulespec-snap-2026-07-21",
+        "content_sha256": "d" * 64,
+        "git_commit": "7661f3c9",
+    }
     m = bpa.assemble_manifest(
         programs=[{"program_id": "co-snap", "compat": bpa.build_compat("0.1.0", "cafef00dbabe")}],
         corpus={"repo": "rulespec-us", "sha": "733d1a17", "dirty": False},
@@ -82,6 +117,7 @@ def test_assemble_manifest_stamps_real_engine_sha_not_stale():
         engine_version="0.1.0",
         engine_sha="cafef00dbabe",
         toolchain=toolchain,
+        release=release,
     )
     # The BOM's key assertion: engine identity is a real sha, not the "0.1.0" string.
     assert m["engine"]["git_sha"] == "cafef00dbabe"
@@ -90,8 +126,7 @@ def test_assemble_manifest_stamps_real_engine_sha_not_stale():
     assert m["format_version"] == 1
     # Validation pins are labeled as validation, not build provenance.
     assert m["validation_toolchain"] == toolchain
-    # Release binding deferred (not invented).
-    assert m["corpus_release"] is None
+    assert m["corpus_release"] == release
     # The "corpus" field remains what actually composed (rulespec-us provenance).
     assert m["corpus"]["repo"] == "rulespec-us"
     json.loads(json.dumps(m))  # serializable
@@ -102,6 +137,8 @@ def test_manifest_and_program_compat_cannot_disagree():
     # SAME compat object; prove equality holds for a shared instance.
     compat = bpa.build_compat("0.1.0", "cafef00d")
     program_entry = {"program_id": "co-snap", "compat": compat}
-    m = bpa.assemble_manifest([program_entry], {}, "0.1.0", "0.1.0", "cafef00d", {})
+    m = bpa.assemble_manifest(
+        [program_entry], {}, "0.1.0", "0.1.0", "cafef00d", {}, None
+    )
     assert m["programs"][0]["compat"] is compat
     assert m["programs"][0]["compat"]["built_by_engine"]["git_sha"] == "cafef00d"
