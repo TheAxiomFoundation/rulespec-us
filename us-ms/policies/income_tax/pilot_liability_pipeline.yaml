@@ -5,37 +5,102 @@ module:
   source_verification:
     corpus_citation_path: us-ms/statute/27-7-5
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-ms/statute/27-7-5
       rationale: |-
-        Mississippi Code section 27-7-5 imposes tax on the net income of every
-        resident individual. For individuals in calendar year 2026, no tax
-        applies through $10,000 of taxable income and the rate on taxable income
-        above $10,000 is 4 percent. This narrow composition accepts completed-
-        return Mississippi taxable income and the active bracket's cumulative
-        base tax, floor, and marginal rate as caller-supplied current-authority
-        inputs. Deductions, exemptions, fiscal-year proration, special income
-        classes, and credits remain outside this rate-section module.
+        Mississippi Code section 27-7-5(1) supplies the complete individual
+        rate schedule operative for calendar year 2026: no tax applies through
+        $10,000 of taxable income and a 4 percent rate applies above $10,000.
+        This narrow module accepts the two completed-return taxable-income
+        candidates used by the pinned comparison target as Person-grain caller
+        boundaries: `ms_taxable_income_indiv` for the separate-return method
+        and `ms_taxable_income_joint` for the joint-return method. It applies
+        only the source-owned section 27-7-5 schedule to each candidate,
+        aggregates each set of Person amounts to the TaxUnit through an
+        explicit relation, and reconstructs the target's non-circular branch
+        comparison from those newly computed amounts. The separate result is
+        selected only when it is strictly less than the joint result; a tie
+        selects the joint result. No `ms_files_separately` value or other tax
+        output is supplied as an input.
+
+        Taxable-income construction, deductions, exemptions, credits,
+        nonresident allocation, S-corporation treatment, and subsection (4)
+        fiscal-year proration remain outside this calendar-year-2026 schedule
+        module. The relation and strict-lower comparison are target-integration
+        mechanics, not a claim that section 27-7-5 creates a filing election.
+        All executable versions fail closed outside tax year 2026.
   summary: |-
-    Composed Mississippi individual-income-tax schedule for the 2026 ordinary
-    full-year resident wage-earner slice. It normalizes supplied completed-
-    return Mississippi taxable income and applies the supplied active section
-    27-7-5 bracket in cumulative-base-plus-marginal form before credits. Its
-    exact PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2 analog is
-    `ms_income_tax_before_credits_unit` on the six-case childless age-40 grid:
-    single at $30,000/$60,000/$150,000 of wages and one-earner joint at
-    $60,000/$120,000/$300,000. PolicyEngine supplies completed taxable income;
-    expected outputs are independently hand-computed from the statutory 2026
-    schedule.
+    Mississippi calendar-year 2026 individual income-tax schedule before
+    credits under section 27-7-5(1). For each related Person, the module
+    computes 4 percent of the excess over the $10,000 zero-tax amount for both
+    completed-return taxable-income candidates. It aggregates the separate and
+    joint candidate taxes to the TaxUnit, derives the strict lower-tax selector,
+    and returns the separate total only when it is lower, using the joint total
+    on a tie. Upstream taxable-income construction and all credits are outside
+    this narrow target.
 rules:
-  - name: ms_pit_pilot_taxable_income
-    kind: derived
-    entity: TaxUnit
+  - name: ms_pit_pilot_person_of_tax_unit
+    kind: data_relation
+    data_relation:
+      predicate: ms_pit_pilot_person_of_tax_unit
+      arity: 2
+      arguments:
+        - Person
+        - TaxUnit
+    source: Runtime relation connecting each compared Person candidate to its Mississippi TaxUnit
+
+  - name: ms_pit_pilot_zero_tax_ceiling
+    kind: parameter
     dtype: Money
     period: Year
     unit: USD
-    source: Miss. Code section 27-7-5, supplied Mississippi taxable income
+    source: Miss. Code section 27-7-5(1)(a)(ii), (1)(b)(i), 2026 zero-tax amount
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2022 and all taxable years thereafter, there shall be no tax levied on the first Five Thousand Dollars ($5,000.00) of taxable income"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "there shall be no tax levied under subparagraph (ii) ... in excess of Five Thousand Dollars ($5,000.00) up to and including Ten Thousand Dollars ($10,000.00)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '10000'
+
+  - name: ms_pit_pilot_2026_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Miss. Code section 27-7-5(1)(b)(ii)(3), calendar-year 2026 rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2026, on such taxable income, the rate shall be four percent (4%)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.04'
+
+  - name: ms_pit_pilot_individual_taxable_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5(1), supplied completed-return `ms_taxable_income_indiv` boundary
     metadata:
       proof:
         atoms:
@@ -46,15 +111,16 @@ rules:
               excerpt: "upon the entire net income of every resident individual"
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, ms_pit_pilot_supplied_taxable_income)
+        effective_to: '2026-12-31'
+        formula: max(0, ms_pit_pilot_supplied_taxable_income_indiv)
 
-  - name: ms_pit_pilot_schedule_tax
+  - name: ms_pit_pilot_joint_taxable_income
     kind: derived
-    entity: TaxUnit
+    entity: Person
     dtype: Money
     period: Year
     unit: USD
-    source: Miss. Code section 27-7-5(1), individual 2026 schedule
+    source: Miss. Code section 27-7-5(1), supplied completed-return `ms_taxable_income_joint` boundary
     metadata:
       proof:
         atoms:
@@ -62,22 +128,130 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-ms/statute/27-7-5
-              excerpt: "For calendar year 2022 and all taxable years thereafter, there shall be no tax levied on the first Five Thousand Dollars ($5,000.00) of taxable income;"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ms/statute/27-7-5
-              excerpt: "For calendar year 2023 and all calendar years thereafter, there shall be no tax levied under subparagraph (ii)"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ms/statute/27-7-5
-              excerpt: "For calendar year 2026, on such taxable income, the rate shall be four percent (4%);"
+              excerpt: "upon the entire net income of every resident individual"
     versions:
       - effective_from: '2026-01-01'
-        formula: |-
-          ms_pit_pilot_supplied_bracket_base
-          + ms_pit_pilot_supplied_marginal_rate * max(0, ms_pit_pilot_taxable_income - ms_pit_pilot_supplied_bracket_floor)
+        effective_to: '2026-12-31'
+        formula: max(0, ms_pit_pilot_supplied_taxable_income_joint)
+
+  - name: ms_pit_pilot_related_person_has_both_candidates
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: Relation-member guard for the two completed-return section 27-7-5 schedule candidates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "upon the entire net income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ms_pit_pilot_individual_taxable_income >= 0 and ms_pit_pilot_joint_taxable_income >= 0
+
+  - name: ms_pit_pilot_individual_schedule_tax
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5(1), 2026 schedule on separate-return taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2026, on such taxable income, the rate shall be four percent (4%)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ms_pit_pilot_2026_rate * max(0, ms_pit_pilot_individual_taxable_income - ms_pit_pilot_zero_tax_ceiling)
+
+  - name: ms_pit_pilot_joint_schedule_tax
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5(1), 2026 schedule on joint-return taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2026, on such taxable income, the rate shall be four percent (4%)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ms_pit_pilot_2026_rate * max(0, ms_pit_pilot_joint_taxable_income - ms_pit_pilot_zero_tax_ceiling)
+
+  - name: ms_pit_pilot_separate_total_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5(1), aggregate schedule tax on related separate-return candidates
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "upon the entire net income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: sum_where(ms_pit_pilot_person_of_tax_unit, ms_pit_pilot_individual_schedule_tax, ms_pit_pilot_related_person_has_both_candidates)
+
+  - name: ms_pit_pilot_joint_total_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5(1), aggregate schedule tax on related joint-return candidates
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "upon the entire net income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: sum_where(ms_pit_pilot_person_of_tax_unit, ms_pit_pilot_joint_schedule_tax, ms_pit_pilot_related_person_has_both_candidates)
+
+  - name: ms_pit_pilot_separate_total_is_strictly_lower
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Non-circular comparison of the two section 27-7-5 schedule candidates
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "a tax at the following rates"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ms_pit_pilot_separate_total_schedule_tax < ms_pit_pilot_joint_total_schedule_tax
 
   - name: ms_pit_pilot_income_tax_liability
     kind: derived
@@ -85,7 +259,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: Miss. Code section 27-7-5, resident tax before credits
+    source: Miss. Code section 27-7-5(1), lower compared 2026 schedule amount before credits
     metadata:
       proof:
         atoms:
@@ -96,4 +270,9 @@ rules:
               excerpt: "there is hereby assessed and levied, to be collected and paid"
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, ms_pit_pilot_schedule_tax)
+        effective_to: '2026-12-31'
+        formula: |-
+          if ms_pit_pilot_separate_total_is_strictly_lower:
+            ms_pit_pilot_separate_total_schedule_tax
+          else:
+            ms_pit_pilot_joint_total_schedule_tax
