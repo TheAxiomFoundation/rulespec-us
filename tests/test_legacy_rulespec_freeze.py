@@ -116,10 +116,11 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     assert "4dd0974e6064617b43a2dd4f9f5d05bacb09c62d" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     guard_expression = (
-        "run-generated-guard: ${{ !((github.event_name == 'pull_request' && "
+        "${{ !((github.event_name == 'pull_request' && "
         "github.event.pull_request.number == 911) || (github.event_name == 'push' "
         "&& github.ref == 'refs/heads/main' && "
-        "contains(github.event.head_commit.message, '#911'))) }}"
+        "startsWith(github.event.head_commit.message, "
+        "'Merge pull request #911 from '))) }}"
     )
     assert guard_expression in workflow
     assert "run-generated-guard: false" not in workflow
@@ -130,7 +131,15 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     [
         ("pull_request", 911, "refs/pull/911/merge", "", False),
         ("pull_request", 912, "refs/pull/912/merge", "", True),
-        ("push", None, "refs/heads/main", "Merge pull request #911", False),
+        (
+            "push",
+            None,
+            "refs/heads/main",
+            "Merge pull request #911 from TheAxiomFoundation/hard-cut",
+            False,
+        ),
+        ("push", None, "refs/heads/main", "fix: mention #911", True),
+        ("push", None, "refs/heads/main", "Merge pull request #911", True),
         ("push", None, "refs/heads/main", "ordinary push", True),
         ("push", None, "refs/heads/topic", "Merge pull request #911", True),
         ("schedule", None, "refs/heads/main", "", True),
@@ -147,7 +156,7 @@ def test_generated_guard_migration_exception_truth_table(
     migration_merge = (
         event_name == "push"
         and ref == "refs/heads/main"
-        and "#911" in head_message
+        and head_message.startswith("Merge pull request #911 from ")
     )
     assert (not (migration_pr or migration_merge)) is expected
 
