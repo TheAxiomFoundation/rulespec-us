@@ -5,86 +5,83 @@ module:
   source_verification:
     corpus_citation_paths:
       - us-va/statute/58.1/58.1-320
-      - us-va/statute/58.1/58.1-322.03
       - us-va/statute/58.1/58.1-321
-    upstream_source_check:
-      status: composed_from_supplied_current_authority
-      checked_paths:
-        - us-va/statute/58.1/58.1-320
-        - us-va/statute/58.1/58.1-322.03
-        - us-va/statute/58.1/58.1-321
-      rationale: |-
-        This pipeline computes the Va. Code section 58.1-320 progressive bracket
-        tax on Virginia taxable income for the ordinary resident wage-earner
-        slice at the 2026 tax year. Section 58.1-320 imposes 2 per cent on income
-        not over $3,000, 3 per cent on the next $2,000 to $5,000, 5 per cent from
-        $5,000 to $17,000, and 5.75 per cent above $17,000; these bracket floors
-        and rates are statutory fixed amounts (unchanged since 1990 and not
-        indexed), carried by the encoded us-va/statutes/58.1/58/1-320 module. This
-        pipeline supplies those four floors and rates as declared caller-supplied
-        current-authority inputs so the marginal application runs end to end
-        without importing the encoded bracket rules. Virginia taxable income is
-        Virginia adjusted gross income less the section 58.1-322.03 deduction and
-        the section 58.1-321 personal exemptions; the operative 2026 standard
-        deduction ($8,750 single / $17,500 married filing jointly, Va. Code
-        58.1-322.03(1) as amended) and the $930 per-exemption personal exemption
-        (section 58.1-322.03(2)/58.1-321) are supplied as declared inputs rather
-        than derived, because those amounts sit in filing-status and dependency
-        mechanics the flat slice does not carry. The pipeline adds no numeric
-        literals of its own; it wires the progressive-tax mechanics only.
   summary: |-
-    Composed Virginia individual income-tax liability pipeline for the oracle
-    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
-    Virginia adjusted gross income into the section 58.1-320 progressive bracket
-    tax, so an end-to-end comparison against PolicyEngine
-    (va_income_tax_before_non_refundable_credits) and TAXSIM (siitax) does not
-    require the caller to supply the section 58.1-320 bracket-application stage
-    boundaries. It wires: Virginia taxable income (AGI less the supplied
-    deduction and personal exemptions); the progressive tax as the marginal sum
-    across the four brackets (2, 3, 5, and 5.75 per cent at the $3,000 / $5,000 /
-    $17,000 floors); and the liability as that bracket tax. Because Virginia
-    neither indexes its brackets nor levies a surtax on this slice, the composed
-    liability equals PolicyEngine's before-non-refundable-credits value exactly.
-    It deliberately excludes the section 58.1-339.8 earned income tax credit and
-    every other section 58.1-332 through 58.1-339.12 credit (all non-refundable
-    or refundable and excluded from this before-credits core), the age deduction
-    and the section 58.1-322.03 child-and-dependent-care deduction (supplied as
-    part of the caller's deduction input or zero for this slice), and itemized
-    deductions. Virginia AGI, filing status, the deduction, the personal
-    exemptions, and the bracket floors and rates are supplied inputs; the
-    brackets are statutory fixed amounts, so this 2026 pipeline is compared
-    against PolicyEngine at 2026 and against TAXSIM's latest 2024 law year with
-    the standard-deduction vintage dispositioned.
+    Composed Virginia individual income-tax pipeline for tax year 2026. It
+    accepts two TaxUnit-level completed-return boundaries: Virginia taxable
+    income and whether the return is within the Virginia filing requirement.
+    For an applicable return, it computes the section 58.1-320 marginal
+    schedule using the bracket bounds and rates imported from the encoded
+    statute module; otherwise it returns zero. The boundaries already reflect
+    the upstream federal and Virginia income, deduction, exemption, residency,
+    and filing-status mechanics, so this module makes no independent claim
+    about that chain. It deliberately targets tax before nonrefundable credits
+    and excludes every credit and payment. Both rules are bounded to 2026 so
+    adjacent years fail closed. This narrow boundary is suitable for comparison
+    with PolicyEngine's va_taxable_income and va_must_file feeding
+    va_income_tax_before_non_refundable_credits across full-year resident tax
+    units in the certified Populace.
+imports:
+  - us-va:statutes/58.1/58/1-320#first_bracket_upper_income
+  - us-va:statutes/58.1/58/1-320#first_bracket_rate
+  - us-va:statutes/58.1/58/1-320#second_bracket_upper_income
+  - us-va:statutes/58.1/58/1-320#second_bracket_rate
+  - us-va:statutes/58.1/58/1-320#third_bracket_upper_income
+  - us-va:statutes/58.1/58/1-320#third_bracket_rate
+  - us-va:statutes/58.1/58/1-320#top_bracket_rate
 rules:
-  - name: va_pit_pilot_taxable_income
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: Va. Code 58.1-322, Virginia taxable income after the supplied deduction and personal exemptions
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-va/statute/58.1/58.1-322.03
-              excerpt: "the Virginia standard deduction"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, va_pit_pilot_adjusted_gross_income - va_pit_pilot_supplied_deductions - va_pit_pilot_supplied_exemptions)
   - name: va_pit_pilot_bracket_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Va. Code 58.1-320, progressive tax as the marginal sum across the supplied bracket floors and rates
+    source: Va. Code 58.1-320, marginal tax on supplied completed-return Virginia taxable income
     metadata:
       proof:
         atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#first_bracket_upper_income
+              output: first_bracket_upper_income
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#first_bracket_rate
+              output: first_bracket_rate
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#second_bracket_upper_income
+              output: second_bracket_upper_income
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#second_bracket_rate
+              output: second_bracket_rate
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#third_bracket_upper_income
+              output: third_bracket_upper_income
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#third_bracket_rate
+              output: third_bracket_rate
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-va:statutes/58.1/58/1-320#top_bracket_rate
+              output: top_bracket_rate
+              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
           - path: versions[0].formula
             kind: formula
             source:
@@ -92,18 +89,19 @@ rules:
               excerpt: "A tax is hereby annually imposed on the Virginia taxable income for each taxable year of every individual as follows"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, min(va_pit_pilot_taxable_income, va_pit_pilot_supplied_bracket_floor_2) - va_pit_pilot_supplied_bracket_floor_1) * va_pit_pilot_supplied_bracket_rate_1
-          + max(0, min(va_pit_pilot_taxable_income, va_pit_pilot_supplied_bracket_floor_3) - va_pit_pilot_supplied_bracket_floor_2) * va_pit_pilot_supplied_bracket_rate_2
-          + max(0, min(va_pit_pilot_taxable_income, va_pit_pilot_supplied_bracket_floor_4) - va_pit_pilot_supplied_bracket_floor_3) * va_pit_pilot_supplied_bracket_rate_3
-          + max(0, va_pit_pilot_taxable_income - va_pit_pilot_supplied_bracket_floor_4) * va_pit_pilot_supplied_bracket_rate_4
+          first_bracket_rate * min(va_pit_pilot_state_taxable_income, first_bracket_upper_income)
+          + second_bracket_rate * max(0, min(va_pit_pilot_state_taxable_income, second_bracket_upper_income) - first_bracket_upper_income)
+          + third_bracket_rate * max(0, min(va_pit_pilot_state_taxable_income, third_bracket_upper_income) - second_bracket_upper_income)
+          + top_bracket_rate * max(0, va_pit_pilot_state_taxable_income - third_bracket_upper_income)
   - name: va_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Va. Code 58.1-320 bracket tax, before the section 58.1-332 through 58.1-339.12 credits, for the wage-earner slice
+    source: Va. Code 58.1-320 tax, subject to the Va. Code 58.1-321 no-tax and no-return threshold, before credits
     metadata:
       proof:
         atoms:
@@ -111,8 +109,26 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-va/statute/58.1/58.1-320
-              excerpt: "A tax is hereby annually imposed on the Virginia taxable income"
+              excerpt: "A tax is hereby annually imposed on the Virginia taxable income for each taxable year of every individual"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-va/statute/58.1/58.1-321
+              excerpt: "No tax levied pursuant to § 58.1-320 is imposed, nor any return required to be filed"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          va_pit_pilot_bracket_tax
+          if va_pit_pilot_must_file: va_pit_pilot_bracket_tax else: 0
+inputs:
+  - name: va_pit_pilot_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Nonnegative completed-return Virginia taxable income supplied by the caller as an upstream oracle boundary.
+  - name: va_pit_pilot_must_file
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the tax unit is within Virginia's filing requirement, supplied by the caller as an upstream applicability boundary.
