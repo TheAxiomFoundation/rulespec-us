@@ -12,27 +12,29 @@ module:
         - us-co/statute/39/39-22-104
         - us-co/statute/39/39-22-627
       rationale: |-
-        This pipeline computes the Colorado section 39-22-104 individual
-        income-tax liability before credits for the ordinary resident slice:
-        the flat tax prescribed by subsection (1.7)(c) — four and forty
-        one-hundredths percent for taxable years commencing on or after
-        January 1, 2022 — applied to Colorado taxable income, which
-        subsection (2) defines as federal taxable income modified by the
-        subsection (3) additions and subsection (4) subtractions. The rate is
-        imported from the encoded 39-22-104(1.7)(c) module rather than
-        restated, so this pipeline adds no numeric literals of its own.
-        The caller supplies adjusted gross income and the federal
-        deductions that take it to section 63 federal taxable income (the
-        subsection (1.7)(c) base is federal taxable income "as determined
-        pursuant to section 63 of the internal revenue code"), plus single
-        aggregate subsection (3) addition and subsection (4) subtraction
-        amounts, pending executable composition of those chains: their child
-        modules are individually encoded, but the 39-22-104 aggregate parent
-        defers composition across their distinct legal entities and adjusted
-        federal taxable-income bases (see its deferred_outputs), mirroring
-        the Alabama and California pilots' supplied-deduction pattern. The
-        section 39-22-627 temporary rate reduction is a distinct
-        revenue-triggered mechanism and is out of scope for this pilot slice.
+        Both cited provisions are current official Colorado Revised Statutes
+        from the consolidated OLLS Title 39 corpus. Section 39-22-104(1.7)(c)
+        supplies the base and imported rate. Section 39-22-627 was checked
+        because subsection (1.7)(c) expressly makes its rate subject to that
+        separate temporary-adjustment mechanism. This narrow component stops
+        before the section 39-22-627 adjustment and therefore does not encode
+        its fiscal-year revenue determinations as taxpayer inputs.
+  summary: |-
+    Narrow Colorado individual-income-tax base calculation under C.R.S.
+    § 39-22-104(1.7)(c). It accepts one TaxUnit-level completed-return
+    Colorado taxable-income boundary, floors that value at zero, and applies
+    the 4.4-per-cent rate imported from the existing subsection (1.7)(c)
+    encoding. The caller boundary already reflects federal taxable income and
+    every applicable subsection (2), (3), and (4) Colorado modification, so
+    this module makes no independent claim about that upstream chain.
+
+    The output is expressly the subsection (1.7)(c) base tax before any
+    temporary rate adjustment under § 39-22-627 and before all credits. That
+    narrow output aligns with PolicyEngine's
+    co_income_tax_before_non_refundable_credits only where the oracle contract
+    separately confirms that § 39-22-627 does not alter the comparison. The
+    imported rate and this calculation take effect for taxable years beginning
+    on or after January 1, 2022, as stated in subsection (1.7)(c).
 imports:
   - us-co:statutes/39/39-22-104/1.7/c#individual_estate_trust_income_tax_rate
 rules:
@@ -42,7 +44,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 39-22-104 subsection 2, section 63 federal taxable income from the supplied adjusted gross income and federal deductions, modified by the supplied additions and subtractions, floored at zero
+    source: C.R.S. § 39-22-104(2), supplied completed-return Colorado taxable income after all subsection (3) additions and subsection (4) subtractions, defensively floored at zero
     metadata:
       proof:
         atoms:
@@ -50,18 +52,23 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-co/statute/39/39-22-104
-              excerpt: "the federal taxable income shall be modified as provided in"
+              excerpt: "Prior to the application of the rate of tax prescribed in subsection (1), (1.5), or (1.7) of this section, the federal taxable income shall be modified as provided in subsections (3) and (4) of this section."
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "with respect to taxable years commencing on or after January 1, 2022"
     versions:
       - effective_from: '2022-01-01'
         formula: |-
-          max(0, co_pit_pilot_adjusted_gross_income - co_pit_pilot_supplied_federal_deductions + co_pit_pilot_supplied_additions - co_pit_pilot_supplied_subtractions)
+          max(0, co_pit_pilot_state_taxable_income)
   - name: co_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 39-22-104 subsection 1.7 paragraph c, the four and forty one-hundredths percent tax imposed on modified federal taxable income for taxable years commencing on or after January 1, 2022, via the imported encoded rate
+    source: C.R.S. § 39-22-104(1.7)(c) base tax on completed Colorado taxable income before § 39-22-627 temporary adjustment and all credits
     metadata:
       proof:
         atoms:
@@ -75,8 +82,20 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-co/statute/39/39-22-104
-              excerpt: "a tax of four and forty one-hundredths percent is imposed"
+              excerpt: "a tax of four and forty one-hundredths percent is imposed on the federal taxable income"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "with respect to taxable years commencing on or after January 1, 2022"
     versions:
       - effective_from: '2022-01-01'
         formula: |-
-          individual_estate_trust_income_tax_rate * co_pit_pilot_taxable_income
+          co_pit_pilot_taxable_income * individual_estate_trust_income_tax_rate
+inputs:
+  - name: co_pit_pilot_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Nonnegative completed-return Colorado taxable income supplied by the caller as the sole upstream oracle boundary.
