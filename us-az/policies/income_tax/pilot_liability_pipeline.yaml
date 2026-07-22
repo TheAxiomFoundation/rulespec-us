@@ -3,55 +3,30 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-az/statute/43-1011
-      - us-az/statute/43-1041
+    corpus_citation_path: us-az/form/individual-income-tax/2026/140es-booklet/document-1
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-az/statute/43-1011
-        - us-az/statute/43-1041
       rationale: |-
-        This pipeline computes the Arizona section 43-1011 individual income-tax
-        liability for the ordinary resident wage-earner slice: the flat tax on
-        Arizona taxable income (Arizona adjusted gross income less the section
-        43-1041 standard deduction). For taxable years beginning from and after
-        December 31, 2022 Arizona levies a single flat rate on Arizona taxable
-        income, and the encoded 43-1011 module carries the historical graduated
-        subsection (A) brackets and the constitutional combined-rate cap; the
-        operative flat rate PolicyEngine applies is supplied here as a declared
-        caller input. Section 43-1041(H) requires the department to adjust the
-        standard deduction each year for inflation, so the operative 2026
-        standard deduction is an indexed value PolicyEngine projects; to reach a
-        liability comparable to PolicyEngine az_income_tax to the cent, the
-        standard deduction, the flat marginal rate, the bracket floor, the
-        bracket base tax, and the nonrefundable credit are all declared
-        caller-supplied inputs. The pipeline adds no numeric literals of its own;
-        it wires the flat-tax mechanics only, in the same supplied-schedule form
-        as the California and Ohio pilots. The section 43-1041 standard deduction
-        and the operative section 43-1011 rate are supplied here pending their
-        own indexed encodings.
+        A.R.S. 43-1011 was checked as the higher-authority individual-income-
+        tax provision. This narrow component accepts completed-return Arizona
+        taxable income as an explicit upstream boundary and imports the live
+        2026 rate from the official Department of Revenue Form 140ES booklet,
+        whose worksheet applies that rate directly to Arizona taxable income.
   summary: |-
-    Composed Arizona individual income-tax liability pipeline for the oracle slice
-    at the 2026 tax year. It exposes a TaxUnit-level path from a supplied Arizona
-    adjusted gross income into the section 43-1011 flat tax on Arizona taxable
-    income (Arizona AGI less the supplied section 43-1041 standard deduction), so
-    an end-to-end comparison against PolicyEngine (az_income_tax) and TAXSIM
-    (siitax) does not require the caller to supply the bracket application. Arizona
-    replaced its graduated 43-1011(A) schedule with a single flat rate for tax
-    years beginning after 2022, so the schedule is wired in the general
-    bracket-base-plus-marginal form with the supplied bracket floor and base tax
-    set to zero and the supplied marginal rate carrying the flat rate; that
-    reproduces the statutory flat tax while keeping the same shape as the
-    progressive pilots. It deliberately models only the ordinary resident wage
-    earner and excludes the section 43-1073 family income tax credit, the section
-    43-1072.01/43-1073.01 dependent credits, and the section 43-1088 charitable
-    credits, all of which are zero for the childless wage-earner grid. Arizona
-    AGI, filing status, the standard deduction, the flat rate, and the credit are
-    supplied inputs; the department indexes the standard deduction each year, so
-    this 2026 pipeline is compared against PolicyEngine at 2026 and against
-    TAXSIM's latest 2024 law year with the standard-deduction indexation vintage
-    dispositioned.
+    Composed Arizona individual-income-tax component for tax year 2026 before
+    nonrefundable credits. It accepts one TaxUnit-level completed-return
+    Arizona taxable-income boundary, floors it at zero, and applies the 2.5-
+    per-cent rate imported from the official 2026 Form 140ES rate module. It
+    deliberately excludes nonrefundable credits and makes no independent claim
+    about the upstream adjusted-gross-income, additions, subtractions, or
+    deduction chain. This narrow boundary matches PolicyEngine's
+    az_taxable_income feeding az_income_tax_before_non_refundable_credits for
+    full-year resident tax units. Both calculations are bounded to 2026 so
+    adjacent years fail closed.
+imports:
+  - us-az:policies/income_tax/2026_rate#individual_income_tax_rate
 rules:
   - name: az_pit_pilot_taxable_income
     kind: derived
@@ -59,55 +34,50 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 43-1011 and 43-1041, Arizona taxable income after the supplied standard deduction
+    source: Supplied completed-return Arizona taxable income, floored at zero
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-az/statute/43-1041
-              excerpt: "the standard deduction is $12,200"
+              corpus_citation_path: us-az/form/individual-income-tax/2026/140es-booklet/document-1
+              excerpt: "Figure this tax on your estimated Arizona taxable income."
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, az_pit_pilot_adjusted_gross_income - az_pit_pilot_supplied_standard_deduction)
-  - name: az_pit_pilot_schedule_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 43-1011, flat tax as the supplied bracket base plus the supplied marginal rate on income above the supplied bracket floor
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-az/statute/43-1011
-              excerpt: "the combined tax rate ... may not exceed four and one-half percent"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          az_pit_pilot_supplied_bracket_base
-          + az_pit_pilot_supplied_marginal_rate * max(0, az_pit_pilot_taxable_income - az_pit_pilot_supplied_bracket_floor)
+          max(0, az_pit_pilot_state_taxable_income)
   - name: az_pit_pilot_income_tax_liability
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 43-1011 flat tax less the supplied nonrefundable credit, floored at zero
+    source: Arizona Form 140ES worksheet line 19, 2.5 per cent of Arizona taxable income before nonrefundable credits
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/income_tax/2026_rate#individual_income_tax_rate
+              output: individual_income_tax_rate
+              hash: sha256:3afa12de4a8f63636b4bcdaa8be39ab85124efc9af6b0bea2cb0db6512bd1875
+          - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-az/statute/43-1011
-              excerpt: "the combined tax rate ... may not exceed four and one-half percent"
+              corpus_citation_path: us-az/form/individual-income-tax/2026/140es-booklet/document-1
+              excerpt: "Multiply line 18 by 2.5% (.025) to calculate your Arizona estimated tax liability."
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, az_pit_pilot_schedule_tax - az_pit_pilot_supplied_nonrefundable_credit)
+          az_pit_pilot_taxable_income * individual_income_tax_rate
+inputs:
+  - name: az_pit_pilot_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return Arizona taxable income supplied by the caller as the sole upstream oracle boundary.
