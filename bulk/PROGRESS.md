@@ -55,11 +55,11 @@ In progress on branch `fed-parity/surtaxes` from `origin/main` at
   and exact/one-dollar-over threshold cases.
 - Confirmed the signer selects the P3 module and companion for a
   `manual_exception: composition` manifest; signing remains credential-blocked.
+- Regenerated `.axiom/index/provisions_to_rules.json` for the three new
+  composition modules (3,944 provisions, 4,674 edges, 4,436 modules).
 
 ## Next
 
-- Generate approved manifests if credentials permit, regenerate the reverse
-  index, run the official oracle sync when locally available, and run all
-  local CI-equivalent gates.
+- Run the official oracle sync/check and all local CI-equivalent gates.
 - Write the requested external build summary with case arithmetic and exact
   gate results.
