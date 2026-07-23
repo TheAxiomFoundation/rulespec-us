@@ -9,16 +9,20 @@ module:
       - us-ga/statute/48/48-7-27
       - us-ga/statute/48/48-7-29.10
       - us-ga/statute/48/48-7A-3
+      - us-ga/statute/session-laws/2025/hb136/document-1
       - us-ga/statute/session-laws/2026/hb463/document-1
+      - us-ga/form/it-511/2025/document-1
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: checked_higher_authority
       checked_paths:
         - us-ga/statute/48/48-7-20
         - us-ga/statute/48/48-7-26
         - us-ga/statute/48/48-7-27
         - us-ga/statute/48/48-7-29.10
         - us-ga/statute/48/48-7A-3
+        - us-ga/statute/session-laws/2025/hb136/document-1
         - us-ga/statute/session-laws/2026/hb463/document-1
+        - us-ga/form/it-511/2025/document-1
       rationale: |-
         The cited current Georgia authorities supply the 2026 individual rate,
         standard deductions, dependent-exemption amount, low-income credit,
@@ -29,6 +33,14 @@ module:
         boundaries. Those boundaries avoid inventing the many cross-referenced
         adjustment, itemization, NOL, and dependent-definition rules that the
         encoded section 48-7-27 and 48-7-26 modules truthfully defer.
+
+        The unchanged low-income-credit statute and latest official IT-511
+        worksheet establish that its schedule uses federal adjusted gross
+        income and separate credit units for self, spouse on a joint return,
+        natural or legally adopted children other than unborn dependents, and
+        taxpayer/spouse age 65 status. These units are distinct from the
+        caller-classified Georgia dependent count used for the income-tax
+        exemption deduction.
 
         Georgia DOR has not published the tax-year-2026 Form 500 and IT-511
         annual-return package in the pinned official corpus. The latest official
@@ -45,7 +57,8 @@ module:
     deduction is supplied; subtracts the enacted $5,000 amount for each
     caller-classified Georgia dependent and a completed Georgia NOL deduction;
     applies the enacted 4.99 percent rate; and subtracts the section 48-7A-3
-    low-income credit and section 48-7-29.10 child/dependent-care credit without
+    low-income credit based on federal AGI and its separate exemption/age
+    units, and the section 48-7-29.10 child/dependent-care credit, without
     taking the result below zero.
 
     The result is not complete annual liability. Other-state, eligible-itemizer,
@@ -315,23 +328,24 @@ rules:
     entity: TaxUnit
     dtype: Integer
     period: Year
-    source: O.C.G.A. § 48-7A-3(b), adjusted-gross-income band
+    source: O.C.G.A. § 48-7A-3(b) and 2025 IT-511 worksheet, federal-adjusted-gross-income band
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ga/statute/48/48-7A-3
+              corpus_citation_path: us-ga/form/it-511/2025/document-1
+              excerpt: "Credit Table: Federal Adjusted Gross Income Credit"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if ga_2026_resident_adjusted_gross_income < agi_band_0_upper_bound: 0
-          else: if ga_2026_resident_adjusted_gross_income >= agi_band_1_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_1_upper_bound: 1
-          else: if ga_2026_resident_adjusted_gross_income >= agi_band_2_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_2_upper_bound: 2
-          else: if ga_2026_resident_adjusted_gross_income >= agi_band_3_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_3_upper_bound: 3
-          else: if ga_2026_resident_adjusted_gross_income >= agi_band_4_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_4_upper_bound: ga_2026_resident_low_income_last_band_index
+          if ga_2026_resident_federal_adjusted_gross_income < agi_band_0_upper_bound: 0
+          else: if ga_2026_resident_federal_adjusted_gross_income >= agi_band_1_lower_bound and ga_2026_resident_federal_adjusted_gross_income <= agi_band_1_upper_bound: 1
+          else: if ga_2026_resident_federal_adjusted_gross_income >= agi_band_2_lower_bound and ga_2026_resident_federal_adjusted_gross_income <= agi_band_2_upper_bound: 2
+          else: if ga_2026_resident_federal_adjusted_gross_income >= agi_band_3_lower_bound and ga_2026_resident_federal_adjusted_gross_income <= agi_band_3_upper_bound: 3
+          else: if ga_2026_resident_federal_adjusted_gross_income >= agi_band_4_lower_bound and ga_2026_resident_federal_adjusted_gross_income <= agi_band_4_upper_bound: ga_2026_resident_low_income_last_band_index
           else: -1
 
   - name: ga_2026_resident_low_income_last_band_index
@@ -355,6 +369,68 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: '4'
+
+  - name: ga_2026_resident_low_income_exemption_units
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 2025 IT-511 Low Income Credit Worksheet line 2, self, spouse, and natural or legally adopted children excluding unborn dependents
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/form/it-511/2025/document-1
+              excerpt: "Exemptions are self, spouse and natural or legally adopted children"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/form/it-511/2025/document-1
+              excerpt: "dependents do not include those unborn with a detectable heartbeat"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+              excerpt: "A husband and wife filing a joint return shall each be deemed a dependent for purposes of such joint return"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          1
+          + (if ga_2026_resident_filing_status_joint: 1 else: 0)
+          + max(
+              0,
+              ga_2026_resident_low_income_natural_or_legally_adopted_child_count_including_unborn
+              - max(0, ga_2026_resident_low_income_unborn_dependent_count)
+            )
+
+  - name: ga_2026_resident_low_income_age_units
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: O.C.G.A. § 48-7A-3(b) and 2025 IT-511 Low Income Credit Worksheet line 3, taxpayer and spouse age-65 units
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+              excerpt: "Each taxpayer 65 years of age or over may claim double the tax credit."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/form/it-511/2025/document-1
+              excerpt: "Enter 1 if you or your spouse is 65 or older; enter 2 if you and your spouse are 65 or older"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          (if ga_2026_resident_taxpayer_age_65_or_older: 1 else: 0)
+          + (if ga_2026_resident_spouse_age_65_or_older: 1 else: 0)
 
   - name: ga_2026_resident_low_income_credit_before_cap
     kind: derived
@@ -390,9 +466,8 @@ rules:
             else:
               credit_amount_per_dependent[ga_2026_resident_low_income_credit_band]
               * (
-                max(0, ga_2026_resident_georgia_dependent_count)
-                + (if ga_2026_resident_taxpayer_age_65_or_older: 1 else: 0)
-                + (if ga_2026_resident_spouse_age_65_or_older: 1 else: 0)
+                ga_2026_resident_low_income_exemption_units
+                + ga_2026_resident_low_income_age_units
               )
           else:
             0
@@ -433,7 +508,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: O.C.G.A. § 48-7-29.10(a)-(b), 50 percent of federal credit capped by Georgia tax
+    source: O.C.G.A. § 48-7-29.10(a)-(b), as amended by 2025 HB 136, 50 percent of federal credit capped by Georgia tax
     metadata:
       proof:
         atoms:
@@ -446,7 +521,7 @@ rules:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ga/statute/48/48-7-29.10
+              corpus_citation_path: us-ga/statute/session-laws/2025/hb136/document-1
               excerpt: "50 percent of the amount of the credit provided for in Section 21 of the Internal Revenue Code"
           - path: versions[0].formula
             kind: exception
