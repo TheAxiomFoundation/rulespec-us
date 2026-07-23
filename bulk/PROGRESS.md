@@ -3,9 +3,9 @@
 ## State
 
 The executable compose and complete hand-computed companion are implemented.
-Focused gates pass, and the reverse index is regenerated and current. The
-remaining full pytest rerun and fresh-snapshot oracle/program-artifact/signing
-checks are next.
+Focused gates, the regenerated reverse index, and the 55-test repository
+pytest suite pass. The workflow-current oracle-pending sync is applied; its
+fresh-snapshot check plus program-artifact and signing checks are next.
 
 ## Done
 
@@ -46,11 +46,14 @@ checks are next.
   reports 3,944 provisions, 4,672 edges, and 4,434 modules. The first repo
   pytest pass had 54 passing tests and only the expected pre-regeneration
   stale-index failure.
+- Reran repository pytest after regeneration: 55 passed. The workflow-current
+  oracle classifier synchronized the ratchet to 1,742 declarations, adding
+  the compose's 15 derived outputs and draining 14 entries now classified as
+  mapped.
 
 ## Next
 
-- Rerun repository pytest against the regenerated index.
-- Run oracle-pending sync/fresh check, canonical-basename program artifacts,
-  and signing selection dry-run.
+- Run the oracle-pending fresh-snapshot check, canonical-basename program
+  artifacts, and signing selection dry-run.
 - Produce the scratchpad summary and done marker, leaving manifest signing to
   the main lane after a dry-run selection proof.
