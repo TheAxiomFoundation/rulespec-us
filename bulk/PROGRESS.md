@@ -2,10 +2,10 @@
 
 ## State
 
-The executable applicant-scoped relation aggregate, highest-standard-only
-5-percentage-point FPL comparison, and guarded section 435.119/435.110
-consumer bridges are implemented and green in an initial pinned-engine smoke
-companion. Expanding the companion to the complete boundary matrix is next.
+The executable compose and complete hand-computed companion are implemented.
+The 24-case 133%/138% matrix and nine direct/edge cases pass focused
+validation, proof, money-proof, and pinned-engine gates. The repository-wide
+and generated-artifact gate battery is next.
 
 ## Done
 
@@ -33,11 +33,18 @@ companion. Expanding the companion to the complete boundary matrix is next.
   counted-income-plus-cash member contribution and the inclusive exact-138%
   adult boundary. Focused validate, proof-validate (28 atoms), and pinned
   engine tests (2/2) pass.
+- Expanded the companion to all six cent-level boundary points around 133%
+  and 138% across four applicant-specific assembly variants: tax filer,
+  claimed-dependent child with excluded income, non-filer with spouse and a
+  filtered roommate, and filer parent with required-filer child income.
+- Added the complete cash-support gate matrix, zero-income/no-floor behavior,
+  both sides of the lower-parent-band highest-standard guard, and invalid
+  family-size/FPL runtime cases. All 33 companion cases pass on the pinned
+  engine; proof validation checks 28 atoms and the money-proof ratchet reports
+  zero missing monetary proofs.
 
 ## Next
 
-- Add the hand-computed 133/138 grid across filer, dependent, non-filer, and
-  child-income household variants, plus cash-support and zero/edge cases.
 - Run the complete campaign gate battery and fix any failures.
 - Produce the scratchpad summary and done marker, leaving manifest signing to
   the main lane after a dry-run selection proof.
