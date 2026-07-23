@@ -148,6 +148,11 @@ a key holder must generate the signed manual-composition manifests and rerun
   byte-for-byte current at 3,944 provisions, 4,674 edges, and 4,436 modules;
   no reverse-index commit was needed because the module-to-provision edges did
   not change.
+- Ran the official oracle-pending sync with the workflow-current
+  `axiom-encode` classifier at `3fd8b063`. The eleven new pipeline-local helper
+  outputs were declared from 2026-07-23, nothing was drained, and the ceiling
+  moved from 1,742 to 1,753. The canonical-checkout ratchet passes with 1,753
+  declared, 1,753 applied, and zero stale entries.
 
 ## Next
 
