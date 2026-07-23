@@ -1,0 +1,221 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/25A
+      - us/statute/26/26
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/statute/26/25A
+        - us/statute/26/26
+      rationale: |-
+        Section 25A's executable module derives eligible-person adjusted
+        expenses, the aggregate $10,000 expense cap, the 20-percent rate, the
+        fixed $80,000-$90,000 and $160,000-$180,000 MAGI phaseout ranges,
+        filing and alien-status gates, coordination with the American
+        Opportunity credit, the pre-section-26 potential, and the final
+        tax-liability-capped Lifetime Learning credit. Section 26 was checked
+        because the encoded final applies available tax after preceding
+        credits.
+  summary: |-
+    Thin federal Lifetime Learning credit composition under 26 USC 25A(c)
+    and (d) for tax year 2026. Qualified-expense, assistance, relationship,
+    election, identification, payee-statement, and American Opportunity
+    coordination facts are supplied for people through the encoded education
+    credit relation. Filing status, completed-return MAGI, alien-election
+    facts, tax before credits, and preceding credits are TaxUnit boundaries.
+
+    The pipeline exposes two imported encoded outputs: the statutory
+    Lifetime Learning credit potential before section 26 and the final credit
+    after the encoded available-tax cap. Every P8 grid fixture supplies
+    $10,000 of tax before credits and zero foreign tax, child/dependent care,
+    and American Opportunity credits, so that cap does not bind and both
+    outputs equal the requested pre-section-26 amount. A separate diagnostic
+    fixture proves the two boundaries differ when only $500 of tax is
+    available.
+imports:
+  - us:statutes/26/25A#lifetime_learning_credit_potential
+  - us:statutes/26/25A#lifetime_learning_credit
+rules:
+  - name: federal_lifetime_learning_credit_before_section_26
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(c)-(d), imported encoded Lifetime Learning credit potential
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25A#lifetime_learning_credit_potential
+              output: lifetime_learning_credit_potential
+              hash: sha256:c96f218e15e3d44c3cbc7b32e48df885d5b6d99c454e8b28f398f57be5eadc64
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/25A
+              excerpt: "an amount equal to 20 percent of the qualified tuition and related expenses"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: lifetime_learning_credit_potential
+
+  - name: federal_lifetime_learning_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25A(c) and 26 USC 26(a), imported encoded final Lifetime Learning credit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25A#lifetime_learning_credit
+              output: lifetime_learning_credit
+              hash: sha256:c96f218e15e3d44c3cbc7b32e48df885d5b6d99c454e8b28f398f57be5eadc64
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/25A
+              excerpt: "Lifetime Learning Credit"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: lifetime_learning_credit
+
+inputs:
+  - name: filing_status
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Education-credit filing-status code; 0 single/other, 1 joint, 2 married filing separately, 3 head of household, 4 surviving spouse.
+  - name: modified_adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return section 25A(d) modified adjusted gross income.
+  - name: income_tax_before_credits
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Income tax before credits used by the encoded section 26 ordering.
+  - name: foreign_tax_credit
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Foreign tax credit applied before nonrefundable education credits.
+  - name: cdcc
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Child and dependent care credit applied before nonrefundable education credits.
+  - name: taxpayer_is_section_1_g_child
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the taxpayer is a section 1(g) child for refundable-AOTC coordination.
+  - name: is_nonresident_alien
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the taxpayer is a nonresident alien.
+  - name: section_6013_resident_alien_election
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether a qualifying section 6013 resident-alien election is in effect.
+  - name: qualified_tuition_and_related_expenses
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Person's qualified tuition and related expenses before excludable assistance.
+  - name: excludable_educational_assistance
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Excludable educational assistance reducing the person's qualified expenses.
+  - name: is_tax_unit_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the person is the TaxUnit's dependent for section 25A(f)(1).
+  - name: is_taxpayer
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the person is the taxpayer.
+  - name: is_spouse
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the person is the taxpayer's spouse.
+  - name: meets_higher_education_act_student_requirements
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: American Opportunity student-status fact used to prevent a duplicate LLC claim.
+  - name: at_least_half_time_student
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: American Opportunity half-time-student fact used to prevent a duplicate LLC claim.
+  - name: aotc_prior_year_election_count
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Number of prior taxable years for which an American Opportunity election applied.
+  - name: completed_first_four_years_postsecondary_before_year
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the person completed the first four postsecondary years before this taxable year.
+  - name: has_felony_drug_conviction
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: American Opportunity felony-drug-conviction fact.
+  - name: aotc_election_in_effect
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether an American Opportunity credit election is in effect for the person.
+  - name: education_credit_election_in_effect
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the Lifetime Learning credit election is in effect for the person.
+  - name: education_credit_identification_requirements_met
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether section 25A(g)(1) identification requirements are met.
+  - name: institution_employer_identification_number_included
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the institution EIN required for an American Opportunity claim is included.
+  - name: payee_statement_received
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the required tuition statement was received, subject to statutory exceptions already resolved by the caller.
+  - name: aotc_disallowance_period_applies
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether an American Opportunity disallowance period applies.
