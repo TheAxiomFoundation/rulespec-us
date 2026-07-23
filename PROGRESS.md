@@ -2,13 +2,15 @@
 
 ## State
 
-Defensive correctness-and-completeness audit in progress on
+Defensive correctness-and-completeness audit complete on
 `fed-parity/credits`, based on `origin/main` commit
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
 All four requested pipelines and companions are complete and independently
 validated. Shared reverse-index and oracle-pending artifacts have been
-regenerated with the workflow-current classifier.
+regenerated with the workflow-current classifier. The only remaining
+pre-integration action is intentional: a signing-key holder must generate the
+four manual-composition manifests.
 
 ## Done
 
@@ -60,10 +62,23 @@ regenerated with the workflow-current classifier.
   screen.
 - Passed that module's `validate --skip-reviewers`, proof validation,
   money-proof ratchet, and pinned-engine companion suite.
+- Passed the combined final battery: 4/4 deterministic validation, 38 proof
+  atoms, zero new missing money atoms, and 45/45 pinned-engine companion
+  cases.
+- Passed repository pytest: 55 tests, with only the expected unsigned-module
+  and temporary-directory cleanup warnings.
+- Passed a fresh-snapshot oracle check: 1,743 declared, 1,743 applied, and
+  zero stale.
+- Passed source staleness: all 43 pinned modules match the current corpus.
+- Passed the canonical-basename Program Artifact check: 32/32 programs
+  composed and engine-compiled with the pinned composer and rules engine.
+- The signer dry run selected exactly four manifests for the eight intended
+  pipeline/companion files. No signing was attempted or fabricated.
+- Confirmed `guard-generated` now fails only for those same eight unsigned
+  files, which is the expected handoff block.
 
 ## Next
 
-1. Run the complete validation, fresh-snapshot oracle, canonical 32/32
-   program-artifact, and signing-dry-run gate battery.
-2. Record the expected signing-key block without fabricating manifests.
-3. Write the required scratchpad summary and completion marker.
+1. A key holder runs `axiom-encode sign-applied-files` with the
+   `composition` manual exception and commits the four generated manifests.
+2. Rerun `guard-generated`; it must pass before integration.
