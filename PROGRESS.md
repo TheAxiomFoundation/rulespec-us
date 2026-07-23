@@ -22,19 +22,21 @@
   - WIC nutritional risk remains an explicit runtime determination; it is never silently assumed.
   - Head Start and Early Head Start outputs express regulatory eligibility, not selection, enrollment, take-up, or imputed service value.
   - Federal poverty-guideline dollar amounts remain caller-supplied runtime inputs.
-- Added the WIC person-level eligibility compose and a 21-case companion:
+- Added the WIC person-level eligibility compose and a 22-case companion:
   - all five encoded category facts crossed with income below, at, and above the 185-percent Federal maximum;
   - a no-category negative control;
   - a documented SNAP adjunctive-eligibility override;
   - the encoded pregnant-applicant/unborn-child income-guideline exception;
+  - a mismatched-pregnancy negative proving that the unborn-child exception
+    cannot passport another WIC category;
   - residency, certification, and nutritional-risk blockers.
 - Declared the WIC category classification, State guidelines below the Federal
   maximum, and competent-professional nutritional-risk determination as
   explicit boundaries.
 - Declared current-rate/unemployment and instream-migrant income procedures as
   completed upstream projections rather than silently inferring them.
-- Passed targeted WIC schema/CI validation, proof validation (12 atoms), and
-  all 21 companion cases.
+- Passed targeted WIC schema/CI validation, proof validation (13 atoms), and
+  all 22 companion cases.
 - Added the Head Start/Early Head Start person-level eligibility compose and a
   29-case companion:
   - ordinary income below, at, and above 100 percent of the poverty line;
@@ -56,7 +58,8 @@
   staff-policy administration outside the scalar eligibility outputs.
 - Passed targeted Head Start schema/CI validation, proof validation (32
   atoms), and all 29 companion cases.
-- Resolved both actionable findings from the independent read-only review.
+- Resolved all three actionable findings from two independent read-only review
+  passes.
 - Regenerated `.axiom/index/provisions_to_rules.json`; the check mode confirms
   3,944 provisions, 4,670 edges, and 4,435 modules are current.
 
