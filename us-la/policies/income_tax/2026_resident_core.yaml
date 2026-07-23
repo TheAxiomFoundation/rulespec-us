@@ -65,28 +65,53 @@ module:
         child-level school-expense allocations, bonus depreciation, other-state
         tax credit allocation, prior-year carryforwards, and numerous
         certification-, cap-, registry-, or program-dependent specialty
-        credits require additional source and fact surfaces. This module
-        therefore exposes a source-certified resident income/tax-before-credits
-        core and nominal amounts for two ordinary credits, but does not claim
-        the annual after-credit or final-liability stages.
+        credits require additional source and fact surfaces. LAC 61:I.1937,
+        which governs construction-retrofit eligibility and documentation, is
+        not present in the pinned corpus. This module therefore exposes only
+        explicitly partial income and tax amounts before held adjustments,
+        plus nominal amounts for three calculations. It does not claim
+        complete tax-table income, tax before credits, annual after-credit tax,
+        or final liability.
   summary: |-
-    Louisiana tax-year-2026 full-year resident income-tax core. It starts with
-    federal adjusted gross income and raw taxpayer facts; adds taxable interest
-    on other-state obligations; subtracts directly encoded exempt income,
-    pass-through income or loss, the operative filing-status standard
-    deduction, excess federal medical itemized deduction, volunteer and
-    construction-retrofit deductions, two adoption deductions, and
-    terminal-illness hardship distributions; floors tax-table income at zero;
-    and applies the enacted three-percent rate.
+    Louisiana tax-year-2026 full-year resident partial income-tax calculation.
+    It starts with federal adjusted gross income and raw taxpayer facts; adds
+    taxable interest on other-state obligations; subtracts the specifically
+    encoded exempt income, pass-through income or loss, the operative
+    filing-status standard deduction, excess federal medical itemized
+    deduction, volunteer deductions, two adoption deductions, and
+    terminal-illness hardship distributions; floors the partial income amount
+    at zero; and applies the enacted three-percent rate. Filing status fails
+    closed unless exactly one recognized status is selected.
 
     The module separately computes the current statutory nominal child-care
-    credit and Louisiana earned-income credit from permitted federal outputs.
-    It does not apply those credits to tax or label a terminal amount final.
-    Tax-year-2026 annual-return ordering, the indexed age-65 retirement
-    exemption, account and bonus-depreciation adjustments, other-state tax
-    credits, carryforwards, school-readiness and other specialty credits remain
-    source holds described below.
+    credit and Louisiana earned-income credit from permitted federal outputs,
+    and a nominal construction-retrofit arithmetic amount before the regulatory
+    eligibility and documentation rules in LAC 61:I.1937. The retrofit amount
+    is not subtracted from the partial income calculation. Tax-year-2026
+    annual-return ordering, complete tax-table income and tax-before-credits,
+    the indexed age-65 retirement exemption, account and bonus-depreciation
+    adjustments, other-state tax credits, carryforwards, school-readiness and
+    other specialty credits remain source holds described below.
   deferred_outputs:
+    - output: us-la:policies/income_tax/2026_resident_core#la_2026_resident_construction_code_retrofit_deduction
+      reason: |-
+        R.S. 47:293(2) supplies the percentage, incentive offset, and cap, but
+        makes the deduction subject to LAC 61:I.1937. That regulation is not
+        present in the pinned corpus, so regulatory eligibility and
+        documentation cannot be source-certified. Only a nominal statutory
+        arithmetic amount is exposed, and it is not included in aggregate
+        deductions.
+    - output: us-la:policies/income_tax/2026_resident_core#la_2026_resident_tax_table_income
+      reason: |-
+        Complete tax-table income requires the held indexed retirement,
+        account, bonus-depreciation, school-expense, retrofit, and specialty
+        adjustment surfaces described below. The executable aggregate is
+        explicitly partial and excludes those held adjustments.
+    - output: us-la:policies/income_tax/2026_resident_core#la_2026_resident_income_tax_before_credits
+      reason: |-
+        Complete income tax before credits depends on complete tax-table
+        income. The executable three-percent amount is explicitly partial and
+        remains before the held adjustments.
     - output: us-la:policies/income_tax/2026_resident_core#la_2026_resident_tax_after_nonrefundable_credits
       reason: |-
         The official tax-year-2026 annual IT-540 and its credit schedules have
@@ -306,6 +331,75 @@ rules:
         formula: |-
           la_2026_resident_federal_adjusted_gross_income
 
+  - name: la_2026_resident_filing_status_selection_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Count
+    period: Year
+    source: 2026 IT-540ESi worksheet, line 3 filing-status choices
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-la/form/individual-income-tax/2026/it-540es-instructions/document-1
+              excerpt: "If your filing status is:"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          (
+            if la_2026_resident_filing_status_single:
+              1
+            else:
+              0
+          )
+          + (
+            if la_2026_resident_filing_status_married_separate:
+              1
+            else:
+              0
+          )
+          + (
+            if la_2026_resident_filing_status_joint:
+              1
+            else:
+              0
+          )
+          + (
+            if la_2026_resident_filing_status_head_of_household:
+              1
+            else:
+              0
+          )
+          + (
+            if la_2026_resident_filing_status_qualifying_surviving_spouse:
+              1
+            else:
+              0
+          )
+
+  - name: la_2026_resident_filing_status_selection_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 2026 IT-540ESi worksheet, line 3 filing-status choices
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-la/form/individual-income-tax/2026/it-540es-instructions/document-1
+              excerpt: "If your filing status is:"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          la_2026_resident_filing_status_selection_count == 1
+
   - name: la_2026_resident_standard_deduction
     kind: derived
     entity: TaxUnit
@@ -325,16 +419,15 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if la_2026_resident_filing_status_joint
-             or la_2026_resident_filing_status_head_of_household
-             or la_2026_resident_filing_status_qualifying_surviving_spouse:
-            la_2026_standard_deduction_joint_head_or_surviving_spouse
-          else:
-            if la_2026_resident_filing_status_single
-               or la_2026_resident_filing_status_married_separate:
-              la_2026_standard_deduction_single_or_separate
+          if la_2026_resident_filing_status_selection_valid:
+            if la_2026_resident_filing_status_joint
+               or la_2026_resident_filing_status_head_of_household
+               or la_2026_resident_filing_status_qualifying_surviving_spouse:
+              la_2026_standard_deduction_joint_head_or_surviving_spouse
             else:
               la_2026_standard_deduction_single_or_separate
+          else:
+            0
 
   - name: la_2026_resident_disability_income_exemption
     kind: derived
@@ -365,7 +458,8 @@ rules:
               0
           )
           + (
-            if la_2026_resident_spouse_has_qualifying_permanent_total_disability_income:
+            if la_2026_resident_filing_status_joint
+               and la_2026_resident_spouse_has_qualifying_permanent_total_disability_income:
               min(
                 la_2026_disability_income_exemption_cap,
                 max(0, la_2026_resident_spouse_qualifying_disability_income_in_federal_agi)
@@ -403,7 +497,8 @@ rules:
               0
           )
           + (
-            if la_2026_resident_spouse_active_duty_outside_louisiana_for_at_least_120_consecutive_days:
+            if la_2026_resident_filing_status_joint
+               and la_2026_resident_spouse_active_duty_outside_louisiana_for_at_least_120_consecutive_days:
               min(
                 la_2026_active_duty_outside_louisiana_exclusion_cap,
                 max(0, la_2026_resident_spouse_active_duty_compensation_for_services_outside_louisiana)
@@ -412,7 +507,7 @@ rules:
               0
           )
 
-  - name: la_2026_resident_positive_exempt_income
+  - name: la_2026_resident_encoded_positive_exempt_income
     kind: derived
     entity: TaxUnit
     dtype: Money
@@ -494,14 +589,17 @@ rules:
               0
           )
           + (
-            if la_2026_resident_spouse_qualifies_as_recreation_volunteer
-               or la_2026_resident_spouse_qualifies_as_volunteer_firefighter:
+            if la_2026_resident_filing_status_joint
+               and (
+                 la_2026_resident_spouse_qualifies_as_recreation_volunteer
+                 or la_2026_resident_spouse_qualifies_as_volunteer_firefighter
+               ):
               la_2026_volunteer_deduction_amount
             else:
               0
           )
 
-  - name: la_2026_resident_construction_code_retrofit_deduction
+  - name: la_2026_resident_nominal_construction_code_retrofit_amount_before_regulatory_eligibility
     kind: derived
     entity: TaxUnit
     dtype: Money
@@ -515,23 +613,25 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-la/statute/47:293
-              excerpt: "fifty percent of the cost paid or incurred by a taxpayer to voluntarily retrofit"
+              excerpt: "an amount equal to fifty percent of the cost paid or incurred by a taxpayer to voluntarily retrofit an existing residential structure"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-la/statute/47:293
+              excerpt: "less the value of any municipally sponsored, state-sponsored, or federally sponsored financial incentives for the retrofitting cost paid"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if la_2026_resident_qualifying_retrofit_completed_in_tax_year:
-            min(
-              la_2026_retrofit_deduction_cap,
+          min(
+            la_2026_retrofit_deduction_cap,
+            max(
+              0,
               la_2026_retrofit_deduction_rate
-              * max(
-                0,
-                la_2026_resident_qualifying_retrofit_cost
-                - la_2026_resident_retrofit_financial_incentives
-              )
+              * max(0, la_2026_resident_qualifying_retrofit_cost)
+              - max(0, la_2026_resident_retrofit_financial_incentives)
             )
-          else:
-            0
+          )
 
   - name: la_2026_resident_adoption_deductions
     kind: derived
@@ -566,7 +666,7 @@ rules:
             )
           )
 
-  - name: la_2026_resident_other_direct_deductions
+  - name: la_2026_resident_encoded_direct_deductions_before_held_adjustments
     kind: derived
     entity: TaxUnit
     dtype: Money
@@ -587,11 +687,10 @@ rules:
         formula: |-
           la_2026_resident_excess_federal_medical_itemized_deduction
           + la_2026_resident_volunteer_deduction
-          + la_2026_resident_construction_code_retrofit_deduction
           + la_2026_resident_adoption_deductions
           + max(0, la_2026_resident_terminal_illness_hardship_distributions)
 
-  - name: la_2026_resident_income_before_standard_and_direct_deductions
+  - name: la_2026_resident_partial_income_before_standard_and_encoded_deductions
     kind: derived
     entity: TaxUnit
     dtype: Money
@@ -617,10 +716,10 @@ rules:
         formula: |-
           la_2026_resident_adjusted_gross_income
           + max(0, la_2026_resident_interest_on_other_state_or_local_obligations)
-          - la_2026_resident_positive_exempt_income
+          - la_2026_resident_encoded_positive_exempt_income
           - la_2026_resident_pte_net_income_or_loss_in_federal_agi
 
-  - name: la_2026_resident_tax_table_income
+  - name: la_2026_resident_partial_tax_table_income_before_held_adjustments
     kind: derived
     entity: TaxUnit
     dtype: Money
@@ -639,14 +738,17 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          max(
-            0,
-            la_2026_resident_income_before_standard_and_direct_deductions
-            - la_2026_resident_standard_deduction
-            - la_2026_resident_other_direct_deductions
-          )
+          if la_2026_resident_filing_status_selection_valid:
+            max(
+              0,
+              la_2026_resident_partial_income_before_standard_and_encoded_deductions
+              - la_2026_resident_standard_deduction
+              - la_2026_resident_encoded_direct_deductions_before_held_adjustments
+            )
+          else:
+            0
 
-  - name: la_2026_resident_income_tax_before_credits
+  - name: la_2026_resident_partial_income_tax_before_held_adjustments_and_credits
     kind: derived
     entity: TaxUnit
     dtype: Money
@@ -671,7 +773,7 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          la_2026_resident_tax_table_income * individual_income_tax_rate
+          la_2026_resident_partial_tax_table_income_before_held_adjustments * individual_income_tax_rate
 
   - name: la_2026_resident_nominal_child_care_credit
     kind: derived
