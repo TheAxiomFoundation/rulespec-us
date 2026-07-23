@@ -2,8 +2,7 @@
 
 ## State
 
-- Defensive correctness and completeness audit is in the full-validation phase
-  on branch
+- Defensive correctness and completeness audit is complete on branch
   `fed-parity/surtaxes`.
 - Scope remains limited to deferring the generic Additional Medicare
   international-agreement surfaces that overlap the upstream deferred
@@ -58,12 +57,24 @@
 - Ratcheted `oracle-coverage-pending.yaml` from 1,753 to exactly 1,751 entries.
 - Confirmed both pinned deferred-overlap detectors now report zero issues and
   pinned proof validation passes with 14 atoms checked.
+- Built the exact pinned rules engine commit
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0` and used the exact pinned corpus
+  commit `dfa47fb05bd1d3abbadf0ff17ce4a04bdd5c8085` in canonical temporary
+  checkouts.
+- Ran the shared-workflow-equivalent `validate --skip-reviewers` invocation:
+  Additional Medicare, NIIT, ordinary SE tax, and PR #1002 PTC each reported
+  `CI: ✓` and `Result: ✓ PASSED`.
+- Ran a no-skip diagnostic on Additional Medicare: its deterministic CI tier
+  reported `CI: ✓`; all four external reviewer CLIs exited before any turns or
+  tokens, so that non-CI reviewer layer is unavailable locally.
+- Proof validation passed for all four files (14, 2, 15, and 34 atoms).
+- Companion tests passed for all three PR #1003 files (32/32), Additional
+  Medicare alone (12/12), and PTC (9/9).
+- Reverse-index check passed: 3,944 provisions, 4,674 edges, 4,436 modules.
+- Oracle-coverage pending check passed with 1,751 applied declarations and zero
+  stale entries.
 
 ## Next
 
-- Materialize canonical temporary checkouts with the exact pinned encoder,
-  rules engine, corpus, and PR #1002 PTC ref.
-- Run CI-mode validation on all three PR #1003 pipelines and the PR #1002 PTC
-  pipeline, plus all companions and the reverse-index check.
-- Record exact commands/results, final commit SHA, and any tooling limitations
-  in the required DONE marker.
+- Main lane re-signs the changed Additional Medicare pipeline/test manifest.
+- Main lane pushes the local commits and re-runs PR #1003 CI.
