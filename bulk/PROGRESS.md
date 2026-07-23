@@ -2,11 +2,16 @@
 
 ## State
 
-Implementation and locally runnable verification are complete on branch
-`fed-parity/surtaxes` from `origin/main` at
-`c86b2f62511b7ff9d5351c98ca03b87e3cc41042`. Pre-PR provenance remains
-credential-blocked: a key holder must generate three signed
-manual-composition manifests and rerun `guard-generated`.
+The P1 Additional Medicare boundary follow-up is in progress on branch
+`fed-parity/surtaxes`, starting from prior-work commit `5a63f76a`. This is a
+defensive correctness and completeness audit: the target is to accept the
+GRID-CONTRACT gross self-employment net-profit boundary, derive taxable
+self-employment income through the existing SE pipeline, and preserve the
+combined and per-leg output names without editing encoded statute modules.
+
+Pre-PR provenance remains credential-blocked independently of this follow-up:
+a key holder must generate the signed manual-composition manifests and rerun
+`guard-generated`.
 
 ## Done
 
@@ -94,12 +99,27 @@ manual-composition manifests and rerun `guard-generated`.
   remains red only for those six unsigned files.
 - Wrote the requested full build report to
   `/private/tmp/claude-501/-Users-maxghenis-TheAxiomFoundation/53bdb134-6cd3-452d-89aa-000a8b5d77e3/scratchpad/build-surtax-SUMMARY.md`.
+- Started the P1 boundary follow-up from a clean `5a63f76a` worktree and read
+  both required prior summaries, including the oracle lane's verified
+  `amt-single-wage-se = 346.725` contract.
+- Reconfirmed the documented failure mode: importing encoded root section 1401
+  forces a completed TaxUnit `self_employment_income` boundary that collides
+  with the Person-level section 1402(b) output imported by the SE pipeline.
+- Limited the follow-up to policy-pipeline and companion authorship; encoded
+  statute modules, manifests, toolchain, workflows, and `CODEOWNERS` remain
+  out of scope.
 
 ## Next
 
-- Have a signing-key holder run `axiom-encode sign-applied-files --repo .
-  --base-ref origin/main --head-ref HEAD --manual-exception composition`,
-  commit the three generated manifests, and rerun `guard-generated`.
-- Resolve the root section 1401 TaxUnit/Person symbol collision in a
-  provenance-approved upstream change before adding the exact
-  `amt-single-wage-se` gross-profit fixture.
+- Inspect whole-module import behavior and the SE pipeline's aggregate output,
+  then choose the cleanest validating shape: reuse importable encoded
+  parameters if collision-free, otherwise author the section 1401(b)(2)
+  SE-leg rate/threshold/coordination locally with corpus-backed proof atoms.
+- Add and engine-verify the exact neutral-grid `amt-single-wage-se` case while
+  retaining the completed-income boundary case as a clearly labeled
+  non-contract fixture.
+- Run the full validation, proof, money-proof, companion, reverse-index,
+  oracle-pending (only if outputs change), canonical-basename program-artifact,
+  source-staleness, signer, and generated-file guard battery.
+- Append the follow-up section to the prior summary and write the requested
+  `fix-p1-DONE.md` marker with commit SHAs and exact gate results.
