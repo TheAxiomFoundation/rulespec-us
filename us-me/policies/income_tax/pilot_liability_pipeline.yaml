@@ -4,118 +4,703 @@ module:
     required: true
   source_verification:
     corpus_citation_paths:
-      - us-me/statute/36/5111
-      - us-me/statute/36/5124-C
-      - us-me/statute/36/5126-A
+      - us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+      - us-me/statute/36/5111/block-2
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
-        - us-me/statute/36/5111
-        - us-me/statute/36/5124-C
-        - us-me/statute/36/5126-A
+        - us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+        - us-me/statute/36/5111/block-2
       rationale: |-
-        This pipeline computes the Maine section 5111 individual income-tax
-        liability for the ordinary resident wage-earner slice: the graduated tax
-        on Maine taxable income (Maine adjusted gross income less the section
-        5124-C standard deduction and the section 5126-A personal exemption). The
-        encoded 5111 module carries the statutory rate tables — for tax years
-        beginning on or after January 1, 2017 a three-bracket schedule of 5.8,
-        6.75, and 7.15 per cent — but section 5111 subsection 1-F requires the
-        Assessor to adjust the bracket dollar amounts each year for inflation, so
-        the operative 2026 bracket boundaries are indexed values PolicyEngine
-        projects (26,800 / 63,450 single; 53,600 / 126,900 joint). Because the
-        six-case grid crosses all three brackets, each case supplies the
-        cumulative tax at its bracket floor, that floor, and the bracket marginal
-        rate, so the schedule reproduces the graduated tax as the supplied
-        cumulative base plus the supplied marginal rate on taxable income above the
-        floor. To reach a liability comparable to PolicyEngine me_income_tax to the
-        cent, the amounts this pipeline needs are declared caller-supplied inputs:
-        the section 5124-C standard deduction plus the section 5126-A personal
-        exemption (both indexed and both phased out at higher income, so the
-        supplied subtraction shrinks in the top cases), the per-case bracket floor,
-        the cumulative base tax at that floor, and the bracket marginal rate. Maine
-        applies no per-exemption tax credit on this childless grid, so the supplied
-        credit is zero. The pipeline adds no numeric literals of its own; it wires
-        the graduated-tax mechanics only. The section 5124-C deduction and section
-        5126-A exemption amounts are supplied here pending their own executable
-        encodings, mirroring the California pilot's supplied standard deduction.
+        Maine Revenue Services' official tax-year-2026 rate schedule supplies
+        the 5.8, 6.75, and 7.15 percent rates and the exact indexed thresholds
+        and cumulative bracket bases for single and married-separate,
+        head-of-household, and married-joint or surviving-spouse joint returns.
+        It also increases the tax calculated under those schedules by 2 percent
+        of Maine taxable income above the filing-status threshold.
+
+        The source heading classifies "Married Individuals and Surviving
+        Spouses Filing Joint Returns" in one base-schedule category. This module
+        therefore exposes one joint-return or surviving-spouse selector. The
+        source's surcharge note assigns $1,500,000 to married-joint and
+        head-of-household returns; a surviving spouse represented by this
+        selector is specifically a surviving spouse filing a joint return under
+        the source heading, so the joint-return threshold applies. No treatment
+        is inferred for a surviving spouse who is not filing in that source
+        category.
+
+        The caller supplies completed-return Maine taxable income and mutually
+        exclusive filing-status classifications. All selectors false means
+        single. The module does not determine taxable income, deductions,
+        exemptions, residency, allocation, credits, withholding, tax-table
+        substitution, or final-return liability. It fails closed outside tax
+        year 2026.
   summary: |-
-    Composed Maine individual income-tax liability pipeline for the oracle slice
-    at the 2026 tax year. It exposes a TaxUnit-level path from a supplied Maine
-    adjusted gross income into the section 5111 graduated tax on Maine taxable
-    income, so an end-to-end comparison against PolicyEngine
-    (me_income_tax_before_refundable_credits) and TAXSIM (siitax) does not require
-    the caller to supply the 5111 bracket application. It wires: Maine taxable
-    income (Maine AGI less the supplied section 5124-C standard deduction and
-    section 5126-A personal exemption); the graduated tax as the supplied
-    cumulative base tax at the case's bracket floor plus the supplied marginal
-    rate on taxable income above that floor, which reproduces the statutory
-    5.8/6.75/7.15-per-cent schedule for filers above the floor; and that tax less
-    the supplied credit (zero for Maine on this grid), floored at zero. It
-    deliberately models only the ordinary resident wage earner and excludes the
-    property-tax-fairness and other refundable credits, all zero for the childless
-    wage-earner grid. Maine AGI, filing status, the deduction/exemption
-    subtraction, the bracket floor, base, and marginal rate, and the credit are
-    supplied inputs; the Assessor indexes the brackets and the deduction/exemption
-    each year, so this 2026 pipeline is compared against PolicyEngine at 2026 and
-    against TAXSIM's latest 2024 law year with the indexation vintage
-    dispositioned.
+    Maine 2026 individual income-tax rate schedule and surcharge from completed
+    Maine taxable income. The module selects the official filing-status
+    thresholds and published cumulative bracket bases, applies the
+    5.8/6.75/7.15-percent graduated schedule, and adds the 2-percent surcharge
+    above the official filing-status threshold.
+
+    This is a schedule-only computation, not final Maine income-tax liability or
+    a completed return. It excludes all upstream taxable-income construction and
+    all downstream additions, allocations, credits, payments, and rounding
+    instructions. PolicyEngine and TAXSIM parity are not claimed; the official
+    2026 Maine Revenue Services schedule and boundary fixtures are the acceptance
+    standard.
 rules:
+  - name: me_pit_pilot_low_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Maine Revenue Services 2026 first-bracket rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "5.8% of Maine taxable income"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.058'}
+
+  - name: me_pit_pilot_middle_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Maine Revenue Services 2026 second-bracket rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "plus 6.75% of excess over"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0675'}
+
+  - name: me_pit_pilot_high_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Maine Revenue Services 2026 third-bracket rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "plus 7.15% of excess over"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0715'}
+
+  - name: me_pit_pilot_surcharge_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Maine Revenue Services 2026 income-tax surcharge rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "increased by a surcharge of 2%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.02'}
+
+  - name: me_pit_pilot_narrow_first_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 single and married-separate first threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Less than $27,400"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '27400'}
+
+  - name: me_pit_pilot_narrow_second_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 single and married-separate second threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$27,400 but less than $64,850"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '64850'}
+
+  - name: me_pit_pilot_narrow_first_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 single and married-separate second-bracket base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,589 plus 6.75%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '1589'}
+
+  - name: me_pit_pilot_narrow_second_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 single and married-separate third-bracket base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$4,117 plus 7.15%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '4117'}
+
+  - name: me_pit_pilot_head_first_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 head-of-household first threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Less than $41,100"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '41100'}
+
+  - name: me_pit_pilot_head_second_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 head-of-household second threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$41,100 but less than $97,300"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '97300'}
+
+  - name: me_pit_pilot_head_first_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 head-of-household second-bracket base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$2,384 plus 6.75%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '2384'}
+
+  - name: me_pit_pilot_head_second_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 head-of-household third-bracket base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$6,178 plus 7.15%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '6178'}
+
+  - name: me_pit_pilot_joint_first_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 joint or surviving-spouse first threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Less than $54,850"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '54850'}
+
+  - name: me_pit_pilot_joint_second_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 joint or surviving-spouse second threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$54,850 but less than $129,750"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '129750'}
+
+  - name: me_pit_pilot_joint_first_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 joint or surviving-spouse second-bracket base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$3,181 plus 6.75%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '3181'}
+
+  - name: me_pit_pilot_joint_second_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 joint or surviving-spouse third-bracket base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$8,237 plus 7.15%"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '8237'}
+
+  - name: me_pit_pilot_single_surcharge_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 single surcharge threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,000,000 if filing single"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '1000000'}
+
+  - name: me_pit_pilot_separate_surcharge_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 married-separate surcharge threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$750,000 if married filing separate"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '750000'}
+
+  - name: me_pit_pilot_joint_surcharge_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 married-joint surcharge threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,500,000 if married filing jointly"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '1500000'}
+
+  - name: me_pit_pilot_head_surcharge_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 head-of-household surcharge threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,500,000 if married filing jointly or head of household"
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '1500000'}
+
   - name: me_pit_pilot_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 5111 and 5124-C/5126-A, Maine taxable income after the supplied standard deduction and personal exemption
+    source: Completed-return Maine taxable income supplied by the caller
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-me/statute/36/5124-C
-              excerpt: "the standard deduction of a resident individual"
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Maine taxable income"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, me_pit_pilot_state_taxable_income)
+
+  - name: me_pit_pilot_first_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 first threshold by filing-status schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Less than $27,400"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Less than $41,100"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "Less than $54,850"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, me_pit_pilot_adjusted_gross_income - me_pit_pilot_supplied_standard_deduction)
+          if me_pit_pilot_filing_status_joint_or_surviving_spouse:
+            me_pit_pilot_joint_first_threshold
+          else: if me_pit_pilot_filing_status_head_of_household:
+            me_pit_pilot_head_first_threshold
+          else:
+            me_pit_pilot_narrow_first_threshold
+
+  - name: me_pit_pilot_second_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 second threshold by filing-status schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$27,400 but less than $64,850"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$41,100 but less than $97,300"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$54,850 but less than $129,750"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if me_pit_pilot_filing_status_joint_or_surviving_spouse:
+            me_pit_pilot_joint_second_threshold
+          else: if me_pit_pilot_filing_status_head_of_household:
+            me_pit_pilot_head_second_threshold
+          else:
+            me_pit_pilot_narrow_second_threshold
+
+  - name: me_pit_pilot_first_bracket_base
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 published second-bracket base by filing status
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,589 plus 6.75%"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$2,384 plus 6.75%"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$3,181 plus 6.75%"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if me_pit_pilot_filing_status_joint_or_surviving_spouse:
+            me_pit_pilot_joint_first_base
+          else: if me_pit_pilot_filing_status_head_of_household:
+            me_pit_pilot_head_first_base
+          else:
+            me_pit_pilot_narrow_first_base
+
+  - name: me_pit_pilot_second_bracket_base
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 published third-bracket base by filing status
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$4,117 plus 7.15%"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$6,178 plus 7.15%"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$8,237 plus 7.15%"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if me_pit_pilot_filing_status_joint_or_surviving_spouse:
+            me_pit_pilot_joint_second_base
+          else: if me_pit_pilot_filing_status_head_of_household:
+            me_pit_pilot_head_second_base
+          else:
+            me_pit_pilot_narrow_second_base
+
+  - name: me_pit_pilot_surcharge_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 surcharge threshold by filing status
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,000,000 if filing single"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$750,000 if married filing separate"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "$1,500,000 if married filing jointly or head of household"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if me_pit_pilot_filing_status_joint_or_surviving_spouse:
+            me_pit_pilot_joint_surcharge_threshold
+          else: if me_pit_pilot_filing_status_separate:
+            me_pit_pilot_separate_surcharge_threshold
+          else: if me_pit_pilot_filing_status_head_of_household:
+            me_pit_pilot_head_surcharge_threshold
+          else:
+            me_pit_pilot_single_surcharge_threshold
+
+  - name: me_pit_pilot_base_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 graduated schedule using published cumulative bases
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "If the taxable income is: The tax is:"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if me_pit_pilot_taxable_income < me_pit_pilot_first_threshold:
+            me_pit_pilot_low_rate * me_pit_pilot_taxable_income
+          else: if me_pit_pilot_taxable_income < me_pit_pilot_second_threshold:
+            me_pit_pilot_first_bracket_base
+            + me_pit_pilot_middle_rate * (me_pit_pilot_taxable_income - me_pit_pilot_first_threshold)
+          else:
+            me_pit_pilot_second_bracket_base
+            + me_pit_pilot_high_rate * (me_pit_pilot_taxable_income - me_pit_pilot_second_threshold)
+
+  - name: me_pit_pilot_surcharge
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Maine Revenue Services 2026 2-percent surcharge above the filing-status threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "2% on the portion of the taxpayer’s Maine taxable income greater than"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          me_pit_pilot_surcharge_rate
+          * max(0, me_pit_pilot_taxable_income - me_pit_pilot_surcharge_threshold)
+
   - name: me_pit_pilot_schedule_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 5111, graduated tax as the supplied cumulative base at the bracket floor plus the supplied marginal rate above it
+    source: Maine Revenue Services 2026 base schedule increased by the income-tax surcharge
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-me/statute/36/5111
-              excerpt: "imposes individual income tax tables"
+              corpus_citation_path: us-me/guidance/revenue/individual-income-tax/2026/rate-schedules/document-1
+              excerpt: "the tax calculated above is increased by a surcharge"
     versions:
       - effective_from: '2026-01-01'
-        formula: |-
-          me_pit_pilot_supplied_bracket_base
-          + me_pit_pilot_supplied_marginal_rate * max(0, me_pit_pilot_taxable_income - me_pit_pilot_supplied_bracket_floor)
-  - name: me_pit_pilot_income_tax_liability
-    kind: derived
+        effective_to: '2026-12-31'
+        formula: me_pit_pilot_base_schedule_tax + me_pit_pilot_surcharge
+
+inputs:
+  - name: me_pit_pilot_state_taxable_income
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 5111 graduated tax less the supplied credit (zero for Maine on this grid), floored at zero
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-me/statute/36/5111
-              excerpt: "the tax imposed by this section"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, me_pit_pilot_schedule_tax - me_pit_pilot_supplied_nonrefundable_credit)
+    description: Completed-return Maine taxable income supplied by the caller.
+  - name: me_pit_pilot_filing_status_joint_or_surviving_spouse
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for the source category of a married joint return or a surviving spouse filing a joint return.
+  - name: me_pit_pilot_filing_status_separate
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for a married-separate return.
+  - name: me_pit_pilot_filing_status_head_of_household
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for a head-of-household return; all selectors false selects single.
