@@ -4,7 +4,7 @@
 
 - Branch: `fed-parity/benefit-elig`
 - Starting commit: `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`
-- Phase: required-source and repository-discipline review complete; implementation not started.
+- Phase: WIC compose complete and targeted gates passing; Head Start compose next.
 - Network fetch was unavailable because `github.com` could not be resolved. The cached `origin/main` and `HEAD` both resolve to the stated starting commit.
 
 ## Done
@@ -22,11 +22,20 @@
   - WIC nutritional risk remains an explicit runtime determination; it is never silently assumed.
   - Head Start and Early Head Start outputs express regulatory eligibility, not selection, enrollment, take-up, or imputed service value.
   - Federal poverty-guideline dollar amounts remain caller-supplied runtime inputs.
+- Added the WIC person-level eligibility compose and a 20-case companion:
+  - all five encoded category facts crossed with income below, at, and above the 185-percent Federal maximum;
+  - a no-category negative control;
+  - a documented SNAP adjunctive-eligibility override;
+  - residency, certification, and nutritional-risk blockers.
+- Declared the WIC category classification, State guidelines below the Federal
+  maximum, and competent-professional nutritional-risk determination as
+  explicit boundaries.
+- Passed targeted WIC schema/CI validation, proof validation (11 atoms), and
+  all 20 companion cases.
 
 ## Next
 
-1. Implement and companion-test the WIC eligibility pipeline.
-2. Implement and companion-test the Head Start/Early Head Start eligibility pipeline.
-3. Generate required provenance/index artifacts through the approved dry-run-only path.
-4. Run the full validation battery and signing dry-run.
-5. Write `build-benefit-elig-SUMMARY.md` and `build-benefit-elig-DONE.md` with case tables, boundaries, gates, commit SHAs, and oracle-suite notes.
+1. Implement and companion-test the Head Start/Early Head Start eligibility pipeline.
+2. Generate required provenance/index artifacts through the approved dry-run-only path.
+3. Run the full validation battery and signing dry-run.
+4. Write `build-benefit-elig-SUMMARY.md` and `build-benefit-elig-DONE.md` with case tables, boundaries, gates, commit SHAs, and oracle-suite notes.
