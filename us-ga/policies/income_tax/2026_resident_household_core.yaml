@@ -1,0 +1,526 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ga/statute/48/48-7-20
+      - us-ga/statute/48/48-7-26
+      - us-ga/statute/48/48-7-27
+      - us-ga/statute/48/48-7-29.10
+      - us-ga/statute/48/48-7A-3
+      - us-ga/statute/session-laws/2026/hb463/document-1
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ga/statute/48/48-7-20
+        - us-ga/statute/48/48-7-26
+        - us-ga/statute/48/48-7-27
+        - us-ga/statute/48/48-7-29.10
+        - us-ga/statute/48/48-7A-3
+        - us-ga/statute/session-laws/2026/hb463/document-1
+      rationale: |-
+        The cited current Georgia authorities supply the 2026 individual rate,
+        standard deductions, dependent-exemption amount, low-income credit,
+        and child/dependent-care credit. This composition starts with federal
+        adjusted gross income but preserves completed Georgia Schedule 1
+        additions and subtractions, completed Georgia itemized deductions, the
+        Georgia NOL deduction, and Georgia-dependent classification as caller
+        boundaries. Those boundaries avoid inventing the many cross-referenced
+        adjustment, itemization, NOL, and dependent-definition rules that the
+        encoded section 48-7-27 and 48-7-26 modules truthfully defer.
+
+        Georgia DOR has not published the tax-year-2026 Form 500 and IT-511
+        annual-return package in the pinned official corpus. The latest official
+        package is tax year 2025, whose Form 500 separately orders the
+        other-state tax credit, eligible-itemizer credit, IND-CR credits,
+        Schedule 2 credits, and Schedule 2B refundable credits. This module
+        therefore stops before those unencoded surfaces and does not label its
+        terminal amount final liability.
+  summary: |-
+    Georgia tax-year-2026 resident household-core income tax. The pipeline
+    starts from federal adjusted gross income; applies caller-supplied completed
+    Georgia additions and subtractions; selects the enacted $30,000 joint or
+    $15,000 other-filer standard deduction unless a completed Georgia itemized
+    deduction is supplied; subtracts the enacted $5,000 amount for each
+    caller-classified Georgia dependent and a completed Georgia NOL deduction;
+    applies the enacted 4.99 percent rate; and subtracts the section 48-7A-3
+    low-income credit and section 48-7-29.10 child/dependent-care credit without
+    taking the result below zero.
+
+    The result is not complete annual liability. Other-state, eligible-itemizer,
+    IND-CR, Schedule 2, and refundable Schedule 2B credits remain outside this
+    source-certified core pending the official 2026 Form 500/IT-511 package and
+    separate encoding of their eligibility and amount surfaces. The pipeline is
+    limited to full-year resident individual returns and tax year 2026.
+  deferred_outputs:
+    - output: us-ga:policies/income_tax/2026_resident_household_core#ga_2026_resident_final_income_tax_before_payments
+      reason: |-
+        A truthful final-before-payments output requires the tax-year-2026 Form
+        500 and IT-511 ordering plus all applicable other-state,
+        eligible-itemizer, IND-CR, Schedule 2, and refundable Schedule 2B credit
+        computations. The pinned official corpus contains only the 2025 annual
+        return package, so the 2026 final surface cannot yet be certified.
+imports:
+  - us-ga:statutes/48/48-7-20#individual_income_tax_rate
+  - us-ga:statutes/48/48-7-26#dependent_exemption_amount
+  - us-ga:statutes/48/48-7-27#single_or_head_of_household_standard_deduction
+  - us-ga:statutes/48/48-7-27#married_separate_standard_deduction
+  - us-ga:statutes/48/48-7-27#married_joint_standard_deduction
+  - us-ga:statutes/48/48-7-29/10#child_and_dependent_care_credit_percentage
+  - us-ga:statutes/48/48-7A-3#agi_band_0_upper_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_1_lower_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_1_upper_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_2_lower_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_2_upper_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_3_lower_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_3_upper_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_4_lower_bound
+  - us-ga:statutes/48/48-7A-3#agi_band_4_upper_bound
+  - us-ga:statutes/48/48-7A-3#credit_amount_per_dependent
+rules:
+  - name: ga_2026_resident_adjusted_gross_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-27(a), federal adjusted gross income after completed Georgia additions and subtractions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-27
+              excerpt: "Georgia taxable net income of an individual shall be the taxpayer's federal adjusted gross income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ga_2026_resident_federal_adjusted_gross_income
+          + ga_2026_resident_completed_georgia_additions
+          - ga_2026_resident_completed_georgia_subtractions
+
+  - name: ga_2026_resident_standard_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-27(a)(1)(B), 2026 standard deduction selected by filing status
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-27#single_or_head_of_household_standard_deduction
+              output: single_or_head_of_household_standard_deduction
+              hash: sha256:f9e733b5499754ed829bc6c7610eee597d0ae55ba7dbb1fbdec257859737038e
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-27#married_separate_standard_deduction
+              output: married_separate_standard_deduction
+              hash: sha256:f9e733b5499754ed829bc6c7610eee597d0ae55ba7dbb1fbdec257859737038e
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-27#married_joint_standard_deduction
+              output: married_joint_standard_deduction
+              hash: sha256:f9e733b5499754ed829bc6c7610eee597d0ae55ba7dbb1fbdec257859737038e
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-27
+              excerpt: "then a standard deduction as provided for in the following subparagraphs"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ga_2026_resident_filing_status_joint:
+            married_joint_standard_deduction
+          else:
+            if ga_2026_resident_filing_status_married_separate:
+              married_separate_standard_deduction
+            else:
+              single_or_head_of_household_standard_deduction
+
+  - name: ga_2026_resident_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-27(a)(1), completed Georgia itemized deduction or statutory standard deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-27
+              excerpt: "At the taxpayer's election, federal itemized deductions"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:policies/income_tax/2026_resident_household_core#ga_2026_resident_standard_deduction
+              output: ga_2026_resident_standard_deduction
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ga_2026_resident_itemizes:
+            max(0, ga_2026_resident_completed_georgia_itemized_deduction)
+          else:
+            ga_2026_resident_standard_deduction
+
+  - name: ga_2026_resident_caller_classified_dependents_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-26(b), 2026 dependent exemption amount times caller-classified Georgia dependents
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-26#dependent_exemption_amount
+              output: dependent_exemption_amount
+              hash: sha256:1a4ca8c47965b220316d028b9b07f90658e089d4e92492e945402338dad9a0f7
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/session-laws/2026/hb463/document-1
+              excerpt: "$5,000.00 for each dependent"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          dependent_exemption_amount * max(0, ga_2026_resident_georgia_dependent_count)
+
+  - name: ga_2026_resident_income_before_nol
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-27(a), Georgia adjusted gross income less deductions and exemptions before completed Georgia NOL
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-27
+              excerpt: "less the sum of the amounts allowed the taxpayer as deductions and exemptions"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(0,
+            ga_2026_resident_adjusted_gross_income
+            - ga_2026_resident_deduction
+            - ga_2026_resident_caller_classified_dependents_amount
+          )
+
+  - name: ga_2026_resident_taxable_net_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-27(a), income before NOL less completed Georgia NOL deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-27
+              excerpt: "Georgia taxable net income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(0,
+            ga_2026_resident_income_before_nol
+            - max(0, ga_2026_resident_completed_georgia_nol_deduction)
+          )
+
+  - name: ga_2026_resident_income_tax_before_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-20(a.1), 2026 tax on Georgia taxable net income before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-20#individual_income_tax_rate
+              output: individual_income_tax_rate
+              hash: sha256:3b14bace271098396b2e7f91054f8f5453fdd291c7ba60a776f47b1f55d5fd02
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-20
+              excerpt: "computed at the rate of 5.39 percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/session-laws/2026/hb463/document-1
+              excerpt: "4.99 percent"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ga_2026_resident_taxable_net_income * individual_income_tax_rate
+
+  - name: ga_2026_resident_low_income_credit_allowed
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: O.C.G.A. § 48-7A-3(a), resident low-income-credit eligibility boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          not ga_2026_resident_taxpayer_claimed_or_eligible_as_another_dependent
+          and not ga_2026_resident_received_food_stamp_allotment
+          and not ga_2026_resident_incarcerated_or_confined
+
+  - name: ga_2026_resident_low_income_credit_band
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: O.C.G.A. § 48-7A-3(b), adjusted-gross-income band
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ga_2026_resident_adjusted_gross_income < agi_band_0_upper_bound: 0
+          else: if ga_2026_resident_adjusted_gross_income >= agi_band_1_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_1_upper_bound: 1
+          else: if ga_2026_resident_adjusted_gross_income >= agi_band_2_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_2_upper_bound: 2
+          else: if ga_2026_resident_adjusted_gross_income >= agi_band_3_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_3_upper_bound: 3
+          else: if ga_2026_resident_adjusted_gross_income >= agi_band_4_lower_bound and ga_2026_resident_adjusted_gross_income <= agi_band_4_upper_bound: ga_2026_resident_low_income_last_band_index
+          else: -1
+
+  - name: ga_2026_resident_low_income_last_band_index
+    kind: parameter
+    dtype: Integer
+    period: Year
+    source: O.C.G.A. § 48-7A-3(b), zero-based index of the fifth and final low-income-credit schedule band
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+              table:
+                header: "TAX CREDIT SCHEDULE Adjusted Gross Income Tax Credit"
+                row: "15,000.00 but not more than 19,999.00"
+                column: "fifth schedule row"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '4'
+
+  - name: ga_2026_resident_low_income_credit_before_cap
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7A-3(b), low-income schedule amount before liability cap
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7A-3#credit_amount_per_dependent
+              output: credit_amount_per_dependent
+              hash: sha256:be1408488645d51211fa5d43dcae6bed04b38abb8a1b9b40733f381ca4dff5b2
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+              table:
+                header: "TAX CREDIT SCHEDULE Adjusted Gross Income Tax Credit"
+                row_key: "ga_2026_resident_low_income_credit_band"
+                column_key: "tax_credit"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ga_2026_resident_low_income_credit_allowed and ga_2026_resident_low_income_credit_band >= 0:
+            if ga_2026_resident_married_separate_when_joint_return_could_be_filed:
+              max(0, ga_2026_resident_completed_joint_equivalent_low_income_credit)
+            else:
+              credit_amount_per_dependent[ga_2026_resident_low_income_credit_band]
+              * (
+                max(0, ga_2026_resident_georgia_dependent_count)
+                + (if ga_2026_resident_taxpayer_age_65_or_older: 1 else: 0)
+                + (if ga_2026_resident_spouse_age_65_or_older: 1 else: 0)
+              )
+          else:
+            0
+
+  - name: ga_2026_resident_low_income_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7A-3(c)-(d), timely low-income credit capped by tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ga_2026_resident_low_income_credit_claim_filed_timely:
+            min(
+              max(0, ga_2026_resident_income_tax_before_credits),
+              max(0, ga_2026_resident_low_income_credit_before_cap)
+            )
+          else:
+            0
+
+  - name: ga_2026_resident_child_and_dependent_care_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-29.10(a)-(b), 50 percent of federal credit capped by Georgia tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-29/10#child_and_dependent_care_credit_percentage
+              output: child_and_dependent_care_credit_percentage
+              hash: sha256:4ac284f36e8cc5bcd4b905b01ce889bbd93f2fa09cf21dcacbb57581d9eb2c85
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-29.10
+              excerpt: "50 percent of the amount of the credit provided for in Section 21 of the Internal Revenue Code"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-29.10
+              excerpt: "In no event shall the total amount of the tax credit under this Code section for a taxable year exceed the taxpayer's income tax liability."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          min(
+            max(0, ga_2026_resident_income_tax_before_credits),
+            child_and_dependent_care_credit_percentage
+            * max(0, ga_2026_resident_federal_child_and_dependent_care_credit)
+          )
+
+  - name: ga_2026_resident_household_core_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. §§ 48-7A-3 and 48-7-29.10, household-core credits limited to tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-29.10
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          min(
+            max(0, ga_2026_resident_income_tax_before_credits),
+            ga_2026_resident_low_income_credit
+            + ga_2026_resident_child_and_dependent_care_credit
+          )
+
+  - name: ga_2026_resident_income_tax_after_household_core_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. §§ 48-7-20, 48-7A-3, and 48-7-29.10, tax after encoded household-core nonrefundable credits and before all other credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-20
+              excerpt: "A tax is imposed upon every resident of this state with respect to the Georgia taxable net income of the taxpayer"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7A-3
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-29.10
+              excerpt: "In no event shall the total amount of the tax credit under this Code section for a taxable year exceed the taxpayer's income tax liability."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(
+            0,
+            ga_2026_resident_income_tax_before_credits
+            - ga_2026_resident_household_core_nonrefundable_credits
+          )
