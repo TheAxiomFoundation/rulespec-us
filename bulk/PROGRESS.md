@@ -144,6 +144,10 @@ a key holder must generate the signed manual-composition manifests and rerun
   cases using the pinned engine. Because the checkout basename is not
   `rulespec-us`, same-worktree canonical imports were resolved through a
   temporary canonical-basename symlink.
+- Regenerated and checked the reverse index after the boundary fix. It remains
+  byte-for-byte current at 3,944 provisions, 4,674 edges, and 4,436 modules;
+  no reverse-index commit was needed because the module-to-provision edges did
+  not change.
 
 ## Next
 
