@@ -1,77 +1,197 @@
-# Expected values are independently hand-computed from Mississippi Code section
-# 27-7-5's 2026 individual schedule: zero through $10,000 and 4 percent of
-# excess taxable income. Supplied taxable-income inputs equal PolicyEngine's
-# completed-return ms_taxable_income_joint values for the standard wage grid.
-# All six liabilities match ms_income_tax_before_credits_unit exactly.
+# Expected values use independent decimal arithmetic from Mississippi Code
+# section 27-7-5(1): the 2026 tax is 4% of taxable income above $10,000.
+# Person-grain fixtures cover normalization and both taxable-income candidates;
+# TaxUnit fixtures cover relation aggregation and separate, joint, and tie
+# branches. No fixture supplies PolicyEngine's `ms_files_separately` output.
+- name: individual_candidate_negative_income_normalizes_to_zero
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: -500
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_individual_taxable_income: '0'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_individual_schedule_tax: '0'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_related_person_has_both_candidates: holds
+
+- name: joint_candidate_negative_income_normalizes_to_zero
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: -500
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_taxable_income: '0'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_schedule_tax: '0'
+
+- name: individual_candidate_one_dollar_below_zero_tax_ceiling
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 9999
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_individual_taxable_income: '9999'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_individual_schedule_tax: '0'
+
+- name: joint_candidate_at_zero_tax_ceiling
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 10000
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_taxable_income: '10000'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_schedule_tax: '0'
+
+- name: individual_candidate_one_dollar_above_zero_tax_ceiling
+  # 4% * (10,001 - 10,000) = 0.04.
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 10001
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_individual_schedule_tax: '0.04'
+
+- name: joint_candidate_above_zero_tax_ceiling
+  # 4% * (60,000 - 10,000) = 2,000.
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 60000
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_schedule_tax: '2000'
+
+- name: relation_aggregates_both_candidate_sets
+  # Individual total: 800 + 400 = 1,200.
+  # Joint total: 1,400 + 600 = 2,000.
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 30000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 45000
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 20000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 25000
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_schedule_tax: '1200'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_total_schedule_tax: '2000'
+
+- name: strict_lower_separate_total_selects_separate_branch
+  # Separate total: tax(30,000) + tax(20,000) = 800 + 400 = 1,200.
+  # Joint total: tax(60,000) + tax(0) = 2,000. The strict comparison holds.
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 30000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 60000
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 20000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_schedule_tax: '1200'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_total_schedule_tax: '2000'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_is_strictly_lower: holds
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '1200'
+
+- name: lower_joint_total_selects_joint_branch
+  # Separate total: tax(50,000) + tax(40,000) = 1,600 + 1,200 = 2,800.
+  # Joint total: tax(70,000) + tax(0) = 2,400. The strict comparison does not hold.
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 50000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 70000
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 40000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_schedule_tax: '2800'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_total_schedule_tax: '2400'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_is_strictly_lower: not_holds
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '2400'
+
+- name: equal_totals_choose_joint_branch
+  # Each total is tax(30,000) + tax(0) = 800. Strict less-than is false,
+  # so this distinguishes the required joint-on-tie behavior.
+  period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
+  input:
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 30000
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 30000
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
+  output:
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_schedule_tax: '800'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_joint_total_schedule_tax: '800'
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_separate_total_is_strictly_lower: not_holds
+    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '800'
+
+# Canonical oracle-grid compatibility cases. Candidate taxable incomes are the
+# exact Person-grain values returned by PE-US 1.752.2 for the standard 2026
+# wage situations. Expected liabilities use independent section 27-7-5 decimal
+# arithmetic and match PE-US ms_income_tax_before_credits_unit.
 - name: single_30000
-  # 4% * (21,700 - 10,000) = 468.
+  # Separate: 4% * (24,700 - 10,000) = 588.
+  # Joint: 4% * (21,700 - 10,000) = 468; joint is lower.
   period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
   input:
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income: 21700
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_base: 0
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_floor: 10000
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_marginal_rate: 0.04
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 24700
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 21700
   output:
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_taxable_income: '21700'
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_schedule_tax: '468'
     us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '468'
+
 - name: single_60000
-  # 4% * (51,700 - 10,000) = 1,668.
+  # Separate: 4% * (54,700 - 10,000) = 1,788.
+  # Joint: 4% * (51,700 - 10,000) = 1,668; joint is lower.
   period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
   input:
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income: 51700
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_base: 0
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_floor: 10000
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_marginal_rate: 0.04
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 54700
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 51700
   output:
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_taxable_income: '51700'
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_schedule_tax: '1668'
     us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '1668'
+
 - name: single_150000
-  # 4% * (141,700 - 10,000) = 5,268.
+  # Separate: 4% * (144,700 - 10,000) = 5,388.
+  # Joint: 4% * (141,700 - 10,000) = 5,268; joint is lower.
   period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
   input:
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income: 141700
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_base: 0
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_floor: 10000
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_marginal_rate: 0.04
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 144700
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 141700
   output:
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_taxable_income: '141700'
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_schedule_tax: '5268'
     us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '5268'
-- name: married_60000
-  # 4% * (43,400 - 10,000) = 1,336.
+
+- name: joint_60000
+  # Separate: 4% * (51,700 - 10,000) + tax(0) = 1,668.
+  # Joint: 4% * (43,400 - 10,000) + tax(0) = 1,336; joint is lower.
   period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
   input:
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income: 43400
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_base: 0
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_floor: 10000
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_marginal_rate: 0.04
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 51700
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 43400
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
   output:
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_taxable_income: '43400'
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_schedule_tax: '1336'
     us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '1336'
-- name: married_120000
-  # 4% * (103,400 - 10,000) = 3,736.
+
+- name: joint_120000
+  # Separate: 4% * (111,700 - 10,000) + tax(0) = 4,068.
+  # Joint: 4% * (103,400 - 10,000) + tax(0) = 3,736; joint is lower.
   period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
   input:
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income: 103400
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_base: 0
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_floor: 10000
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_marginal_rate: 0.04
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 111700
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 103400
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
   output:
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_taxable_income: '103400'
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_schedule_tax: '3736'
     us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '3736'
-- name: married_300000
-  # 4% * (283,400 - 10,000) = 10,936.
+
+- name: joint_300000
+  # Separate: 4% * (291,700 - 10,000) + tax(0) = 11,268.
+  # Joint: 4% * (283,400 - 10,000) + tax(0) = 10,936; joint is lower.
   period: {period_kind: tax_year, start: '2026-01-01', end: '2026-12-31'}
   input:
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income: 283400
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_base: 0
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_bracket_floor: 10000
-    us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_marginal_rate: 0.04
+    us-ms:policies/income_tax/pilot_liability_pipeline#relation.ms_pit_pilot_person_of_tax_unit:
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 291700
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 283400
+      - us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_indiv: 0
+        us-ms:policies/income_tax/pilot_liability_pipeline#input.ms_pit_pilot_supplied_taxable_income_joint: 0
   output:
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_taxable_income: '283400'
-    us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_schedule_tax: '10936'
     us-ms:policies/income_tax/pilot_liability_pipeline#ms_pit_pilot_income_tax_liability: '10936'

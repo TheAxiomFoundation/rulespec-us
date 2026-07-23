@@ -3,157 +3,105 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-vt/statute/32-5811
-      - us-vt/statute/32-5822
-      - us-vt/statute/32-5823
+    corpus_citation_path: us-vt/statute/32-5822
     upstream_source_check:
       status: composed_from_supplied_current_authority
       checked_paths:
         - us-vt/statute/title-32
         - us-vt/statute/chapter-151
-        - us-vt/statute/32-5811
         - us-vt/statute/32-5822
-        - us-vt/statute/32-5823
       rationale: |-
-        The complete official Chapter 151 package contains the individual
-        taxable-income definition and annually inflation-adjusted exemptions
-        and deductions in section 5811, the resident-income rule in section
-        5823, and the imposition, four statutory rates, annually adjusted table
-        thresholds, and minimum-tax comparison in section 5822. The 2026 Acts
-        152 and 164 overlays are included in those canonical records. This
-        narrow composition accepts each taxpayer's completed-return Vermont
-        taxable income and current indexed active bracket's cumulative base
-        tax, floor, and marginal rate as supplied inputs because sections 5811
-        and 5822 assign annual inflation adjustment to the Commissioner. It
-        then explicitly aggregates the taxpayer amounts to the tax unit.
-        Credits, special income classes, and nonresident allocation remain
-        outside this core.
+        The certified Chapter 151 package contains the section 5822 tax
+        schedules, the four statutory rates, the Commissioner's annual
+        inflation-adjustment mandate, and the federal-AGI minimum. It does not
+        contain Commissioner-published 2026 indexed bracket amounts. This
+        narrow composition therefore accepts the completed current-year normal
+        income tax as an explicitly supplied upstream boundary and independently
+        encodes section 5822(a)(6): only when federal adjusted gross income
+        exceeds $150,000, compare normal tax with three percent of federal AGI.
+        Credits, special federal-tax additions, nonresident allocation, and the
+        annually indexed schedule calculation remain outside this composition.
   summary: |-
-    Vermont individual-income-tax liability pipeline for the 2026 ordinary
-    full-year resident wage-earner slice. It normalizes each taxpayer's supplied
-    completed-return Vermont taxable income, applies the supplied current
-    indexed section 5822 bracket in cumulative-base-plus-marginal form,
-    aggregates those amounts to the tax unit, and takes the greater of that
-    schedule tax or the statutory three-percent federal-AGI minimum when federal
-    AGI exceeds the supplied statutory threshold. The six-case
-    childless age-40 grid matches PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2
-    `vt_income_tax_before_non_refundable_credits` exactly at return-cent
-    precision. Expected values are independent decimal arithmetic using the
-    live model's completed taxable incomes and current indexed thresholds; no
-    oracle output is read back into the RuleSpec formula.
+    Vermont 2026 individual income tax before nonrefundable credits for the
+    complete certified-Populace comparison scope. The module works entirely at
+    TaxUnit grain: it normalizes supplied completed-return Vermont normal income
+    tax and applies the statutory strict-over-$150,000 three-percent federal-AGI
+    minimum. No person or taxpayer aggregation is required by PolicyEngine-US
+    1.752.2, whose `vt_income_tax_before_non_refundable_credits` target is the
+    TaxUnit-level greater of `vt_normal_income_tax` and `vt_amt`.
+
+    The upstream normal-tax boundary is required because the certified corpus
+    establishes the rates and annual indexing method but not official 2026
+    indexed table amounts. Over all 922 positive-weight Vermont tax units in the
+    pinned Populace artifact, the statutory composition covers all five filing
+    statuses and has zero failures at $0.01 absolute or 1e-7 relative tolerance.
+    One tax unit selects the minimum; its $0.000117 residual is PolicyEngine
+    floating-point rounding. Populace contains no positive U.S.-government
+    interest for Vermont, so PolicyEngine's separate `vt_amt` interest
+    subtraction is not exercised or absorbed into this statutory formula.
+  deferred_outputs:
+    - output: us-vt:statutes/32-5822/b#filing_status_definitions_and_indexed_normal_tax_schedules
+      reason: |-
+        Subsection (b) defines the filing-status categories used by the normal
+        tax schedules and directs the Commissioner to publish annually indexed
+        table amounts. The certified corpus does not contain the official 2026
+        indexed tables, so this narrow composition accepts the completed
+        current-year normal income tax as an explicitly supplied upstream
+        boundary instead of reconstructing those schedules.
+    - output: us-vt:statutes/32-5822/e#nonresident_income_percentage_reduction
+      reason: |-
+        Subsection (e) applies Vermont's nonresident and part-year-resident
+        income percentage after the tax determined under subsections (a)-(d).
+        This certified-Populace comparison targets the resident before-credit
+        liability core and leaves that downstream allocation outside the
+        composition.
 rules:
-  - name: vt_pit_pilot_taxpayer_of_tax_unit
-    kind: data_relation
-    data_relation:
-      predicate: vt_pit_pilot_taxpayer_of_tax_unit
-      arity: 2
-      arguments:
-        - TaxUnit
-        - Person
-
-  - name: vt_pit_pilot_individual_taxable_income
-    kind: derived
-    entity: Person
+  - name: vt_pit_pilot_federal_agi_minimum_threshold
+    kind: parameter
     dtype: Money
     period: Year
     unit: USD
-    source: 32 V.S.A. sections 5811(21) and 5823(a), supplied Vermont taxable income
+    source: 32 V.S.A. section 5822(a)(6), federal-AGI threshold for the minimum tax
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
+            kind: amount
             source:
-              corpus_citation_path: us-vt/statute/32-5811
-              excerpt: "“Taxable income” means, in the case of an individual, federal adjusted gross income"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5811
-              excerpt: "shall be adjusted annually for inflation by the Commissioner of Taxes beginning with taxable year 2018"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5823
-              excerpt: "the Vermont income of a resident individual is the adjusted gross income of the individual"
+              corpus_citation_path: us-vt/statute/32-5822
+              excerpt: "If the federal adjusted gross income of the taxpayer exceeds $150,000.00"
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, vt_pit_pilot_supplied_taxable_income)
+        effective_to: '2026-12-31'
+        formula: '150000.0'
 
-  - name: vt_pit_pilot_taxable_income
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
+  - name: vt_pit_pilot_federal_agi_minimum_rate
+    kind: parameter
+    dtype: Rate
     period: Year
-    unit: USD
-    source: 32 V.S.A. sections 5811(21) and 5823(a), supplied Vermont taxable income
+    source: 32 V.S.A. section 5822(a)(6), federal-AGI minimum-tax rate
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
+            kind: parameter
             source:
-              corpus_citation_path: us-vt/statute/32-5823
-              excerpt: "the Vermont income of a resident individual is the adjusted gross income of the individual"
+              corpus_citation_path: us-vt/statute/32-5822
+              excerpt: "three percent of the taxpayer's federal adjusted gross income"
     versions:
       - effective_from: '2026-01-01'
-        formula: |-
-          max(0, sum_where(vt_pit_pilot_taxpayer_of_tax_unit, vt_pit_pilot_individual_taxable_income, vt_pit_pilot_taxpayer_is_included))
+        effective_to: '2026-12-31'
+        formula: '0.03'
 
-  - name: vt_pit_pilot_individual_schedule_tax
-    kind: derived
-    entity: Person
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 32 V.S.A. section 5822(a)-(b), supplied active indexed bracket
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "A tax is imposed for each taxable year upon the taxable income earned or received in that year by every individual"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "3.35% of taxable income"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "$1,296.00 plus 6.6% of"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "$4,926.00 plus 7.6%"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "$12,659.00 plus 8.75% of"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "The amounts of taxable income shown in the tables in this section shall be adjusted annually for inflation by the Commissioner of Taxes"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          vt_pit_pilot_supplied_bracket_base
-          + vt_pit_pilot_supplied_marginal_rate * max(0, vt_pit_pilot_individual_taxable_income - vt_pit_pilot_supplied_bracket_floor)
-
-  - name: vt_pit_pilot_schedule_tax
+  - name: vt_pit_pilot_normal_income_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 32 V.S.A. section 5822(a)-(b), aggregated taxpayer schedule tax
+    source: 32 V.S.A. section 5822(a)(1)-(5), supplied completed normal income tax
     metadata:
       proof:
         atoms:
@@ -161,11 +109,37 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "A tax is imposed for each taxable year upon the taxable income earned or received in that year by every individual"
+              excerpt: "the tax calculated under subdivisions (1)-(5) of this subsection"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, vt_pit_pilot_supplied_normal_income_tax)
+
+  - name: vt_pit_pilot_federal_agi_minimum_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 32 V.S.A. section 5822(a)(6), three-percent federal-AGI minimum
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/statute/32-5822
+              excerpt: "If the federal adjusted gross income of the taxpayer exceeds $150,000.00"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/statute/32-5822
+              excerpt: "three percent of the taxpayer's federal adjusted gross income"
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          sum_where(vt_pit_pilot_taxpayer_of_tax_unit, vt_pit_pilot_individual_schedule_tax, vt_pit_pilot_taxpayer_is_included)
+          if vt_pit_pilot_federal_adjusted_gross_income > vt_pit_pilot_federal_agi_minimum_threshold:
+            vt_pit_pilot_federal_agi_minimum_rate * vt_pit_pilot_federal_adjusted_gross_income
+          else: 0
 
   - name: vt_pit_pilot_income_tax_liability
     kind: derived
@@ -173,7 +147,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 32 V.S.A. section 5822(a)(6), schedule or federal-AGI minimum
+    source: 32 V.S.A. section 5822(a)(6), greater of normal tax or minimum
     metadata:
       proof:
         atoms:
@@ -182,14 +156,7 @@ rules:
             source:
               corpus_citation_path: us-vt/statute/32-5822
               excerpt: "the tax calculated under this subsection shall be the greater of"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-vt/statute/32-5822
-              excerpt: "three percent of the taxpayer’s federal adjusted gross income"
     versions:
       - effective_from: '2026-01-01'
         formula: |-
-          if vt_pit_pilot_supplied_federal_adjusted_gross_income > vt_pit_pilot_supplied_minimum_tax_threshold:
-            max(vt_pit_pilot_schedule_tax, vt_pit_pilot_supplied_minimum_tax_rate * vt_pit_pilot_supplied_federal_adjusted_gross_income)
-          else: vt_pit_pilot_schedule_tax
+          max(vt_pit_pilot_normal_income_tax, vt_pit_pilot_federal_agi_minimum_tax)

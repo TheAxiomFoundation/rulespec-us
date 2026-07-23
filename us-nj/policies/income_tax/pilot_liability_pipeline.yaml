@@ -5,29 +5,44 @@ module:
   source_verification:
     corpus_citation_path: us-nj/statute/54a:2-1
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-nj/statute/54a:2-1
       rationale: |-
-        N.J. Stat. section 54A:2-1 imposes tax on New Jersey taxable income
-        under separate post-2020 schedules for joint and single filers. This
-        narrow 2026 composition accepts completed-return New Jersey taxable
-        income and the applicable bracket's cumulative base tax, floor, and
-        marginal rate as caller-supplied current-authority inputs. It therefore
-        owns only the statutory active-bracket mechanics and does not claim that
-        the rate section proves upstream gross-income modifications, deductions,
-        exemptions, or credits. The six companion cases use the schedule inputs
-        selected by PolicyEngine for the standard resident wage grid.
+        N.J. Stat. section 54A:2-1(a)(7) and (b)(7) provide the complete
+        individual-income-tax schedules for taxable years beginning on or
+        after January 1, 2020. Subsection (a)(7) applies the wide schedule to
+        joint, head-of-household, and surviving-spouse filers. Subsection
+        (b)(7) applies the narrow schedule to single and married-separate
+        filers. Subsection (c) also directs an individual who would qualify as
+        head of household but for nonresident-alien status to the subsection
+        (a) wide schedule. The statute fixes every threshold, cumulative base
+        amount, and marginal rate, so the 2026 schedule contains no indexed or
+        projected parameters.
+
+        This module accepts completed-return New Jersey taxable income and a
+        filing-status classification as its only caller boundaries. Upstream
+        gross-income modifications, deductions, exemptions, residency and
+        allocation decisions remain outside this rate-schedule module. The
+        statutory wide schedule deliberately uses a $1,295.50 base above
+        $70,000 and a $1,645.00 base above $80,000. That literal half-dollar
+        discontinuity is preserved rather than normalized into a continuous
+        marginal scale. All rules fail closed outside tax year 2026.
   summary: |-
-    Composed New Jersey individual-income-tax schedule for the 2026 ordinary
-    full-year resident wage-earner slice. It normalizes supplied New Jersey
-    taxable income, applies the supplied active section 54A:2-1 bracket in
-    cumulative-base-plus-marginal form, and exposes the resulting main income
-    tax. Its exact PolicyEngine 4.18.9 analog is `nj_main_income_tax` on the
-    six-case childless age-40 grid: single at $30,000/$60,000/$150,000 of wages
-    and one-earner joint at $60,000/$120,000/$300,000. PolicyEngine supplies the
-    completed taxable income and active schedule inputs; expected outputs are
-    independently hand-computed from those inputs and the official statute.
+    New Jersey 2026 main individual-income-tax schedule before credits. The
+    caller supplies completed-return New Jersey taxable income and whether the
+    return uses the section 54A:2-1(a)(7) wide schedule. The module selects and
+    applies every statutory bracket in either the wide joint/head/surviving
+    schedule (including the subsection-(c) nonresident-alien exception) or the
+    narrow single/separate schedule, including the exact statutory cumulative
+    base amounts through the 10.75-percent top bracket.
+
+    PolicyEngine-US 1.752.2 feeds `nj_taxable_income` and `filing_status`
+    directly into the distinct `nj_main_income_tax` target. PolicyEngine models
+    the schedules as continuous marginal scales, while the official wide table
+    is $0.50 higher for taxable income over $70,000 through $80,000. The
+    population comparison therefore uses the existing $1 absolute tolerance
+    and does not erase that source-literal difference.
 rules:
   - name: nj_pit_pilot_taxable_income
     kind: derived
@@ -35,7 +50,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: N.J. Stat. section 54A:2-1, supplied completed-return taxable income
+    source: N.J. Stat. § 54A:2-1, completed-return New Jersey taxable income
     metadata:
       proof:
         atoms:
@@ -46,7 +61,8 @@ rules:
               excerpt: "subject to the deductions, limitations and modifications hereinafter provided, determined in accordance with the following tables with respect to taxpayers' taxable income"
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, nj_pit_pilot_supplied_taxable_income)
+        effective_to: '2026-12-31'
+        formula: max(0, nj_pit_pilot_state_taxable_income)
 
   - name: nj_pit_pilot_schedule_tax
     kind: derived
@@ -54,7 +70,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: N.J. Stat. section 54A:2-1(a)(7) and (b)(7), supplied active bracket
+    source: N.J. Stat. § 54A:2-1(a)(7) and (b)(7), post-2020 schedules
     metadata:
       proof:
         atoms:
@@ -63,11 +79,437 @@ rules:
             source:
               corpus_citation_path: us-nj/statute/54a:2-1
               excerpt: "for taxable years beginning on or after January 1, 2020: If the taxable income is: The tax is:"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nj:policies/income_tax/pilot_liability_pipeline#nj_pit_pilot_wide_bracket_base
+              output: nj_pit_pilot_wide_bracket_base
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nj:policies/income_tax/pilot_liability_pipeline#nj_pit_pilot_wide_bracket_floor
+              output: nj_pit_pilot_wide_bracket_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nj:policies/income_tax/pilot_liability_pipeline#nj_pit_pilot_wide_bracket_rate
+              output: nj_pit_pilot_wide_bracket_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nj:policies/income_tax/pilot_liability_pipeline#nj_pit_pilot_narrow_bracket_base
+              output: nj_pit_pilot_narrow_bracket_base
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nj:policies/income_tax/pilot_liability_pipeline#nj_pit_pilot_narrow_bracket_floor
+              output: nj_pit_pilot_narrow_bracket_floor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-nj:policies/income_tax/pilot_liability_pipeline#nj_pit_pilot_narrow_bracket_rate
+              output: nj_pit_pilot_narrow_bracket_rate
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          nj_pit_pilot_supplied_bracket_base
-          + nj_pit_pilot_supplied_marginal_rate * max(0, nj_pit_pilot_taxable_income - nj_pit_pilot_supplied_bracket_floor)
+          if nj_pit_pilot_filing_status_joint_head_or_surviving:
+              nj_pit_pilot_wide_bracket_base[nj_pit_pilot_wide_bracket_selector]
+              + nj_pit_pilot_wide_bracket_rate[nj_pit_pilot_wide_bracket_selector]
+              * max(0, nj_pit_pilot_taxable_income - nj_pit_pilot_wide_bracket_floor[nj_pit_pilot_wide_bracket_selector])
+          else:
+              nj_pit_pilot_narrow_bracket_base[nj_pit_pilot_narrow_bracket_selector]
+              + nj_pit_pilot_narrow_bracket_rate[nj_pit_pilot_narrow_bracket_selector]
+              * max(0, nj_pit_pilot_taxable_income - nj_pit_pilot_narrow_bracket_floor[nj_pit_pilot_narrow_bracket_selector])
+
+  - name: nj_pit_pilot_wide_bracket_selector
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: N.J. Stat. § 54A:2-1(a)(7), wide-schedule bracket selection
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "For married individuals filing a joint return"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "individuals filing as head of household or as surviving spouse"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "such taxpayer is a nonresident alien, shall determine tax pursuant to subsection a. of this section"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_first_upper_bound: 0
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_second_upper_bound: 1
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_third_upper_bound: 2
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_fourth_upper_bound: 3
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_fifth_upper_bound: 4
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_sixth_upper_bound: 5
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_wide_seventh_upper_bound: 6
+          else: 7
+
+  - name: nj_pit_pilot_wide_first_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide first upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Not over $20,000.00........ 1.400% of taxable income"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '20000'}
+
+  - name: nj_pit_pilot_wide_second_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide second upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $20,000.00 but not over $50,000.00.... $280.00 plus 1.750% of the excess over $20,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '50000'}
+
+  - name: nj_pit_pilot_wide_third_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide third upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $50,000.00 but not over $70,000.00.... $805.00 plus 2.450% of the excess over $50,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '70000'}
+
+  - name: nj_pit_pilot_wide_fourth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide fourth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $70,000.00 but not over $80,000.00... $1,295.50 plus 3.500% of the excess over $70,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '80000'}
+
+  - name: nj_pit_pilot_wide_fifth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide fifth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $80,000.00 but not over $150,000.00.. $1,645.00 plus 5.525% of the excess over $80,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '150000'}
+
+  - name: nj_pit_pilot_wide_sixth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide sixth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $150,000.00 but not over $500,000.00.. $5,512.50 plus 6.370% of the excess over $150,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '500000'}
+
+  - name: nj_pit_pilot_wide_seventh_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(a)(7), wide seventh upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $500,000.00 but not over $1,000,000.00.. $27,807.50 plus 8.970% of the excess over $500,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '1000000'}
+
+  - name: nj_pit_pilot_wide_bracket_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: nj_pit_pilot_wide_bracket_selector
+    source: N.J. Stat. § 54A:2-1(a)(7), wide excess floors
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              table: {header: "Subsection a.(7) rate schedule", row_key: bracket, column_key: excess_floor}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 20000, 2: 50000, 3: 70000, 4: 80000, 5: 150000, 6: 500000, 7: 1000000}
+
+  - name: nj_pit_pilot_wide_bracket_base
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: nj_pit_pilot_wide_bracket_selector
+    source: N.J. Stat. § 54A:2-1(a)(7), wide cumulative base tax
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              table: {header: "Subsection a.(7) rate schedule", row_key: bracket, column_key: base_tax}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 280, 2: 805, 3: 1295.50, 4: 1645, 5: 5512.50, 6: 27807.50, 7: 72657.50}
+
+  - name: nj_pit_pilot_wide_bracket_rate
+    kind: parameter
+    dtype: Rate
+    indexed_by: nj_pit_pilot_wide_bracket_selector
+    source: N.J. Stat. § 54A:2-1(a)(7), wide marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              table: {header: "Subsection a.(7) rate schedule", row_key: bracket, column_key: marginal_rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.014, 1: 0.0175, 2: 0.0245, 3: 0.035, 4: 0.05525, 5: 0.0637, 6: 0.0897, 7: 0.1075}
+
+  - name: nj_pit_pilot_narrow_bracket_selector
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow-schedule bracket selection
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "For married individuals filing separately"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              excerpt: "unmarried individuals other than individuals filing as head of household or as a surviving spouse"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if nj_pit_pilot_taxable_income <= nj_pit_pilot_narrow_first_upper_bound: 0
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_narrow_second_upper_bound: 1
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_narrow_third_upper_bound: 2
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_narrow_fourth_upper_bound: 3
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_narrow_fifth_upper_bound: 4
+          else: if nj_pit_pilot_taxable_income <= nj_pit_pilot_narrow_sixth_upper_bound: 5
+          else: 6
+
+  - name: nj_pit_pilot_narrow_first_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow first upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Not over $20,000.00...... 1.400% of taxable income"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '20000'}
+
+  - name: nj_pit_pilot_narrow_second_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow second upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $20,000.00 but not over $35,000.00....... $280.00 plus 1.750% of the excess over $20,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '35000'}
+
+  - name: nj_pit_pilot_narrow_third_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow third upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $35,000.00 but not over $40,000.00...... $542.50 plus 3.500% of the excess over $35,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '40000'}
+
+  - name: nj_pit_pilot_narrow_fourth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow fourth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $40,000.00 but not over $75,000.00...... $717.50 plus 5.525% of the excess over $40,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '75000'}
+
+  - name: nj_pit_pilot_narrow_fifth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow fifth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $75,000.00 but not over $500,000.00... $2,651.25 plus 6.370% of the excess over $75,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '500000'}
+
+  - name: nj_pit_pilot_narrow_sixth_upper_bound
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow sixth upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nj/statute/54a:2-1, excerpt: "Over $500,000.00 but not over $1,000,000.00.. $29,723.75 plus 8.970% of the excess over $500,000.00"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '1000000'}
+
+  - name: nj_pit_pilot_narrow_bracket_floor
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: nj_pit_pilot_narrow_bracket_selector
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow excess floors
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              table: {header: "Subsection b.(7) rate schedule", row_key: bracket, column_key: excess_floor}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 20000, 2: 35000, 3: 40000, 4: 75000, 5: 500000, 6: 1000000}
+
+  - name: nj_pit_pilot_narrow_bracket_base
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: nj_pit_pilot_narrow_bracket_selector
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow cumulative base tax
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              table: {header: "Subsection b.(7) rate schedule", row_key: bracket, column_key: base_tax}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 280, 2: 542.50, 3: 717.50, 4: 2651.25, 5: 29723.75, 6: 74573.75}
+
+  - name: nj_pit_pilot_narrow_bracket_rate
+    kind: parameter
+    dtype: Rate
+    indexed_by: nj_pit_pilot_narrow_bracket_selector
+    source: N.J. Stat. § 54A:2-1(b)(7), narrow marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nj/statute/54a:2-1
+              table: {header: "Subsection b.(7) rate schedule", row_key: bracket, column_key: marginal_rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.014, 1: 0.0175, 2: 0.035, 3: 0.05525, 4: 0.0637, 5: 0.0897, 6: 0.1075}
 
   - name: nj_pit_pilot_income_tax_liability
     kind: derived
@@ -75,7 +517,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: N.J. Stat. section 54A:2-1 main income tax before downstream credits
+    source: N.J. Stat. § 54A:2-1 main income tax before credits
     metadata:
       proof:
         atoms:
@@ -86,4 +528,17 @@ rules:
               excerpt: "There is hereby imposed a tax for each taxable year"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: max(0, nj_pit_pilot_schedule_tax)
+inputs:
+  - name: nj_pit_pilot_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return New Jersey taxable income supplied by the caller as an upstream oracle boundary.
+  - name: nj_pit_pilot_filing_status_joint_head_or_surviving
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: True when the subsection-(a) wide schedule applies—joint, head-of-household, surviving-spouse, or the subsection-(c) nonresident-alien exception; false for ordinary single or married-separate filers.
