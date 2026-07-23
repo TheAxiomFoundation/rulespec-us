@@ -3,365 +3,124 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
+    corpus_citation_path: us-wi/statute/71.06
     upstream_source_check:
-      status: official_parameter_source
+      status: composed_from_supplied_current_authority
       checked_paths:
         - us-wi/statute/71.06
-        - us-wi/form/individual-income-tax/2026/1-es/document-1
       rationale: |-
-        The Wisconsin Department of Revenue's official 2026 Form 1-ES
-        instructions publish complete Gross Tax Schedules A, B, and C for
-        full-year residents, including every taxable-income threshold,
-        cumulative base amount, and marginal rate. Schedule A applies when
-        both caller status selectors are false, Schedule B applies to married
-        filing jointly, and Schedule C applies to married filing separately.
-        A caller setting both status selectors true is rejected through the
-        invalid schedule and bracket sentinel rather than silently selecting a
-        schedule.
-
-        This narrow module accepts completed-return Wisconsin taxable income
-        and the two filing-status selectors. It does not construct deductions,
-        exemptions, or taxable income; apply credits or return rounding;
-        prorate nonresident or part-year-resident brackets; map surviving-spouse
-        status; compute estimated payments or final liability; or claim exact
-        PolicyEngine parity. Every executable version fails closed outside tax
-        year 2026.
+        Wisconsin Statutes section 71.06(1r) and (2)(k) prescribe four
+        individual-income-tax brackets after 2024, at 3.50, 4.40, 5.30, and
+        7.65 percent, and section 71.06(2e)(bm) indexes the bracket amounts after
+        2025 and section 71.06(2e)(c) requires the indexed amounts to be rounded
+        to the nearest $10. Wisconsin taxable income and the legally indexed,
+        rounded 2026 bracket floors are caller-supplied inputs. This rate-section
+        module applies the marginal schedule without claiming that section 71.06
+        proves upstream deductions or exemptions.
   summary: |-
-    Wisconsin 2026 full-year-resident gross-tax schedule component before
-    credits. It normalizes caller-supplied completed-return Wisconsin taxable
-    income to zero and applies the official Schedule A, B, or C published
-    floors, cumulative bases, and rates. The public result is gross tax on the
-    supplied taxable income before credits; it is not rounded final liability.
+    Composed Wisconsin individual-income-tax pipeline for the ordinary resident
+    wage-earner slice in 2026. It accepts supplied completed-return Wisconsin
+    taxable income, then applies the section 71.06 four-bracket schedule using
+    the 2025 statutory floors indexed by the August 2024-to-August 2025 CPI-U
+    change and rounded to the nearest $10 as section 71.06(2e)(c) requires. The
+    companion cases compare to wi_income_tax_before_credits and intentionally
+    expose PolicyEngine's stale/unrounded bracket projection as an oracle
+    residual. Credits and upstream taxable-income computations are out of scope.
+  deferred_outputs:
+    - output: us-wi:statutes/71.06/a#legacy_nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(a) applies only to nonresident and part-year-resident tax
+        years beginning after 1996 and before 1998. This pilot covers ordinary
+        full-year residents in 2026; encoding the historical rule would require a
+        separate historical version plus Wisconsin and federal adjusted-gross-income
+        inputs and domicile-period classifications.
+    - output: us-wi:statutes/71.06/b#legacy_nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(b) applies only to nonresident and part-year-resident tax
+        years beginning after 1997 and before 2000. It is outside this full-year
+        resident 2026 pilot and requires historical brackets, adjusted-gross-income
+        inputs, and domicile-period classifications.
+    - output: us-wi:statutes/71.06/c#legacy_nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(c) applies only to nonresident and part-year-resident tax
+        years beginning after 1999 and before 2001. It is outside this full-year
+        resident 2026 pilot and requires historical brackets, adjusted-gross-income
+        inputs, and domicile-period classifications.
+    - output: us-wi:statutes/71.06/d#nonresident_bracket_apportionment
+      reason: |-
+        Paragraph (2s)(d) apportions brackets for nonresidents and part-year
+        residents using Wisconsin and federal adjusted gross income and domicile
+        periods. This pilot is limited to ordinary full-year residents in 2026;
+        the nonresident branch requires those additional upstream classifications.
 rules:
-  - name: wi_pit_pilot_first_bracket_upper
-    kind: parameter
-    dtype: Money
-    period: Year
-    unit: USD
-    indexed_by: wi_pit_pilot_schedule_selector
-    source: 2026 Form 1-ES Gross Tax Schedules A, B, and C, first bracket upper bounds
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].values
-            kind: parameter_table
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "2026 Tax Rate Schedules for Full-Year Residents"
-              table: {header: "If taxable income is: but over – not over –", row_key: schedule, column_key: first upper bound}
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        values: {0: 15110, 1: 20150, 2: 10080}
-
-  - name: wi_pit_pilot_second_bracket_upper
-    kind: parameter
-    dtype: Money
-    period: Year
-    unit: USD
-    indexed_by: wi_pit_pilot_schedule_selector
-    source: 2026 Form 1-ES Gross Tax Schedules A, B, and C, second bracket upper bounds
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].values
-            kind: parameter_table
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule B – Married Filing Jointly"
-              table: {header: "If taxable income is: but over – not over –", row_key: schedule, column_key: second upper bound}
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        values: {0: 51950, 1: 69260, 2: 34630}
-
-  - name: wi_pit_pilot_third_bracket_upper
-    kind: parameter
-    dtype: Money
-    period: Year
-    unit: USD
-    indexed_by: wi_pit_pilot_schedule_selector
-    source: 2026 Form 1-ES Gross Tax Schedules A, B, and C, third bracket upper bounds
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].values
-            kind: parameter_table
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule C – Married Filing Separately"
-              table: {header: "If taxable income is: but over – not over –", row_key: schedule, column_key: third upper bound}
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        values: {0: 332720, 1: 443630, 2: 221820}
-
-  - name: wi_pit_pilot_bracket_floor
-    kind: parameter
-    dtype: Money
-    period: Year
-    unit: USD
-    indexed_by: wi_pit_pilot_bracket_selector
-    source: 2026 Form 1-ES Gross Tax Schedules A, B, and C, excess-over floors
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].values
-            kind: parameter_table
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "The 2026 Gross Tax is: of the amount over"
-              table: {header: "The 2026 Gross Tax is: of the amount over –", row_key: schedule and bracket, column_key: excess-over floor}
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        values:
-          0: 0
-          1: 15110
-          2: 51950
-          3: 332720
-          4: 0
-          5: 20150
-          6: 69260
-          7: 443630
-          8: 0
-          9: 10080
-          10: 34630
-          11: 221820
-
-  - name: wi_pit_pilot_bracket_base
-    kind: parameter
-    dtype: Money
-    period: Year
-    unit: USD
-    indexed_by: wi_pit_pilot_bracket_selector
-    source: 2026 Form 1-ES Gross Tax Schedules A, B, and C, published cumulative bases
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].values
-            kind: parameter_table
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "528.85 + 4.4%"
-              table: {header: "The 2026 Gross Tax is: of the amount over –", row_key: schedule and bracket, column_key: cumulative base}
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        values:
-          0: 0
-          1: 528.85
-          2: 2149.81
-          3: 17030.62
-          4: 0
-          5: 705.25
-          6: 2866.09
-          7: 22707.70
-          8: 0
-          9: 352.80
-          10: 1433.00
-          11: 11354.07
-
-  - name: wi_pit_pilot_bracket_rate
-    kind: parameter
-    dtype: Rate
-    period: Year
-    indexed_by: wi_pit_pilot_bracket_selector
-    source: 2026 Form 1-ES Gross Tax Schedules A, B, and C, marginal rates
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].values
-            kind: parameter_table
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "17,030.62 + 7.65%"
-              table: {header: "The 2026 Gross Tax is: of the amount over –", row_key: schedule and bracket, column_key: marginal rate}
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        values:
-          0: 0.035
-          1: 0.044
-          2: 0.053
-          3: 0.0765
-          4: 0.035
-          5: 0.044
-          6: 0.053
-          7: 0.0765
-          8: 0.035
-          9: 0.044
-          10: 0.053
-          11: 0.0765
-
-  - name: wi_pit_pilot_brackets_per_schedule
-    kind: parameter
-    dtype: Integer
-    period: Year
-    source: 2026 Form 1-ES, four brackets in each Gross Tax Schedule
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: parameter
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "$ 0 15,110 51,950 332,720"
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: '4'
-
   - name: wi_pit_pilot_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 2026 Form 1-ES worksheet line 3, supplied completed-return Wisconsin taxable income
+    source: Wis. Stat. s. 71.06, supplied completed-return Wisconsin taxable income
     metadata:
-      private: true
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Estimated taxable income (subtract line 2 from line 1)"
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "taxable income"
     versions:
       - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: max(0, wi_pit_pilot_completed_return_taxable_income)
+        formula: max(0, wi_pit_pilot_supplied_taxable_income)
 
-  - name: wi_pit_pilot_filing_status_selectors_valid
-    kind: derived
-    entity: TaxUnit
-    dtype: Judgment
-    period: Year
-    source: 2026 Form 1-ES, mutually exclusive married-filing-jointly and married-filing-separately schedules
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule B – Married Filing Jointly"
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule C – Married Filing Separately"
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: not (wi_pit_pilot_is_married_filing_jointly and wi_pit_pilot_is_married_filing_separately)
-
-  - name: wi_pit_pilot_schedule_selector
-    kind: derived
-    entity: TaxUnit
-    dtype: Integer
-    period: Year
-    source: 2026 Form 1-ES selection among Gross Tax Schedules A, B, and C
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule A – Single, Head of Household, Estates and Trusts"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule B – Married Filing Jointly"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "Schedule C – Married Filing Separately"
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: |-
-          if not wi_pit_pilot_filing_status_selectors_valid: -1
-          else: if wi_pit_pilot_is_married_filing_jointly: 1
-          else: if wi_pit_pilot_is_married_filing_separately: 2
-          else: 0
-
-  - name: wi_pit_pilot_bracket_selector
-    kind: derived
-    entity: TaxUnit
-    dtype: Integer
-    period: Year
-    source: 2026 Form 1-ES bracket selection within Gross Tax Schedule A, B, or C
-    metadata:
-      private: true
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "If taxable income is: but over – not over –"
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: |-
-          if not wi_pit_pilot_filing_status_selectors_valid: -1
-          else: if wi_pit_pilot_taxable_income <= wi_pit_pilot_first_bracket_upper[wi_pit_pilot_schedule_selector]: wi_pit_pilot_schedule_selector * wi_pit_pilot_brackets_per_schedule
-          else: if wi_pit_pilot_taxable_income <= wi_pit_pilot_second_bracket_upper[wi_pit_pilot_schedule_selector]: wi_pit_pilot_schedule_selector * wi_pit_pilot_brackets_per_schedule + 1
-          else: if wi_pit_pilot_taxable_income <= wi_pit_pilot_third_bracket_upper[wi_pit_pilot_schedule_selector]: wi_pit_pilot_schedule_selector * wi_pit_pilot_brackets_per_schedule + 2
-          else: wi_pit_pilot_schedule_selector * wi_pit_pilot_brackets_per_schedule + 3
-
-  - name: wi_pit_pilot_gross_tax_on_supplied_taxable_income_before_credits
+  - name: wi_pit_pilot_schedule_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 2026 Form 1-ES, full-year-resident Gross Tax Schedules A, B, and C
+    source: Wis. Stat. s. 71.06(1r), (2)(k), four-bracket marginal schedule
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1
-              excerpt: "The 2026 Gross Tax is:"
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "3.50 percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "7.65 percent"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "rounded to the nearest multiple of $10"
     versions:
       - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
         formula: |-
-          wi_pit_pilot_bracket_base[wi_pit_pilot_bracket_selector]
-          + wi_pit_pilot_bracket_rate[wi_pit_pilot_bracket_selector]
-          * (wi_pit_pilot_taxable_income - wi_pit_pilot_bracket_floor[wi_pit_pilot_bracket_selector])
+          max(0, min(wi_pit_pilot_taxable_income, wi_pit_pilot_supplied_bracket_floor_2) - wi_pit_pilot_supplied_bracket_floor_1) * wi_pit_pilot_supplied_bracket_rate_1
+          + max(0, min(wi_pit_pilot_taxable_income, wi_pit_pilot_supplied_bracket_floor_3) - wi_pit_pilot_supplied_bracket_floor_2) * wi_pit_pilot_supplied_bracket_rate_2
+          + max(0, min(wi_pit_pilot_taxable_income, wi_pit_pilot_supplied_bracket_floor_4) - wi_pit_pilot_supplied_bracket_floor_3) * wi_pit_pilot_supplied_bracket_rate_3
+          + max(0, wi_pit_pilot_taxable_income - wi_pit_pilot_supplied_bracket_floor_4) * wi_pit_pilot_supplied_bracket_rate_4
 
-inputs:
-  - name: wi_pit_pilot_completed_return_taxable_income
+  - name: wi_pit_pilot_income_tax_liability
+    kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Completed-return Wisconsin taxable income supplied by the caller.
-  - name: wi_pit_pilot_is_married_filing_jointly
-    entity: TaxUnit
-    dtype: Boolean
-    period: Year
-    description: True selects Schedule B; mutually exclusive with married filing separately.
-  - name: wi_pit_pilot_is_married_filing_separately
-    entity: TaxUnit
-    dtype: Boolean
-    period: Year
-    description: True selects Schedule C; mutually exclusive with married filing jointly.
+    source: Wis. Stat. s. 71.06 individual income tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wi/statute/71.06
+              excerpt: "taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, wi_pit_pilot_schedule_tax)
