@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build compiled program artifacts from every spec in programs/.
+"""Build compiled program artifacts from every jurisdiction programs/ root.
 
-For each programs/<jurisdiction>/<program>/<period>.yaml spec this composes the
+For each <jurisdiction>/programs/<program>/<period>.yaml spec this composes the
 program (axiom-compose), compiles it to an executable artifact
 (axiom-rules-engine compile), stamps provenance into the artifact metadata, and
 writes a manifest describing everything that was built.
@@ -59,7 +59,7 @@ class SpecBuild:
 
 def discover_specs(root: Path) -> list[SpecBuild]:
     builds: list[SpecBuild] = []
-    for path in sorted((root / "programs").rglob("*.yaml")):
+    for path in sorted(root.glob("us*/programs/**/*.yaml")):
         if path.name.endswith(".test.yaml"):
             continue
         spec = yaml.safe_load(path.read_text())
@@ -118,7 +118,7 @@ def composer_version() -> str:
 
 
 def validation_toolchain(root: Path) -> dict:
-    """Read the pinned *validation* toolchain from .axiom/toolchain.toml.
+    """Read the immutable validation checkout pins.
 
     IMPORTANT: these are the pins the org validate-rulespec workflow uses to
     revalidate the repo — they are NOT, in general, the build provenance of
@@ -129,21 +129,46 @@ def validation_toolchain(root: Path) -> dict:
     *validated against*, not what compiled them. Reading only — never modifies
     the pin. Empty dict if absent, so local builds still produce a manifest.
     """
-    path = root / ".axiom" / "toolchain.toml"
+    path = root / ".axiom" / "workflow-toolchain.toml"
     if not path.exists():
         return {}
     try:
         import tomllib
 
-        data = tomllib.loads(path.read_text()).get("toolchain", {})
+        data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
     except Exception:
         return {}
     return {
+        "axiom_compose_ref": str(data.get("axiom_compose_ref", "")),
         "axiom_rules_engine_ref": str(data.get("axiom_rules_engine_ref", "")),
         "axiom_corpus_ref": str(data.get("axiom_corpus_ref", "")),
         "axiom_encode_ref": str(data.get("axiom_encode_ref", "")),
         "axiom_encode_version": str(data.get("axiom_encode_version", "")),
+        "rulespec_us_ref": str(data.get("rulespec_us_ref", "")),
     }
+
+
+def corpus_release(root: Path) -> dict | None:
+    """Read the repository-pinned signed release identity.
+
+    The validation checkout may be a descendant of the commit recorded inside
+    the signed release object. Do not synthesize release provenance from that
+    checkout pin; the build workflow does not acquire and verify the object.
+    """
+    path = root / ".axiom" / "toolchain.toml"
+    if not path.exists():
+        return None
+    try:
+        import tomllib
+
+        data = tomllib.loads(path.read_text()).get("toolchain", {})
+    except Exception:
+        return None
+    release = {
+        "name": str(data.get("axiom_corpus_release", "")),
+        "content_sha256": str(data.get("axiom_corpus_release_content_sha256", "")),
+    }
+    return release if all(release.values()) else None
 
 
 def engine_build_sha(engine_bin: str) -> str:
@@ -193,6 +218,7 @@ def assemble_manifest(
     engine_version: str,
     engine_sha: str,
     toolchain: dict,
+    release: dict | None,
 ) -> dict:
     """Assemble the top-level manifest. Pure function so it is directly testable
     with real inputs (the fields below must come from here, not a test's copy)."""
@@ -210,11 +236,10 @@ def assemble_manifest(
         # this" misreading; the published corpus *release* identity is a
         # separate deliberate binding (see corpus_release).
         "validation_toolchain": toolchain,
-        # The immutable published corpus release these artifacts cite. Left null
-        # until bound authoritatively: the toolchain pins a corpus *commit*, and
-        # a release name may be stamped only when an axiom-corpus release
-        # manifest's provenance commit exactly equals that pin.
-        "corpus_release": None,
+        # The immutable published corpus release these artifacts cite. Commit
+        # provenance is omitted because this build does not verify the signed
+        # release object that carries it.
+        "corpus_release": release,
         "artifact_schema": ARTIFACT_SCHEMA_VERSION,
         "programs": programs,
     }
@@ -235,12 +260,19 @@ def compose_spec(root: Path, build: SpecBuild, out_path: Path) -> None:
 
 def engine_compile(root: Path, module: Path, artifact: Path, engine_bin: str) -> str:
     """Run the engine compiler; returns its reported engine_version."""
-    env = dict(os.environ, AXIOM_RULESPEC_REPO_ROOTS=str(root))
     result = subprocess.run(
-        [engine_bin, "compile", "--program", str(module), "--output", str(artifact)],
+        [
+            engine_bin,
+            "compile-composed",
+            "--program",
+            str(module),
+            "--rulespec-root",
+            str(root),
+            "--output",
+            str(artifact),
+        ],
         capture_output=True,
         text=True,
-        env=env,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
@@ -286,6 +318,7 @@ def main() -> int:
     corpus = corpus_provenance(root)
     composer = composer_version()
     toolchain = validation_toolchain(root)
+    release = corpus_release(root)
     engine_sha = engine_build_sha(engine_bin)
     if not engine_sha:
         print(
@@ -311,7 +344,7 @@ def main() -> int:
     # modules into the artifact (observed: a legacy per-state repo resolving an
     # import the pinned corpus cannot). Neutral cwd keeps local builds
     # byte-identical to CI.
-    workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-"))
+    workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-")).resolve()
 
     for build in builds:
         spec_rel = str(build.spec_path)
@@ -373,7 +406,13 @@ def main() -> int:
         )
 
     manifest = assemble_manifest(
-        manifest_programs, corpus, composer, engine_version, engine_sha, toolchain
+        manifest_programs,
+        corpus,
+        composer,
+        engine_version,
+        engine_sha,
+        toolchain,
+        release,
     )
     (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 

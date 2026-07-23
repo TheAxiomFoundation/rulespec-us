@@ -70,7 +70,7 @@ or encoder code and then regenerated with `encode --apply`.
 2. **encode** (one leg per module, ≤4 parallel):
    - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
      `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
-   - Reads `.axiom/toolchain.toml` and checks out **the pinned** `axiom-encode`,
+   - Reads `.axiom/workflow-toolchain.toml` and checks out **the pinned** `axiom-encode`,
      `axiom-rules-engine`, and `axiom-corpus`, then builds the engine. Using the
      pinned encoder means generation and the downstream PR CI validate with the
      identical version — no version-skew surprises.

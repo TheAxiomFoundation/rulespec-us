@@ -11,8 +11,8 @@ into runnable programs.
 - `us-al/` … `us-tx/`: one directory per state, same internal convention.
   Absorbed from the former standalone `rulespec-us-<state>` repos with full
   history; those repos are archived pointers.
-- `programs/`: declarative compose specs, one YAML per
-  (jurisdiction, program, period), consumed by `axiom-compose`. Absorbed
+- `<jurisdiction>/programs/`: declarative compose specs, one YAML per
+  (program, period), consumed by `axiom-compose`. Absorbed
   from `axiom-programs` (US specs) with full history.
 - `tests/`: repository-wide validation — layout, companion-test pairing,
   RuleSpec shape, derived-rule coverage, and program-spec scope auditing —

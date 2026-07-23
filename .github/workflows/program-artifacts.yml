@@ -1,6 +1,6 @@
 name: program-artifacts
 
-# Compiles every programs/ spec through axiom-compose + axiom-rules-engine.
+# Compiles every jurisdiction programs/ spec through axiom-compose + axiom-rules-engine.
 # On pull requests this is a gate: any spec outside
 # tools/known-broken-specs.txt that fails to compile fails the check, so
 # spec/corpus drift is caught at PR time instead of at admission time.
@@ -11,27 +11,19 @@ name: program-artifacts
 on:
   pull_request:
     paths:
-      - "programs/**"
       - "tools/**"
       - "us/**"
       - "us-*/**"
-      - ".axiom/toolchain.toml"
+      - ".axiom/workflow-toolchain.toml"
       - ".github/workflows/program-artifacts.yml"
   push:
     branches: [main]
     paths:
-      - "programs/**"
       - "tools/**"
       - "us/**"
       - "us-*/**"
-      - ".axiom/toolchain.toml"
+      - ".axiom/workflow-toolchain.toml"
       - ".github/workflows/program-artifacts.yml"
-
-env:
-  # Toolchain pins — bump deliberately; they define artifact provenance.
-  AXIOM_COMPOSE_REF: fabe0b3b3fd6e90d3e8f075516f9b668f524f711
-  AXIOM_RULES_ENGINE_REF: ffd8213271947b0189a9dd61a055c1e0e78908a0
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,11 +34,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read protected workflow toolchain
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          toolchain = tomllib.loads(
+              Path(".axiom/workflow-toolchain.toml").read_text()
+          )["workflow_toolchain"]
+          for key in ("axiom_compose_ref", "axiom_rules_engine_ref"):
+              value = toolchain.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+          PY
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
 
       - name: Install axiom-compose
+        env:
+          AXIOM_COMPOSE_REF: ${{ steps.toolchain.outputs.axiom_compose_ref }}
         run: |
           python -m pip install --quiet pyyaml \
             "axiom-compose @ git+https://github.com/TheAxiomFoundation/axiom-compose@${AXIOM_COMPOSE_REF}"
@@ -55,7 +69,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: TheAxiomFoundation/axiom-rules-engine
-          ref: ${{ env.AXIOM_RULES_ENGINE_REF }}
+          ref: ${{ steps.toolchain.outputs.axiom_rules_engine_ref }}
           path: .engine-src
 
       - name: Cache engine build
@@ -63,7 +77,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .engine-src/target/release/axiom-rules-engine
-          key: engine-bin-${{ runner.os }}-${{ env.AXIOM_RULES_ENGINE_REF }}
+          key: engine-bin-${{ runner.os }}-${{ steps.toolchain.outputs.axiom_rules_engine_ref }}
 
       - name: Build engine
         if: steps.engine-cache.outputs.cache-hit != 'true'

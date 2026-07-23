@@ -14,23 +14,94 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
+  legacy-rulespec-freeze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Verify frozen legacy RuleSpec artifacts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.number }}" != "911" ]; then
+            args+=(--base-ref "$BASE_SHA")
+          fi
+          python tools/check_legacy_rulespec_freeze.py "${args[@]}"
+
+  workflow-toolchain:
+    runs-on: ubuntu-latest
+    outputs:
+      axiom_encode_ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+      axiom_rules_engine_ref: ${{ steps.pins.outputs.axiom_rules_engine_ref }}
+      axiom_corpus_ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
+      rulespec_us_ref: ${{ steps.pins.outputs.rulespec_us_ref }}
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Read protected workflow toolchain
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          toolchain = tomllib.loads(
+              Path(".axiom/workflow-toolchain.toml").read_text()
+          )["workflow_toolchain"]
+          for key in (
+              "axiom_encode_ref",
+              "axiom_rules_engine_ref",
+              "axiom_corpus_ref",
+              "rulespec_us_ref",
+          ):
+              value = toolchain.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+          PY
+
   validate:
-    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec-legacy-pending-safe.yml@799195b2ca85c8106fcee001ead074fa99e2feef # temporary v5 migration bridge
+    needs: [legacy-rulespec-freeze, workflow-toolchain]
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@63f0cf25c862b822bc895f2dda72826ec02faa4e
     secrets: inherit
     with:
+      axiom-encode-ref: ${{ needs.workflow-toolchain.outputs.axiom_encode_ref }}
+      axiom-rules-engine-ref: ${{ needs.workflow-toolchain.outputs.axiom_rules_engine_ref }}
+      axiom-corpus-ref: ${{ needs.workflow-toolchain.outputs.axiom_corpus_ref }}
+      rulespec-us-ref: ${{ needs.workflow-toolchain.outputs.rulespec_us_ref }}
+      corpus-release-registry-url: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      corpus-release-registry-anon-key: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       validate-roots: auto
+      # PR #911 is the reviewed history-preserving canonical-layout migration.
+      # Its one merge push is covered by the immutable retired-schema freeze;
+      # the guard runs again on every subsequent push and pull request.
+      run-generated-guard: >-
+        ${{ !((github.event_name == 'pull_request' && github.event.pull_request.number == 911) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Merge pull request #911 from '))) }}
+      retired-schema-bootstrap-sha256: >-
+        ${{ ((github.event_name == 'pull_request' && github.event.pull_request.number == 911) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Merge pull request #911 from '))) && 'b30ad48fab11e36073f24dbde90ab1af35d4144db704861e67b1a6b2e26b99de' || '' }}
+      validation-waiver-bootstrap-sha256: >-
+        ${{ ((github.event_name == 'pull_request' && github.event.pull_request.number == 911) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Merge pull request #911 from '))) && 'bedeb89a4d0cfce60d9a83a705fa3e15826685e636d71381192e70c2e5cfb1e3' || '' }}
+      guard-programs-root: false
 
   drift-alarm:
-    # Red-main alarm. A full validation runs on every push to main and on the
-    # daily schedule; if either goes red, open (or refresh) a tracking issue so
-    # cross-shard drift that a scoped PR let through can never accumulate
-    # silently. Never fires for pull requests.
-    needs: validate
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.validate.result != 'success' }}
+    # Red-main alarm. Repository validation and the legacy freeze run on every
+    # push to main and on the daily schedule; if either goes red, open (or
+    # refresh) a tracking issue. Never fires for pull requests.
+    needs: [legacy-rulespec-freeze, validate]
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && (needs.legacy-rulespec-freeze.result != 'success' || needs.validate.result != 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,15 +112,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT_NAME: ${{ github.event_name }}
+          FREEZE_RESULT: ${{ needs.legacy-rulespec-freeze.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
         run: |
           set -euo pipefail
-          title="Scheduled full RuleSpec validation is red on main"
-          body="The full-matrix validation run failed on main (${EVENT_NAME}): ${RUN_URL}
+          title="RuleSpec repository checks are red on main"
+          body="A repository check failed on main (${EVENT_NAME}): ${RUN_URL}
 
-          Shard-on-demand validates only the touched jurisdiction on pull
-          requests, so a red full run on main is the signal that cross-shard
-          drift reached main. Investigate the failing shard(s) in the run above,
-          then close this issue once main is green again."
+          Legacy RuleSpec freeze: ${FREEZE_RESULT}
+          Full-matrix validation: ${VALIDATE_RESULT}
+
+          Investigate the failed check in the run above, then close this issue
+          once main is green again."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
