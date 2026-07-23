@@ -29,12 +29,17 @@ module:
         The pinned official Title 68 corpus contains the enacted tax-year-2026
         filing-status schedules and the resident base, deduction, exemption,
         other-state-credit, and refundable earned-income-credit statutes. The
-        section 2358 parent lists three 2024 session-law versions; this module
-        uses the latest-listed SB 2038 text in section 2358v3 for provisions
-        common to the ordinary resident surface. The corpus marks each child
-        version as superseded and contains no tax-year-2026 Form 511 or annual
-        instructions, so the module does not claim the unpinned final-return
-        ordering or a complete section 2358 adjustment inventory.
+        section 2358 parent lists three 2024 session-law versions. The official
+        codification identifies section 2358v3 as the latest version, enacted
+        by SB 2038 with an emergency effective date of June 14, 2024, and the
+        pinned source contains no later amendment displacing it for tax year
+        2026. This module therefore uses v3 as the operative text. Its generated
+        corpus metadata incorrectly says "repealed" because the Oklahoma
+        extractor scans historical repeal notes inside the section body; that
+        verified extraction-status exception does not alter the official text.
+        The corpus contains no tax-year-2026 Form 511 or annual instructions,
+        so the module does not claim the unpinned final-return ordering or a
+        complete section 2358 adjustment inventory.
 
         The supported boundary is a full-year resident individual who is not
         claimable as another taxpayer's dependent; has no married-separate
@@ -51,7 +56,8 @@ module:
     It constructs a partial Oklahoma adjusted-gross-income stage from federal
     adjusted gross income and ordinary governmental-obligation interest facts;
     computes fixed standard or capped itemized deductions, personal, blind,
-    and age exemptions, and selected retirement, military, Social Security,
+    and age exemptions, and selected per-individual retirement, military,
+    Social Security, federal-civil-service-in-lieu-of-Social-Security,
     organ-donor, foster-care, college-savings, and ABLE deductions from raw
     facts; applies both enacted 2026 filing-status schedules; applies the
     section 2357 other-state personal-services credit; and applies the
@@ -250,6 +256,34 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: '10000'
+
+  - name: ok_2026_spouse_retirement_exemption_eligibility
+    kind: parameter
+    dtype: Integer
+    period: Year
+    indexed_by: filing_status
+    source: 68 O.S. § 2358(E)(8) and (13), per-individual cap applied to a spouse only on a joint return
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ok/statute/68-2358v3
+              table:
+                header: "retirement benefits ... received by an individual"
+                row_key: "filing status"
+                column_key: "spouse included on return"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values:
+          0: 0
+          1: 1
+          2: 0
+          3: 0
+          4: 0
 
   - name: ok_2026_organ_donor_expense_cap
     kind: parameter
@@ -584,6 +618,25 @@ rules:
         effective_to: '2026-12-31'
         formula: '0.05'
 
+  - name: ok_2026_full_credit_proration_ratio
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: 68 O.S. § 2357.43, maximum Oklahoma EITC proration ratio
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ok/statute/68-2357-43
+              excerpt: "The maximum earned income tax credit allowable on the Oklahoma income tax return"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '1'
+
   - name: ok_2026_resident_adjusted_gross_income_core
     kind: derived
     entity: TaxUnit
@@ -782,7 +835,7 @@ rules:
     dtype: Money
     unit: USD
     period: Year
-    source: 68 O.S. § 2358(E)(8), (13), and (17), capped public/other retirement plus full military retirement
+    source: 68 O.S. § 2358(E)(8), (13), and (17), per-individual capped public/other retirement plus full military retirement
     metadata:
       proof:
         atoms:
@@ -802,20 +855,41 @@ rules:
         formula: |-
           min(
             ok_2026_retirement_exemption_cap,
-            max(0, ok_2026_enumerated_public_retirement_benefits_in_federal_agi)
+            max(0, ok_2026_taxpayer_enumerated_public_retirement_benefits_in_federal_agi)
+            + max(0, ok_2026_taxpayer_other_qualifying_retirement_benefits_in_federal_agi)
           )
-          + min(
-              max(
-                0,
-                ok_2026_retirement_exemption_cap
-                - min(
-                    ok_2026_retirement_exemption_cap,
-                    max(0, ok_2026_enumerated_public_retirement_benefits_in_federal_agi)
-                  )
-              ),
-              max(0, ok_2026_other_qualifying_retirement_benefits_in_federal_agi)
+          + ok_2026_spouse_retirement_exemption_eligibility[filing_status]
+            * min(
+                ok_2026_retirement_exemption_cap,
+                max(0, ok_2026_spouse_enumerated_public_retirement_benefits_in_federal_agi)
+                + max(0, ok_2026_spouse_other_qualifying_retirement_benefits_in_federal_agi)
             )
           + max(0, ok_2026_military_retirement_benefits_in_federal_agi)
+
+  - name: ok_2026_resident_federal_civil_service_in_lieu_social_security_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 68 O.S. § 2358(E)(18), full post-2010 exemption for qualifying federal civil-service retirement and survivor benefits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ok/statute/68-2358v3
+              excerpt: "retirement benefits received by federal civil service retirees, including survivor annuities, paid in lieu of Social Security benefits"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ok/statute/68-2358v3
+              excerpt: "in the taxable year beginning January 1, 2011, and subsequent taxable years, one hundred percent (100%) of such benefits shall be exempt"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, ok_2026_federal_civil_service_retirement_and_survivor_benefits_paid_in_lieu_of_social_security_in_federal_agi)
 
   - name: ok_2026_resident_organ_donor_deduction
     kind: derived
@@ -888,7 +962,7 @@ rules:
     dtype: Money
     unit: USD
     period: Year
-    source: 68 O.S. § 2358(E)(16), current-year contributions under the no-carryforward/no-withdrawal scope
+    source: 68 O.S. § 2358(E)(16), tax-year-attributable contributions through the succeeding-year deadline under the no-carryforward/no-withdrawal scope
     metadata:
       proof:
         atoms:
@@ -897,6 +971,11 @@ rules:
             source:
               corpus_citation_path: us-ok/statute/68-2358v3
               excerpt: "each taxpayer shall be allowed a deduction for contributions to accounts established pursuant to the Oklahoma College Savings Plan Act"
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ok/statute/68-2358v3
+              excerpt: "deductions may be taken for contributions and rollovers made during a taxable year and up to April 15 of the succeeding year"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -909,7 +988,8 @@ rules:
                 ok_2026_individual_contribution_deduction_cap
               else:
                 ok_2026_individual_contribution_deduction_cap,
-            max(0, ok_2026_current_year_oklahoma_college_savings_contributions)
+            max(0, ok_2026_oklahoma_college_savings_contributions_made_during_tax_year)
+            + max(0, ok_2026_oklahoma_college_savings_contributions_made_by_statutory_succeeding_year_deadline_for_tax_year)
           )
 
   - name: ok_2026_resident_able_deduction
@@ -918,7 +998,7 @@ rules:
     dtype: Money
     unit: USD
     period: Year
-    source: 68 O.S. § 2358(E)(24), current-year ABLE contributions under the no-carryforward scope
+    source: 68 O.S. § 2358(E)(24), tax-year-attributable ABLE contributions through the succeeding-year deadline under the no-carryforward scope
     metadata:
       proof:
         atoms:
@@ -927,6 +1007,11 @@ rules:
             source:
               corpus_citation_path: us-ok/statute/68-2358v3
               excerpt: "allowed a deduction for contributions to accounts established pursuant to the Achieving a Better Life Experience (ABLE) Program"
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ok/statute/68-2358v3
+              excerpt: "Deductions may be taken for contributions made during the tax year and through April 15 of the succeeding tax year"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -939,7 +1024,8 @@ rules:
                 ok_2026_individual_contribution_deduction_cap
               else:
                 ok_2026_individual_contribution_deduction_cap,
-            max(0, ok_2026_current_year_oklahoma_able_contributions)
+            max(0, ok_2026_oklahoma_able_contributions_made_during_tax_year)
+            + max(0, ok_2026_oklahoma_able_contributions_made_by_statutory_succeeding_year_deadline_for_tax_year)
           )
 
   - name: ok_2026_resident_taxable_income_before_unpinned_return_floor_core
@@ -977,6 +1063,7 @@ rules:
           - ok_2026_resident_blind_exemptions
           - ok_2026_resident_age_exemptions
           - ok_2026_resident_retirement_deduction
+          - ok_2026_resident_federal_civil_service_in_lieu_social_security_deduction
           - max(0, ok_2026_social_security_benefits_in_federal_agi)
           - max(0, ok_2026_active_duty_military_compensation_in_federal_agi)
           - ok_2026_resident_organ_donor_deduction
@@ -1154,10 +1241,13 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if ok_2026_federal_adjusted_gross_income > 0:
-            max(0, ok_2026_resident_adjusted_gross_income_core)
-            / ok_2026_federal_adjusted_gross_income
+            min(
+              ok_2026_full_credit_proration_ratio,
+              max(0, ok_2026_resident_adjusted_gross_income_core)
+              / ok_2026_federal_adjusted_gross_income
+            )
           else:
-            0
+            ok_2026_full_credit_proration_ratio
 
   - name: ok_2026_resident_refundable_earned_income_credit_core
     kind: derived
@@ -1284,24 +1374,42 @@ inputs:
     unit: USD
     period: Year
     description: Traditional-to-Roth IRA conversion income included in federal AGI.
-  - name: ok_2026_enumerated_public_retirement_benefits_in_federal_agi
+  - name: ok_2026_taxpayer_enumerated_public_retirement_benefits_in_federal_agi
     entity: TaxUnit
     dtype: Money
     unit: USD
     period: Year
-    description: Retirement distributions from systems enumerated in section 2358(E)(8), included in federal AGI.
-  - name: ok_2026_other_qualifying_retirement_benefits_in_federal_agi
+    description: Taxpayer's retirement distributions from systems enumerated in section 2358(E)(8), included in federal AGI and excluding any amount separately qualifying under section 2358(E)(18).
+  - name: ok_2026_taxpayer_other_qualifying_retirement_benefits_in_federal_agi
     entity: TaxUnit
     dtype: Money
     unit: USD
     period: Year
-    description: Other section 2358(E)(13) retirement distributions included in federal AGI.
+    description: Taxpayer's other section 2358(E)(13) retirement distributions included in federal AGI.
+  - name: ok_2026_spouse_enumerated_public_retirement_benefits_in_federal_agi
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    description: On a joint return, the spouse's retirement distributions from systems enumerated in section 2358(E)(8), included in federal AGI and excluding any amount separately qualifying under section 2358(E)(18); zero outside a joint return.
+  - name: ok_2026_spouse_other_qualifying_retirement_benefits_in_federal_agi
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    description: On a joint return, the spouse's other section 2358(E)(13) retirement distributions included in federal AGI; zero outside a joint return.
   - name: ok_2026_military_retirement_benefits_in_federal_agi
     entity: TaxUnit
     dtype: Money
     unit: USD
     period: Year
     description: Armed Forces retirement benefits included in federal AGI.
+  - name: ok_2026_federal_civil_service_retirement_and_survivor_benefits_paid_in_lieu_of_social_security_in_federal_agi
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    description: Federal civil-service retirement benefits and survivor annuities paid in lieu of Social Security benefits, included in federal AGI under IRC section 86 and excluded from the capped section 2358(E)(8) facts.
   - name: ok_2026_social_security_benefits_in_federal_agi
     entity: TaxUnit
     dtype: Money
@@ -1340,18 +1448,30 @@ inputs:
     dtype: Integer
     period: Year
     description: Months under contract and providing qualifying foster care during tax year 2026.
-  - name: ok_2026_current_year_oklahoma_college_savings_contributions
+  - name: ok_2026_oklahoma_college_savings_contributions_made_during_tax_year
     entity: TaxUnit
     dtype: Money
     unit: USD
     period: Year
-    description: Current-year Oklahoma College Savings Plan contributions under the supported no-carryforward/no-withdrawal scope.
-  - name: ok_2026_current_year_oklahoma_able_contributions
+    description: Oklahoma College Savings Plan contributions made during tax year 2026 and attributed to that tax year under the supported no-carryforward/no-withdrawal scope.
+  - name: ok_2026_oklahoma_college_savings_contributions_made_by_statutory_succeeding_year_deadline_for_tax_year
     entity: TaxUnit
     dtype: Money
     unit: USD
     period: Year
-    description: Current-year Oklahoma ABLE contributions under the supported no-carryforward scope.
+    description: Contributions made after December 31, 2026, through April 15, 2027, or the unextended state-return due date if later, designated for tax year 2026 and not deducted for another year.
+  - name: ok_2026_oklahoma_able_contributions_made_during_tax_year
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    description: Oklahoma ABLE contributions made during tax year 2026 and attributed to that tax year under the supported no-carryforward scope.
+  - name: ok_2026_oklahoma_able_contributions_made_by_statutory_succeeding_year_deadline_for_tax_year
+    entity: TaxUnit
+    dtype: Money
+    unit: USD
+    period: Year
+    description: ABLE contributions made after December 31, 2026, through April 15, 2027, or the unextended state-return due date if later, designated for tax year 2026 and not deducted for another year.
   - name: ok_2026_income_tax_paid_to_other_state_on_personal_services
     entity: TaxUnit
     dtype: Money
