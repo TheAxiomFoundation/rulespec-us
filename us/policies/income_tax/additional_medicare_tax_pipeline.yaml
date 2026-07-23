@@ -1,0 +1,183 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/3101
+      - us/statute/26/1401
+      - us/statute/26/1402
+    upstream_source_check:
+      status: composed_from_grounded_modules
+      checked_paths:
+        - us/statute/26/3101
+        - us/statute/26/1401
+        - us/statute/26/1402
+      rationale: |-
+        Section 3101(b)(2) supplies the wage-leg rate, filing-status
+        thresholds, excess-wage calculation, and final wage tax imported
+        below. Section 1401(b)(2) supplies the self-employment-leg rate,
+        thresholds, wage reduction, international-agreement exemption, and
+        final self-employment tax imported below. Section 1402 was checked to
+        define, rather than reconstruct, the completed self-employment-income
+        boundary consumed by section 1401.
+  summary: |-
+    Federal additional Medicare tax composition under 26 USC
+    3101(b)(2) and 1401(b)(2). The module imports both encoded final tax
+    concepts, sends the same tax-unit wages used by the wage leg to section
+    1401(b)(2)(B)'s threshold-reduction input, and exposes each leg plus their
+    sum. Filing status uses the encoded convention: 0 single, 1 joint,
+    2 married filing separately, 3 head of household, and 4 surviving spouse.
+
+    `self_employment_income` is a completed TaxUnit-level section 1402(b)
+    boundary. The existing executable section 1402(b) output is Person-level,
+    while the encoded section 1401(b)(2) machinery consumes a TaxUnit-level
+    amount. This composition therefore does not re-derive section 1402(b) or
+    silently treat gross business profit as that statutory output. The caller
+    must aggregate completed section 1402(b) amounts consistently with the
+    return and supply the section 1401(c) agreement facts.
+  deferred_outputs:
+    - output: us:policies/income_tax/additional_medicare_tax_pipeline#tax_unit_self_employment_income_from_section_1402_b
+      reason: |-
+        The encoded section 1402(b) `self_employment_income` rule is
+        Person-level, but the encoded section 1401(b)(2) rule expects the
+        homonymous amount at TaxUnit level. RuleSpec has no source-grounded
+        cross-entity import binding for this pair, so this module accepts the
+        completed TaxUnit amount as a runtime boundary instead of reconstructing
+        the already-encoded section 1402(b) result.
+    - output: us:statutes/26/1402/a#net_earnings_from_self_employment
+      reason: |-
+        Section 1402(a)'s full partnership, trade-or-business, deduction,
+        exclusion, and special-rule assembly is deferred in the upstream
+        encoding. This module cannot turn a gross-profit observation into
+        section 1402(b) self-employment income without that machinery.
+imports:
+  - us:statutes/26/3101/b/2#additional_medicare_tax
+  - us:statutes/26/1401#additional_medicare_self_employment_tax
+rules:
+  - name: wages_taken_into_account_for_additional_medicare_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2)(B), wages used to reduce the self-employment threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "shall be reduced (but not below zero) by the amount of wages taken into account"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: wages
+
+  - name: federal_additional_medicare_wage_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3101(b)(2), imported encoded wage-leg tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3101/b/2#additional_medicare_tax
+              output: additional_medicare_tax
+              hash: sha256:f06b93b281a9f04e380d545bbc6f6484b0ae591237831b84051b57d05aa661fa
+    versions:
+      - effective_from: '2013-01-01'
+        formula: additional_medicare_tax
+
+  - name: federal_additional_medicare_self_employment_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2), imported encoded self-employment-leg tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1401#additional_medicare_self_employment_tax
+              output: additional_medicare_self_employment_tax
+              hash: sha256:a844cf97fb59ac576f3b4f44a604c9658bbdd6cc5b4c84d136ac066d8166948b
+    versions:
+      - effective_from: '2013-01-01'
+        formula: additional_medicare_self_employment_tax
+
+  - name: federal_additional_medicare_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3101(b)(2) and 1401(b)(2), combined tax-unit surtax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3101/b/2#additional_medicare_tax
+              output: additional_medicare_tax
+              hash: sha256:f06b93b281a9f04e380d545bbc6f6484b0ae591237831b84051b57d05aa661fa
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1401#additional_medicare_self_employment_tax
+              output: additional_medicare_self_employment_tax
+              hash: sha256:a844cf97fb59ac576f3b4f44a604c9658bbdd6cc5b4c84d136ac066d8166948b
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "In addition to the tax imposed by paragraph (1) and the preceding subsection"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          additional_medicare_tax
+          + additional_medicare_self_employment_tax
+
+inputs:
+  - name: filing_status
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Filing-status code consumed by both imported threshold rules.
+  - name: wages
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Tax-unit wages subject to section 3101(b)(2), including both spouses' wages on a joint return.
+  - name: self_employment_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed TaxUnit-level section 1402(b) self-employment income; not gross receipts or pre-section-1402(a)(12) profit.
+  - name: international_social_security_agreement_under_section_233_in_effect
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Section 1401(c) agreement-in-effect fact.
+  - name: self_employment_income_is_subject_exclusively_to_foreign_social_security_laws_under_agreement
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Section 1401(c) foreign-exclusive-coverage fact.
+  - name: self_employment_income_amount_subject_exclusively_to_foreign_social_security_laws_under_agreement
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed section 1401(c) amount subject exclusively to the foreign system.

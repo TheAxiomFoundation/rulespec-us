@@ -26,10 +26,19 @@ In progress on branch `fed-parity/surtaxes` from `origin/main` at
 - Surveyed the repository workflow and local gate commands, including pytest,
   RuleSpec validation/execution/proof checks, reverse-index generation, oracle
   pending sync/check, and generated-artifact guards.
+- Implemented the additional-Medicare composition with imported wage and
+  self-employment legs, section 1401(b)(2)(B) wage coordination, five
+  well-posed P1 grid cases, a completed-section-1402(b) replacement for the
+  ill-posed gross-profit row, and zero/threshold boundary cases.
+- Passed focused RuleSpec validation, proof validation, money-proof checking,
+  and all 11 additional-Medicare companion cases with the repository-pinned
+  encoder and engine revisions.
+- Confirmed the manual-composition signer selects the new P1 module and
+  companion, but cannot write the manifest because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable.
 
 ## Next
 
-- Implement and test the additional-Medicare composition.
 - Implement and test the self-employment-tax composition.
 - Implement and test the NIIT composition.
 - Generate approved manifests if credentials permit, regenerate the reverse
