@@ -4,119 +4,726 @@ module:
     required: true
   source_verification:
     corpus_citation_paths:
+      - us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+      - us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
       - us-ca/statute/rtc/17041
-      - us-ca/statute/rtc/17054
+      - us-ca/statute/rtc/17043
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
+        - us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+        - us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
         - us-ca/statute/rtc/17041
-        - us-ca/statute/rtc/17054
+        - us-ca/statute/rtc/17043
       rationale: |-
-        This pipeline computes the RTC 17041 progressive bracket tax and
-        subtracts the RTC 17054 personal exemption credit to reach the core
-        California personal income-tax liability for the ordinary resident
-        wage-earner slice. Section 17041 requires the Franchise Tax Board to
-        recompute the bracket thresholds each year by the California Consumer
-        Price Index (subdivision (h)); the encoded RTC 17041 module carries the
-        statutory subdivision (a)/(c) 2021 base tables and 1 through 9.3 per cent
-        rates but defers the indexed bracket thresholds and the resident tax
-        output, and the encoded RTC 17054 module carries the statutory 52/104/227
-        dollar base credits and defers the indexed personal exemption credit.
-        Because the Franchise Tax Board had not published a tax-year-2026
-        schedule at the time of authoring (its 2026 Form 540 booklet issues near
-        the end of the tax year), every indexed amount this pipeline needs is a
-        declared caller-supplied input: the bracket floors and their rates, the
-        standard deduction, and the per-filer personal exemption credit. The
-        operative 2026 values used in the companion tests are the Franchise Tax
-        Board tax-year-2025 published schedule (the latest available authority)
-        carried one further year forward under the subdivision (h) indexation;
-        the oracle disposition records this indexation vintage against TAXSIM's
-        2024 law year. The pipeline adds no numeric literals of its own; it wires
-        the progressive-tax mechanics only.
+        The official 2026 California Estimated Tax Worksheet directs taxpayers
+        to figure line 4 tax on completed worksheet line 3 taxable income using
+        the 2025 Form 540 or Form 540NR tax materials. The official 2025 Form
+        540 instructions divide those materials at $100,000: the tax table is
+        mandatory at or below $100,000, while the filing-status rate schedules
+        are used only above $100,000. This module encodes only that official
+        greater-than-$100,000 rate-schedule branch. When the precondition is
+        not met, its monetary branch output is a non-applicable zero sentinel,
+        not a claim that California tax is zero; the caller must route those
+        cases to the official tax table.
+
+        The caller supplies completed worksheet line 3 taxable income after all
+        deductions; this module does not subtract the worksheet's standard
+        deduction again. The caller also supplies the mutually exclusive joint
+        or qualifying-survivor and head-of-household classifications. When
+        both are false, Schedule X (single or married/RDP filing separately)
+        applies. The 2026 instructions separately impose the 1% Behavioral
+        Health Services Tax on taxable income above $1,000,000 and direct that
+        amount to estimated-tax worksheet line 17. Revenue and Taxation Code
+        sections 17041 and 17043 supply the higher-authority progressive-tax
+        and additional-tax framework; the current official forms supply the
+        indexed values and estimated-tax dependency boundary encoded here.
   summary: |-
-    Composed California personal income-tax liability pipeline for the oracle
-    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
-    California adjusted gross income into the RTC 17041 progressive bracket tax
-    less the RTC 17054 personal exemption credit, so an end-to-end comparison
-    against PolicyEngine (ca_income_tax) and TAXSIM (siitax) does not require the
-    caller to supply the section 17041 bracket-application or section 17054
-    credit stage boundaries. It wires: California taxable income (AGI less the
-    supplied standard deduction); the progressive tax as the marginal sum across
-    the first six brackets (1, 2, 4, 6, 8, and 9.3 per cent), which cover the
-    entire ordinary-wage grid up to the 379,897-dollar single / 759,795-dollar
-    joint 10.3 per cent bracket floor; and the RTC 17041 tax less the supplied
-    personal exemption credit. It deliberately excludes the RTC 17041(a)(2)
-    temporary 0.25-point increase (expired after 2010), the head-of-household
-    schedule, the mental-health-services 1 per cent surcharge on income above one
-    million dollars, the section 17041(g) child-unearned-income treatment, the
-    RTC 17053.5 renter's credit and other section 17053 credits, and itemized
-    deductions, all of which are supplied as zero or omitted for this slice.
-    California AGI, filing status, the bracket floors and rates, the standard
-    deduction, and the personal exemption credit are supplied inputs; the
-    Franchise Tax Board indexes the brackets, standard deduction, and credit each
-    year, so this 2026 pipeline is compared against PolicyEngine at 2026 and
-    against TAXSIM's latest 2024 law year with the indexation vintage
-    dispositioned.
+    California tax-year-2026 estimated-tax rate-schedule branch for completed
+    resident Form 540 taxable income strictly above $100,000. It applies the
+    official 2025 Schedule X, Y, or Z incorporated by the 2026 Form 540-ES
+    worksheet and adds the worksheet's 1% Behavioral Health Services Tax above
+    $1,000,000.
+
+    This module deliberately does not compute tax at or below $100,000 because
+    the official tax table, not a continuous rate schedule, controls that
+    range. The public applicability judgment is authoritative for this domain;
+    a monetary zero when that judgment does not hold is only a non-applicable
+    sentinel and must never be read as zero tax. It also excludes taxable-
+    income construction, exemption credits,
+    FTB 3800 and FTB 3803 tax, nonresident allocation, all other worksheet
+    taxes and credits, payment percentages and installments, and final-return
+    liability. It is bounded to tax year 2026 and makes no PolicyEngine or
+    TAXSIM parity claim.
 rules:
-  - name: ca_pit_pilot_taxable_income
+  - name: ca_pit_pilot_rate_schedule_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 2025 California Tax Rate Schedules, exclusive applicability threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "Use only if your taxable income on Form 540, line 19 is more than $100,000."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '100000'
+
+  - name: ca_pit_pilot_schedule_x_upper
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_x_bracket
+    source: 2025 Schedule X, upper bounds within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule X", row_key: "amount over", column_key: "but not over"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 371479, 1: 445771, 2: 742953}
+
+  - name: ca_pit_pilot_schedule_x_floor
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_x_bracket
+    source: 2025 Schedule X, excess-over floors within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule X", row_key: "amount over", column_key: "amount over"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 72724, 1: 371479, 2: 445771, 3: 742953}
+
+  - name: ca_pit_pilot_schedule_x_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_x_bracket
+    source: 2025 Schedule X, cumulative base tax within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule X", row_key: "amount over", column_key: "base tax"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 3201.97, 1: 30986.19, 2: 38638.27}
+
+  - name: ca_pit_pilot_schedule_x_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    indexed_by: ca_pit_pilot_schedule_x_bracket
+    source: 2025 Schedule X, marginal rates within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule X", row_key: "amount over", column_key: "rate"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.093, 1: 0.103, 2: 0.113, 3: 0.123}
+
+  - name: ca_pit_pilot_schedule_y_upper
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_y_bracket
+    source: 2025 Schedule Y, upper bounds within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Y", row_key: "amount over", column_key: "but not over"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 115084, 1: 145448, 2: 742958, 3: 891542, 4: 1485906}
+
+  - name: ca_pit_pilot_schedule_y_floor
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_y_bracket
+    source: 2025 Schedule Y, excess-over floors within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Y", row_key: "amount over", column_key: "amount over"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 82904, 1: 115084, 2: 145448, 3: 742958, 4: 891542, 5: 1485906}
+
+  - name: ca_pit_pilot_schedule_y_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_y_bracket
+    source: 2025 Schedule Y, cumulative base tax within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Y", row_key: "amount over", column_key: "base tax"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 2044.02, 1: 3974.82, 2: 6403.94, 3: 61972.37, 4: 77276.52}
+
+  - name: ca_pit_pilot_schedule_y_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    indexed_by: ca_pit_pilot_schedule_y_bracket
+    source: 2025 Schedule Y, marginal rates within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Y", row_key: "amount over", column_key: "rate"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.06, 1: 0.08, 2: 0.093, 3: 0.103, 4: 0.113, 5: 0.123}
+
+  - name: ca_pit_pilot_schedule_z_upper
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_z_bracket
+    source: 2025 Schedule Z, upper bounds within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Z", row_key: "amount over", column_key: "but not over"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 505208, 1: 606251, 2: 1010417}
+
+  - name: ca_pit_pilot_schedule_z_floor
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_z_bracket
+    source: 2025 Schedule Z, excess-over floors within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Z", row_key: "amount over", column_key: "amount over"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 98990, 1: 505208, 2: 606251, 3: 1010417}
+
+  - name: ca_pit_pilot_schedule_z_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: ca_pit_pilot_schedule_z_bracket
+    source: 2025 Schedule Z, cumulative base tax within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Z", row_key: "amount over", column_key: "base tax"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 3616.45, 1: 41394.72, 2: 51802.15}
+
+  - name: ca_pit_pilot_schedule_z_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    indexed_by: ca_pit_pilot_schedule_z_bracket
+    source: 2025 Schedule Z, marginal rates within the greater-than-$100,000 branch
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              table: {header: "Schedule Z", row_key: "amount over", column_key: "rate"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.093, 1: 0.103, 2: 0.113, 3: 0.123}
+
+  - name: ca_pit_pilot_behavioral_health_services_tax_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 2026 Form 540-ES Behavioral Health Services Tax worksheet, line B
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+              excerpt: "B. Less $(1,000,000)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '1000000'
+
+  - name: ca_pit_pilot_behavioral_health_services_tax_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: 2026 Form 540-ES Behavioral Health Services Tax worksheet, line D
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+              excerpt: "D. Tax rate - 1 percent."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.01'
+
+  - name: ca_pit_pilot_completed_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: RTC 17041, California taxable income after the supplied standard deduction
+    source: 2026 California Estimated Tax Worksheet line 3, completed taxable income
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+              excerpt: "3 Subtract line 2c from line 1"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, ca_pit_pilot_supplied_completed_taxable_income)
+
+  - name: ca_pit_pilot_rate_schedule_applicable
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 2025 California Tax Rate Schedules, mandatory greater-than-$100,000 scope
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ca/statute/rtc/17041
-              excerpt: "taxable income"
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "Use only if your taxable income on Form 540, line 19 is more than $100,000. If $100,000 or less, use the Tax Table."
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ca_pit_pilot_completed_taxable_income > ca_pit_pilot_rate_schedule_threshold
+
+  - name: ca_pit_pilot_schedule_x_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 2025 Schedule X, bracket selection above $100,000
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "Schedule X"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, ca_pit_pilot_adjusted_gross_income - ca_pit_pilot_supplied_standard_deduction)
-  - name: ca_pit_pilot_bracket_tax
+          if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_x_upper[0]: 0
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_x_upper[1]: 1
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_x_upper[2]: 2
+          else: 3
+
+  - name: ca_pit_pilot_schedule_y_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 2025 Schedule Y, bracket selection above $100,000
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "Schedule Y"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_y_upper[0]: 0
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_y_upper[1]: 1
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_y_upper[2]: 2
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_y_upper[3]: 3
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_y_upper[4]: 4
+          else: 5
+
+  - name: ca_pit_pilot_schedule_z_bracket
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: 2025 Schedule Z, bracket selection above $100,000
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "Schedule Z"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_z_upper[0]: 0
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_z_upper[1]: 1
+          else: if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_z_upper[2]: 2
+          else: 3
+
+  - name: ca_pit_pilot_schedule_x_top_bracket_base
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: RTC 17041(a)(1), progressive tax as the marginal sum across the supplied bracket floors and rates
+    rounding: half_up
+    source: 2025 Schedule X, published 12.3% bracket base reconstructed at the schedule's cent precision
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "742,953 AND OVER 72,219.84 + 12.30% 742,953"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ca_pit_pilot_schedule_x_base[2]
+          + ca_pit_pilot_schedule_x_rate[2]
+          * (ca_pit_pilot_schedule_x_floor[3] - ca_pit_pilot_schedule_x_floor[2])
+
+  - name: ca_pit_pilot_schedule_y_top_bracket_base
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    rounding: half_up
+    source: 2025 Schedule Y, published 12.3% bracket base reconstructed at the schedule's cent precision
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "1,485,906 AND OVER 144,439.65 + 12.30% 1,485,906"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ca_pit_pilot_schedule_y_base[4]
+          + ca_pit_pilot_schedule_y_rate[4]
+          * (ca_pit_pilot_schedule_y_floor[5] - ca_pit_pilot_schedule_y_floor[4])
+
+  - name: ca_pit_pilot_schedule_z_top_bracket_base
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    rounding: half_up
+    source: 2025 Schedule Z, published 12.3% bracket base reconstructed at the schedule's cent precision
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "1,010,417 AND OVER 97,472.91 + 12.30% 1,010,417"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ca_pit_pilot_schedule_z_base[2]
+          + ca_pit_pilot_schedule_z_rate[2]
+          * (ca_pit_pilot_schedule_z_floor[3] - ca_pit_pilot_schedule_z_floor[2])
+
+  - name: ca_pit_pilot_schedule_x_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    rounding: half_up
+    source: 2025 California Tax Rate Schedule X, incorporated by the 2026 estimated-tax worksheet
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: |-
+                Schedule X – 11,079 26,264 110.79 + 2.00% 11,079 Use if your filing status is 26,264 41,452 414.49 + 4.00% 26,264 Single or Married/RDP Filing Separately 41,452 57,542 1,022.01 + 6.00% 41,452 57,542 72,724 1,987.41 + 8.00% 57,542 72,724 371,479 3,201.97 + 9.30% 72,724 371,479 445,771 30,986.19 + 10.30% 371,479 445,771 742,953 38,638.27 + 11.30% 445,771 742,953 AND OVER 72,219.84 + 12.30% 742,953
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_x_upper[2]:
+              ca_pit_pilot_schedule_x_base[ca_pit_pilot_schedule_x_bracket]
+              + ca_pit_pilot_schedule_x_rate[ca_pit_pilot_schedule_x_bracket]
+              * (ca_pit_pilot_completed_taxable_income - ca_pit_pilot_schedule_x_floor[ca_pit_pilot_schedule_x_bracket])
+          else:
+              ca_pit_pilot_schedule_x_top_bracket_base
+              + ca_pit_pilot_schedule_x_rate[3]
+              * (ca_pit_pilot_completed_taxable_income - ca_pit_pilot_schedule_x_floor[3])
+
+  - name: ca_pit_pilot_schedule_y_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    rounding: half_up
+    source: 2025 California Tax Rate Schedule Y, incorporated by the 2026 estimated-tax worksheet
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: |-
+                Schedule Y – 22,158 52,528 221.58 + 2.00% 22,158 Use if your filing status is 52,528 82,904 828.98 + 4.00% 52,528 Married/RDP Filing Jointly or Qualifying 82,904 115,084 2,044.02 + 6.00% 82,904 Surviving Spouse/RDP 115,084 145,448 3,974.82 + 8.00% 115,084 145,448 742,958 6,403.94 + 9.30% 145,448 742,958 891,542 61,972.37 + 10.30% 742,958 891,542 1,485,906 77,276.52 + 11.30% 891,542 1,485,906 AND OVER 144,439.65 + 12.30% 1,485,906
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_y_upper[4]:
+              ca_pit_pilot_schedule_y_base[ca_pit_pilot_schedule_y_bracket]
+              + ca_pit_pilot_schedule_y_rate[ca_pit_pilot_schedule_y_bracket]
+              * (ca_pit_pilot_completed_taxable_income - ca_pit_pilot_schedule_y_floor[ca_pit_pilot_schedule_y_bracket])
+          else:
+              ca_pit_pilot_schedule_y_top_bracket_base
+              + ca_pit_pilot_schedule_y_rate[5]
+              * (ca_pit_pilot_completed_taxable_income - ca_pit_pilot_schedule_y_floor[5])
+
+  - name: ca_pit_pilot_schedule_z_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    rounding: half_up
+    source: 2025 California Tax Rate Schedule Z, incorporated by the 2026 estimated-tax worksheet
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: |-
+                Schedule Z – 22,173 52,530 221.73 + 2.00% 22,173 Use if your filing status is 52,530 67,716 828.87 + 4.00% 52,530 Head of Household 67,716 83,805 1,436.31 + 6.00% 67,716 83,805 98,990 2,401.65 + 8.00% 83,805 98,990 505,208 3,616.45 + 9.30% 98,990 505,208 606,251 41,394.72 + 10.30% 505,208 606,251 1,010,417 51,802.15 + 11.30% 606,251 1,010,417 AND OVER 97,472.91 + 12.30% 1,010,417
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ca_pit_pilot_completed_taxable_income <= ca_pit_pilot_schedule_z_upper[2]:
+              ca_pit_pilot_schedule_z_base[ca_pit_pilot_schedule_z_bracket]
+              + ca_pit_pilot_schedule_z_rate[ca_pit_pilot_schedule_z_bracket]
+              * (ca_pit_pilot_completed_taxable_income - ca_pit_pilot_schedule_z_floor[ca_pit_pilot_schedule_z_bracket])
+          else:
+              ca_pit_pilot_schedule_z_top_bracket_base
+              + ca_pit_pilot_schedule_z_rate[3]
+              * (ca_pit_pilot_completed_taxable_income - ca_pit_pilot_schedule_z_floor[3])
+
+  - name: ca_pit_pilot_estimated_tax_rate_schedule_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 2026 estimated-tax worksheet line 4, greater-than-$100,000 resident rate-schedule branch
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ca/statute/rtc/17041
-              excerpt: "subdivision (a)(1) taxable income tax table"
+              corpus_citation_path: us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+              excerpt: "4 Tax. Figure your tax on the amount on line 3 using the 2025 tax table for Form 540 or Form 540NR."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2025/540-tax-rate-schedules/document-1
+              excerpt: "Use only if your taxable income on Form 540, line 19 is more than $100,000. If $100,000 or less, use the Tax Table."
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_2) - ca_pit_pilot_supplied_bracket_floor_1) * ca_pit_pilot_supplied_bracket_rate_1
-          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_3) - ca_pit_pilot_supplied_bracket_floor_2) * ca_pit_pilot_supplied_bracket_rate_2
-          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_4) - ca_pit_pilot_supplied_bracket_floor_3) * ca_pit_pilot_supplied_bracket_rate_3
-          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_5) - ca_pit_pilot_supplied_bracket_floor_4) * ca_pit_pilot_supplied_bracket_rate_4
-          + max(0, min(ca_pit_pilot_taxable_income, ca_pit_pilot_supplied_bracket_floor_6) - ca_pit_pilot_supplied_bracket_floor_5) * ca_pit_pilot_supplied_bracket_rate_5
-          + max(0, ca_pit_pilot_taxable_income - ca_pit_pilot_supplied_bracket_floor_6) * ca_pit_pilot_supplied_bracket_rate_6
-  - name: ca_pit_pilot_income_tax_liability
+          if ca_pit_pilot_rate_schedule_applicable:
+              if ca_pit_pilot_filing_status_joint_or_qualifying_surviving_spouse:
+                  ca_pit_pilot_schedule_y_tax
+              else:
+                  if ca_pit_pilot_filing_status_head_of_household:
+                      ca_pit_pilot_schedule_z_tax
+                  else:
+                      ca_pit_pilot_schedule_x_tax
+          else:
+              0
+
+  - name: ca_pit_pilot_behavioral_health_services_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: RTC 17041 tax less the RTC 17054 personal exemption credit, before other section 17053 credits
+    source: 2026 Form 540-ES Behavioral Health Services Tax worksheet, line E
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ca/statute/rtc/17054
-              excerpt: "credits for personal exemption may be deducted from the tax imposed under Section 17041"
+              corpus_citation_path: us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+              excerpt: "Behavioral Health Services Tax – Multiply line C by line D. Enter this amount here and on line 17 of the 2026 California Estimated Tax Worksheet"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, ca_pit_pilot_bracket_tax - ca_pit_pilot_supplied_personal_exemption_credit)
+          if ca_pit_pilot_rate_schedule_applicable:
+              max(0, ca_pit_pilot_completed_taxable_income - ca_pit_pilot_behavioral_health_services_tax_threshold)
+              * ca_pit_pilot_behavioral_health_services_tax_rate
+          else:
+              0
+
+  - name: ca_pit_pilot_estimated_tax_schedule_branch_total
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 2026 California Estimated Tax Worksheet lines 4 and 17, encoded resident schedule branch
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/form/individual-income-tax/2026/540-es-instructions/document-1
+              excerpt: "18 2026 Estimated Tax. Add line 14 through line 17. Enter the result, but not less than zero"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ca_pit_pilot_estimated_tax_rate_schedule_amount
+          + ca_pit_pilot_behavioral_health_services_tax
