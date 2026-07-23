@@ -1,180 +1,204 @@
 format: rulespec/v1
-imports:
-  - us-ma:statutes/62/3#single_or_separate_personal_exemption_cap
-  - us-ma:statutes/62/3#head_of_household_personal_exemption_cap
-  - us-ma:statutes/62/3#joint_return_personal_exemption_cap
 module:
   proof_validation:
     required: true
   source_verification:
     corpus_citation_paths:
-      - us-ma/statute/62/3
-      - us-ma/statute/62/4
+      - us-ma/form/individual-income-tax/2026/1-es/document-1
+      - us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+      - us-ma/statute/62/4/block-2
     upstream_source_check:
-      status: composed_from_grounded_modules
+      status: official_parameter_source
       checked_paths:
-        - us-ma/statute/62/3
-        - us-ma/statute/62/4
+        - us-ma/form/individual-income-tax/2026/1-es/document-1
+        - us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+        - us-ma/statute/62/4/block-2
       rationale: |-
-        The section 3(b) personal-exemption cap amounts for single/separate,
-        head of household, and joint filers are imported from the already-
-        grounded MGL c.62 section 3 module; the section 3 personal exemptions
-        have equalled their statutory caps since 2004, so those caps are the
-        operative 2026 amounts, and the section 3 filing-status/medical-expense
-        mechanics that determine them in the general case are not re-derived
-        here. The operative flat Part B rate (5 per cent) and the section 4(d)
-        additional-tax rate (4 per cent) are declared caller-supplied inputs
-        (ma_pit_pilot_supplied_part_b_rate, ma_pit_pilot_supplied_surtax_rate)
-        rather than imported, because the section 4 encoding carries them inside
-        rate schedules with baseline-tax-growth and one-million-dollar-threshold
-        mechanics that a flat-rate application would strand; Massachusetts has in
-        fact taxed Part B income at the 5 per cent section 4(b) statutory floor
-        since tax year 2020 and applies the 4 per cent section 4(d) additional
-        tax, and those encoded floor and additional rates are the cited authority
-        for the supplied values. The section 4(d) 2026 indexed surtax threshold
-        is likewise a supplied input (ma_pit_pilot_supplied_indexed_surtax_
-        threshold), because the indexed amount is published by the Department of
-        Revenue rather than stated in the statute; the operative 2026 value is
-        1,107,750 dollars, indexing the section 4(d) one-million-dollar base by
-        the Code section 1(f) cost-of-living adjustment. The 2026 Part B
-        liability equals the 5 per cent rate on Part B taxable income plus the
-        4 per cent additional tax on Part B taxable income above the supplied
-        indexed threshold.
+        Massachusetts Department of Revenue Form 1-ES is the current official
+        tax-year-2026 parameter source for this estimated-tax slice. Its
+        worksheet applies 5 per cent to completed taxable 5%-income on line 1,
+        applies 4 per cent to taxable income above the $1,107,750 surtax
+        threshold on line 3, and adds those amounts on line 4. The Department's
+        separate surtax guidance confirms the 2026 threshold and requires the
+        surtax base to sum only positive Part A, Part B, and Part C taxable
+        income amounts. MGL c.62 section 4 supplies the underlying 5-per-cent
+        floor, 4-per-cent additional-tax rate, positive-Part boundary, and
+        annual threshold-indexing authority.
+
+        The caller supplies Form 1-ES line 1's completed taxable 5%-income
+        amount after all upstream deductions and exemptions. This module
+        models the worksheet slice in which lines 2a through 2c are zero, so
+        line 1 is also the entire surtax base. It does not determine taxable
+        income or compose a final return.
   summary: |-
-    Composed Massachusetts Part B individual income-tax liability pipeline for
-    the oracle slice at the 2026 tax year. It exposes a TaxUnit-level path from
-    a supplied Part B adjusted gross income (a completed-return, AGI-level
-    input) into the MGL c.62 section 4(b)/(d) liability so an end-to-end
-    comparison against PolicyEngine (ma_income_tax) and TAXSIM (siitax) does not
-    require the caller to supply the section 4 rate-schedule or section 3
-    exemption stage boundaries. It wires: the section 3(b) personal exemption
-    selected by supplied filing status, the supplied section 3(b)(a)(2)
-    FICA/employment-tax deduction (capped at 2,000 dollars per employee), Part B
-    taxable income after those subtractions, the 5 per cent Part B rate on Part
-    B taxable income, and the 4 per cent section 4(d) additional tax on Part B
-    taxable income above the supplied 2026 indexed one-million-dollar threshold.
-    It deliberately excludes Part A (interest, dividends, short-term and long-term
-    capital gains) and Part C (qualified small business stock) income, which are
-    charged at separate section 4(a)/(c) rates and are zero for the ordinary
-    wage earner this slice models, and it excludes section 6 credits (EITC,
-    limited-income credit), no-tax-status, deductions beyond the FICA
-    deduction, and the dependent/age-65/blindness additional exemptions, all of
-    which are supplied as zero for this slice. Filing status, Part B AGI, and
-    the FICA deduction are supplied inputs; PolicyEngine and TAXSIM both apply
-    the same 5 per cent flat rate and equal exemptions across 2024-2026, so this
-    2026 pipeline is directly comparable to TAXSIM's latest (2024) law year for
-    the flat-rate cases.
+    Massachusetts 2026 Form 1-ES estimated-tax schedule for the narrow
+    completed-5%-income slice. The module floors the supplied line-1 taxable
+    amount at zero, applies the form's 5-per-cent rate, and adds 4 per cent of
+    the amount above the official $1,107,750 surtax threshold.
+
+    This is not final-return liability. It excludes 8.5%- and 12%-rate income,
+    separately entered long-term capital gains, cross-Part deductions upstream
+    of completed taxable income, credits, withholding, prior-year
+    overpayments, the $400 estimated-payment requirement, installments,
+    residency and allocation rules, and every final Form 1 or Form 1-NR/PY
+    step. It is bounded to tax year 2026 and makes no PolicyEngine or TAXSIM
+    parity claim.
 rules:
-  - name: ma_pit_pilot_personal_exemption
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
+  - name: ma_pit_pilot_five_percent_rate
+    kind: parameter
+    dtype: Rate
     period: Year
-    unit: USD
-    source: MGL c.62 s.3(b), personal exemption selected by supplied filing status (2026 amounts equal the statutory caps)
+    source: 2026 Form 1-ES line 1, rate on completed taxable 5%-income
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
+            kind: parameter
             source:
-              corpus_citation_path: us-ma/statute/62/3
-              excerpt: "a personal exemption of"
+              corpus_citation_path: us-ma/form/individual-income-tax/2026/1-es/document-1
+              excerpt: "1 x .05"
           - path: versions[0].formula
-            kind: import
-            import:
-              target: us-ma:statutes/62/3#single_or_separate_personal_exemption_cap
-              output: single_or_separate_personal_exemption_cap
-              hash: sha256:339de2008275feebafc70700ca627f994e21e23a1b7f369c541a7994b05e229f
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-ma:statutes/62/3#head_of_household_personal_exemption_cap
-              output: head_of_household_personal_exemption_cap
-              hash: sha256:339de2008275feebafc70700ca627f994e21e23a1b7f369c541a7994b05e229f
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-ma:statutes/62/3#joint_return_personal_exemption_cap
-              output: joint_return_personal_exemption_cap
-              hash: sha256:339de2008275feebafc70700ca627f994e21e23a1b7f369c541a7994b05e229f
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          if ma_pit_pilot_filing_status_joint: joint_return_personal_exemption_cap else: (if ma_pit_pilot_filing_status_head_of_household: head_of_household_personal_exemption_cap else: single_or_separate_personal_exemption_cap)
-  - name: ma_pit_pilot_part_b_taxable_income
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: MGL c.62 s.3(a)-(b), Part B taxable income after the personal exemption and the FICA/employment deduction
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
+            kind: parameter
             source:
-              corpus_citation_path: us-ma/statute/62/3
-              excerpt: "Part B adjusted gross income less the deductions and exemptions"
-    versions:
-      - effective_from: '2026-01-01'
-        formula: |-
-          max(0, ma_pit_pilot_part_b_adjusted_gross_income - ma_pit_pilot_personal_exemption - ma_pit_pilot_supplied_fica_deduction)
-  - name: ma_pit_pilot_base_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: MGL c.62 s.4(b), supplied operative 5 per cent Part B rate on Part B taxable income
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-ma/statute/62/4
+              corpus_citation_path: us-ma/statute/62/4/block-2
               excerpt: "Part B taxable income shall be taxed at a rate of not less than 5 per cent."
     versions:
       - effective_from: '2026-01-01'
-        formula: |-
-          ma_pit_pilot_part_b_taxable_income * ma_pit_pilot_supplied_part_b_rate
-  - name: ma_pit_pilot_surtax
+        effective_to: '2026-12-31'
+        formula: '0.05'
+
+  - name: ma_pit_pilot_surtax_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: 2026 Form 1-ES line 3 and DOR guidance, additional surtax rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+              excerpt: "You must multiply the difference by 4%"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ma/statute/62/4/block-2
+              excerpt: "plus an additional 4 per cent."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.04'
+
+  - name: ma_pit_pilot_surtax_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: DOR 4% surtax guidance, tax-year-2026 indexed threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+              excerpt: "Tax year 2026 is $1,107,750"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '1107750'
+
+  - name: ma_pit_pilot_five_percent_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: MGL c.62 s.4(d), supplied 4 per cent additional tax on Part B taxable income above the supplied indexed threshold
+    source: Completed Form 1-ES line-1 taxable 5%-income, floored at the positive-Part boundary
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ma/statute/62/4
-              excerpt: "the portion of such taxable income exceeding $1,000,000 shall be taxed at the rates specified in subsections (a) to (c), inclusive, plus an additional 4 per cent"
+              corpus_citation_path: us-ma/form/individual-income-tax/2026/1-es/document-1
+              excerpt: "Taxable 5% income* (after deductions and exemptions)"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+              excerpt: "any Part that is negative is treated as 0"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, ma_pit_pilot_part_b_taxable_income - ma_pit_pilot_supplied_indexed_surtax_threshold) * ma_pit_pilot_supplied_surtax_rate
-  - name: ma_pit_pilot_income_tax_liability
+          max(0, ma_pit_pilot_completed_five_percent_taxable_income)
+
+  - name: ma_pit_pilot_base_estimated_tax
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: MGL c.62 s.4(b), (d), Part B liability before section 6 credits
+    source: 2026 Form 1-ES line 1, 5 per cent of completed taxable 5%-income
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us-ma/statute/62/4
-              excerpt: "Part B taxable income shall be taxed"
+              corpus_citation_path: us-ma/form/individual-income-tax/2026/1-es/document-1
+              excerpt: "1 x .05"
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          max(0, ma_pit_pilot_base_tax + ma_pit_pilot_surtax)
+          ma_pit_pilot_five_percent_taxable_income * ma_pit_pilot_five_percent_rate
+
+  - name: ma_pit_pilot_estimated_surtax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 2026 DOR guidance and Form 1-ES line 3, 4 per cent above the indexed threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+              excerpt: "you subtract the amount of the surtax threshold for that year"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/guidance/department-of-revenue/4-percent-surtax/2026/taxable-income-calculation
+              excerpt: "You must multiply the difference by 4%"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(0, ma_pit_pilot_five_percent_taxable_income - ma_pit_pilot_surtax_threshold) * ma_pit_pilot_surtax_rate
+
+  - name: ma_pit_pilot_estimated_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 2026 Form 1-ES line 4 for the line-1-only estimated-tax slice
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ma/form/individual-income-tax/2026/1-es/document-1
+              excerpt: "Total tax. Add column B of lines 1 through 3"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ma_pit_pilot_base_estimated_tax + ma_pit_pilot_estimated_surtax
