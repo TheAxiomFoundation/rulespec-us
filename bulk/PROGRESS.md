@@ -108,13 +108,26 @@ a key holder must generate the signed manual-composition manifests and rerun
 - Limited the follow-up to policy-pipeline and companion authorship; encoded
   statute modules, manifests, toolchain, workflows, and `CODEOWNERS` remain
   out of scope.
+- Chose implementation shape **(a)** after tracing pinned-engine import
+  resolution: concept fragments are stripped before loading and the complete
+  imported RuleSpec document is merged. A rate- or threshold-only root-1401
+  import would therefore still pull the colliding TaxUnit
+  `self_employment_income` graph, so shape (b) is not collision-free.
+- Verified the collision-free replacement surface:
+  `self_employment_tax_pipeline#federal_self_employment_income` derives the
+  section 1402(a)(12) adjustment, section 1402(b) floor/exclusions, and
+  Person-to-TaxUnit aggregation from `gross_self_employment_profit`.
+- Verified literal corpus excerpts for every locally authored section
+  1401(b)(2)(A)/(B) rate, threshold, excess-base, and wage-coordination proof,
+  plus subsection (c) agreement-exemption text needed to preserve the existing
+  pipeline behavior.
 
 ## Next
 
-- Inspect whole-module import behavior and the SE pipeline's aggregate output,
-  then choose the cleanest validating shape: reuse importable encoded
-  parameters if collision-free, otherwise author the section 1401(b)(2)
-  SE-leg rate/threshold/coordination locally with corpus-backed proof atoms.
+- Implement shape (a): retain the wage-leg import, import the SE pipeline
+  aggregate, and author the section 1401(b)(2) SE rate, thresholds,
+  wage-coordination reduction, excess base, and tax locally with corpus-backed
+  proof atoms while preserving subsection (c) behavior.
 - Add and engine-verify the exact neutral-grid `amt-single-wage-se` case while
   retaining the completed-income boundary case as a clearly labeled
   non-contract fixture.
