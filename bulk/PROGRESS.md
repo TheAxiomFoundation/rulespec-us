@@ -46,10 +46,18 @@ In progress on branch `fed-parity/surtaxes` from `origin/main` at
   cases and floor/base boundaries.
 - Confirmed the signer selects the P2 module and companion for a
   `manual_exception: composition` manifest; signing remains credential-blocked.
+- Implemented the thin NIIT composition as an identity over the complete
+  encoded section 1411 tax, with completed-return AGI and the statute's
+  investment, section 911, and applicability facts documented as runtime
+  boundaries.
+- Passed focused RuleSpec validation, proof validation, money-proof checking,
+  and all nine NIIT companion cases, including every P3 grid case plus zero
+  and exact/one-dollar-over threshold cases.
+- Confirmed the signer selects the P3 module and companion for a
+  `manual_exception: composition` manifest; signing remains credential-blocked.
 
 ## Next
 
-- Implement and test the NIIT composition.
 - Generate approved manifests if credentials permit, regenerate the reverse
   index, run the official oracle sync when locally available, and run all
   local CI-equivalent gates.
