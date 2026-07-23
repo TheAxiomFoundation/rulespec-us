@@ -1,0 +1,232 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/regulation/7/247/9
+      - us/regulation/7/247/9/a
+      - us/regulation/7/247/9/b
+      - us/regulation/7/247/9/c
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/regulation/7/247/9
+        - us/regulation/7/247/9/a
+        - us/regulation/7/247/9/b
+        - us/regulation/7/247/9/c
+      rationale: |-
+        Paragraph (a) supplies the inclusive age-60 condition and requires the
+        paragraph-(b) income test. Paragraph (b) supplies the household-income
+        ceiling, adjunctive paths, and legacy-certification exception.
+        Paragraph (d)(4), available at the stable section citation path,
+        recognizes a previous-12-month income measure. The local factor of 12
+        is neutral annualization plumbing for a caller-selected monthly income
+        amount; it does not choose between current income and a 12-month
+        average or alter the regulation's definition of countable income.
+  summary: |-
+    Person-month CSFP eligibility composition under 7 CFR 247.9. The pipeline
+    imports the paragraph-(a) age predicate and paragraph-(b) current-rule
+    income predicate, then binds paragraph (b)'s direct household-income fact
+    from runtime household size, income, annual poverty-guideline dollars, and
+    the State agency's CSFP limit as a ratio of those guidelines.
+
+    One income amount is supplied with an explicit monthly/annual selector to
+    avoid contradictory dual income inputs. A monthly amount is annualized by
+    12 solely so it can be compared with the caller-supplied annual poverty
+    guideline. The State ratio must be positive and cannot exceed the imported
+    150-percent federal ceiling. Invalid direct-income inputs make only the
+    direct path false: paragraph (b)(3) keeps documented adjunctive eligibility
+    independent of the income limit. The applicant's household aggregates are
+    carried on the Person surface because no Person-Household relation is
+    required for this already-completed certification input contract. Age and
+    adjunctive-program facts retain their imported paragraph-(a)/(b) input
+    slots; this module owns the household measurement inputs it binds. The
+    caller supplies countable gross income after the paragraph-(d) exclusions
+    and the State/local choice between current and previous-12-month-average
+    income. Optional paragraph-(e) nutritional-risk and service-area screens,
+    and actual program/service availability, remain outside this federal
+    eligibility surface.
+  deferred_outputs:
+    - output: us:regulations/7-cfr/247/9/d#csfp_countable_household_income
+      reason: |-
+        Paragraph (d) defines gross income, exclusions, and the authorized
+        choice between current and previous-12-month-average income. The
+        pipeline accepts the State/local agency's completed countable amount
+        rather than recreating those source-by-source determinations.
+    - output: us:regulations/7-cfr/247/9/e#optional_state_csfp_requirements
+      reason: |-
+        A State agency may add nutritional-risk and service-area residency
+        requirements. Those optional State choices require State-bound facts
+        and are not part of this federal age-and-income compose.
+    - output: us:programs/usda/csfp#commodity_package_or_benefit_amount
+      reason: |-
+        This lane determines eligibility only. Food-package issuance,
+        availability, and any monetized amount remain out of scope.
+imports:
+  - us:regulations/7-cfr/247/9/a#csfp_age_requirement_met
+  - us:regulations/7-cfr/247/9/b#maximum_csfp_household_income_limit_fpg_ratio
+  - us:regulations/7-cfr/247/9/b#csfp_income_eligible_under_current_rule
+rules:
+  - name: csfp_income_annualization_months
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 247.9(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/247/9
+              excerpt: "average income during the previous 12 months"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          12
+
+  - name: csfp_annualized_household_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 247.9(b) and (d)(4), caller-selected income reporting period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/247/9/b
+              excerpt: "households with income at or below this level"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/csfp/eligibility_pipeline#csfp_income_annualization_months
+              output: csfp_income_annualization_months
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if csfp_household_income_is_monthly:
+            csfp_household_income * csfp_income_annualization_months
+          else:
+            csfp_household_income
+
+  - name: csfp_direct_income_runtime_inputs_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(b)-(c), direct-income runtime boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/a
+              excerpt: "individuals must be at least 60 years of age and meet the income eligibility requirements"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/b#maximum_csfp_household_income_limit_fpg_ratio
+              output: maximum_csfp_household_income_limit_fpg_ratio
+              hash: sha256:5429426e80a220064349cbdca97c980ff12be42e3fa2907629b11349150fcbc5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          csfp_household_size > 0
+          and csfp_annual_federal_poverty_guideline_for_household > 0
+          and csfp_household_income >= 0
+          and csfp_state_agency_household_income_limit_fpg_ratio > 0
+          and csfp_state_agency_household_income_limit_fpg_ratio <= maximum_csfp_household_income_limit_fpg_ratio
+
+  - name: household_income_at_or_below_state_agency_csfp_income_limit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(b), direct household-income path
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/b
+              excerpt: "Participants in households with income at or below this level must be considered eligible"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/csfp/eligibility_pipeline#csfp_annualized_household_income
+              output: csfp_annualized_household_income
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          csfp_direct_income_runtime_inputs_valid
+          and csfp_annualized_household_income
+          <= csfp_annual_federal_poverty_guideline_for_household
+          * csfp_state_agency_household_income_limit_fpg_ratio
+
+  - name: csfp_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(a), composed age and income eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/a
+              excerpt: "at least 60 years of age and meet the income eligibility requirements outlined in paragraph (b)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/a#csfp_age_requirement_met
+              output: csfp_age_requirement_met
+              hash: sha256:94c367e2a633d5dc3d6ddba09ed3c9bfd58844f42e3eca7efd7453b91b0c69dd
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/b#csfp_income_eligible_under_current_rule
+              output: csfp_income_eligible_under_current_rule
+              hash: sha256:5429426e80a220064349cbdca97c980ff12be42e3fa2907629b11349150fcbc5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          csfp_age_requirement_met
+          and csfp_income_eligible_under_current_rule
+inputs:
+  - name: csfp_household_size
+    entity: Person
+    dtype: Count
+    period: Month
+    description: Size of the applicant's CSFP household corresponding to the supplied poverty guideline.
+  - name: csfp_household_income
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Completed CSFP household income amount, monthly or annual as selected by csfp_household_income_is_monthly.
+  - name: csfp_household_income_is_monthly
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: True when csfp_household_income is monthly; false when it is already annual.
+  - name: csfp_annual_federal_poverty_guideline_for_household
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Annual HHS poverty-guideline dollars applicable to the applicant's household size and location in the certification month.
+  - name: csfp_state_agency_household_income_limit_fpg_ratio
+    entity: Person
+    dtype: Rate
+    period: Month
+    description: State agency's CSFP household-income limit as a ratio of FPG, capped by paragraph (b) at 1.50.
