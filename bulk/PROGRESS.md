@@ -36,10 +36,19 @@ In progress on branch `fed-parity/surtaxes` from `origin/main` at
 - Confirmed the manual-composition signer selects the new P1 module and
   companion, but cannot write the manifest because
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable.
+- Implemented the per-person ordinary self-employment-tax composition using
+  the imported section 1402(a)(12) deduction, section 1402(b) floor and
+  wage-coordinated OASDI base, imported section 1401(a) and (b)(1) taxes, and
+  the encoded 2026 SSA base. The combined output deliberately excludes the
+  section 1401(b)(2) surtax owned by P1.
+- Passed focused RuleSpec validation, proof validation, money-proof checking,
+  and all 11 self-employment-tax companion cases, including all six P2 grid
+  cases and floor/base boundaries.
+- Confirmed the signer selects the P2 module and companion for a
+  `manual_exception: composition` manifest; signing remains credential-blocked.
 
 ## Next
 
-- Implement and test the self-employment-tax composition.
 - Implement and test the NIIT composition.
 - Generate approved manifests if credentials permit, regenerate the reverse
   index, run the official oracle sync when locally available, and run all
