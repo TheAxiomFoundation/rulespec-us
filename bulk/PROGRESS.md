@@ -3,9 +3,10 @@
 ## State
 
 The executable compose and complete hand-computed companion are implemented.
-Focused gates, the regenerated reverse index, and the 55-test repository
-pytest suite pass. The workflow-current oracle-pending sync is applied; its
-fresh-snapshot check plus program-artifact and signing checks are next.
+Implementation and the full gate battery are complete. All required checks
+are green; manifest signing remains intentionally blocked for the main lane.
+Preparing the scratchpad summary/done marker and then removing this temporary
+progress file from the final tree are the only remaining steps.
 
 ## Done
 
@@ -50,10 +51,19 @@ fresh-snapshot check plus program-artifact and signing checks are next.
   oracle classifier synchronized the ratchet to 1,742 declarations, adding
   the compose's 15 derived outputs and draining 14 entries now classified as
   mapped.
+- A fresh canonical `rulespec-us` oracle check reports 1,742 applied and zero
+  stale declarations.
+- Canonical-basename program-artifact verification built all 32/32 programs
+  with the pinned `ffd8213271947b0189a9dd61a055c1e0e78908a0` engine.
+- Signing dry-run selects one manifest covering exactly the compose and
+  companion. The unsigned guard fails only those two files, which is the
+  expected main-lane signing block.
 
 ## Next
 
-- Run the oracle-pending fresh-snapshot check, canonical-basename program
-  artifacts, and signing selection dry-run.
+- Write `build-medicaid-SUMMARY.md` and `build-medicaid-DONE.md` in the
+  campaign scratchpad.
+- Delete this temporary progress file from the final repository tree and make
+  the final local commit.
 - Produce the scratchpad summary and done marker, leaving manifest signing to
   the main lane after a dry-run selection proof.
