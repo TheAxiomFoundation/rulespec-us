@@ -1,0 +1,233 @@
+# Hand-computed tax-year-2026 fixtures for 26 USC 199A. Revenue Procedure
+# 2025-32 section 4.26 publishes thresholds of $201,750 for single/HOH,
+# $201,775 for MFS, and $403,500 for joint returns, with upper ends of
+# $276,750, $276,775, and $553,500:
+# https://www.irs.gov/pub/irs-irbs/irb25-45.pdf
+#
+# These current-law $75,000/$150,000 phase-in widths supersede the
+# GRID-CONTRACT's stale $50,000/$100,000 note. QBI and wage inputs are
+# caller-resolved non-SSTB amounts for one aggregation group. UBIA, PTP,
+# cooperative amounts, and net capital gain are zero unless stated. The grid
+# cases set active-business QBI to zero so the new section 199A(i) $400
+# minimum does not change wage-limited results. No expected value comes from
+# PolicyEngine.
+
+- name: qbid-ti-limited
+  # Trade amount = 20% * 80,000 = 16,000.
+  # Overall limit = 20% * (60,000 - 0 net capital gain) = 12,000.
+  # Deduction = min(16,000, 12,000) = 12,000.
+  period: &tax_year_2026
+    period_kind: tax_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    <<: &common_qbid_inputs
+      us:statutes/26/199A#input.qualified_trade_or_business_unadjusted_basis: 0
+      us:statutes/26/199A#input.qualified_business_income_allocable_to_qualified_cooperative_payments: 0
+      us:statutes/26/199A#input.w2_wages_allocable_to_qualified_cooperative_payments: 0
+      us:statutes/26/199A#input.qualified_publicly_traded_partnership_income: 0
+      us:statutes/26/199A#input.taxpayer_is_corporation: false
+      us:statutes/26/199A#input.minimum_deduction_cost_of_living_adjustment: 0
+      us:statutes/26/199A#input.aggregate_qualified_business_income_from_active_qualified_trades_or_businesses: 0
+      us:statutes/26/199A#input.qualified_production_activities_income: 0
+      us:statutes/26/199A#input.taxpayer_is_specified_agricultural_or_horticultural_cooperative: false
+      us:statutes/26/199A#input.cooperative_w2_wages: 0
+      us:statutes/26/1/h#input.net_capital_gain_taken_into_account_as_investment_income_under_section_163_d_4_B_iii: 0
+      us:statutes/26/1/h#input.long_term_capital_gains: 0
+      us:statutes/26/1/h#input.short_term_capital_gains: 0
+      us:statutes/26/1/h#input.qualified_dividend_income: 0
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750.0
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 40000
+    us:statutes/26/199A#input.qualified_business_income: 80000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 60000
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qualified_business_income_threshold_amount: '201750'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_trade_or_business_deductible_amount: '16000'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_combined_qualified_business_income_amount: '16000'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qbi_deduction_before_minimum_active_qbi: '12000'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '12000'
+
+- name: qbid-basic-100k
+  # Below $201,750: trade amount = 20% * 100,000 = 20,000.
+  # Overall limit = 20% * 150,000 = 30,000, so deduction = 20,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 50000
+    us:statutes/26/199A#input.qualified_business_income: 100000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 150000
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '20000'
+
+- name: qbid-joint-150k
+  # Below the $403,500 joint threshold: 20% * 150,000 = 30,000.
+  # Overall limit = 20% * 250,000 = 50,000, so deduction = 30,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 403500
+    us:statutes/26/199A#input.filing_status: 1
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 60000
+    us:statutes/26/199A#input.qualified_business_income: 150000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 250000
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '30000'
+
+- name: qbid-phasein
+  # Correct single midpoint = 201,750 + 75,000 / 2 = 239,250.
+  # QBI amount = 20% * 200,000 = 40,000.
+  # Wage/UBIA limit = max(50% * 30,000, 25% * 30,000 + 2.5% * 0)
+  # = 15,000; excess = 25,000; ratio = 37,500 / 75,000 = 1/2.
+  # Reduction = 12,500; trade amount = 27,500; overall limit = 47,850.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 30000
+    us:statutes/26/199A#input.qualified_business_income: 200000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 239250
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_trade_or_business_phasein_reduction: '12500'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_trade_or_business_deductible_amount: '27500'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '27500'
+
+- name: qbid-above-nowages
+  # $276,751 is one dollar above the official single band top.
+  # Full wage/UBIA limit = 0. Active-QBI aggregate = 0, so the section
+  # 199A(i) minimum is inapplicable and the final deduction remains zero.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 0
+    us:statutes/26/199A#input.qualified_business_income: 300000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 276751
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qbi_deduction_before_minimum_active_qbi: '0'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '0'
+
+- name: qbid-reit-only
+  # Trade amount = 0. Separate REIT component = 20% * 20,000 = 4,000.
+  # Overall limit = 20% * 100,000 = 20,000, so deduction = 4,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 403500
+    us:statutes/26/199A#input.filing_status: 1
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 0
+    us:statutes/26/199A#input.qualified_business_income: 0
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 100000
+    us:statutes/26/199A#input.qualified_reit_dividends: 20000
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '4000'
+
+- name: qbid-zero
+  # Every amount is zero, so the deduction is zero.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 0
+    us:statutes/26/199A#input.qualified_business_income: 0
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 0
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '0'
+
+- name: qbid-single-at-threshold
+  # At $201,750, phase-in has not begun: 20% * 150,000 = 30,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 0
+    us:statutes/26/199A#input.qualified_business_income: 150000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 201750
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '30000'
+
+- name: qbid-single-one-dollar-over-threshold
+  # Excess = 30,000 - 0 = 30,000; phase ratio = 1 / 75,000.
+  # Reduction = 0.40, so deduction = 30,000 - 0.40 = 29,999.60.
+  period: *tax_year_2026
+  input:
+    <<: *common_qbid_inputs
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 0
+    us:statutes/26/199A#input.qualified_business_income: 150000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 201751
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '29999.600000000000000000000001'
+
+- name: qbid-active-minimum
+  # Ordinary deduction = min(20% * 1,000, 20% * 10,000) = 200.
+  # Active-QBI aggregate reaches $1,000, so section 199A(i) raises it to $400.
+  period: *tax_year_2026
+  input:
+    us:statutes/26/199A#input.qualified_trade_or_business_unadjusted_basis: 0
+    us:statutes/26/199A#input.qualified_business_income_allocable_to_qualified_cooperative_payments: 0
+    us:statutes/26/199A#input.w2_wages_allocable_to_qualified_cooperative_payments: 0
+    us:statutes/26/199A#input.qualified_publicly_traded_partnership_income: 0
+    us:statutes/26/199A#input.taxpayer_is_corporation: false
+    us:statutes/26/199A#input.minimum_deduction_cost_of_living_adjustment: 0
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.aggregate_qualified_business_income_from_active_qualified_trades_or_businesses: 1000
+    us:statutes/26/199A#input.qualified_production_activities_income: 0
+    us:statutes/26/199A#input.taxpayer_is_specified_agricultural_or_horticultural_cooperative: false
+    us:statutes/26/199A#input.cooperative_w2_wages: 0
+    us:statutes/26/1/h#input.net_capital_gain_taken_into_account_as_investment_income_under_section_163_d_4_B_iii: 0
+    us:statutes/26/1/h#input.long_term_capital_gains: 0
+    us:statutes/26/1/h#input.short_term_capital_gains: 0
+    us:statutes/26/1/h#input.qualified_dividend_income: 0
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 0
+    us:statutes/26/199A#input.qualified_business_income: 1000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 10000
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qbi_deduction_before_minimum_active_qbi: '200'
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '400'
+
+- name: qbid-net-capital-gain-limit
+  # Trade amount = 20% * 100,000 = 20,000.
+  # Net capital gain = 30,000; overall limit = 20% * (100,000 - 30,000)
+  # = 14,000, so final deduction = 14,000.
+  period: *tax_year_2026
+  input:
+    us:statutes/26/199A#input.qualified_trade_or_business_unadjusted_basis: 0
+    us:statutes/26/199A#input.qualified_business_income_allocable_to_qualified_cooperative_payments: 0
+    us:statutes/26/199A#input.w2_wages_allocable_to_qualified_cooperative_payments: 0
+    us:statutes/26/199A#input.qualified_publicly_traded_partnership_income: 0
+    us:statutes/26/199A#input.taxpayer_is_corporation: false
+    us:statutes/26/199A#input.minimum_deduction_cost_of_living_adjustment: 0
+    us:statutes/26/199A#input.aggregate_qualified_business_income_from_active_qualified_trades_or_businesses: 0
+    us:statutes/26/199A#input.qualified_production_activities_income: 0
+    us:statutes/26/199A#input.taxpayer_is_specified_agricultural_or_horticultural_cooperative: false
+    us:statutes/26/199A#input.cooperative_w2_wages: 0
+    us:statutes/26/1/h#input.net_capital_gain_taken_into_account_as_investment_income_under_section_163_d_4_B_iii: 0
+    us:statutes/26/1/h#input.short_term_capital_gains: 0
+    us:statutes/26/1/h#input.qualified_dividend_income: 0
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026: 201750
+    us:statutes/26/199A#input.filing_status: 0
+    us:statutes/26/199A#input.qualified_trade_or_business_w2_wages: 50000
+    us:statutes/26/199A#input.qualified_business_income: 100000
+    us:statutes/26/199A#input.taxable_income_computed_without_section_199A: 100000
+    us:statutes/26/199A#input.qualified_reit_dividends: 0
+    us:statutes/26/1/h#input.long_term_capital_gains: 30000
+  output:
+    us:policies/income_tax/qualified_business_income_deduction_pipeline#federal_qualified_business_income_deduction: '14000'
