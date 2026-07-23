@@ -5,7 +5,7 @@
 - Branch: `fed-parity/aca-ptc`
 - Base: `origin/main` at `c86b2f62`
 - Phase: compose module, companion, reverse index, and oracle-pending ledger
-  are complete; signing attempt and full gates next.
+  are complete; signing is credential-blocked and full gates are next.
 - Module home: `us/policies/aca/ptc_pipeline.yaml`, following the federal
   `us/policies/...` executable-RuleSpec convention.
 
@@ -44,10 +44,17 @@
   pending, and raises the ceiling from 1,741 to 1,743. Preserved the existing
   ledger formatting instead of committing a whole-file serializer rewrite;
   the official check passes with 1,743 applied and zero stale.
+- Inspected the Wisconsin manual-composition manifest and ran the pinned
+  `sign-applied-files` dry run with `manual_exception: composition`; it
+  correctly selected the new pipeline and companion as one manifest group.
+- Attempted real signing. It stopped before writing because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not set. No signature or manifest was
+  fabricated; `.axiom/encoding-manifests/us/policies/aca/ptc_pipeline.json`
+  remains an explicit credential-holder TODO.
 
 ## Next
 
-1. Attempt the approved manual-composition signing path without fabricating
-   credentials; record an explicit TODO if the HMAC key remains unavailable.
-2. Run the full local gate battery and record every result in the required
+1. Run the full local gate battery and record every result in the required
    summary.
+2. Have a credential holder run the recorded pinned signing command, then
+   rerun the manifest/encoder-first gates.
