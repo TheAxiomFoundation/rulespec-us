@@ -2,10 +2,11 @@
 
 ## State
 
-The governing age paragraph is present in the pinned corpus; its atomic
-RuleSpec module and age-boundary companion are implemented and locally
-verified. Research continues on the policy composition boundary, runtime
-income normalization, and oracle contract.
+The governing age paragraph is present in the pinned corpus. Its atomic
+RuleSpec module and the executable federal age-and-income composition are
+implemented with companions. Targeted deterministic and proof validation pass;
+all 16 targeted cases pass provisionally, and exact-pinned engine verification
+plus the full repository battery remain.
 
 ## Done
 
@@ -22,10 +23,23 @@ income normalization, and oracle contract.
 - Implemented `us/regulations/7-cfr/247/9/a.yaml` and its 59/60/61 companion.
 - Passed pinned-encoder deterministic validation, two-atom proof validation
   against the pinned local corpus, and all three companion cases.
+- Implemented `us/policies/usda/csfp/eligibility_pipeline.yaml`, importing the
+  paragraph-(a) age predicate and paragraph-(b) income predicate.
+- Bound one monthly-or-annual income amount, annual FPG dollars, household
+  size, and the actual State FPG ratio; the direct path fails closed for
+  invalid inputs or a State ratio above 1.50 without blocking adjunctive paths.
+- Added 13 hand-computed pipeline cases covering ages 59/60/61, annual and
+  monthly exact/over income boundaries, two-person household scaling, State
+  limit compliance, both adjunctive routes, the legacy exception, and zeros.
+- Passed targeted pipeline validation, all 10 proof atoms, and all 13 cases
+  against the available engine checkout. The exact pinned-engine rerun remains
+  part of the next gate step.
+- Regenerated the required provision-to-rules reverse index for the new
+  regulation and policy source references.
 
 ## Next
 
-- Implement the executable compose and hand-computed boundary companions.
-- Run the complete campaign gate battery and fix any failures.
-- Produce the scratchpad summary and done marker, leaving manifest signing to
-  dry-run proof only.
+- Build/use the exact pinned engine and rerun both companions.
+- Run the complete campaign gate battery and fix any in-scope failures.
+- Produce the scratchpad summary and done marker, leave signing at dry-run,
+  and remove this session ledger from the final tree.
