@@ -6,9 +6,9 @@ Defensive correctness-and-completeness audit in progress on
 `fed-parity/credits`, based on `origin/main` commit
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
-The section 199A, section 25B, and section 22 pipelines and companions are
-complete and independently validated. Section 22 supports the requested true
-thin identity, including its Person and Payment relation closure.
+All four requested pipelines and companions are complete and independently
+validated. Section 22 and section 25A support thin imports; the latter exposes
+both its pre-section-26 potential and its encoded tax-liability-capped final.
 
 ## Done
 
@@ -25,6 +25,15 @@ thin identity, including its Person and Payment relation closure.
 - Added the proofed `qualified_business_income_deduction_pipeline` and 11
   hand-computed fixtures, including all P5 cases, exact-threshold, active-QBI
   minimum, zero, and net-capital-gain-limit checks.
+- Passed that module's `validate --skip-reviewers`, proof validation,
+  money-proof ratchet, and pinned-engine companion suite.
+- Added the thin `lifetime_learning_credit_pipeline` and 12 hand-computed
+  fixtures covering all P8 cases, zero and both phaseout edges, the aggregate
+  expense cap, and a binding-tax diagnostic.
+- Confirmed the encoded 2026 MAGI ranges are the fixed $80,000-$90,000
+  nonjoint and $160,000-$180,000 joint ranges. Grid cases supply $10,000 of
+  pre-credit tax and zero preceding credits, so the encoded tax cap does not
+  bind.
 - Passed that module's `validate --skip-reviewers`, proof validation,
   money-proof ratchet, and pinned-engine companion suite.
 - Added the thin `elderly_disabled_credit_pipeline` and 10 hand-computed
@@ -48,7 +57,7 @@ thin identity, including its Person and Payment relation closure.
 
 ## Next
 
-1. Add and commit the thin-identity section 25A(c) compose with P8 fixtures.
-2. Regenerate shared index/coverage artifacts and commit them separately.
-3. Run the complete validation/signing-dry-run gate battery.
-4. Write the required scratchpad summary and completion marker.
+1. Regenerate shared index, oracle-coverage, program-artifact, and manifest
+   artifacts as required, then commit shared generated files separately.
+2. Run the complete validation/signing-dry-run gate battery.
+3. Write the required scratchpad summary and completion marker.

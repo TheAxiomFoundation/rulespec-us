@@ -1,0 +1,214 @@
+# Hand-computed tax-year-2026 fixtures for 26 USC 25A(c)-(d). The encoded
+# fixed MAGI ranges are $80,000-$90,000 for nonjoint returns and
+# $160,000-$180,000 for joint returns. The credit is 20% of up to $10,000 of
+# aggregate adjusted expenses, multiplied by the unphased fraction.
+#
+# Every grid person has an LLC election, required identification and payee
+# statement, no excludable assistance, and no allowed AOTC election. Every
+# grid TaxUnit has $10,000 income tax before credits and zero FTC/CDCC/AOTC,
+# so the encoded tax-liability cap does not bind. Both the pre-section-26
+# potential and capped final are asserted. No expected value comes from
+# PolicyEngine.
+
+- name: llc-basic
+  # 20% * 4,000 = 800; MAGI 50,000 is below the $80,000 phaseout start.
+  period: &tax_year_2026
+    period_kind: tax_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    <<: &common_llc_tax_unit_inputs
+      us:statutes/26/25A#input.income_tax_before_credits: 10000
+      us:statutes/26/25A#input.foreign_tax_credit: 0
+      us:statutes/26/25A#input.cdcc: 0
+      us:statutes/26/25A#input.taxpayer_is_section_1_g_child: false
+      us:statutes/26/25A#input.is_nonresident_alien: false
+      us:statutes/26/25A#input.section_6013_resident_alien_election: false
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 50000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: &llc_eligible_person
+          us:statutes/26/25A#input.excludable_educational_assistance: 0
+          us:statutes/26/25A#input.is_tax_unit_dependent: true
+          us:statutes/26/25A#input.is_taxpayer: false
+          us:statutes/26/25A#input.is_spouse: false
+          us:statutes/26/25A#input.meets_higher_education_act_student_requirements: false
+          us:statutes/26/25A#input.at_least_half_time_student: false
+          us:statutes/26/25A#input.aotc_prior_year_election_count: 0
+          us:statutes/26/25A#input.completed_first_four_years_postsecondary_before_year: false
+          us:statutes/26/25A#input.has_felony_drug_conviction: false
+          us:statutes/26/25A#input.aotc_election_in_effect: false
+          us:statutes/26/25A#input.education_credit_election_in_effect: true
+          us:statutes/26/25A#input.education_credit_identification_requirements_met: true
+          us:statutes/26/25A#input.institution_employer_identification_number_included: false
+          us:statutes/26/25A#input.payee_statement_received: true
+          us:statutes/26/25A#input.aotc_disallowance_period_applies: false
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 4000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '800'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '800'
+
+- name: llc-cap
+  # Aggregate expenses are capped at $10,000: 20% * 10,000 = 2,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 50000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 15000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '2000'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '2000'
+
+- name: llc-phaseout-mid
+  # Single midpoint MAGI = 85,000. Phaseout fraction = 1 - 5,000/10,000
+  # = 50%; credit = (20% * 10,000) * 50% = 1,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 85000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 10000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '1000'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '1000'
+
+- name: llc-over
+  # MAGI 90,001 is above the single phaseout range, so the credit is zero.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 90001
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 10000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '0'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '0'
+
+- name: llc-joint-mid
+  # Joint midpoint MAGI = 170,000. Potential = 20% * 8,000 = 1,600;
+  # 50% unphased fraction gives 800.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 1
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 170000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 8000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '800'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '800'
+
+- name: llc-small
+  # Joint MAGI 100,000 is below phaseout. Credit = 20% * 900 = 180.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 1
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 100000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 900
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '180'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '180'
+
+- name: llc-zero-expenses
+  # Zero adjusted expenses produce zero potential and final credit.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 50000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 0
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '0'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '0'
+
+- name: llc-at-phaseout-start
+  # At MAGI 80,000 the unphased fraction is 100%: credit = 2,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 80000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 10000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '2000'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '2000'
+
+- name: llc-one-dollar-over-phaseout-start
+  # Phaseout rate = 1/10,000; credit = 2,000 * 9,999/10,000 = 1,999.80.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 80001
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 10000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '1999.8'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '1999.8'
+
+- name: llc-at-phaseout-end
+  # At MAGI 90,000 the phaseout rate is 100%, so the credit is zero.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 90000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 10000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '0'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '0'
+
+- name: llc-aggregate-cap
+  # Two eligible people have 6,000 each; aggregate 12,000 is capped at 10,000.
+  # Credit = 20% * 10,000 = 2,000.
+  period: *tax_year_2026
+  input:
+    <<: *common_llc_tax_unit_inputs
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 50000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 6000
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 6000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '2000'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '2000'
+
+- name: llc-liability-cap-diagnostic
+  # Potential = 20% * 10,000 = 2,000, but only $500 of income tax is
+  # available after preceding credits. Pre-section-26 = 2,000; final = 500.
+  period: *tax_year_2026
+  input:
+    us:statutes/26/25A#input.income_tax_before_credits: 500
+    us:statutes/26/25A#input.foreign_tax_credit: 0
+    us:statutes/26/25A#input.cdcc: 0
+    us:statutes/26/25A#input.taxpayer_is_section_1_g_child: false
+    us:statutes/26/25A#input.is_nonresident_alien: false
+    us:statutes/26/25A#input.section_6013_resident_alien_election: false
+    us:statutes/26/25A#input.filing_status: 0
+    us:statutes/26/25A#input.modified_adjusted_gross_income: 50000
+    us:statutes/26/25A#relation.education_credit_member_of_tax_unit:
+      - <<: *llc_eligible_person
+        us:statutes/26/25A#input.qualified_tuition_and_related_expenses: 10000
+  output:
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit_before_section_26: '2000'
+    us:policies/income_tax/lifetime_learning_credit_pipeline#federal_lifetime_learning_credit: '500'
