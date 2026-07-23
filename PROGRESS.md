@@ -4,8 +4,11 @@
 
 - Branch: `fed-parity/aca-ptc`
 - Base: `origin/main` at `c86b2f62`
-- Phase: mandatory source reading complete; repository survey and legal/arithmetic verification next.
-- Intended home: `us/policies/aca/ptc_pipeline.yaml`, subject to confirmation against repository conventions.
+- Phase: compose module and nine-case companion pass pinned validation,
+  proof validation, and exact-pinned-engine execution; generated artifacts and
+  full gates next.
+- Module home: `us/policies/aca/ptc_pipeline.yaml`, following the federal
+  `us/policies/...` executable-RuleSpec convention.
 
 ## Done
 
@@ -14,11 +17,34 @@
 - Read the required section 36B, Rev. Proc. 2025-25, and Ohio compose/template modules in the specified order.
 - Confirmed the worktree is clean and on `fed-parity/aca-ptc` at the requested base.
 - Identified the core legal/composition boundary: the Rev. Proc. supplies the indexed 2026 initial/final percentages, section 36B(b)(3)(A) supplies linear interpolation, section 36B(c)(1)(A) supplies the inclusive 100%-400% gate, and section 36B(b) supplies monthly assistance mechanics.
+- Verified that 2026 coverage uses the 2025 HHS poverty guideline under
+  section 36B(d)(3)(B); the needed contiguous-48 values are $15,650 for one
+  person, $21,150 for two people, and $32,150 for four people.
+- Confirmed that direct import of `36B/b/3/A#applicable_percentage` cannot
+  accept the Rev. Proc. endpoints because the upstream module closes over its
+  unindexed base tables. The compose instead imports the Rev. Proc. band and
+  endpoints and proofedly applies the same statutory linear interpolation.
+- Drafted `us/policies/aca/ptc_pipeline.yaml` with six explicit runtime inputs,
+  the 100%-400% gate, annual-to-monthly bridges, a 12-month annual result, and
+  explicit employer-coverage, QSEHRA, lawfully-present, relational, regulatory
+  rounding, and filing-form boundaries.
+- Added `us/policies/aca/ptc_pipeline.test.yaml` with all six exact P4 cases
+  plus exact 100% FPL, exact 400% FPL, and contribution-above-SLCSP cases.
+  Comments show the independent band, rate, contribution, benchmark-excess,
+  and enrolled-premium cap arithmetic.
+- Passed `axiom-encode` 0.2.1200 validation and proof validation (34 atoms).
+- Built `axiom-rules-engine` at the exact pinned commit
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0` in a temporary directory and
+  passed all 9 companion cases.
+- Ran focused layout/manifest/index pytest: 17 passed; the only failure was the
+  expected stale reverse index, which is the next generated-artifact step.
 
 ## Next
 
-1. Survey policy-module naming, import/proof conventions, validator commands, manifest layout, reverse-index generation, and oracle-pending sync.
-2. Verify the 2026 FPL vintage under section 36B(d)(3), locate the official HHS values/corpus citations, and hand-compute all fixtures.
-3. Implement the proofed executable compose module with explicit runtime inputs and deferred boundaries.
-4. Add the exact six P4 cases plus exact-100%, exact-400%, and contribution-over-benchmark cases.
-5. Generate/sign required artifacts, run the full local gate battery, and record every result in the required summary.
+1. Validate, proof-check, and execute the companion against the pinned bridge
+   encoder, correcting schema, import, formula, or expected-value issues.
+2. Generate the reverse index and oracle-pending classification.
+3. Attempt the approved manual-composition signing path without fabricating
+   credentials; record an explicit TODO if the HMAC key remains unavailable.
+4. Run the full local gate battery and record every result in the required
+   summary.
