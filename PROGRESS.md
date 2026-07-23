@@ -4,7 +4,8 @@
 
 - Branch: `fed-parity/benefit-elig`
 - Starting commit: `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`
-- Phase: both eligibility composes and reverse source index complete; repository-wide gates next.
+- Phase: implementation and validation complete; scratchpad reports and final
+  progress-ledger cleanup next.
 - Network fetch was unavailable because `github.com` could not be resolved. The cached `origin/main` and `HEAD` both resolve to the stated starting commit.
 
 ## Done
@@ -62,9 +63,37 @@
   passes.
 - Regenerated `.axiom/index/provisions_to_rules.json`; the check mode confirms
   3,944 provisions, 4,670 edges, and 4,435 modules are current.
+- Passed the final targeted battery for both modules: schema/CI validation,
+  45 proof atoms, and all 51 hand-computed companion cases.
+- Passed the repository test suite: 63 tests passed. The expected
+  unmanifested-module warning remains because the campaign permits signing
+  dry-run only.
+- Ran all 15,604 repository companion cases. The only four failures are the
+  unchanged baseline reference failures in `us/statutes/26/32.test.yaml`; the
+  two new companions pass.
+- Passed the repository-wide money-proof ratchet: 118 missing legacy atoms
+  across 2,586 monetary obligations, below the allowed backlog of 151.
+- Passed the pinned Program Artifact build: all 32 ProgramSpecs compose and
+  compile. The builder also reports three pre-existing allowlisted specs that
+  now compile; no allowlist was edited.
+- Passed source-staleness against the local current corpus: all 43 pinned
+  modules match.
+- Ran `sign-applied-files` in dry-run mode only. It would create two manifests
+  covering the four new RuleSpec/companion files; it wrote nothing.
+- Confirmed the generated-file guard fails only because those four files lack
+  the manifests intentionally withheld by the signing-dry-run constraint.
+- Confirmed all 15 new executable outputs are companion-tested but remain
+  unmapped in oracle coverage. The pending-ledger check reports those 15
+  required declarations plus one pre-existing stale Hawaii entry. The
+  campaign's no-ledger-edit order prevents resolving this lane in-tree.
+- Confirmed the unrelated failing §32 companion and its module are unchanged
+  from `origin/main`.
 
 ## Next
 
-1. Run the full repository validation battery and signing dry-run.
-2. Resolve any independent-review findings.
-3. Write `build-benefit-elig-SUMMARY.md` and `build-benefit-elig-DONE.md` with case tables, boundaries, gates, commit SHAs, and oracle-suite notes.
+1. Write `build-benefit-elig-SUMMARY.md` and `build-benefit-elig-DONE.md` with
+   case tables, boundaries, gates, commit SHAs, and oracle-suite notes.
+2. Remove this temporary progress ledger so the final repository diff obeys
+   the no-repo-ledger requirement.
+3. Verify the final tree is clean and contains only the four RuleSpec files
+   plus the generated reverse-index update.
