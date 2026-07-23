@@ -7,9 +7,9 @@ Corpus presence and repository-convention audit is complete on
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
 Revenue Procedure 2025-32 section 4.26 is present at the pinned corpus ref, so
-the qualified-business-income module will be encoded. Notice 2025-67 is absent
-from that corpus, so the saver's-credit half is stopped pending ingest and no
-Notice-derived executable values will be added.
+the qualified-business-income module and companion are now implemented.
+Notice 2025-67 is absent from that corpus, so the saver's-credit half is
+stopped pending ingest and no Notice-derived executable values will be added.
 
 ## Done
 
@@ -41,13 +41,20 @@ Notice-derived executable values will be added.
   pinned source, inventory, coverage, provision, and ingest-manifest trees.
   The required ingest target is Notice 2025-67, 2025-49 I.R.B. 761; the
   official document has no numbered section 3.09.
+- Added
+  `us/policies/irs/rev-proc-2025-32/qualified-business-income.yaml`
+  with all six published table cells, three explicit phase-in widths, and
+  filing-status selectors for the threshold, range endpoint, and width.
+- Added a five-case companion covering all five filing-status codes and
+  asserting every published value and width over the 2026 effective window.
+- Passed pinned-encoder deterministic validation and proof validation:
+  40 atoms checked, with zero missing across nine monetary obligations.
+- Passed all five companion cases with the RuleSpec engine.
 
 ## Next
 
-1. Encode the qualified-business-income table, derived widths and selectors,
-   proof atoms, and tax-year-2026 companion.
-2. Regenerate the provision reverse index without modifying toolchain,
+1. Regenerate the provision reverse index without modifying toolchain,
    workflows, CODEOWNERS, statutes, pipelines, or repository ledgers.
-3. Run the full validation battery and manual-composition signing dry-run.
-4. Write the requested build summary and done marker, including commit SHAs,
+2. Run the full validation battery and manual-composition signing dry-run.
+3. Write the requested build summary and done marker, including commit SHAs,
    the Notice ingest-needed finding, and the exact cross-branch repoint plan.
