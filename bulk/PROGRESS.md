@@ -153,6 +153,11 @@ a key holder must generate the signed manual-composition manifests and rerun
   outputs were declared from 2026-07-23, nothing was drained, and the ceiling
   moved from 1,742 to 1,753. The canonical-checkout ratchet passes with 1,753
   declared, 1,753 applied, and zero stale entries.
+- The first full repository test run defensively caught three locally derived
+  helpers that were computed but not asserted by any companion output. Added
+  targeted assertions for the married-filing-separately threshold, the false
+  international-agreement condition, and taxable SE income; the pinned-engine
+  P1 companion and the strict derived-output coverage test now pass.
 
 ## Next
 
