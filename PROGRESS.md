@@ -4,7 +4,7 @@
 
 - Branch: `fed-parity/benefit-elig`
 - Starting commit: `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`
-- Phase: both eligibility composes complete and targeted gates passing; repository-wide gates and generated index next.
+- Phase: both eligibility composes and reverse source index complete; repository-wide gates next.
 - Network fetch was unavailable because `github.com` could not be resolved. The cached `origin/main` and `HEAD` both resolve to the stated starting commit.
 
 ## Done
@@ -50,10 +50,11 @@
   staff-policy administration outside the scalar eligibility outputs.
 - Passed targeted Head Start schema/CI validation, proof validation (29
   atoms), and all 27 companion cases.
+- Regenerated `.axiom/index/provisions_to_rules.json`; the check mode confirms
+  3,944 provisions, 4,670 edges, and 4,435 modules are current.
 
 ## Next
 
-1. Generate the reverse source index and inspect the complete diff.
-2. Run the full repository validation battery and signing dry-run.
-3. Resolve any independent-review findings.
-4. Write `build-benefit-elig-SUMMARY.md` and `build-benefit-elig-DONE.md` with case tables, boundaries, gates, commit SHAs, and oracle-suite notes.
+1. Run the full repository validation battery and signing dry-run.
+2. Resolve any independent-review findings.
+3. Write `build-benefit-elig-SUMMARY.md` and `build-benefit-elig-DONE.md` with case tables, boundaries, gates, commit SHAs, and oracle-suite notes.
