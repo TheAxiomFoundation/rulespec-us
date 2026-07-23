@@ -1,0 +1,432 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/199A
+      - us/guidance/irs/rev-proc-2025-32/page-21
+      - us/guidance/irs/rev-proc-2025-32/page-22
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us/statute/26/199A
+        - us/guidance/irs/rev-proc-2025-32/page-21
+        - us/guidance/irs/rev-proc-2025-32/page-22
+      rationale: |-
+        Section 199A supplies the deduction rate, taxable-income/net-capital-
+        gain ceiling, W-2-wage/UBIA limitation, REIT/PTP component, cooperative
+        reduction, and active-QBI minimum. Revenue Procedure 2025-32,
+        section 4.26, supplies the unencoded tax-year-2026 threshold amounts:
+        $403,500 joint, $201,775 married filing separately, and $201,750 for
+        all other returns. Its published upper ends of $553,500, $276,775,
+        and $276,750 confirm the current statutory phase-in widths of $150,000
+        joint and $75,000 otherwise.
+  summary: |-
+    Federal qualified business income deduction composition under 26 USC
+    199A for tax year 2026. The encoded section derives the final deduction,
+    but its internal `threshold_amount_base` remains the unindexed statutory
+    base of $157,500 and RuleSpec imports cannot substitute the official 2026
+    amount. This module therefore imports the encoded deduction components,
+    accepts the applicable Revenue Procedure 2025-32 threshold as a runtime
+    input, and repeats only the threshold-dependent phase-in and final
+    combination in locally proofed rules.
+
+    The current section 199A text and Revenue Procedure 2025-32 use $75,000
+    and $150,000 phase-in widths for 2026, not the pre-amendment $50,000 and
+    $100,000 widths. The companion fixtures follow the current encoded statute
+    and official revenue procedure. They supply $201,750 for single returns
+    and $403,500 for joint returns.
+
+    Qualified business income, W-2 wages, UBIA, cooperative amounts, REIT
+    dividends, PTP income, and taxable income before this deduction are
+    completed-return TaxUnit boundaries. QBI classification under section
+    199A(c)-(d), including specified-service-business determinations, remains
+    upstream as in the encoded section. All fixtures use resolved non-SSTB
+    QBI, zero UBIA, zero PTP income, zero cooperative amounts, and no net
+    capital gain. The no-wage above-band fixture also has zero active-QBI
+    aggregate, so section 199A(i)'s new $400 active-business minimum does not
+    replace the zero wage-limited result.
+  deferred_outputs:
+    - output: us:statutes/26/199A#qualified_business_income_deduction
+      reason: |-
+        The encoded final output closes over an unindexed $157,500 threshold
+        parameter. Revenue Procedure 2025-32 publishes materially different
+        2026 thresholds, and RuleSpec imports cannot replace that internal
+        parameter. The corrected pipeline output below uses the official
+        caller-supplied threshold while retaining the encoded component rules.
+      source_values:
+        - us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026
+    - output: us:statutes/26/199A/c#qualified_business_income_definition
+      reason: |-
+        The encoded section consumes resolved qualified business income and
+        defers the subsection (c) item composition. This pipeline preserves
+        that completed-return boundary.
+    - output: us:statutes/26/199A/d#qualified_trade_or_business_definition
+      reason: |-
+        The encoded section consumes resolved trade-or-business
+        classifications, including SSTB treatment. This pipeline preserves
+        that upstream classification boundary and does not treat an unknown
+        SSTB determination as false.
+imports:
+  - us:statutes/26/199A#qbi_phasein_range
+  - us:statutes/26/199A#trade_or_business_wage_property_limit
+  - us:statutes/26/199A#trade_or_business_qbi_amount_before_limits
+  - us:statutes/26/199A#trade_or_business_excess_amount
+  - us:statutes/26/199A#cooperative_reduction
+  - us:statutes/26/199A#qualified_reit_and_ptp_component
+  - us:statutes/26/199A#qbi_taxable_income_limit
+  - us:statutes/26/199A#applicable_taxpayer_for_minimum_active_qbi_deduction
+  - us:statutes/26/199A#minimum_active_qbi_deduction_amount
+rules:
+  - name: pipeline_qualified_business_income_threshold_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Rev. Proc. 2025-32 section 4.26, applicable tax-year-2026 section 199A threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
+              excerpt: "Filing Status Threshold amount"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: qualified_business_income_threshold_amount_2026
+
+  - name: pipeline_trade_or_business_phasein_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 199A(b)(3)(B)(ii), reduction over the applicable 2026 phase-in range
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "bears the same ratio to the excess amount as"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#trade_or_business_excess_amount
+              output: trade_or_business_excess_amount
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#qbi_phasein_range
+              output: qbi_phasein_range
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          trade_or_business_excess_amount
+          * min(
+              1,
+              max(
+                  0,
+                  taxable_income_computed_without_section_199A
+                  - pipeline_qualified_business_income_threshold_amount
+              )
+              / qbi_phasein_range
+          )
+
+  - name: pipeline_trade_or_business_deductible_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 199A(b)(2), (b)(3), and (b)(7), using the official 2026 threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "Modifications to limit based on taxable income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#trade_or_business_qbi_amount_before_limits
+              output: trade_or_business_qbi_amount_before_limits
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#trade_or_business_wage_property_limit
+              output: trade_or_business_wage_property_limit
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#qbi_phasein_range
+              output: qbi_phasein_range
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#cooperative_reduction
+              output: cooperative_reduction
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(
+              0,
+              (
+                  if taxable_income_computed_without_section_199A
+                      <= pipeline_qualified_business_income_threshold_amount:
+                      trade_or_business_qbi_amount_before_limits
+                  else:
+                      if taxable_income_computed_without_section_199A
+                          <= pipeline_qualified_business_income_threshold_amount
+                          + qbi_phasein_range:
+                          trade_or_business_qbi_amount_before_limits
+                          - pipeline_trade_or_business_phasein_reduction
+                      else:
+                          min(
+                              trade_or_business_qbi_amount_before_limits,
+                              trade_or_business_wage_property_limit
+                          )
+              )
+              - cooperative_reduction
+          )
+
+  - name: pipeline_combined_qualified_business_income_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 199A(b)(1), corrected trade-or-business amount plus the separate REIT/PTP component
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "plus 20 percent of the aggregate amount of the qualified REIT dividends"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#qualified_reit_and_ptp_component
+              output: qualified_reit_and_ptp_component
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          pipeline_trade_or_business_deductible_amount
+          + qualified_reit_and_ptp_component
+
+  - name: pipeline_qbi_deduction_before_minimum_active_qbi
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 199A(a), lesser of corrected combined QBI and taxable-income/net-capital-gain limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "In the case of a taxpayer other than a corporation"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "the lesser of"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#qbi_taxable_income_limit
+              output: qbi_taxable_income_limit
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if taxpayer_is_corporation:
+              0
+          else:
+              max(
+                  0,
+                  min(
+                      pipeline_combined_qualified_business_income_amount,
+                      qbi_taxable_income_limit
+                  )
+              )
+
+  - name: federal_qualified_business_income_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 199A(a), (i), final tax-unit deduction using the official 2026 threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "equal to the greater of"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#applicable_taxpayer_for_minimum_active_qbi_deduction
+              output: applicable_taxpayer_for_minimum_active_qbi_deduction
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#minimum_active_qbi_deduction_amount
+              output: minimum_active_qbi_deduction_amount
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if applicable_taxpayer_for_minimum_active_qbi_deduction:
+              max(
+                  pipeline_qbi_deduction_before_minimum_active_qbi,
+                  minimum_active_qbi_deduction_amount
+              )
+          else:
+              pipeline_qbi_deduction_before_minimum_active_qbi
+
+inputs:
+  - name: qualified_business_income_threshold_amount_2026
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Applicable 2026 section 199A threshold from Rev. Proc. 2025-32 section 4.26; $403,500 joint, $201,775 separate, or $201,750 otherwise.
+  - name: filing_status
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Filing-status code; 0 single/other, 1 joint, 2 married filing separately, 3 head of household, 4 surviving spouse.
+  - name: qualified_trade_or_business_w2_wages
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Resolved W-2 wages for the represented qualified trade or business.
+  - name: qualified_trade_or_business_unadjusted_basis
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Resolved UBIA of qualified property for the represented qualified trade or business.
+  - name: qualified_business_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return qualified business income after subsection (c)-(d) classification, loss netting, and SSTB treatment.
+  - name: taxable_income_computed_without_section_199A
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Taxable income computed without the section 199A deduction.
+  - name: qualified_business_income_allocable_to_qualified_cooperative_payments
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Resolved QBI allocable to qualified cooperative payments.
+  - name: w2_wages_allocable_to_qualified_cooperative_payments
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Resolved W-2 wages allocable to qualified cooperative payments.
+  - name: qualified_reit_dividends
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Aggregate qualified REIT dividends.
+  - name: qualified_publicly_traded_partnership_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Aggregate qualified publicly traded partnership income after applicable classification.
+  - name: taxpayer_is_corporation
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the taxpayer is a corporation and therefore outside section 199A(a).
+  - name: minimum_deduction_cost_of_living_adjustment
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    description: Section 199A(i)(3) adjustment used only after 2026; zero for the tax-year-2026 fixtures.
+  - name: aggregate_qualified_business_income_from_active_qualified_trades_or_businesses
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Aggregate QBI from active qualified trades or businesses for the section 199A(i) minimum deduction.
+  - name: qualified_production_activities_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Specified agricultural or horticultural cooperative qualified production activities income.
+  - name: taxpayer_is_specified_agricultural_or_horticultural_cooperative
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the taxpayer is a specified agricultural or horticultural cooperative.
+  - name: cooperative_w2_wages
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: W-2 wages used for the separate cooperative production deduction.
+  - name: net_capital_gain_taken_into_account_as_investment_income_under_section_163_d_4_B_iii
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Net-capital-gain component treated as investment income under section 163(d)(4)(B)(iii).
+  - name: long_term_capital_gains
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Long-term capital gains used by the imported section 1(h) net-capital-gain rule.
+  - name: short_term_capital_gains
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Short-term capital gains used by the imported section 1(h) net-capital-gain rule.
+  - name: qualified_dividend_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Qualified dividend income used by the imported section 1(h) net-capital-gain rule.
