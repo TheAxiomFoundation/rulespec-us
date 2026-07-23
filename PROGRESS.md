@@ -6,10 +6,9 @@ Defensive correctness-and-completeness audit in progress on
 `fed-parity/credits`, based on `origin/main` commit
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
-The section 199A and section 25B pipelines and companions are complete and
-independently validated. Both required narrow local corrections: section 199A
-for the source module's stale unindexed threshold, and section 25B for its
-single TaxUnit contribution cap and incorrect dependent-screen proxy.
+The section 199A, section 25B, and section 22 pipelines and companions are
+complete and independently validated. Section 22 supports the requested true
+thin identity, including its Person and Payment relation closure.
 
 ## Done
 
@@ -28,6 +27,14 @@ single TaxUnit contribution cap and incorrect dependent-screen proxy.
   minimum, zero, and net-capital-gain-limit checks.
 - Passed that module's `validate --skip-reviewers`, proof validation,
   money-proof ratchet, and pinned-engine companion suite.
+- Added the thin `elderly_disabled_credit_pipeline` and 10 hand-computed
+  fixtures covering all P7 cases, the executable under-65 disability branch,
+  a no-qualified-person zero, and exact AGI-reduction edges.
+- Verified that joint returns with one qualified spouse use the $5,000 initial
+  amount and that `eld-basic` is $412.50 because its AGI adds a $250 reduction
+  omitted from the grid's abbreviated shape.
+- Passed that module's `validate --skip-reviewers`, proof validation,
+  money-proof ratchet, and pinned-engine companion suite.
 - Recorded the official 2026 saver’s-credit tier limits from IRS Notice
   2025-67: joint $48,500/$52,500/$80,500, head of household
   $36,375/$39,375/$60,375, and other returns
@@ -41,8 +48,7 @@ single TaxUnit contribution cap and incorrect dependent-screen proxy.
 
 ## Next
 
-1. Add and commit thin-identity section 22 and section 25A(c) composes with
-   P7/P8 fixtures.
+1. Add and commit the thin-identity section 25A(c) compose with P8 fixtures.
 2. Regenerate shared index/coverage artifacts and commit them separately.
 3. Run the complete validation/signing-dry-run gate battery.
 4. Write the required scratchpad summary and completion marker.
