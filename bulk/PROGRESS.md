@@ -44,7 +44,7 @@ progress file from the final tree are the only remaining steps.
   engine; proof validation checks 28 atoms and the money-proof ratchet reports
   zero missing monetary proofs.
 - Regenerated `.axiom/index/provisions_to_rules.json`; its fresh `--check`
-  reports 3,944 provisions, 4,672 edges, and 4,434 modules. The first repo
+  reports 3,944 provisions, 4,673 edges, and 4,434 modules. The first repo
   pytest pass had 54 passing tests and only the expected pre-regeneration
   stale-index failure.
 - Reran repository pytest after regeneration: 55 passed. The workflow-current
@@ -58,6 +58,10 @@ progress file from the final tree are the only remaining steps.
 - Signing dry-run selects one manifest covering exactly the compose and
   companion. The unsigned guard fails only those two files, which is the
   expected main-lane signing block.
+- Final audit clarified the paragraph-(h) runtime boundary: applicants/new
+  enrollees require consistently monthly-scaled inputs; projected annual
+  budgeting is limited to qualifying current beneficiaries. Annualized
+  companion dollars are ratio-equivalent fixture arithmetic only.
 
 ## Next
 
