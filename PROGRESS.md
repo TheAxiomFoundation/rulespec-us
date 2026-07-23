@@ -51,6 +51,13 @@
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not set. No signature or manifest was
   fabricated; `.axiom/encoding-manifests/us/policies/aca/ptc_pipeline.json`
   remains an explicit credential-holder TODO.
+- Completed a final section 36B eligibility-boundary review. The module now
+  states that fixtures are unmarried or married filing jointly and not
+  claimable as dependents, and explicitly defers sections 36B(c)(1)(C)-(D)
+  because those filing-status and section 151 facts are absent from the
+  aggregate TaxUnit surface. Validation, all 34 proof atoms, and all nine
+  companion cases still pass; the reverse index now includes those two cited
+  corpus fragments.
 
 ## Next
 
