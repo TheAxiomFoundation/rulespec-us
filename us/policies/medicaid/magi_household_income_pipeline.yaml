@@ -1,0 +1,816 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/regulation/42/435/603/b
+      - us/regulation/42/435/603/d
+      - us/regulation/42/435/603/e
+      - us/regulation/42/435/603/f
+      - us/regulation/42/435/603/h
+      - us/regulation/42/435/110
+      - us/regulation/42/435/119
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/regulation/42/435/603/b
+        - us/regulation/42/435/603/d
+        - us/regulation/42/435/603/e
+        - us/regulation/42/435/603/f
+        - us/regulation/42/435/603/h
+        - us/regulation/42/435/110
+        - us/regulation/42/435/119
+      rationale: |-
+        Section 435.603(d) supplies the member-income exclusions, optional
+        cash-support addition, applicant-to-member relation, and
+        5-percentage-point FPL amount, but deliberately defers the
+        applicant-scoped member sum and final comparison income. Paragraph
+        (f) supplies the applicant-specific filer, dependent, non-filer, and
+        spouse household-membership predicate. This compose closes those two
+        deferred arithmetic surfaces beside, rather than inside, the source
+        modules.
+
+        Section 435.603(d)(4) limits the subtraction to overall eligibility
+        under the highest applicable MAGI-based income standard. CMS's
+        August 9, 2013 MAGI FAQ, Q6, confirms that the subtraction matters
+        only when raw income is above that highest standard and no more than
+        5 FPL percentage points above it. The final comparison therefore
+        keeps raw income when the applicant is already eligible or when the
+        subtraction cannot cure the excess. It never applies the subtraction
+        independently to each lower category standard.
+
+        Paragraph (b)'s family-size definition is deferred. The caller must
+        therefore supply family size, the corresponding FPL dollar amount
+        for the selected year and region, and the applicant's highest
+        applicable unadjusted MAGI standard. Under paragraph (h)(1), an
+        applicant or new enrollee must be evaluated with current-month
+        household income and family size, so the caller must supply income
+        and FPL on a consistent monthly scale. Only a qualifying current
+        beneficiary may use a State-plan-elected current-month or projected
+        annual basis under paragraph (h)(2). The companion's annualized 2026
+        dollars for the contiguous 48 States and District of Columbia are
+        ratio-equivalent fixture arithmetic, not an applicant budget-period
+        election.
+
+        Paragraph (e) is encoded at Payment/Month while paragraph (d)'s
+        member rules are Person/Year. Each relation row in this narrow
+        surface therefore represents one already-aggregated member MAGI
+        candidate, passed through paragraph (e)'s encoded inclusion and
+        exception facts. Aggregating multiple heterogeneous payments into
+        that member candidate remains a caller boundary.
+  summary: |-
+    Applicant-scoped Medicaid MAGI household-income composition. For every
+    row in the imported paragraph-(d) applicant-to-member relation, the
+    pipeline evaluates paragraph (f)'s household-membership predicate, adds
+    the member's paragraph-(d) counted MAGI and any paragraph-(d)(3)
+    State-option cash support, and sums only included members. The resulting
+    `medicaid_household_pre_disregard_magi` and its FPL ratio are diagnostic
+    raw-income outputs.
+
+    The pipeline then computes the dollar amount of the caller-supplied
+    highest applicable unadjusted MAGI standard. It exposes the mechanical
+    candidate after subtracting 5 FPL percentage points, but uses that
+    candidate as final comparison income only when raw income is above the
+    highest standard and the subtraction brings it within the standard.
+    Exact 138 percent is therefore eligible when the highest standard is the
+    imported section 435.119 adult-group limit of 133 percent; an amount
+    above 138 percent is not. Raw income at or below 133 percent remains the
+    final comparison income because no disregard is needed.
+
+    Two private bridges make the existing category rules importable without
+    spreading the subtraction to every band. Section 435.119 receives the
+    final comparison ratio only when its 133-percent standard is the highest
+    applicable standard; otherwise it receives the raw ratio. Section
+    435.110 receives a State-plan income-standard Boolean computed the same
+    way, so a lower parent/caretaker band receives no independent disregard
+    when a higher MAGI group is available. State or oracle parameters that
+    already include the effective 5 points must not be supplied as the
+    unadjusted standards here.
+  deferred_outputs:
+    - output: us:policies/medicaid/magi_household_income_pipeline#member_magi_from_multiple_payments
+      reason: |-
+        Paragraph 435.603(e) is Payment/Month while the imported paragraph
+        435.603(d) member output is Person/Year. This narrow compose accepts
+        one already-aggregated, consistently scaled MAGI candidate per
+        relation member and does not invent a nested payment-to-person
+        relation.
+    - output: us:regulations/42-cfr/435/603/b#family_size
+      reason: |-
+        Paragraph (b)'s executable family-size output is deferred, including
+        pregnancy and State-option counting branches. Applicable family size
+        and its matching FPL dollars remain explicit runtime inputs.
+    - output: us:policies/medicaid/magi_household_income_pipeline#highest_applicable_magi_income_standard_selection
+      reason: |-
+        Selecting the highest standard requires the complete set of
+        applicant-applicable Medicaid and CHIP groups plus State-plan
+        standards. This federal income compose accepts the resulting
+        unadjusted FPL ratio and does not infer category applicability.
+
+imports:
+  - us:regulations/42-cfr/435/603/d#household_member_counted_magi_based_income
+  - us:regulations/42-cfr/435/603/d#state_option_available_cash_support_included
+  - us:regulations/42-cfr/435/603/d#member_of_individuals_household
+  - us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_rate
+  - us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_amount
+  - us:regulations/42-cfr/435/603/f#medicaid_household_member
+  - us:regulations/42-cfr/435/119#adult_group_income_limit_fpl_ratio
+  - us:regulations/42-cfr/435/119#adult_group_eligible
+  - us:regulations/42-cfr/435/110#parent_or_caretaker_relative_eligible
+
+rules:
+  - name: medicaid_magi_household_member_contribution
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(3), counted member MAGI plus optional cash support
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "the MAGI-based income, as defined in paragraph (e) of this section, of every individual included in the individual's household"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#household_member_counted_magi_based_income
+              output: household_member_counted_magi_based_income
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#state_option_available_cash_support_included
+              output: state_option_available_cash_support_included
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_member_counted_magi_based_income
+          + state_option_available_cash_support_included
+
+  - name: medicaid_household_pre_disregard_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(3), applicant-scoped included-member sum
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "the sum of the MAGI-based income, as defined in paragraph (e) of this section, of every individual included in the individual's household"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#member_of_individuals_household
+              output: member_of_individuals_household
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/f#medicaid_household_member
+              output: medicaid_household_member
+              hash: sha256:82e4fc9da0d9256ad56169ef0aa6db2687601b4223ca9cb0846cfc1b25f24832
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/medicaid/magi_household_income_pipeline#medicaid_magi_household_member_contribution
+              output: medicaid_magi_household_member_contribution
+              hash: sha256:local
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          sum_where(
+            member_of_individuals_household,
+            medicaid_magi_household_member_contribution,
+            medicaid_household_member
+          )
+
+  - name: medicaid_applicable_federal_poverty_level_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4), caller-supplied FPL for applicable family size
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "5 percentage points of the Federal poverty level for the applicable family size"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_amount
+              output: fpl_five_percentage_point_disregard_amount
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_rate
+              output: fpl_five_percentage_point_disregard_rate
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          fpl_five_percentage_point_disregard_amount
+          / fpl_five_percentage_point_disregard_rate
+
+  - name: medicaid_household_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Year
+    source: 42 CFR 435.603(d)(4), raw household income expressed against applicable FPL
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "Federal poverty level for the applicable family size"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_pre_disregard_magi
+          / medicaid_applicable_federal_poverty_level_amount
+
+  - name: highest_applicable_magi_income_standard_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4), caller-selected highest applicable MAGI standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "the eligibility group with the highest income standard using MAGI-based methodologies"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_applicable_federal_poverty_level_amount
+          * highest_applicable_magi_income_standard_fpl_ratio
+
+  - name: medicaid_household_income_after_five_percentage_point_subtraction
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4), mechanical candidate before highest-standard gate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "a state must subtract an amount equivalent to 5 percentage points of the Federal poverty level"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_amount
+              output: fpl_five_percentage_point_disregard_amount
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_pre_disregard_magi
+          - fpl_five_percentage_point_disregard_amount
+
+  - name: five_percentage_point_disregard_changes_overall_magi_eligibility
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d)(4), highest-standard-only overall eligibility backstop
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "only to determine the eligibility of an individual for medical assistance under the eligibility group with the highest income standard using MAGI-based methodologies"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "but not to determine eligibility for a particular eligibility group"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_pre_disregard_magi
+            > highest_applicable_magi_income_standard_amount
+          and medicaid_household_income_after_five_percentage_point_subtraction
+            <= highest_applicable_magi_income_standard_amount
+
+  - name: medicaid_household_eligibility_comparison_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4), final highest-standard comparison income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "only to determine the eligibility of an individual for medical assistance under the eligibility group with the highest income standard"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if five_percentage_point_disregard_changes_overall_magi_eligibility:
+            medicaid_household_income_after_five_percentage_point_subtraction
+          else:
+            medicaid_household_pre_disregard_magi
+
+  - name: medicaid_household_eligibility_comparison_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Year
+    source: 42 CFR 435.603(d)(4), final highest-standard comparison income level
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "Federal poverty level for the applicable family size"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_eligibility_comparison_income
+          / medicaid_applicable_federal_poverty_level_amount
+
+  - name: eligible_under_highest_applicable_magi_income_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d)(4), overall financial eligibility at highest standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "determine the eligibility of an individual for medical assistance under the eligibility group with the highest income standard"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_eligibility_comparison_income
+          <= highest_applicable_magi_income_standard_amount
+
+  - name: medicaid_magi_household_runtime_inputs_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(b), (d), runtime family-size/FPL/standard boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "Federal poverty level for the applicable family size"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          applicable_family_size > 0
+          and medicaid_applicable_federal_poverty_level_amount > 0
+          and highest_applicable_magi_income_standard_fpl_ratio >= 0
+
+  - name: household_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Year
+    source: 42 CFR 435.603(d)(4) and 42 CFR 435.119(b)(5), adult-group consumer bridge
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "the eligibility group with the highest income standard using MAGI-based methodologies"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#adult_group_income_limit_fpl_ratio
+              output: adult_group_income_limit_fpl_ratio
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if adult_group_income_limit_fpl_ratio
+            == highest_applicable_magi_income_standard_fpl_ratio:
+            medicaid_household_eligibility_comparison_income_as_fraction_of_fpl
+          else:
+            medicaid_household_income_as_fraction_of_fpl
+
+  - name: household_income_at_or_below_state_plan_income_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.110(b) and 42 CFR 435.603(d)(4), parent/caretaker consumer bridge
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "only to determine the eligibility of an individual for medical assistance under the eligibility group with the highest income standard"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "but not to determine eligibility for a particular eligibility group"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          (
+            state_plan_parent_or_caretaker_income_standard_fpl_ratio
+              == highest_applicable_magi_income_standard_fpl_ratio
+            and medicaid_household_eligibility_comparison_income_as_fraction_of_fpl
+              <= state_plan_parent_or_caretaker_income_standard_fpl_ratio
+          )
+          or (
+            state_plan_parent_or_caretaker_income_standard_fpl_ratio
+              != highest_applicable_magi_income_standard_fpl_ratio
+            and medicaid_household_income_as_fraction_of_fpl
+              <= state_plan_parent_or_caretaker_income_standard_fpl_ratio
+          )
+
+  - name: medicaid_adult_group_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.119(b), imported adult-group consumer
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#adult_group_eligible
+              output: adult_group_eligible
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "individuals who: (1) Are age 19 or older and under age 65"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: adult_group_eligible
+
+  - name: medicaid_parent_or_caretaker_relative_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.110(b), imported parent/caretaker consumer
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/110#parent_or_caretaker_relative_eligible
+              output: parent_or_caretaker_relative_eligible
+              hash: sha256:e75602f427450e0c901f86624cdf8722311a12fddef730325a649d5f4e6d843f
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/110
+              excerpt: "The agency must provide Medicaid to parents and other caretaker relatives"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: parent_or_caretaker_relative_eligible
+
+inputs:
+  - name: applicable_family_size
+    entity: Person
+    dtype: Count
+    period: Year
+    description: Runtime family size under 42 CFR 435.603(b); the matching FPL dollar input must use this size, year, and region.
+  - name: highest_applicable_magi_income_standard_fpl_ratio
+    entity: Person
+    dtype: Rate
+    period: Year
+    description: Highest unadjusted MAGI-based Medicaid or CHIP standard applicable to this applicant; do not supply a threshold that already includes the 5-point disregard.
+  - name: state_plan_parent_or_caretaker_income_standard_fpl_ratio
+    entity: Person
+    dtype: Rate
+    period: Year
+    description: Unadjusted 42 CFR 435.110 State-plan parent/caretaker standard for the applicant; used only by the imported parent/caretaker consumer bridge.
+  - name: federal_poverty_level_for_applicable_family_size
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: FPL dollars for the applicable family size, year, region, and budget-period scale; consumed by imported 42 CFR 435.603(d).
+
+  # Per-member paragraph-(d) income and cash-support facts. These are supplied
+  # on each member_of_individuals_household relation row.
+  - name: included_in_household_of_natural_adopted_or_step_parent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph (d)(2)(i) parent-household income-exclusion fact for this member.
+  - name: expected_required_to_file_return_under_6012_a_1
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether this member is expected to be required to file under IRC 6012(a)(1).
+  - name: tax_dependent_described_in_paragraph_f_2_i
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Exact paragraph (f)(2)(i) status; not the broader paragraph (f)(2)(i)-(iii) exception predicate.
+  - name: state_option_includes_actually_available_cash_support
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: State election to count paragraph (d)(3) actually available cash support.
+  - name: cash_support_exceeds_nominal_amount
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether cash support for this paragraph-(f)(2)(i) member exceeds a nominal amount.
+  - name: actually_available_cash_support_provided_by_claiming_taxpayer
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Consistently scaled cash support actually available from the claiming taxpayer.
+
+  # Per-member paragraph-(e) facts. In this narrow surface payment_amount is
+  # the caller-aggregated member MAGI candidate for the selected budget period.
+  - name: payment_is_income_under_section_36B_d_2_B_methodologies
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Whether the member MAGI candidate is income under section 36B(d)(2)(B) methodologies.
+  - name: payment_amount
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Caller-aggregated member MAGI candidate in the same budget-period scale as the supplied FPL amount.
+  - name: payment_received_as_lump_sum
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Whether the candidate is a lump sum under paragraph (e)(1).
+  - name: lump_sum_received_in_current_month
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Whether a lump sum was received in the eligibility month.
+  - name: scholarship_award_or_fellowship_grant_used_for_education_purposes
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(2) education-purpose exclusion fact.
+  - name: scholarship_award_or_fellowship_grant_used_for_living_expenses
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(2) living-expense exception fact.
+  - name: distribution_from_alaska_native_corporation_or_settlement_trust
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(i) exclusion fact.
+  - name: distribution_from_trust_or_restricted_property_under_secretary_of_interior_supervision
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(ii) exclusion fact.
+  - name: payment_from_rights_in_trust_or_restricted_land
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(iii)(A) exclusion fact.
+  - name: payment_from_federally_protected_off_reservation_natural_resource_rights
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(iii)(B) exclusion fact.
+  - name: distribution_from_natural_resource_real_property_interest_on_or_near_reservation
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(iv)(A) exclusion fact.
+  - name: distribution_from_exercise_of_federally_protected_real_property_rights
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(iv)(B) exclusion fact.
+  - name: payment_from_cultural_religious_traditional_or_subsistence_item_or_right
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(v) exclusion fact.
+  - name: student_financial_assistance_under_bureau_of_indian_affairs_education_program
+    entity: Payment
+    dtype: Boolean
+    period: Month
+    description: Paragraph (e)(3)(vi) exclusion fact.
+
+  # Per-member paragraph-(f) applicant/candidate household facts.
+  - name: person_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Applicant age used by the paragraph-(f) State-plan-age rules and the adult consumer.
+  - name: state_plan_elects_full_time_student_age_21
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph (f)(3)(iv)(B) State-plan age election.
+  - name: person_is_full_time_student
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant full-time-student fact for the paragraph-(f) age election.
+  - name: tax_dependent_is_not_spouse_or_child_of_claiming_taxpayer
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph (f)(2)(i) dependent-exception fact.
+  - name: expected_to_be_claimed_by_one_parent_and_living_with_both_parents_and_parents_do_not_expect_joint_return
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph (f)(2)(ii) dependent-exception fact.
+  - name: expected_to_be_claimed_by_non_custodial_parent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph (f)(2)(iii) dependent-exception fact.
+  - name: expects_to_file_federal_tax_return
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant tax-filing fact used to select paragraph-(f)(3).
+  - name: expects_to_be_claimed_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant dependent fact used to select paragraph-(f)(3).
+  - name: individual_expects_to_file_tax_return
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant tax-filer fact used by paragraph (f)(1) for each candidate row.
+  - name: individual_expects_to_be_claimed_as_tax_dependent_by_another_taxpayer
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant dependent fact used by paragraphs (f)(1)-(2) for each candidate row.
+  - name: candidate_is_the_individual
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether this relation candidate is the applicant.
+  - name: individual_expects_to_claim_candidate_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether a tax-filer applicant expects to claim this candidate.
+  - name: taxpayer_can_reasonably_establish_candidate_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph (f)(5) substantiation fact for this candidate.
+  - name: candidate_is_in_household_of_taxpayer_claiming_individual
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether this candidate belongs to the household of the taxpayer claiming a dependent applicant.
+  - name: candidate_lives_with_individual
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Co-residence fact used by paragraph (f)(3)-(4).
+  - name: candidate_is_individuals_spouse
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant spouse relationship fact.
+  - name: candidate_is_individuals_child
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant child relationship fact.
+  - name: candidate_under_state_plan_age
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate's paragraph-(f)(3)(iv) age result.
+  - name: individual_under_state_plan_age
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant's paragraph-(f)(3)(iv) age result.
+  - name: candidate_is_individuals_parent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant parent relationship fact.
+  - name: candidate_is_individuals_sibling
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant sibling relationship fact.
+
+  # Remaining imported adult-group and parent/caretaker consumer facts.
+  - name: person_is_pregnant
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(b)(2) pregnancy fact.
+  - name: person_entitled_to_or_enrolled_in_medicare_part_a_or_b
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(b)(3) Medicare fact.
+  - name: person_eligible_and_enrolled_for_mandatory_medicaid_under_subpart_b
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(b)(4) mandatory-coverage fact.
+  - name: person_is_parent_or_caretaker_relative
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Applicant parent/caretaker status used by sections 435.110 and 435.119(c).
+  - name: person_is_spouse_of_parent_or_caretaker_relative_living_with_them
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.110(b) co-resident spouse status.
+  - name: person_lives_with_dependent_child_under_age_threshold
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(c) dependent-child household fact.
+  - name: dependent_child_receiving_medicaid
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(c) Medicaid-coverage exception fact.
+  - name: dependent_child_receiving_chip
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(c) CHIP-coverage exception fact.
+  - name: dependent_child_enrolled_in_minimum_essential_coverage
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Section 435.119(c) minimum-essential-coverage exception fact.
+  - name: state_elected_435_222_higher_age_as_of_march_23_2010
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Section 435.119(c)(2) State election fact.
+  - name: state_elected_435_222_higher_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Section 435.119(c)(2) elected higher dependent-child age.
