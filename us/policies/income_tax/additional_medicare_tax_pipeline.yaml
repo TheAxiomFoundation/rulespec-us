@@ -14,50 +14,55 @@ module:
         - us/statute/26/1401
         - us/statute/26/1402
       rationale: |-
-        Section 3101(b)(2) supplies the wage-leg rate, filing-status
-        thresholds, excess-wage calculation, and final wage tax imported
-        below. Section 1401(b)(2) supplies the self-employment-leg rate,
-        thresholds, wage reduction, international-agreement exemption, and
-        final self-employment tax imported below. Section 1402 was checked to
-        define, rather than reconstruct, the completed self-employment-income
-        boundary consumed by section 1401.
+        Section 3101(b)(2) supplies the imported wage leg. The sibling
+        self-employment-tax pipeline supplies aggregated section 1402(b)
+        self-employment income after deriving the paragraph-(12) adjustment
+        from each Person's gross-self-employment-profit boundary. Section
+        1401(b)(2) supplies the locally authored SE-leg rate, filing-status
+        thresholds, excess-income base, and FICA wage coordination. Section
+        1401(c)'s existing international-agreement exemption is preserved
+        locally rather than importing the collision-prone root 1401 module.
   summary: |-
-    Federal additional Medicare tax composition under 26 USC
-    3101(b)(2) and 1401(b)(2). The module imports both encoded final tax
-    concepts, sends the same tax-unit wages used by the wage leg to section
-    1401(b)(2)(B)'s threshold-reduction input, and exposes each leg plus their
-    sum. Filing status uses the encoded convention: 0 single, 1 joint,
-    2 married filing separately, 3 head of household, and 4 surviving spouse.
+    Federal additional Medicare tax composition under 26 USC 3101(b)(2) and
+    1401(b)(2). The wage leg remains an identity over the encoded section
+    3101(b)(2) final tax. The composed self-employment and combined surfaces
+    are scoped to tax year 2026 because that is the imported SE pipeline's
+    currently executable version.
 
-    `self_employment_income` is a completed TaxUnit-level section 1402(b)
-    boundary. The existing executable section 1402(b) output is Person-level,
-    while the encoded section 1401(b)(2) machinery consumes a TaxUnit-level
-    amount through an implicit input with the same local symbol. Importing the
-    Person-level rule into this module would therefore collide with, rather
-    than satisfy, section 1401's TaxUnit boundary. This composition does not
-    re-derive section 1402(b) or silently treat pre-paragraph-(12) business
-    profit as that statutory output. The caller must aggregate completed
-    section 1402(b) amounts consistently with the return and supply the
-    section 1401(c) agreement facts.
+    The self-employment leg accepts the same per-Person
+    `gross_self_employment_profit` boundary declared by the sibling ordinary
+    self-employment-tax pipeline: completed-return section 1402(a) net
+    trade-or-business profit after all applicable section 1402(a) machinery
+    except paragraph (12), never gross receipts. That imported pipeline
+    applies the encoded paragraph-(12) deduction and section 1402(b) floor and
+    exclusions, then aggregates Person amounts through
+    `self_employed_individual_of_tax_unit`. This module applies the locally
+    grounded section 1401(b)(2) rate, filing-status threshold, and
+    section 1401(b)(2)(B) wage reduction to that aggregate.
+
+    Root `us:statutes/26/1401` is deliberately not imported. RuleSpec concept
+    fragments merge complete modules, and that root's implicit TaxUnit
+    `self_employment_income` boundary collides with the Person-level rule
+    imported by the sibling pipeline. Filing status uses the encoded
+    convention: 0 single, 1 joint, 2 married filing separately, 3 head of
+    household, and 4 surviving spouse. The public combined and per-leg output
+    names remain unchanged.
   deferred_outputs:
-    - output: us:policies/income_tax/additional_medicare_tax_pipeline#tax_unit_self_employment_income_from_section_1402_b
+    - output: us:statutes/26/1402/a#net_earnings_from_self_employment_before_paragraph_12
       reason: |-
-        The encoded section 1402(b) `self_employment_income` rule is
-        Person-level, but the encoded section 1401(b)(2) rule expects the
-        homonymous amount at TaxUnit level. Because both encoded rules use the
-        same local symbol, whole-module import cannot add a distinct
-        cross-entity aggregation binding. This module therefore accepts the
-        completed TaxUnit amount as a runtime boundary instead of
-        reconstructing the already-encoded section 1402(b) result.
-    - output: us:statutes/26/1402/a#net_earnings_from_self_employment
+        Section 1402(a)'s complete partnership, trade-or-business, deduction,
+        exclusion, community-income, and special-rule assembly remains
+        deferred upstream. The imported SE pipeline therefore accepts the
+        completed-return amount immediately before paragraph (12) through its
+        `gross_self_employment_profit` input.
+    - output: us:statutes/26/1402/b#church_employee_income_special_rules_for_paragraph_2
       reason: |-
-        Section 1402(a)'s full partnership, trade-or-business, deduction,
-        exclusion, and special-rule assembly is deferred in the upstream
-        encoding. This module cannot turn a gross-profit observation into
-        section 1402(b) self-employment income without that machinery.
+        The imported SE pipeline's ordinary-case section 1402(b)(2) threshold
+        path does not implement the separate subsection 1402(j)(2)
+        church-employee floor machinery.
 imports:
   - us:statutes/26/3101/b/2#additional_medicare_tax
-  - us:statutes/26/1401#additional_medicare_self_employment_tax
+  - us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
 rules:
   - name: wages_taken_into_account_for_additional_medicare_tax
     kind: derived
@@ -77,6 +82,251 @@ rules:
     versions:
       - effective_from: '2013-01-01'
         formula: wages
+
+  - name: pipeline_additional_medicare_self_employment_tax_rate
+    kind: parameter
+    dtype: Rate
+    source: 26 USC 1401(b)(2)(A), additional self-employment tax rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "a tax equal to 0.9 percent of the self-employment income"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: '0.009'
+
+  - name: pipeline_additional_medicare_self_employment_joint_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1401(b)(2)(A)(i), joint-return threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "in the case of a joint return, $250,000"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: '250000'
+
+  - name: pipeline_additional_medicare_self_employment_other_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 26 USC 1401(b)(2)(A)(iii), threshold for any other filing status
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "in any other case, $200,000"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: '200000'
+
+  - name: pipeline_additional_medicare_self_employment_separate_threshold_fraction
+    kind: parameter
+    dtype: Decimal
+    source: 26 USC 1401(b)(2)(A)(ii), separate-return fraction of joint threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "½ of the dollar amount determined under clause (i)"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: 1 / 2
+
+  - name: pipeline_additional_medicare_self_employment_separate_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2)(A)(ii), married-filing-separately threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "in the case of a married taxpayer (as defined in section 7703) filing a separate return, ½ of the dollar amount determined under clause (i)"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          pipeline_additional_medicare_self_employment_joint_threshold
+          * pipeline_additional_medicare_self_employment_separate_threshold_fraction
+
+  - name: pipeline_additional_medicare_self_employment_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2)(A)(i)-(iii), filing-status threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "self-employment income for such taxable year which is in excess of"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          match filing_status:
+              1 => pipeline_additional_medicare_self_employment_joint_threshold
+              2 => pipeline_additional_medicare_self_employment_separate_threshold
+              0 => pipeline_additional_medicare_self_employment_other_threshold
+              3 => pipeline_additional_medicare_self_employment_other_threshold
+              4 => pipeline_additional_medicare_self_employment_other_threshold
+
+  - name: pipeline_reduced_additional_medicare_self_employment_threshold
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2)(B), filing-status threshold after FICA wage coordination
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "shall be reduced (but not below zero) by the amount of wages taken into account"
+    versions:
+      - effective_from: '2013-01-01'
+        formula: |-
+          max(
+            0,
+            pipeline_additional_medicare_self_employment_threshold
+            - wages_taken_into_account_for_additional_medicare_tax
+          )
+
+  - name: pipeline_additional_medicare_international_agreement_exemption_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 1401(c), foreign-exclusive social-security coverage condition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "During any period in which there is in effect an agreement entered into pursuant to section 233 of the Social Security Act with any foreign country"
+    versions:
+      - effective_from: '1990-01-01'
+        formula: |-
+          international_social_security_agreement_under_section_233_in_effect
+          and self_employment_income_is_subject_exclusively_to_foreign_social_security_laws_under_agreement
+
+  - name: pipeline_additional_medicare_self_employment_income_exempt_under_international_agreement
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(c), completed foreign-exclusive amount exempt from section 1401
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
+              output: federal_self_employment_income
+              hash: sha256:cac5387584429f293dcea6355bfb1bfb91d572cc2f257f226cf07831af4eeb66
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "shall be exempt from the taxes imposed by this section to the extent that such self-employment income is subject under such agreement exclusively"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if pipeline_additional_medicare_international_agreement_exemption_applies:
+            min(
+              federal_self_employment_income,
+              self_employment_income_amount_subject_exclusively_to_foreign_social_security_laws_under_agreement
+            )
+          else:
+            0
+
+  - name: pipeline_taxable_self_employment_income_for_additional_medicare_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2) and (c), taxable aggregate after agreement exemption
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
+              output: federal_self_employment_income
+              hash: sha256:cac5387584429f293dcea6355bfb1bfb91d572cc2f257f226cf07831af4eeb66
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "shall be exempt from the taxes imposed by this section to the extent that such self-employment income is subject"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(
+            0,
+            federal_self_employment_income
+            - pipeline_additional_medicare_self_employment_income_exempt_under_international_agreement
+          )
+
+  - name: pipeline_additional_medicare_self_employment_tax_base
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(2)(A)-(B) and (c), self-employment income above coordinated threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "self-employment income for such taxable year which is in excess of"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(
+            0,
+            pipeline_taxable_self_employment_income_for_additional_medicare_tax
+            - pipeline_reduced_additional_medicare_self_employment_threshold
+          )
 
   - name: federal_additional_medicare_wage_tax
     kind: derived
@@ -104,19 +354,21 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 1401(b)(2), imported encoded self-employment-leg tax
+    source: 26 USC 1401(b)(2), locally composed self-employment leg
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: import
-            import:
-              target: us:statutes/26/1401#additional_medicare_self_employment_tax
-              output: additional_medicare_self_employment_tax
-              hash: sha256:a844cf97fb59ac576f3b4f44a604c9658bbdd6cc5b4c84d136ac066d8166948b
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "a tax equal to 0.9 percent of the self-employment income"
     versions:
-      - effective_from: '2013-01-01'
-        formula: additional_medicare_self_employment_tax
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          pipeline_additional_medicare_self_employment_tax_base
+          * pipeline_additional_medicare_self_employment_tax_rate
 
   - name: federal_additional_medicare_tax
     kind: derived
@@ -135,40 +387,29 @@ rules:
               output: additional_medicare_tax
               hash: sha256:f06b93b281a9f04e380d545bbc6f6484b0ae591237831b84051b57d05aa661fa
           - path: versions[0].formula
-            kind: import
-            import:
-              target: us:statutes/26/1401#additional_medicare_self_employment_tax
-              output: additional_medicare_self_employment_tax
-              hash: sha256:a844cf97fb59ac576f3b4f44a604c9658bbdd6cc5b4c84d136ac066d8166948b
-          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/statute/26/1401
               excerpt: "In addition to the tax imposed by paragraph (1) and the preceding subsection"
     versions:
-      - effective_from: '2013-01-01'
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
           additional_medicare_tax
-          + additional_medicare_self_employment_tax
+          + federal_additional_medicare_self_employment_tax
 
 inputs:
   - name: filing_status
     entity: TaxUnit
     dtype: Integer
     period: Year
-    description: Filing-status code consumed by both imported threshold rules.
+    description: Filing-status code consumed by the imported wage leg and locally composed self-employment threshold.
   - name: wages
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
     description: Tax-unit wages subject to section 3101(b)(2), including both spouses' wages on a joint return.
-  - name: self_employment_income
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Completed TaxUnit-level section 1402(b) self-employment income; not gross receipts or pre-section-1402(a)(12) profit.
   - name: international_social_security_agreement_under_section_233_in_effect
     entity: TaxUnit
     dtype: Judgment

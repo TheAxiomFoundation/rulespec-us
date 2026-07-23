@@ -1,37 +1,38 @@
-# Hand-computed tax-year-2026 fixtures for 26 USC 3101(b)(2) and
-# 1401(b)(2). Wages on a joint return are the sum of the GRID-CONTRACT
-# primary and spouse columns. Every expected amount is statutory arithmetic
-# at the encoded 0.009 rate; none is sourced from PolicyEngine.
+# Hand-computed tax-year-2026 fixtures for 26 USC 3101(b)(2),
+# 1401(b)(2), and the imported section 1402 path. Wages on a joint return are
+# the sum of the GRID-CONTRACT primary and spouse columns. For each related
+# Person, the imported SE pipeline derives:
 #
-# GRID-CONTRACT case `amt-single-wage-se` is intentionally absent. Its
-# `$150,000 SE net profit` is the pre-section-1402(a)(12) boundary used by the
-# sibling SE-tax pipeline, not the completed TaxUnit section 1402(b)
-# `self_employment_income` consumed by the encoded section 1401 rule. Importing
-# that pipeline is not a valid adapter today: encoded section 1402(b)'s Person
-# output and encoded section 1401's implicit TaxUnit input use the same local
-# `self_employment_income` symbol. The exact case requires a collision-free
-# TaxUnit binding in section 1401; after that fix, its hand calculation is
-# 150,000 * 0.9235 = 138,525 and 0.009 * (138,525 - 100,000) = 346.725.
-# The completed-income case below exercises the current runtime boundary but
-# is explicitly not semantically equivalent to the omitted GRID case.
+#   taxable SE income = gross_self_employment_profit * 0.9235,
+#
+# subject to its encoded section 1402(b) floor and exclusions. Every expected
+# amount is statutory decimal arithmetic at the section 1401(b)(2) 0.009 rate;
+# none is sourced from PolicyEngine.
 
 - name: amt-single-150k
   # Wage leg: 0.009 * max(0, 150,000 - 200,000) = 0.
-  # SE leg: 0.009 * max(0, 0 - (200,000 - 150,000)) = 0.
+  # Gross SE profit and the derived SE leg are both zero.
   period: &tax_year_2026
     period_kind: tax_year
     start: '2026-01-01'
     end: '2026-12-31'
   input:
     <<: &no_international_agreement_inputs
-      us:statutes/26/1401#input.international_social_security_agreement_under_section_233_in_effect: false
-      us:statutes/26/1401#input.self_employment_income_is_subject_exclusively_to_foreign_social_security_laws_under_agreement: false
-      us:statutes/26/1401#input.self_employment_income_amount_subject_exclusively_to_foreign_social_security_laws_under_agreement: 0
+      us:policies/income_tax/additional_medicare_tax_pipeline#input.international_social_security_agreement_under_section_233_in_effect: false
+      us:policies/income_tax/additional_medicare_tax_pipeline#input.self_employment_income_is_subject_exclusively_to_foreign_social_security_laws_under_agreement: false
+      us:policies/income_tax/additional_medicare_tax_pipeline#input.self_employment_income_amount_subject_exclusively_to_foreign_social_security_laws_under_agreement: 0
     us:statutes/26/3101/b/2#input.filing_status: 0
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 150000
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: &domestic_se_person_inputs
+          us:statutes/26/1402/b#input.individual_is_nonresident_alien: false
+          us:statutes/26/1402/b#input.agreement_under_social_security_act_section_233_provides_for_individual: false
+          us:statutes/26/1402/b#input.individual_is_not_united_states_citizen_and_resident_of_puerto_rico_virgin_islands_guam_or_american_samoa: false
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 150000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 150000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '0'
@@ -43,9 +44,13 @@
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 250000
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 250000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 250000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '450'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '450'
@@ -58,9 +63,16 @@
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 1
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 300000
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 150000
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 150000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 300000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '450'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '450'
@@ -72,12 +84,40 @@
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 2
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 150000
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 150000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 150000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '225'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '225'
+
+- name: amt-single-wage-se
+  # Exact GRID-CONTRACT boundary:
+  # taxable SE income = 150,000 * 0.9235 = 138,525.
+  # Wage leg = 0; reduced SE threshold = 200,000 - 100,000 = 100,000.
+  # SE leg = 0.009 * (138,525 - 100,000) = 346.725.
+  period: *tax_year_2026
+  input:
+    <<: *no_international_agreement_inputs
+    us:statutes/26/3101/b/2#input.filing_status: 0
+    us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 100000
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 150000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 100000
+  output:
+    us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 100000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '138525'
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_additional_medicare_self_employment_threshold: 200000
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_reduced_additional_medicare_self_employment_threshold: 100000
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_additional_medicare_self_employment_tax_base: '38525'
+    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
+    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '346.725'
+    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '346.725'
 
 - name: amt-joint-450k
   # Joint wages: 400,000 + 50,000 = 450,000.
@@ -87,28 +127,41 @@
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 1
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 450000
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 400000
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 50000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 450000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '1800'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '1800'
 
-- name: amt-single-wage-completed-se-income-boundary
-  # Boundary-only surrogate for the currently unbindable gross-profit row:
-  # reduced SE threshold = 200,000 - 100,000 wages = 100,000.
-  # Wage leg = 0; SE leg = 0.009 * (150,000 - 100,000) = 450.
+- name: amt-single-wage-derived-completed-se-income-non-contract
+  # Extra non-contract observability fixture retained from the former direct
+  # completed-income boundary case. The runtime input is now honestly gross
+  # profit: 200,000 * 0.9235 derives completed SE income of 184,700.
+  # Reduced threshold = 100,000; SE tax = 0.009 * 84,700 = 762.3.
   period: *tax_year_2026
   input:
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 100000
-    us:statutes/26/1401#input.self_employment_income: 150000
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 200000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 100000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 100000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '184700'
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_additional_medicare_self_employment_tax_base: '84700'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
-    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '450'
-    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '450'
+    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '762.3'
+    us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '762.3'
 
 - name: amt-zero
   # Both statutory bases are zero, so both legs and the combined tax are zero.
@@ -117,67 +170,91 @@
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 0
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 0
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_additional_medicare_self_employment_income_exempt_under_international_agreement: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '0'
 
 - name: amt-single-exact-wage-threshold
-  # 0.009 * max(0, 200,000 - 200,000) = 0.
+  # 0.009 * max(0, 200,000 - 200,000) = 0; SE leg = 0.
   period: *tax_year_2026
   input:
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 200000
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 200000
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 200000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '0'
 
 - name: amt-single-one-dollar-above-wage-threshold
-  # 0.009 * (200,001 - 200,000) = 0.009.
+  # Wage tax = 0.009 * (200,001 - 200,000) = 0.009; SE leg = 0.
   period: *tax_year_2026
   input:
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
     us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 200001
-    us:statutes/26/1401#input.self_employment_income: 0
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 200001
   output:
     us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 200001
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0.009'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '0.009'
 
 - name: amt-single-exact-coordinated-se-threshold
-  # Wages reduce the SE threshold to 100,000; the completed SE amount equals it.
-  # Wage leg = 0; SE leg = 0.009 * max(0, 100,000 - 100,000) = 0.
+  # Gross profit 100,000 derives SE income of 92,350.
+  # Wages 107,650 reduce the SE threshold to exactly 92,350.
+  # Wage leg = 0; SE leg = 0.009 * max(0, 92,350 - 92,350) = 0.
   period: *tax_year_2026
   input:
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
-    us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 100000
-    us:statutes/26/1401#input.self_employment_income: 100000
+    us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 107650
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 100000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 107650
   output:
-    us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 100000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '92350'
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_reduced_additional_medicare_self_employment_threshold: 92350
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '0'
 
 - name: amt-single-one-dollar-above-coordinated-se-threshold
-  # Wages reduce the SE threshold to 100,000.
-  # Wage leg = 0; SE leg = 0.009 * (100,001 - 100,000) = 0.009.
+  # Gross profit 100,000 derives SE income of 92,350.
+  # Wages 107,651 reduce the SE threshold to 92,349, exactly one dollar below
+  # the derived SE income. Wage leg = 0; SE leg = 0.009 * 1 = 0.009.
   period: *tax_year_2026
   input:
     <<: *no_international_agreement_inputs
     us:statutes/26/3101/b/2#input.filing_status: 0
-    us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 100000
-    us:statutes/26/1401#input.self_employment_income: 100001
+    us:policies/income_tax/additional_medicare_tax_pipeline#input.wages: 107651
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_se_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 100000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 107651
   output:
-    us:policies/income_tax/additional_medicare_tax_pipeline#wages_taken_into_account_for_additional_medicare_tax: 100000
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '92350'
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_reduced_additional_medicare_self_employment_threshold: 92349
+    us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_additional_medicare_self_employment_tax_base: '1'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_wage_tax: '0'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_self_employment_tax: '0.009'
     us:policies/income_tax/additional_medicare_tax_pipeline#federal_additional_medicare_tax: '0.009'

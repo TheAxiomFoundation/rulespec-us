@@ -121,16 +121,32 @@ a key holder must generate the signed manual-composition manifests and rerun
   1401(b)(2)(A)/(B) rate, threshold, excess-base, and wage-coordination proof,
   plus subsection (c) agreement-exemption text needed to preserve the existing
   pipeline behavior.
+- Implemented shape (a) without importing root section 1401: the wage leg
+  remains unchanged, the sibling SE pipeline now derives and aggregates
+  section 1402(b) income from related Persons' gross SE net profit, and
+  pipeline-prefixed local rules apply the section 1401(b)(2) rate, thresholds,
+  wage coordination, excess base, and subsection (c) exemption.
+- Preserved the public outputs
+  `federal_additional_medicare_wage_tax`,
+  `federal_additional_medicare_self_employment_tax`, and
+  `federal_additional_medicare_tax`. Aggregate-dependent rules are explicitly
+  limited to tax year 2026, matching the imported SE pipeline's live version.
+- Added and engine-verified exact case `amt-single-wage-se`: $150,000 gross SE
+  net profit derives $138,525 section 1402(b) income; $100,000 wages reduce the
+  threshold to $100,000; the $38,525 excess at 0.009 produces **$346.725**.
+- Retained all prior companion coverage. The former direct completed-income
+  case is relabeled as a non-contract observability fixture and now honestly
+  derives $184,700 completed SE income from $200,000 gross profit. The two
+  coordinated-threshold cases now use wages to place the derived $92,350 SE
+  income exactly at, and one dollar above, the reduced threshold.
+- Passed focused deterministic validation, 18-atom proof validation,
+  money-proof validation with zero new missing atoms, and all 12 P1 companion
+  cases using the pinned engine. Because the checkout basename is not
+  `rulespec-us`, same-worktree canonical imports were resolved through a
+  temporary canonical-basename symlink.
 
 ## Next
 
-- Implement shape (a): retain the wage-leg import, import the SE pipeline
-  aggregate, and author the section 1401(b)(2) SE rate, thresholds,
-  wage-coordination reduction, excess base, and tax locally with corpus-backed
-  proof atoms while preserving subsection (c) behavior.
-- Add and engine-verify the exact neutral-grid `amt-single-wage-se` case while
-  retaining the completed-income boundary case as a clearly labeled
-  non-contract fixture.
 - Run the full validation, proof, money-proof, companion, reverse-index,
   oracle-pending (only if outputs change), canonical-basename program-artifact,
   source-staleness, signer, and generated-file guard battery.
