@@ -2,9 +2,10 @@
 
 ## State
 
-Designing the applicant-scoped relation aggregate and highest-standard-only
-5-percentage-point FPL comparison after completing source and convention
-research.
+The executable applicant-scoped relation aggregate, highest-standard-only
+5-percentage-point FPL comparison, and guarded section 435.119/435.110
+consumer bridges are implemented and green in an initial pinned-engine smoke
+companion. Expanding the companion to the complete boundary matrix is next.
 
 ## Done
 
@@ -20,11 +21,21 @@ research.
   companion and no root ProgramSpec.
 - Confirmed `42 CFR 435.552` is outside the dependency graph and will not be
   imported or edited.
+- Implemented
+  `us/policies/medicaid/magi_household_income_pipeline.yaml`, including the
+  paragraph-(d)/(f) member sum, raw and final FPL ratios, exact highest-band
+  disregard gate, runtime-boundary check, and guarded adult and
+  parent/caretaker consumers.
+- Proved on the pinned engine that relation rows are independently evaluated,
+  nonmembers are filtered, and the existing 435.119 and 435.110 rules consume
+  the compose's private bridges.
+- Added an initial hand-computed companion covering a positive
+  counted-income-plus-cash member contribution and the inclusive exact-138%
+  adult boundary. Focused validate, proof-validate (28 atoms), and pinned
+  engine tests (2/2) pass.
 
 ## Next
 
-- Prove the imported relation/`sum_where` syntax against the pinned engine.
-- Implement the executable compose and its declared runtime boundaries.
 - Add the hand-computed 133/138 grid across filer, dependent, non-filer, and
   child-income household variants, plus cash-support and zero/edge cases.
 - Run the complete campaign gate battery and fix any failures.
