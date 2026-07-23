@@ -1,0 +1,634 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/36B
+      - us/statute/26/36B/c/1/A
+      - us/statute/26/36B/d/3
+      - us/guidance/irs/rev-proc-2025-25
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us/statute/26/36B
+        - us/statute/26/36B/c/1/A
+        - us/statute/26/36B/d/3
+        - us/guidance/irs/rev-proc-2025-25
+      rationale: |-
+        Section 36B supplies the applicable-taxpayer income band, linear
+        applicable-percentage interpolation, monthly required contribution,
+        monthly premium-assistance amount, and annual sum. Rev. Proc. 2025-25
+        supplies the adjusted initial and final percentages for taxable year
+        2026. The separate 9.96-percent required-contribution percentage in
+        section 3.02 of the revenue procedure is an employer-coverage
+        affordability parameter and is not used as every household's premium
+        tax credit contribution rate.
+
+        Section 36B(d)(3)(B) requires the poverty line most recently published
+        on the first day of the regular enrollment period for the coverage
+        year. The 2026 Marketplace open-enrollment period began November 1,
+        2025, so callers must supply the applicable 2025 HHS poverty guideline.
+        This module accepts that exact annual amount as a runtime input instead
+        of inventing or embedding a poverty-guideline table.
+  summary: |-
+    Annual premium tax credit pipeline for the narrow full-year 2026 case in
+    which one TaxUnit is the household and coverage family, all members have
+    the same qualified Marketplace enrollment for all 12 months, and annual
+    enrolled-plan and applicable SLCSP premiums are supplied by the caller.
+
+    The pipeline derives the household-income/FPL ratio, uses the Rev. Proc.
+    2025-25 band selector and adjusted endpoints, applies section
+    36B(b)(3)(A)'s linear interpolation, bridges the resulting percentage into
+    section 36B(b)'s required monthly contribution and premium-assistance
+    amount, and multiplies the identical monthly amount by the caller-supplied
+    12 coverage months. Section 36B(c)(1)(A)'s inclusive 100-through-400-percent
+    applicable-taxpayer predicate gates the final annual credit.
+
+    Annual premium inputs are divided by section 36B(b)'s encoded divisor of
+    12. This is neutral plumbing for the stated full-year, level-month fixture
+    surface; it does not model changing monthly premiums or coverage. Money and
+    applicable-percentage values remain at RuleSpec arithmetic precision.
+    Regulatory and filing-form rounding are deferred below.
+  deferred_outputs:
+    - output: us:statutes/26/36B/b/3/A#applicable_percentage
+      reason: |-
+        The encoded subparagraph-(3)(A) output closes over the unindexed
+        statutory base percentage tables and exposes no caller boundary for
+        the adjusted Rev. Proc. 2025-25 endpoints. RuleSpec imports cannot
+        substitute those internal tables. This pipeline therefore uses the
+        revenue procedure's encoded band and endpoints and applies the same
+        source-stated linear interpolation in a local proofed rule.
+      source_values:
+        - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band
+        - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_initial_percentage
+        - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_final_percentage
+    - output: us:statutes/26/36B/b#premium_assistance_credit_amount
+      reason: |-
+        The encoded annual output sums a coverage-month data relation. This
+        aggregate-input pipeline cannot synthesize twelve relation members, so
+        it applies the mathematically equivalent monthly amount times the
+        required runtime coverage-month count after requiring a full 12 months.
+    - output: us:statutes/26/36B/c/2#coverage_month_and_minimum_essential_coverage_eligibility
+      reason: |-
+        Employer-sponsored coverage affordability and minimum value, other
+        minimum essential coverage, Exchange/QHP enrollment, and coverage-month
+        determinations are not encoded as one executable dependency surface.
+        This narrow pipeline assumes the caller's enrolled-premium inputs are
+        for a qualifying full-year Marketplace case with no employer offer.
+    - output: us:statutes/26/36B/c/4#qualified_small_employer_health_reimbursement_arrangement_coordination
+      reason: |-
+        QSEHRA permitted-benefit reductions and affordability coordination are
+        outside the encoded monthly assistance surface. All fixtures assume no
+        QSEHRA.
+    - output: us:statutes/26/36B/e#lawfully_present_individual_adjusted_premium_and_poverty_ratio_rules
+      reason: |-
+        Person-level lawfully-present modifications require family-size,
+        household-income, and premium attribution mechanics that are deferred
+        in the parent section 36B module. All fixtures are U.S. citizens and do
+        not use the former below-100-percent exception.
+    - output: us:regulations/26-cfr/1.36B-3/g#rounded_applicable_percentage
+      reason: |-
+        The current regulation rounds an interpolated applicable percentage to
+        the nearest 0.01 percentage point, but that regulation is not encoded
+        in this repository and RuleSpec has no imported rounding rule here.
+        Required fixtures use table endpoints, constant bands, or an exact
+        midpoint, so this missing operation does not change their rates.
+    - output: us:forms/irs/8962#filing_form_percentage_and_money_rounding
+      reason: |-
+        Form 8962 percentage truncation and whole-dollar filing mechanics are
+        not encoded, and final 2026 form instructions are not available in the
+        pinned source surface. Outputs retain exact statutory-module arithmetic.
+imports:
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_2
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_3
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_4
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_5
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_6
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_initial_percentage
+  - us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_final_percentage
+  - us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+  - us:statutes/26/36B/b#required_monthly_contribution
+  - us:statutes/26/36B/b#premium_assistance_amount
+  - us:statutes/26/36B/c/1/A#applicable_taxpayer
+rules:
+  - name: household_income_for_taxable_year
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 36B(d)(2), caller-supplied completed annual household MAGI
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "The term “household income” means, with respect to any taxpayer, an amount equal to the sum of the modified adjusted gross income of the taxpayer"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: aca_ptc_household_magi
+
+  - name: poverty_line_for_family_size_involved
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 36B(d)(3), caller-supplied applicable poverty line
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/36B/d/3
+              excerpt: "the poverty line used shall be the most recently published poverty line as of the 1st day of the regular enrollment period"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: aca_ptc_poverty_line_for_household
+
+  - name: household_income_percentage_of_federal_poverty_line
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 36B(b)(3)(A), household income expressed as a percentage of the poverty line
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "household income (expressed as a percent of poverty line) within the following income tier"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: household_income_for_taxable_year / poverty_line_for_family_size_involved
+
+  - name: aca_ptc_applicable_percentage_band_lower_bound
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: Rev. Proc. 2025-25 section 3.01, lower endpoint of selected 2026 FPL band
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-25
+              excerpt: "Less than 133%; At least 133% but less than 150%; At least 150% but less than 200%; At least 200% but less than 250%; At least 250% but less than 300%; At least 300% but not more than 400%"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit
+              output: applicable_percentage_band_scalar_limit
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_2
+              output: applicable_percentage_band_scalar_limit_2
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_3
+              output: applicable_percentage_band_scalar_limit_3
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_4
+              output: applicable_percentage_band_scalar_limit_4
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_5
+              output: applicable_percentage_band_scalar_limit_5
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_6
+              output: applicable_percentage_band_scalar_limit_6
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit:
+            0
+          else:
+            if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_2:
+              applicable_percentage_band_scalar_limit
+            else:
+              if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_3:
+                applicable_percentage_band_scalar_limit_2
+              else:
+                if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_4:
+                  applicable_percentage_band_scalar_limit_3
+                else:
+                  if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_5:
+                    applicable_percentage_band_scalar_limit_4
+                  else:
+                    if household_income_percentage_of_federal_poverty_line <= applicable_percentage_band_scalar_limit_6:
+                      applicable_percentage_band_scalar_limit_5
+                    else:
+                      0
+
+  - name: aca_ptc_applicable_percentage_band_upper_bound
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: Rev. Proc. 2025-25 section 3.01, upper endpoint of selected 2026 FPL band
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-25
+              excerpt: "Less than 133%; At least 133% but less than 150%; At least 150% but less than 200%; At least 200% but less than 250%; At least 250% but less than 300%; At least 300% but not more than 400%"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit
+              output: applicable_percentage_band_scalar_limit
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_2
+              output: applicable_percentage_band_scalar_limit_2
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_3
+              output: applicable_percentage_band_scalar_limit_3
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_4
+              output: applicable_percentage_band_scalar_limit_4
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_5
+              output: applicable_percentage_band_scalar_limit_5
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band_scalar_limit_6
+              output: applicable_percentage_band_scalar_limit_6
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit:
+            applicable_percentage_band_scalar_limit
+          else:
+            if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_2:
+              applicable_percentage_band_scalar_limit_2
+            else:
+              if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_3:
+                applicable_percentage_band_scalar_limit_3
+              else:
+                if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_4:
+                  applicable_percentage_band_scalar_limit_4
+                else:
+                  if household_income_percentage_of_federal_poverty_line < applicable_percentage_band_scalar_limit_5:
+                    applicable_percentage_band_scalar_limit_5
+                  else:
+                    if household_income_percentage_of_federal_poverty_line <= applicable_percentage_band_scalar_limit_6:
+                      applicable_percentage_band_scalar_limit_6
+                    else:
+                      0
+
+  - name: aca_ptc_applicable_percentage_band
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Rev. Proc. 2025-25 section 3.01, selected 2026 applicable-percentage band
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_percentage_band
+              output: applicable_percentage_band
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: applicable_percentage_band
+
+  - name: aca_ptc_applicable_percentage
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 36B(b)(3)(A)(i), using Rev. Proc. 2025-25 adjusted endpoints
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "shall increase, on a sliding scale in a linear manner, from the initial premium percentage to the final premium percentage"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_initial_percentage
+              output: applicable_initial_percentage
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_final_percentage
+              output: applicable_final_percentage
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if aca_ptc_applicable_percentage_band < 0:
+            0
+          else:
+            if applicable_initial_percentage == applicable_final_percentage:
+              applicable_initial_percentage
+            else:
+              applicable_initial_percentage
+              + (
+                  (household_income_percentage_of_federal_poverty_line - aca_ptc_applicable_percentage_band_lower_bound)
+                  / (aca_ptc_applicable_percentage_band_upper_bound - aca_ptc_applicable_percentage_band_lower_bound)
+                )
+                * (applicable_final_percentage - applicable_initial_percentage)
+
+  - name: applicable_percentage_for_taxable_year
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 36B(b)(2)(B)(ii), applicable percentage bridge
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "the applicable percentage with respect to the taxpayer for the taxable year"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: aca_ptc_applicable_percentage
+
+  - name: monthly_premiums_for_exchange_qualified_health_plans_covering_taxpayer_spouse_or_dependents
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 36B(b)(2)(A), annual enrolled premium divided equally over 12 full-year coverage months
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "the monthly premiums for such month for 1 or more qualified health plans"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+              output: required_contribution_annual_to_monthly_divisor
+              hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: aca_ptc_annual_enrolled_premium / required_contribution_annual_to_monthly_divisor
+
+  - name: adjusted_monthly_premium_for_applicable_second_lowest_cost_silver_plan
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 36B(b)(2)(B), annual caller-supplied SLCSP benchmark divided equally over 12 months
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "the adjusted monthly premium for such month for the applicable second lowest cost silver plan"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+              output: required_contribution_annual_to_monthly_divisor
+              hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: aca_ptc_annual_slcsp_benchmark_premium / required_contribution_annual_to_monthly_divisor
+
+  - name: aca_ptc_full_year_runtime_inputs_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Narrow full-year aggregate-input boundary for this section 36B composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "with respect to all coverage months of the taxpayer occurring during the taxable year"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+              output: required_contribution_annual_to_monthly_divisor
+              hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          aca_ptc_family_size > 0
+          and aca_ptc_poverty_line_for_household > 0
+          and aca_ptc_annual_slcsp_benchmark_premium >= 0
+          and aca_ptc_annual_enrolled_premium >= 0
+          and aca_ptc_coverage_month_count == required_contribution_annual_to_monthly_divisor
+
+  - name: aca_ptc_applicable_taxpayer
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 36B(c)(1)(A), income-band component of applicable taxpayer
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/c/1/A#applicable_taxpayer
+              output: applicable_taxpayer
+              hash: sha256:b1b33c37930a88162b703528d39dd2c81b236076d578b88331ae4b73e245f2fe
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: applicable_taxpayer
+
+  - name: aca_ptc_required_monthly_contribution
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 36B(b)(2)(B)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/b#required_monthly_contribution
+              output: required_monthly_contribution
+              hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: required_monthly_contribution
+
+  - name: aca_ptc_monthly_premium_assistance_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 26 USC 36B(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/b#premium_assistance_amount
+              output: premium_assistance_amount
+              hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: premium_assistance_amount
+
+  - name: aca_ptc_annual_premium_assistance_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 36B(b)(1), full-year sum of identical monthly assistance amounts
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "the sum of the premium assistance amounts determined under paragraph (2) with respect to all coverage months"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: aca_ptc_monthly_premium_assistance_amount * aca_ptc_coverage_month_count
+
+  - name: aca_ptc_annual_premium_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 36B(a), annual credit within the declared full-year boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "In the case of an applicable taxpayer, there shall be allowed as a credit"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/36B
+              excerpt: "an amount equal to the premium assistance credit amount of the taxpayer for the taxable year"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid and aca_ptc_applicable_taxpayer:
+            aca_ptc_annual_premium_assistance_amount
+          else:
+            0
+inputs:
+  - name: aca_ptc_household_magi
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed annual section 36B household modified adjusted gross income supplied by the caller.
+  - name: aca_ptc_family_size
+    entity: TaxUnit
+    dtype: Count
+    period: Year
+    description: Section 36B family size supplied by the caller; used to validate the corresponding poverty-line input.
+  - name: aca_ptc_poverty_line_for_household
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Applicable annual poverty line for this family size; for 2026 coverage in the contiguous 48 states and DC, callers use the 2025 HHS guideline.
+  - name: aca_ptc_annual_slcsp_benchmark_premium
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Annual adjusted premium for the applicable second-lowest-cost silver plan, supplied by the caller.
+  - name: aca_ptc_annual_enrolled_premium
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Annual premium for qualified Marketplace plan coverage of the taxpayer, spouse, or dependents, supplied by the caller.
+  - name: aca_ptc_coverage_month_count
+    entity: TaxUnit
+    dtype: Count
+    period: Year
+    description: Coverage-month count supplied by the caller; this narrow pipeline requires exactly 12.
