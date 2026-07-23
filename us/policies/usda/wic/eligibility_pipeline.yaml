@@ -1,0 +1,264 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/regulation/7/246/7/c
+      - us/regulation/7/246/7/d
+      - us/regulation/7/246/7/e
+  summary: |-
+    Person-level WIC certification-eligibility composition. It combines the
+    pregnant-woman, postpartum-woman, breastfeeding-woman, infant, and
+    child-under-five category facts required by 7 CFR 246.7(c) with the
+    185-percent Federal poverty-guideline maximum income ceiling and the
+    adjunctive income-eligibility routes encoded from paragraph (d). The
+    185-percent branch matches the Federal maximum and the PolicyEngine
+    comparison surface; a State agency may adopt a lower compliant income
+    guideline, which is outside this Federal-parity pipeline.
+
+    The caller supplies the Federal poverty-guideline dollar amount already
+    selected for family size and geography. The encoded paragraph-(c) module
+    exposes category membership as a fact rather than deriving the category
+    definitions, so the five category facts are caller-classified runtime
+    inputs. The paragraph-(d)(2)(vii) unborn-child adjustment is an explicit
+    imported income path; the caller supplies its pregnancy, income-only
+    failure, fetus-adjusted-guideline, and waiver facts. The completed family
+    income input already reflects any paragraph-(d)(2)(i) current-rate income
+    period or paragraph-(d)(2)(ix) migrant recertification determination.
+    Residency and certification facts are runtime inputs as well. Nutritional
+    risk is an explicit, required caller determination. The pipeline never
+    treats that determination as satisfied by default: 7 CFR 246.7(e) requires
+    a competent professional authority's medical and/or nutritional
+    assessment, and the source module remains deferred.
+  deferred_outputs:
+    - output: us:regulations/7-cfr/246/7/d#unemployed_family_member_income_period_eligibility_applies
+      reason: |-
+        Paragraph (d)(2)(i) selects the current-rate income period after an
+        adult family member becomes unemployed; it does not by itself conclude
+        that income is below the guideline. The caller supplies the completed
+        wic_family_income amount after applying that period rule.
+    - output: us:regulations/7-cfr/246/7/d#instream_migrant_family_satisfies_income_standard_and_documentation
+      reason: |-
+        Paragraph (d)(2)(ix) depends on a prior local-agency income
+        determination, a Verification of Certification card, and the
+        twelve-month instream period. This pipeline accepts the resulting
+        completed family-income/certification facts and does not silently infer
+        them from migrant status.
+    - output: us:regulations/7-cfr/246/7/e#nutritional_risk_certification_and_priority_system
+      reason: |-
+        The encoded paragraph-(e) module is deferred because the medical or
+        nutritional assessment, competent-professional determination,
+        participant-file documentation, and priority administration are not
+        derivable from this scalar person-level surface. This pipeline exposes
+        that determination as the required
+        wic_nutritional_risk_requirement_met runtime input.
+imports:
+  - us:regulations/7-cfr/246/7/d#applicant_adjunctively_income_eligible
+  - us:regulations/7-cfr/246/7/d#pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+rules:
+  - name: wic_income_limit_multiplier
+    kind: parameter
+    dtype: Decimal
+    source: 7 CFR 246.7(d)(2)(iii), maximum Federal income-guideline ceiling
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/246/7/d
+              excerpt: "gross income in excess of 185 percent of the Federal income guidelines"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          1.85
+
+  - name: wic_income_limit
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 7 CFR 246.7(d)(1), (d)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/246/7/d
+              excerpt: "gross income in excess of 185 percent of the Federal income guidelines"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/wic/eligibility_pipeline#wic_income_limit_multiplier
+              output: wic_income_limit_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          wic_income_limit_multiplier * wic_federal_poverty_guideline
+
+  - name: wic_categorical_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 7 CFR 246.7(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/246/7/c
+              excerpt: "infants, children, and pregnant, postpartum, and breastfeeding women"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          wic_applicant_is_pregnant_woman
+          or wic_applicant_is_postpartum_woman
+          or wic_applicant_is_breastfeeding_woman
+          or wic_applicant_is_infant
+          or wic_applicant_is_child_under_five
+
+  - name: wic_income_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 7 CFR 246.7(d)(1), (d)(2)(iii), (d)(2)(vi), (d)(2)(vii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/246/7/d
+              excerpt: "Persons who are adjunctively income eligible"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/246/7/c
+              excerpt: "pregnant women"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/246/7/d#applicant_adjunctively_income_eligible
+              output: applicant_adjunctively_income_eligible
+              hash: sha256:e4bf3b4442d844647b53225b3fd2a3a371f61a80846d4f3708ccd73aad92d5fb
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/246/7/d#pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+              output: pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+              hash: sha256:e4bf3b4442d844647b53225b3fd2a3a371f61a80846d4f3708ccd73aad92d5fb
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/wic/eligibility_pipeline#wic_income_limit
+              output: wic_income_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          applicant_adjunctively_income_eligible
+          or (
+            wic_applicant_is_pregnant_woman
+            and pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+          )
+          or wic_family_income <= wic_income_limit
+
+  - name: wic_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 7 CFR 246.7(c)-(e), person-level certification eligibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/246/7/c
+              excerpt: "To qualify for the Program"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/246/7/e
+              excerpt: "must be determined to be at nutritional risk"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/wic/eligibility_pipeline#wic_categorical_eligible
+              output: wic_categorical_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/wic/eligibility_pipeline#wic_income_eligible
+              output: wic_income_eligible
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          wic_categorical_eligible
+          and wic_residency_requirement_met
+          and wic_income_eligible
+          and wic_certification_requirements_met
+          and wic_nutritional_risk_requirement_met
+inputs:
+  - name: wic_family_income
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed annual/current-rate family income after applicable 7 CFR 246.7(d)(2)(i) and (ix) period or recertification procedures.
+  - name: wic_federal_poverty_guideline
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Caller-supplied Federal poverty-guideline dollars for the applicable family size and geography used in the direct 185-percent screen; paragraph (d)(2)(vii)'s unborn-child exception is also exposed as an imported path.
+  - name: wic_applicant_is_pregnant_woman
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller determination that the applicant is in the pregnant-woman WIC category.
+  - name: wic_applicant_is_postpartum_woman
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller determination that the applicant is in the postpartum-woman WIC category.
+  - name: wic_applicant_is_breastfeeding_woman
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller determination that the applicant is in the breastfeeding-woman WIC category.
+  - name: wic_applicant_is_infant
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller determination that the applicant is in the infant WIC category.
+  - name: wic_applicant_is_child_under_five
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller determination that the applicant is in the child-under-five WIC category.
+  - name: wic_residency_requirement_met
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller-supplied result of the 7 CFR 246.7(c)(1)(i) residency requirement.
+  - name: wic_certification_requirements_met
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller-supplied result of applicable identity, proof, and certification procedures under 7 CFR 246.7(c).
+  - name: wic_nutritional_risk_requirement_met
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Required caller-supplied competent-professional nutritional-risk determination under deferred 7 CFR 246.7(e); never assumed true.
