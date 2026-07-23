@@ -38,13 +38,14 @@
   passed all 9 companion cases.
 - Ran focused layout/manifest/index pytest: 17 passed; the only failure was the
   expected stale reverse index, which is the next generated-artifact step.
+- Regenerated `.axiom/index/provisions_to_rules.json`; the 29-line diff adds
+  only the new pipeline's four verified source references.
 
 ## Next
 
-1. Validate, proof-check, and execute the companion against the pinned bridge
-   encoder, correcting schema, import, formula, or expected-value issues.
-2. Generate the reverse index and oracle-pending classification.
-3. Attempt the approved manual-composition signing path without fabricating
+1. Run the official oracle-pending classification sync and inspect whether the
+   ledger changes.
+2. Attempt the approved manual-composition signing path without fabricating
    credentials; record an explicit TODO if the HMAC key remains unavailable.
-4. Run the full local gate battery and record every result in the required
+3. Run the full local gate battery and record every result in the required
    summary.
