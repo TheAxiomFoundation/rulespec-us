@@ -1,4 +1,4 @@
-# 2026 indexed-value policy module progress
+# 2026 indexed-value policy-module progress
 
 ## State
 
