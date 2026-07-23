@@ -7,9 +7,15 @@ Corpus presence and repository-convention audit is complete on
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
 Revenue Procedure 2025-32 section 4.26 is present at the pinned corpus ref, so
-the qualified-business-income module and companion are now implemented.
-Notice 2025-67 is absent from that corpus, so the saver's-credit half is
-stopped pending ingest and no Notice-derived executable values will be added.
+the qualified-business-income module and companion are implemented and the
+full executable gate battery is complete. Notice 2025-67 is absent from that
+corpus, so the saver's-credit half is stopped pending ingest and no
+Notice-derived executable values were added.
+
+The two manual-composition checks are intentionally left for their authorized
+owners: the signing dry-run reports the one expected manifest, and oracle
+coverage reports the twelve new rules as unmapped. No signing manifest or
+repository coverage ledger was written.
 
 ## Done
 
@@ -53,9 +59,38 @@ stopped pending ingest and no Notice-derived executable values will be added.
 - Regenerated and checked `.axiom/index/provisions_to_rules.json`; the new
   module is indexed under Revenue Procedure pages 21 and 22 and
   `us/statute/26/199A`.
+- Rebuilt the exact pinned RuleSpec engine ref
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0` offline and passed the companion
+  with the exact pinned encoder ref
+  `3869d66d009f52258be35901edbef370e65a399c`: one file, five cases, zero
+  failures.
+- Passed the repository tests: 55 tests under `tests/` and eight tests under
+  `tools/tests/`. The host `python` wrapper is broken, so the installed Python
+  3.13 executable was used.
+- Passed source-staleness validation for all 43 pinned modules.
+- Passed the repository-wide money-proof ratchet: 118 known missing atoms
+  across 2,595 obligations remain within the 151-item allowance; the new
+  module has zero missing across nine monetary obligations.
+- Passed the CI-shaped program-artifact build with the workflow-pinned
+  composer and engine: 32 of 32 programs compiled. The three existing
+  allowlist entries also compiled; the allowlist was not edited.
+- Confirmed the reverse index is current at 3,946 provisions, 4,669 edges,
+  and 4,434 modules, and passed `git diff --check`.
+- Independently reviewed the QBI implementation with no defects found,
+  including the all-other treatment for filing-status code 4.
+- Ran oracle coverage without writing its ledger. It reported all twelve new
+  QBI rules as unmapped, plus fourteen stale pending declarations already
+  present at the base commit. This is the expected owner follow-up under the
+  no-ledger rule.
+- Ran the generated-file guard. Its only two findings are the unsigned new
+  module and companion. The signing dry-run would create one manifest covering
+  those two files; no manifest was written.
 
 ## Next
 
-1. Run the full validation battery and manual-composition signing dry-run.
-2. Write the requested build summary and done marker, including commit SHAs,
-   the Notice ingest-needed finding, and the exact cross-branch repoint plan.
+1. Write the requested build summary and done marker, including commit SHAs,
+   the Notice ingest-needed finding, gate outcomes, and the exact cross-branch
+   repoint plan.
+2. Remove this session progress file from the final tree after preserving its
+   completed state in Git history, in keeping with the no-repository-ledger
+   campaign rule.
