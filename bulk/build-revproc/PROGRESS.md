@@ -50,11 +50,12 @@ stopped pending ingest and no Notice-derived executable values will be added.
 - Passed pinned-encoder deterministic validation and proof validation:
   40 atoms checked, with zero missing across nine monetary obligations.
 - Passed all five companion cases with the RuleSpec engine.
+- Regenerated and checked `.axiom/index/provisions_to_rules.json`; the new
+  module is indexed under Revenue Procedure pages 21 and 22 and
+  `us/statute/26/199A`.
 
 ## Next
 
-1. Regenerate the provision reverse index without modifying toolchain,
-   workflows, CODEOWNERS, statutes, pipelines, or repository ledgers.
-2. Run the full validation battery and manual-composition signing dry-run.
-3. Write the requested build summary and done marker, including commit SHAs,
+1. Run the full validation battery and manual-composition signing dry-run.
+2. Write the requested build summary and done marker, including commit SHAs,
    the Notice ingest-needed finding, and the exact cross-branch repoint plan.
