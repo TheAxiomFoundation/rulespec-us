@@ -7,8 +7,8 @@ Defensive correctness-and-completeness audit in progress on
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
 All four requested pipelines and companions are complete and independently
-validated. Section 22 and section 25A support thin imports; the latter exposes
-both its pre-section-26 potential and its encoded tax-liability-capped final.
+validated. Shared reverse-index and oracle-pending artifacts have been
+regenerated with the workflow-current classifier.
 
 ## Done
 
@@ -27,6 +27,12 @@ both its pre-section-26 potential and its encoded tax-liability-capped final.
   minimum, zero, and net-capital-gain-limit checks.
 - Passed that module's `validate --skip-reviewers`, proof validation,
   money-proof ratchet, and pinned-engine companion suite.
+- Regenerated and checked `.axiom/index/provisions_to_rules.json`: 3,946
+  provisions, 4,674 edges, and 4,437 modules.
+- Synchronized `oracle-coverage-pending.yaml` with the current classifier in a
+  canonical `rulespec-us` snapshot. It added exactly 16 outputs from these
+  composes, drained 14 already-mapped legacy declarations, and passed with
+  1,743 declared/applied and zero stale.
 - Added the thin `lifetime_learning_credit_pipeline` and 12 hand-computed
   fixtures covering all P8 cases, zero and both phaseout edges, the aggregate
   expense cap, and a binding-tax diagnostic.
@@ -57,7 +63,7 @@ both its pre-section-26 potential and its encoded tax-liability-capped final.
 
 ## Next
 
-1. Regenerate shared index, oracle-coverage, program-artifact, and manifest
-   artifacts as required, then commit shared generated files separately.
-2. Run the complete validation/signing-dry-run gate battery.
+1. Run the complete validation, fresh-snapshot oracle, canonical 32/32
+   program-artifact, and signing-dry-run gate battery.
+2. Record the expected signing-key block without fabricating manifests.
 3. Write the required scratchpad summary and completion marker.
