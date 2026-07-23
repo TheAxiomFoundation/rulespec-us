@@ -11,24 +11,30 @@ module:
       - us-pa/statute/act-1971-2/article-3/section-314
   summary: |-
     Source-certified tax-year 2026 Pennsylvania full-year resident personal
-    income-tax core. The caller supplies separately classified raw amounts for
-    the eight classes in section 303, raw qualified-tuition contributions by
-    designated beneficiary, student-loan interest, raw poverty receipts and
-    statutory exclusions, claimant family facts, and raw facts for one eligible
-    other taxing jurisdiction. The module constructs Pennsylvania income,
-    applies the per-beneficiary qualified-tuition and student-loan-interest
-    deductions without allowing taxable income below zero, applies the 3.07%
-    resident rate, computes the complete section 304 poverty-forgiveness
-    schedule, and computes the section 314 credit and limitation for one other
-    jurisdiction.
+    income-tax core for one resident individual. The caller supplies
+    separately computed section 303 class totals, qualified-tuition
+    contributions by designated beneficiary, student-loan interest, aggregated
+    claimant/spouse poverty receipts and statutory exclusions, claimant family
+    facts, and raw facts for one eligible other taxing jurisdiction. The module
+    floors each income class separately so a loss in one class cannot offset
+    another, applies the per-beneficiary qualified-tuition and per-individual
+    student-loan-interest deductions without allowing taxable income below
+    zero, applies the 3.07% resident rate, computes the section 304
+    poverty-forgiveness schedule from the supplied household receipt
+    categories, and computes the section 314 credit and limitation for one
+    other jurisdiction.
 
     This is deliberately not a completed resident-liability program. The pinned
-    Article III corpus does not contain the operative TY2026 authority and
-    return mechanics for Pennsylvania's refundable earned-income and
-    child/dependent-care credits, and sections 304 and 314 do not establish
-    their ordering relative to each other. The module therefore exposes
-    separately calculated tax-after-forgiveness and tax-after-one-jurisdiction-
-    credit branches, but does not combine them or claim a final liability.
+    corpus does not establish the transaction-level computation needed to
+    construct all eight Pennsylvania class totals, contributor-by-beneficiary
+    and taxpayer/spouse joint-return mechanics, or the conditional inclusion of
+    spouse receipts in poverty income. It also lacks the operative TY2026
+    authority and return mechanics for Pennsylvania's refundable earned-income
+    and child/dependent-care credits, while sections 304 and 314 do not
+    establish their ordering relative to each other. The module therefore
+    exposes separately calculated tax-after-forgiveness and
+    tax-after-one-jurisdiction-credit branches for its bounded input surface,
+    but does not combine them or claim a final liability.
   deferred_outputs:
     - output: us-pa:policies/income_tax/resident_core_liability_pipeline#pa_pit_resident_income_tax_after_encoded_relief
       reason: |-
@@ -40,9 +46,12 @@ module:
         - us-pa:policies/income_tax/resident_core_liability_pipeline#pa_pit_resident_income_tax_after_one_other_jurisdiction_credit
     - output: us-pa:policies/income_tax/resident_core_liability_pipeline#pa_pit_resident_net_income_tax_liability
       reason: |-
-        Final TY2026 liability additionally requires the operative refundable
-        Pennsylvania earned-income and child/dependent-care credit authorities
-        and return ordering, which are absent from the pinned Article III
+        Final TY2026 liability additionally requires transaction-level
+        construction of each Pennsylvania income class, joint taxpayer/spouse
+        class and deduction mechanics, conditional spouse poverty-income
+        inclusion, the operative refundable Pennsylvania earned-income and
+        child/dependent-care credit authorities, and final return ordering.
+        Those surfaces are absent from, or not fully established by, the pinned
         corpus.
       source_values:
         - us-pa:policies/income_tax/resident_core_liability_pipeline#pa_pit_resident_income_tax_before_credits
@@ -262,18 +271,23 @@ rules:
             source:
               corpus_citation_path: us-pa/statute/act-1971-2/article-3/section-303
               excerpt: "The classes of income referred to above are as follows"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/statute/act-1971-2/article-3/section-302
+              excerpt: "a tax upon each dollar of income received by that resident"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          pa_pit_compensation
-          + pa_pit_net_profits
-          + pa_pit_net_gains_from_property
-          + pa_pit_net_rents_royalties_patents_and_copyrights
-          + pa_pit_dividends
-          + pa_pit_taxable_interest_and_similar_receipts
-          + pa_pit_taxable_gambling_and_lottery_winnings
-          + pa_pit_net_income_from_estates_and_trusts
+          max(0, pa_pit_compensation)
+          + max(0, pa_pit_net_profits)
+          + max(0, pa_pit_net_gains_from_property)
+          + max(0, pa_pit_net_rents_royalties_patents_and_copyrights)
+          + max(0, pa_pit_dividends)
+          + max(0, pa_pit_taxable_interest_and_similar_receipts)
+          + max(0, pa_pit_taxable_gambling_and_lottery_winnings)
+          + max(0, pa_pit_net_income_from_estates_and_trusts)
 
   - name: pa_pit_qualified_tuition_program_deduction
     kind: derived
@@ -684,49 +698,49 @@ inputs:
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(1) taxable compensation for the full-year resident return.
+    description: Caller-computed section 303(a)(1) taxable compensation for the resident individual.
   - name: pa_pit_net_profits
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(2) net profits after the class-specific business costs and expenses.
+    description: Caller-computed section 303(a)(2) net profits after class-specific costs and expenses.
   - name: pa_pit_net_gains_from_property
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(3) net gains less net losses from dispositions.
+    description: Caller-computed section 303(a)(3) class total for net gains less net losses from dispositions.
   - name: pa_pit_net_rents_royalties_patents_and_copyrights
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(4) net gains or income from the listed property classes.
+    description: Caller-computed section 303(a)(4) class total for the listed property income.
   - name: pa_pit_dividends
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(5) taxable dividends.
+    description: Caller-computed section 303(a)(5) taxable-dividend class total.
   - name: pa_pit_taxable_interest_and_similar_receipts
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(6) taxable interest and includable insurance, annuity, MSA, or HSA receipts.
+    description: Caller-computed section 303(a)(6) taxable-interest and similar-receipts class total.
   - name: pa_pit_taxable_gambling_and_lottery_winnings
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(7) taxable gambling and lottery winnings.
+    description: Caller-computed section 303(a)(7) taxable gambling and lottery class total.
   - name: pa_pit_net_income_from_estates_and_trusts
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Raw section 303(a)(8) net gains or income through estates or trusts.
+    description: Caller-computed section 303(a)(8) estate-and-trust income class total.
   - name: pa_pit_qualified_tuition_contribution_paid
     entity: Person
     dtype: Money
