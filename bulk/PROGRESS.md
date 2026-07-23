@@ -3,9 +3,9 @@
 ## State
 
 The executable compose and complete hand-computed companion are implemented.
-The 24-case 133%/138% matrix and nine direct/edge cases pass focused
-validation, proof, money-proof, and pinned-engine gates. The repository-wide
-and generated-artifact gate battery is next.
+Focused gates pass, and the reverse index is regenerated and current. The
+remaining full pytest rerun and fresh-snapshot oracle/program-artifact/signing
+checks are next.
 
 ## Done
 
@@ -42,9 +42,15 @@ and generated-artifact gate battery is next.
   family-size/FPL runtime cases. All 33 companion cases pass on the pinned
   engine; proof validation checks 28 atoms and the money-proof ratchet reports
   zero missing monetary proofs.
+- Regenerated `.axiom/index/provisions_to_rules.json`; its fresh `--check`
+  reports 3,944 provisions, 4,672 edges, and 4,434 modules. The first repo
+  pytest pass had 54 passing tests and only the expected pre-regeneration
+  stale-index failure.
 
 ## Next
 
-- Run the complete campaign gate battery and fix any failures.
+- Rerun repository pytest against the regenerated index.
+- Run oracle-pending sync/fresh check, canonical-basename program artifacts,
+  and signing selection dry-run.
 - Produce the scratchpad summary and done marker, leaving manifest signing to
   the main lane after a dry-run selection proof.
