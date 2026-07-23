@@ -2,15 +2,16 @@
 
 ## State
 
-The P1 Additional Medicare boundary follow-up is in progress on branch
-`fed-parity/surtaxes`, starting from prior-work commit `5a63f76a`. This is a
-defensive correctness and completeness audit: the target is to accept the
-GRID-CONTRACT gross self-employment net-profit boundary, derive taxable
-self-employment income through the existing SE pipeline, and preserve the
-combined and per-leg output names without editing encoded statute modules.
+The P1 Additional Medicare boundary follow-up is complete and locally
+verified on branch `fed-parity/surtaxes`, starting from prior-work commit
+`5a63f76a`. The composition now accepts the GRID-CONTRACT gross
+self-employment net-profit boundary, derives taxable self-employment income
+through the existing SE pipeline, and preserves the combined and per-leg
+output names without editing encoded statute modules.
 
-Pre-PR provenance remains credential-blocked independently of this follow-up:
-a key holder must generate the signed manual-composition manifests and rerun
+All runnable correctness and completeness gates pass. Pre-PR provenance
+remains credential-blocked independently of this fix: a key holder must
+generate the three signed manual-composition manifests and rerun
 `guard-generated`.
 
 ## Done
@@ -158,11 +159,27 @@ a key holder must generate the signed manual-composition manifests and rerun
   targeted assertions for the married-filing-separately threshold, the false
   international-agreement condition, and taxable SE income; the pinned-engine
   P1 companion and the strict derived-output coverage test now pass.
+- Passed the final full RuleSpec battery: deterministic validation for all
+  three compositions; proof validation with 18, 15, and 2 atoms; money-proof
+  validation with zero newly missing atoms; and all 32 companion cases,
+  including all 12 P1 cases.
+- Passed the complete repository suite: 55 tests. The seven warnings remain
+  the expected unmanifested-composition census warning and pytest temporary
+  cleanup warnings.
+- Rechecked reverse-index freshness at 3,944 provisions, 4,674 edges, and
+  4,436 modules, and source staleness against the current local corpus: all 43
+  pinned modules match.
+- Rechecked oracle-pending freshness in a fresh canonical clone with the
+  workflow-current classifier: 1,753 declared, 1,753 applied, zero stale.
+- Built and engine-compiled all 32/32 Program Artifacts from a fresh
+  canonical-basename clone using the pinned composer and engine.
+- Confirmed the signer dry run selects exactly three manifests covering the
+  six composition module/companion files. Actual signing fails only because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable, and `guard-generated`
+  rejects only those same six unsigned files.
 
 ## Next
 
-- Run the full validation, proof, money-proof, companion, reverse-index,
-  oracle-pending (only if outputs change), canonical-basename program-artifact,
-  source-staleness, signer, and generated-file guard battery.
-- Append the follow-up section to the prior summary and write the requested
-  `fix-p1-DONE.md` marker with commit SHAs and exact gate results.
+- Have a signing-key holder run `axiom-encode sign-applied-files --repo .
+  --base-ref origin/main --head-ref HEAD --manual-exception composition`,
+  commit the three generated manifests, and rerun `guard-generated`.
