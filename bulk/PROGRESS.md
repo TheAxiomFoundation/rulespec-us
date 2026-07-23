@@ -12,11 +12,23 @@ In progress on branch `fed-parity/surtaxes` from `origin/main` at
   sections 1401, 1402(a), 1402(a)(12), 1402(b), 3101(b)(2), and 1411.
 - Confirmed the requested worktree and branch are clean and at the stated
   canonical base.
+- Surveyed the federal policy tree and selected
+  `us/policies/income_tax/*_pipeline.yaml`, matching the repository's state
+  income-tax composition convention while keeping policy plumbing out of the
+  federal statute tree.
+- Verified that the encoded 2026 Social Security contribution and benefit base
+  is $184,500 in
+  `us/policies/ssa/contribution-and-benefit-base/2026.yaml`.
+- Inspected the Wisconsin manual-composition manifest and located the
+  repository-pinned `axiom-encode` 0.2.1200 environment. The signing key is not
+  present, so manifest generation remains an explicit credential-dependent
+  step.
+- Surveyed the repository workflow and local gate commands, including pytest,
+  RuleSpec validation/execution/proof checks, reverse-index generation, oracle
+  pending sync/check, and generated-artifact guards.
 
 ## Next
 
-- Survey federal policy layout, SSA contribution-base encodings, validation
-  entrypoints, and the manual-composition manifest precedent.
 - Implement and test the additional-Medicare composition.
 - Implement and test the self-employment-tax composition.
 - Implement and test the NIIT composition.
