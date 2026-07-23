@@ -57,9 +57,13 @@ In progress on branch `fed-parity/surtaxes` from `origin/main` at
   `manual_exception: composition` manifest; signing remains credential-blocked.
 - Regenerated `.axiom/index/provisions_to_rules.json` for the three new
   composition modules (3,944 provisions, 4,674 edges, 4,436 modules).
+- Ran the official oracle-pending sync. It declared all 15 new executable
+  outputs, drained one now-classified pre-existing Hawaii output, set the
+  ceiling to 1,755, and passed the scoped pending ratchet with zero stale
+  declarations.
 
 ## Next
 
-- Run the official oracle sync/check and all local CI-equivalent gates.
+- Run all local CI-equivalent gates.
 - Write the requested external build summary with case arithmetic and exact
   gate results.
