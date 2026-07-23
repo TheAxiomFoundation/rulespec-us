@@ -4,9 +4,8 @@
 
 - Branch: `fed-parity/aca-ptc`
 - Base: `origin/main` at `c86b2f62`
-- Phase: compose module and nine-case companion pass pinned validation,
-  proof validation, and exact-pinned-engine execution; generated artifacts and
-  full gates next.
+- Phase: compose module, companion, reverse index, and oracle-pending ledger
+  are complete; signing attempt and full gates next.
 - Module home: `us/policies/aca/ptc_pipeline.yaml`, following the federal
   `us/policies/...` executable-RuleSpec convention.
 
@@ -40,12 +39,15 @@
   expected stale reverse index, which is the next generated-artifact step.
 - Regenerated `.axiom/index/provisions_to_rules.json`; the 29-line diff adds
   only the new pipeline's four verified source references.
+- Ran the official oracle-pending sync and check. The semantic result adds the
+  pipeline's 16 executable outputs, drains 14 outputs that are no longer
+  pending, and raises the ceiling from 1,741 to 1,743. Preserved the existing
+  ledger formatting instead of committing a whole-file serializer rewrite;
+  the official check passes with 1,743 applied and zero stale.
 
 ## Next
 
-1. Run the official oracle-pending classification sync and inspect whether the
-   ledger changes.
-2. Attempt the approved manual-composition signing path without fabricating
+1. Attempt the approved manual-composition signing path without fabricating
    credentials; record an explicit TODO if the HMAC key remains unavailable.
-3. Run the full local gate battery and record every result in the required
+2. Run the full local gate battery and record every result in the required
    summary.
