@@ -1,0 +1,385 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/25B
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us/statute/26/25B
+      rationale: |-
+        Section 25B supplies the 50-, 20-, 10-, and zero-percent rates, the
+        $2,000 contribution cap for each eligible individual, the eligibility
+        screens, and the inflation-adjustment method. IRS Notice 2025-67,
+        section 3.09, supplies the unencoded tax-year-2026 AGI tier limits.
+        This module accepts the three applicable filing-status limits as
+        runtime inputs and records every official value in its companion.
+  summary: |-
+    Federal retirement savings contributions credit composition under
+    26 USC 25B for tax year 2026, before the aggregate limitation under
+    section 26. It imports the encoded statutory rates, individual
+    contribution cap, and minimum age, then wires the credit at TaxUnit level
+    using separate primary- and spouse-level eligibility facts and qualified
+    net contributions.
+
+    The encoded section exposes `savers_credit` as a TaxUnit scalar. That
+    output applies only one $2,000 cap and one eligibility screen, so it cannot
+    implement section 25B(a)'s per-eligible-individual cap on a joint return.
+    Its dependent screen also imports ordinary section 151 exemption
+    eligibility rather than whether another taxpayer may claim the
+    individual. A thin identity would therefore understate the P6 joint case
+    and would not faithfully implement section 25B(c).
+
+    Adjusted gross income plus sections 911, 931, and 933 excluded income is
+    computed locally, matching section 25B(e). Caller-supplied per-person
+    qualified retirement savings contributions are completed section 25B(d)
+    amounts after testing-period distributions and statutory exceptions. The
+    companion uses zero distributions, as required by the grid.
+  deferred_outputs:
+    - output: us:statutes/26/25B#savers_credit
+      reason: |-
+        The encoded TaxUnit scalar applies one individual cap and eligibility
+        screen. Section 25B(a) instead allows each eligible spouse on a joint
+        return a separately capped contribution amount. The corrected pipeline
+        output below composes two explicit individual legs.
+      source_values:
+        - us:policies/income_tax/savers_credit_pipeline#input.primary_qualified_retirement_savings_contributions
+        - us:policies/income_tax/savers_credit_pipeline#input.spouse_qualified_retirement_savings_contributions
+    - output: us:statutes/26/25B/d#per_person_qualified_retirement_savings_contribution_composition
+      reason: |-
+        Contribution-category, testing-period-distribution, rollover, and
+        spouse-distribution attribution must be resolved separately for each
+        individual. This TaxUnit pipeline accepts each person's completed net
+        section 25B(d) amount and does not treat missing distributions as zero.
+imports:
+  - us:statutes/26/25B#savers_credit_contribution_cap
+  - us:statutes/26/25B#savers_credit_age_threshold
+  - us:statutes/26/25B#savers_credit_high_rate
+  - us:statutes/26/25B#savers_credit_middle_rate
+  - us:statutes/26/25B#savers_credit_low_rate
+  - us:statutes/26/25B#savers_credit_zero_rate
+rules:
+  - name: pipeline_savers_credit_modified_adjusted_gross_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25B(e), AGI determined without regard to sections 911, 931, and 933
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "determined without regard to sections 911, 931, and 933"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          adjusted_gross_income
+          + section_911_excluded_income
+          + section_931_excluded_income
+          + section_933_excluded_income
+
+  - name: pipeline_savers_credit_applicable_percentage
+    kind: derived
+    entity: TaxUnit
+    dtype: Rate
+    period: Year
+    source: 26 USC 25B(b), using the applicable IRS Notice 2025-67 tax-year-2026 limits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "The applicable percentage is"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_high_rate
+              output: savers_credit_high_rate
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_middle_rate
+              output: savers_credit_middle_rate
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_low_rate
+              output: savers_credit_low_rate
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_zero_rate
+              output: savers_credit_zero_rate
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if pipeline_savers_credit_modified_adjusted_gross_income
+              <= savers_credit_first_threshold_2026:
+              savers_credit_high_rate
+          else:
+              if pipeline_savers_credit_modified_adjusted_gross_income
+                  <= savers_credit_second_threshold_2026:
+                  savers_credit_middle_rate
+              else:
+                  if pipeline_savers_credit_modified_adjusted_gross_income
+                      <= savers_credit_third_threshold_2026:
+                      savers_credit_low_rate
+                  else:
+                      savers_credit_zero_rate
+
+  - name: primary_savers_credit_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25B(c), primary individual's age, student, and dependent screens
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "The term “eligible individual” means any individual if such individual has attained the age of 18"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_age_threshold
+              output: savers_credit_age_threshold
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          primary_age_at_close_of_taxable_year >= savers_credit_age_threshold
+          and not primary_is_student_under_section_152_f_2
+          and not primary_may_be_claimed_as_dependent_by_another_taxpayer
+
+  - name: spouse_savers_credit_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 25B(a), (c), eligible spouse on a joint return
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "In the case of a joint return"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_age_threshold
+              output: savers_credit_age_threshold
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          filing_status == 1
+          and spouse_age_at_close_of_taxable_year >= savers_credit_age_threshold
+          and not spouse_is_student_under_section_152_f_2
+          and not spouse_may_be_claimed_as_dependent_by_another_taxpayer
+
+  - name: primary_savers_credit_contributions_taken_into_account
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25B(a), primary individual's nonnegative qualified contributions capped at $2,000
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "do not exceed $2,000"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_contribution_cap
+              output: savers_credit_contribution_cap
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          min(
+              max(0, primary_qualified_retirement_savings_contributions),
+              savers_credit_contribution_cap
+          )
+
+  - name: spouse_savers_credit_contributions_taken_into_account
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25B(a), spouse's nonnegative qualified contributions capped at $2,000
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "do not exceed $2,000"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/25B#savers_credit_contribution_cap
+              output: savers_credit_contribution_cap
+              hash: sha256:6b38b3bb321755359757828ffca75dd753694c05bf58c442a0d3922670076b6f
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          min(
+              max(0, spouse_qualified_retirement_savings_contributions),
+              savers_credit_contribution_cap
+          )
+
+  - name: federal_savers_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 25B(a), tax-unit credit from separately capped eligible-individual contributions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/25B
+              excerpt: "an amount equal to the applicable percentage"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          pipeline_savers_credit_applicable_percentage
+          * (
+              (
+                  if primary_savers_credit_eligible:
+                      primary_savers_credit_contributions_taken_into_account
+                  else:
+                      0
+              )
+              + (
+                  if spouse_savers_credit_eligible:
+                      spouse_savers_credit_contributions_taken_into_account
+                  else:
+                      0
+              )
+          )
+
+inputs:
+  - name: filing_status
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Filing-status code; 1 is married filing jointly and the other encoded status codes are nonjoint.
+  - name: adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Adjusted gross income before adding back sections 911, 931, and 933 exclusions.
+  - name: section_911_excluded_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Income excluded under section 911 and added back under section 25B(e).
+  - name: section_931_excluded_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Income excluded under section 931 and added back under section 25B(e).
+  - name: section_933_excluded_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Income excluded under section 933 and added back under section 25B(e).
+  - name: savers_credit_first_threshold_2026
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Applicable 2026 upper limit for the 50-percent tier from IRS Notice 2025-67 section 3.09.
+  - name: savers_credit_second_threshold_2026
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Applicable 2026 upper limit for the 20-percent tier from IRS Notice 2025-67 section 3.09.
+  - name: savers_credit_third_threshold_2026
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Applicable 2026 upper limit for the 10-percent tier from IRS Notice 2025-67 section 3.09.
+  - name: primary_age_at_close_of_taxable_year
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Primary individual's age at the close of the taxable year.
+  - name: primary_is_student_under_section_152_f_2
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the primary individual is a section 152(f)(2) student.
+  - name: primary_may_be_claimed_as_dependent_by_another_taxpayer
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether another taxpayer may claim the primary individual for a taxable year beginning in the same calendar year.
+  - name: primary_qualified_retirement_savings_contributions
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Primary individual's completed net section 25B(d) contribution amount after testing-period distributions and exceptions.
+  - name: spouse_age_at_close_of_taxable_year
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Spouse's age at the close of the taxable year; ignored for nonjoint returns.
+  - name: spouse_is_student_under_section_152_f_2
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether the spouse is a section 152(f)(2) student.
+  - name: spouse_may_be_claimed_as_dependent_by_another_taxpayer
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Whether another taxpayer may claim the spouse for a taxable year beginning in the same calendar year.
+  - name: spouse_qualified_retirement_savings_contributions
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Spouse's completed net section 25B(d) contribution amount after testing-period distributions and exceptions.

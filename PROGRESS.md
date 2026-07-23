@@ -6,11 +6,10 @@ Defensive correctness-and-completeness audit in progress on
 `fed-parity/credits`, based on `origin/main` commit
 `c86b2f62511b7ff9d5351c98ca03b87e3cc41042`.
 
-The section 199A pipeline and companion are complete and independently
-validated. The audit found that the encoded source's final deduction closes
-over an unindexed $157,500 threshold, so the pipeline uses the locally proofed
-ACA-style correction pattern and a Revenue Procedure 2025-32 runtime
-threshold instead of presenting an incorrect thin identity.
+The section 199A and section 25B pipelines and companions are complete and
+independently validated. Both required narrow local corrections: section 199A
+for the source module's stale unindexed threshold, and section 25B for its
+single TaxUnit contribution cap and incorrect dependent-screen proxy.
 
 ## Done
 
@@ -29,12 +28,21 @@ threshold instead of presenting an incorrect thin identity.
   minimum, zero, and net-capital-gain-limit checks.
 - Passed that module's `validate --skip-reviewers`, proof validation,
   money-proof ratchet, and pinned-engine companion suite.
+- Recorded the official 2026 saver’s-credit tier limits from IRS Notice
+  2025-67: joint $48,500/$52,500/$80,500, head of household
+  $36,375/$39,375/$60,375, and other returns
+  $24,250/$26,250/$40,250.
+- Added the proofed `savers_credit_pipeline`, with separate primary/spouse
+  eligibility and contribution-cap legs, and 12 hand-computed fixtures
+  covering all P6 cases, tier edges, zero contributions, and each eligibility
+  screen.
+- Passed that module's `validate --skip-reviewers`, proof validation,
+  money-proof ratchet, and pinned-engine companion suite.
 
 ## Next
 
-1. Add and commit the corrective saver’s-credit compose and P6 fixtures.
-2. Add and commit thin-identity section 22 and section 25A(c) composes with
+1. Add and commit thin-identity section 22 and section 25A(c) composes with
    P7/P8 fixtures.
-3. Regenerate shared index/coverage artifacts and commit them separately.
-4. Run the complete validation/signing-dry-run gate battery.
-5. Write the required scratchpad summary and completion marker.
+2. Regenerate shared index/coverage artifacts and commit them separately.
+3. Run the complete validation/signing-dry-run gate battery.
+4. Write the required scratchpad summary and completion marker.
