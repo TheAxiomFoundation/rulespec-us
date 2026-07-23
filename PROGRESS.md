@@ -4,8 +4,8 @@
 
 - Branch: `fed-parity/aca-ptc`
 - Base: `origin/main` at `c86b2f62`
-- Phase: compose module, companion, reverse index, and oracle-pending ledger
-  are complete; signing is credential-blocked and full gates are next.
+- Phase: implementation, local verification, and the required build summary
+  are complete; signing remains an external credential-holder TODO.
 - Module home: `us/policies/aca/ptc_pipeline.yaml`, following the federal
   `us/policies/...` executable-RuleSpec convention.
 
@@ -58,10 +58,25 @@
   aggregate TaxUnit surface. Validation, all 34 proof atoms, and all nine
   companion cases still pass; the reverse index now includes those two cited
   corpus fragments.
+- Final full repository pytest passed: 55 tests passed with one warning for
+  the existing set of 19 unmanifested modules, including this credential-
+  blocked pipeline.
+- Final repository-wide money-proof validation passed: 118 missing atoms among
+  2,586 monetary obligations, within the ratchet allowance of 151.
+- Final reverse-index check passed at 3,947 provisions, 4,672 edges, and 4,434
+  modules. Final oracle-pending check passed at 1,743 declared/applied and zero
+  stale.
+- Final full program-artifact check composed and compiled all 32 programs.
+- Final all-companion sweep exercised 4,428 files and 15,562 cases. All nine
+  ACA PTC cases passed. Four failures remain in two unchanged
+  `us/statutes/26/32.test.yaml` cases because of unresolved section 32(c)(2)
+  output/input references; none is in a branch-changed RuleSpec path.
+- Final `guard-generated` fails only for the two new ACA files because the
+  signing key is unavailable and therefore their manifest cannot be created.
 
 ## Next
 
-1. Run the full local gate battery and record every result in the required
-   summary.
-2. Have a credential holder run the recorded pinned signing command, then
+1. Have a credential holder run the recorded pinned signing command, then
    rerun the manifest/encoder-first gates.
+2. Address the pre-existing section 32 companion references and the three
+   program allowlist entries that now compile in their own maintenance lane.
