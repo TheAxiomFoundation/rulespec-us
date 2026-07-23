@@ -2,7 +2,7 @@
 
 ## State
 
-- Defensive correctness and completeness audit is in the implementation phase
+- Defensive correctness and completeness audit is in the full-validation phase
   on branch
   `fed-parity/surtaxes`.
 - Scope remains limited to deferring the generic Additional Medicare
@@ -45,17 +45,25 @@
 - Identified the fixture boundary: remove only the three TaxUnit section
   1401(c) facts and deleted-helper assertions; retain the Person-level section
   1402(b) agreement fact and all 12 cases.
+- Added explicit deferred records for the old exemption and taxable-income
+  helpers, each blocked by the upstream deferred section 1401(c) output.
+- Removed the executable section 1401(c) condition/amount path and its three
+  TaxUnit inputs; added an expressly ordinary-case imported-income alias.
+- Preserved `federal_additional_medicare_wage_tax`,
+  `federal_additional_medicare_self_employment_tax`, and
+  `federal_additional_medicare_tax` verbatim.
+- Retained all 12 companions and all six GRID-CONTRACT public results,
+  including the `346.725` row; retained the Person-level section 1402(b)
+  agreement input.
+- Ratcheted `oracle-coverage-pending.yaml` from 1,753 to exactly 1,751 entries.
+- Confirmed both pinned deferred-overlap detectors now report zero issues and
+  pinned proof validation passes with 14 atoms checked.
 
 ## Next
 
-- Add explicit deferred records for the two old generic helper surfaces,
-  blocked by the upstream deferred section 1401(c) output.
-- Remove the executable agreement condition, exemption amount, generic taxable
-  amount, and their three TaxUnit inputs.
-- Add an ordinary-case imported-income alias, preserve the three public output
-  names, retain all 12 fixtures, and ratchet the oracle-pending ledger.
+- Materialize canonical temporary checkouts with the exact pinned encoder,
+  rules engine, corpus, and PR #1002 PTC ref.
 - Run CI-mode validation on all three PR #1003 pipelines and the PR #1002 PTC
-  pipeline, plus proof validation, companions, reverse-index, and grid-result
-  invariance checks.
+  pipeline, plus all companions and the reverse-index check.
 - Record exact commands/results, final commit SHA, and any tooling limitations
   in the required DONE marker.

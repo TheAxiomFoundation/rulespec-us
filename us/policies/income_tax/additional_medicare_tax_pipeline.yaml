@@ -20,8 +20,9 @@ module:
         from each Person's gross-self-employment-profit boundary. Section
         1401(b)(2) supplies the locally authored SE-leg rate, filing-status
         thresholds, excess-income base, and FICA wage coordination. Section
-        1401(c)'s existing international-agreement exemption is preserved
-        locally rather than importing the collision-prone root 1401 module.
+        1401(c)'s international-agreement relief remains deferred with the
+        sibling pipeline's upstream
+        `self_employment_tax_after_international_agreement_exemption` output.
   summary: |-
     Federal additional Medicare tax composition under 26 USC 3101(b)(2) and
     1401(b)(2). The wage leg remains an identity over the encoded section
@@ -39,6 +40,13 @@ module:
     `self_employed_individual_of_tax_unit`. This module applies the locally
     grounded section 1401(b)(2) rate, filing-status threshold, and
     section 1401(b)(2)(B) wage reduction to that aggregate.
+
+    The executable self-employment and combined surfaces cover the ordinary
+    case in which section 1401(c) foreign-system relief is not implicated. The
+    relief pathway is not modeled as zero: the former generic exemption and
+    taxable-income helpers are explicit deferred outputs below, and a
+    separately named ordinary-case alias carries the imported aggregate into
+    the existing public per-leg and combined outputs.
 
     Root `us:statutes/26/1401` is deliberately not imported. RuleSpec concept
     fragments merge complete modules, and that root's implicit TaxUnit
@@ -60,6 +68,25 @@ module:
         The imported SE pipeline's ordinary-case section 1402(b)(2) threshold
         path does not implement the separate subsection 1402(j)(2)
         church-employee floor machinery.
+    - output: us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_additional_medicare_self_employment_income_exempt_under_international_agreement
+      blocked_by:
+        - us:statutes/26/1401#self_employment_tax_after_international_agreement_exemption
+      reason: |-
+        The imported self-employment pipeline leaves the section 1401(c)
+        result unresolved at
+        `self_employment_tax_after_international_agreement_exemption`. Until
+        that upstream output is executable, this composition cannot derive a
+        generic foreign-covered income amount from the imported pre-relief
+        `federal_self_employment_income`.
+    - output: us:policies/income_tax/additional_medicare_tax_pipeline#pipeline_taxable_self_employment_income_for_additional_medicare_tax
+      blocked_by:
+        - us:statutes/26/1401#self_employment_tax_after_international_agreement_exemption
+      reason: |-
+        The generic taxable aggregate would require subtracting the unresolved
+        section 1401(c) foreign-covered income amount. It remains blocked with
+        the upstream
+        `self_employment_tax_after_international_agreement_exemption`; the
+        executable alias below is expressly limited to the ordinary case.
 imports:
   - us:statutes/26/3101/b/2#additional_medicare_tax
   - us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
@@ -219,33 +246,13 @@ rules:
             - wages_taken_into_account_for_additional_medicare_tax
           )
 
-  - name: pipeline_additional_medicare_international_agreement_exemption_applies
-    kind: derived
-    entity: TaxUnit
-    dtype: Judgment
-    period: Year
-    source: 26 USC 1401(c), foreign-exclusive social-security coverage condition
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us/statute/26/1401
-              excerpt: "During any period in which there is in effect an agreement entered into pursuant to section 233 of the Social Security Act with any foreign country"
-    versions:
-      - effective_from: '1990-01-01'
-        formula: |-
-          international_social_security_agreement_under_section_233_in_effect
-          and self_employment_income_is_subject_exclusively_to_foreign_social_security_laws_under_agreement
-
-  - name: pipeline_additional_medicare_self_employment_income_exempt_under_international_agreement
+  - name: pipeline_federal_self_employment_income_for_additional_medicare_tax_ordinary_case
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 1401(c), completed foreign-exclusive amount exempt from section 1401
+    source: 26 USC 1401(b)(2), imported federal self-employment income for the ordinary no-agreement case
     metadata:
       proof:
         atoms:
@@ -255,53 +262,10 @@ rules:
               target: us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
               output: federal_self_employment_income
               hash: sha256:cac5387584429f293dcea6355bfb1bfb91d572cc2f257f226cf07831af4eeb66
-          - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/26/1401
-              excerpt: "shall be exempt from the taxes imposed by this section to the extent that such self-employment income is subject under such agreement exclusively"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: |-
-          if pipeline_additional_medicare_international_agreement_exemption_applies:
-            min(
-              federal_self_employment_income,
-              self_employment_income_amount_subject_exclusively_to_foreign_social_security_laws_under_agreement
-            )
-          else:
-            0
-
-  - name: pipeline_taxable_self_employment_income_for_additional_medicare_tax
-    kind: derived
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    source: 26 USC 1401(b)(2) and (c), taxable aggregate after agreement exemption
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
-              output: federal_self_employment_income
-              hash: sha256:cac5387584429f293dcea6355bfb1bfb91d572cc2f257f226cf07831af4eeb66
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/statute/26/1401
-              excerpt: "shall be exempt from the taxes imposed by this section to the extent that such self-employment income is subject"
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: |-
-          max(
-            0,
-            federal_self_employment_income
-            - pipeline_additional_medicare_self_employment_income_exempt_under_international_agreement
-          )
+        formula: federal_self_employment_income
 
   - name: pipeline_additional_medicare_self_employment_tax_base
     kind: derived
@@ -309,7 +273,7 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: 26 USC 1401(b)(2)(A)-(B) and (c), self-employment income above coordinated threshold
+    source: 26 USC 1401(b)(2)(A)-(B), ordinary-case self-employment income above coordinated threshold
     metadata:
       proof:
         atoms:
@@ -324,7 +288,7 @@ rules:
         formula: |-
           max(
             0,
-            pipeline_taxable_self_employment_income_for_additional_medicare_tax
+            pipeline_federal_self_employment_income_for_additional_medicare_tax_ordinary_case
             - pipeline_reduced_additional_medicare_self_employment_threshold
           )
 
@@ -410,19 +374,3 @@ inputs:
     period: Year
     unit: USD
     description: Tax-unit wages subject to section 3101(b)(2), including both spouses' wages on a joint return.
-  - name: international_social_security_agreement_under_section_233_in_effect
-    entity: TaxUnit
-    dtype: Judgment
-    period: Year
-    description: Section 1401(c) agreement-in-effect fact.
-  - name: self_employment_income_is_subject_exclusively_to_foreign_social_security_laws_under_agreement
-    entity: TaxUnit
-    dtype: Judgment
-    period: Year
-    description: Section 1401(c) foreign-exclusive-coverage fact.
-  - name: self_employment_income_amount_subject_exclusively_to_foreign_social_security_laws_under_agreement
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Completed section 1401(c) amount subject exclusively to the foreign system.
