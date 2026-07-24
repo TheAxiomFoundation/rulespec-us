@@ -2,9 +2,9 @@
 
 ## State
 
-Focused gating in progress. The policy gate graph compiles under the pinned
-engine, the companion passes, and the on-grid judgment is being normalized to
-the deterministic validator's boolean-only syntax.
+Implementation and focused gates are complete. The only remaining repository
+gate failure is manifest synchronization: the authorized signing-key helper is
+locked in this session, so the affected ACA manifest could not be re-signed.
 
 ## Done
 
@@ -37,13 +37,21 @@ the deterministic validator's boolean-only syntax.
 - Repository pytest reached 58 passes and one expected stale-manifest failure;
   the authorized signer dry run selected one manifest and the intended two
   files, but the secret helper is locked in this session.
+- Re-ran the final committed implementation in a clean snapshot with encoder
+  `3869d66d`, engine `ffd82132`, and corpus `b157a201`: deterministic
+  validation passed, proof validation passed 38 atoms, and the focused
+  companion passed 1 file / 11 cases.
+- Re-ran repository pytest: 58 passed, 1 failed, and 1 warning. The only
+  failure is `test_encoded_modules_match_their_manifests`, naming only
+  `us/policies/aca/ptc_pipeline.yaml`.
+- Confirmed the implementation diff does not touch `us/statutes`, the PR body,
+  or any GitHub state.
 
 ## Next
 
-- Re-run validation, proofs, and the focused companion after the boolean
-  rewrite.
-- Re-sign the affected two-file manifest if the authorized key becomes
-  available; otherwise record the credential blocker and stale-manifest pytest
-  result precisely.
-- Run the requested gates, record results, and write
-  `fix2-1002-DONE.md` with the final commit SHA.
+1. An authorized lane must unlock the signing helper and re-sign the one ACA
+   manifest covering `ptc_pipeline.yaml` and `ptc_pipeline.test.yaml`.
+2. Re-run repository pytest; the expected post-signing result is 59 passed and
+   1 warning.
+3. The main lane rewrites the PR body after this lane's final implementation
+   commit.
