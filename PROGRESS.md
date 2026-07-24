@@ -31,7 +31,8 @@ scope.
   companion cases pass.
 - Aligned both local section 1401(b)(2)(B) proof excerpts and the `wages`
   input contract to the full coordination language: wages as defined in
-  section 3121(a), taken into account for the tax under section 3101(b)(2).
+  section 3121(a), taken into account in determining the tax imposed by
+  section 3101(b)(2).
 - Documented exactly that the record's broken `source_url` metadata is tracked
   as `axiom-corpus#514` and does not invalidate the record text's hash-chained
   provenance.
