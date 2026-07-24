@@ -7,9 +7,8 @@
   companion cases, generated local artifacts, and scratchpad handback files.
 - `us/statutes/**` is read-only for this wave.
 - No pushes or GitHub writes.
-- The requested `scratchpad/review-1003-VERDICT.md` is not present in the
-  worktree or elsewhere under the accessible Axiom Foundation directories;
-  implementation is proceeding from the adjudicated findings in the task.
+- Read the full blind-review verdict from the session scratchpad at
+  `/private/tmp/claude-501/-Users-maxghenis-TheAxiomFoundation/53bdb134-6cd3-452d-89aa-000a8b5d77e3/scratchpad/review-1003-VERDICT.md`.
 
 ## Done
 
@@ -18,10 +17,19 @@
   regenerated shared indexes.
 - Located the NIIT, self-employment-tax, and additional-Medicare-tax pipelines
   and their companion case suites.
+- Read and mapped all ten blind-review findings.
+- Confirmed the NIIT defects are upstream encoding defects that must be
+  constrained locally rather than repaired under `us/statutes/**`.
+- Confirmed the section 1401(c) defect is the missing runtime boundary on the
+  additional-Medicare self-employment and combined outputs.
+- Located existing fail-closed supported-domain patterns in the resident income
+  tax pipelines and the explicit-boundary pattern in the WIC composition.
+- Attempted the GitNexus debugging workflow. Its analyzer could not register
+  inside the sandbox and indexed unrelated content, so the generated untracked
+  index was removed and source inspection is being used instead.
 
 ## Next
 
-- Trace existing validation, deferred-output, proof-atom, and case conventions.
 - Add fail-closed NIIT domain guards and companion cases.
 - Add the section 1401(c) boundary gate and companion case.
 - Repair the locally authored section 1401 coordination proof citation.
