@@ -50,12 +50,12 @@ campaign summaries/workpapers.
    classification and drive all three selectors from the absolute import. Do
    not leave a module-local status input.
 
-2. **blocking — the PR is currently unmergeable and its green checks do not
-   validate the current protected base.**
+2. **non-blocking — the green checks do not validate the current protected
+   base.**
 
-   - Live GitHub metadata on 2026-07-24 reports `mergeable: false`. The head is
-     27 commits behind live `main` (`d5dcc6b3ebc5a5139dfa33d94338190da625a651`)
-     with merge base `ba8c2a0`.
+   - Live GitHub metadata on 2026-07-24 reports `mergeable: true`, but the head
+     is 27 commits behind live `main`
+     (`d5dcc6b3ebc5a5139dfa33d94338190da625a651`) with merge base `ba8c2a0`.
    - All three head-associated workflow runs are completed/successful:
      Repository Checks `30085271187`, Source staleness and reverse index
      `30085270744`, and program-artifacts `30085270806`. Generated-guard job
@@ -63,12 +63,12 @@ campaign summaries/workpapers.
      reverse-index, and artifact jobs.
    - Those runs validated synthetic merge commit `022bf292` into the old base
      `ba8c2a0`, before the 27 current-main commits. The two regenerated shared
-     files are base-sensitive, and the currently unmergeable state means the
-     old green suite is not a present merge gate.
+     files are base-sensitive. GitHub reports no merge conflict, and every
+     recorded check is green, so this is not a second code blocker; it is not,
+     however, evidence that the current-base merge has passed the suite.
 
-   **Required fix:** update/rebase the branch onto current `main`, regenerate the
-   shared files/manifests as required, resolve mergeability, and obtain a fresh
-   complete green suite.
+   **Before merge:** update/rebase the branch onto current `main`, regenerate the
+   shared files/manifests as required, and obtain a fresh complete green suite.
 
 ## Statutory and source fidelity
 

@@ -4,8 +4,8 @@
 
 - Review in progress; statutory values/windows are correct under the pinned
   toolchain, but a blocking filing-status boundary defect is confirmed.
-- Live GitHub currently reports the PR unmergeable and 27 commits behind `main`;
-  its successful workflows were run against the original base.
+- Live GitHub reports the PR mergeable but 27 commits behind `main`; its
+  successful workflows were run against the original base.
 - Frozen PR head: `3e31892d3b64cf63368927b57de1946e63bae196` (`origin/fed-parity/revproc`).
 - PR base reported by GitHub: `ba8c2a0158dd9d87cf304bded9c11fc8479d3e5e` (`main`).
 - Review scope is PR #1009 alone; PR #1004 is not being reviewed.
@@ -45,7 +45,7 @@
 - Reconfirmed live workflow runs are all successful, including generated-guard,
   reverse-index, companion, proofs, oracle coverage, and program artifacts; those
   runs used synthetic merge base `ba8c2a0`, while live `main` is now `d5dcc6b3`
-  and GitHub reports `mergeable: false`.
+  and GitHub's final mergeability calculation reports `mergeable: true`.
 
 ## Next
 
