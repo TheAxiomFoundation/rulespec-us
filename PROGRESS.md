@@ -2,10 +2,9 @@
 
 ## State
 
-Implementation in progress. The policy now gates each public percentage and
-local contribution/assistance output directly. The imported canonical
-contribution is gated through the operative percentage, and the imported
-canonical monthly assistance is gated through its monthly premium operands.
+Companion update in progress. The policy gate graph compiles under the pinned
+engine, and the 210%-FPL fixture now exercises every fail-closed public
+percentage and Money surface.
 
 ## Done
 
@@ -23,11 +22,17 @@ canonical monthly assistance is gated through its monthly premium operands.
 - Added fail-closed gates to the public rate, operative rate, canonical bridge
   operands, local monthly contribution, local monthly assistance, and local
   annual assistance. The existing annual-credit gate remains in place.
+- Verified the policy edit with the pinned engine: the pre-update companion
+  compiled all 11 cases and reported only the expected stale raw-rate
+  assertion (`0.06968` expected, `0` returned).
+- Expanded the off-grid fixture to require zero from both applicable
+  percentages, both monthly premium bridge operands, canonical and local
+  contribution, canonical and local monthly assistance, local annual
+  assistance, and the final credit.
 
 ## Next
 
-- Run deterministic validation on the policy edit and fix any schema or
-  dependency issues.
-- Add companion expectations for every gated off-grid surface.
+- Run the focused companion and commit the fixture checkpoint.
+- Re-sign the affected two-file manifest locally.
 - Run the requested gates, record results, and write
   `fix2-1002-DONE.md` with the final commit SHA.
