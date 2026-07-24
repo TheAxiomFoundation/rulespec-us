@@ -41,11 +41,15 @@ module:
     belongs to the separate additional-Medicare composition.
 
     The executable slice assumes no church-employee subsection 1402(j)(2)
-    special floor rule and no section 1401(c) foreign-exclusive social
-    security coverage. Those mechanisms, full upstream section 1402(a)
+    special floor rule. Its ordinary-case section 1401(c) boundary is enforced
+    by the required `no_foreign_system_exclusive_se_income` attestation,
+    exposed as `self_employment_tax_pipeline_domain_is_valid`. When that
+    Judgment is `not_holds`, all three public tax outputs fail closed to zero
+    while the pre-relief income outputs remain observable. The unresolved
+    foreign-agreement relief calculation, full upstream section 1402(a)
     completed-return construction, and the complete cross-referenced wage
-    definition remain explicit deferred boundaries below. A separate
-    non-tax Judgment characterizes whether a caller-supplied completed
+    definition remain explicit deferred boundaries below. A separate non-tax
+    Judgment characterizes whether a caller-supplied completed
     post-paragraph-(12) amount meets the section 1402(b)(2) floor. It permits
     exact-boundary observability without replacing the principal
     pre-paragraph-(12) input or changing any public tax output.
@@ -230,6 +234,25 @@ rules:
         effective_to: '2026-12-31'
         formula: not individual_excluded_from_self_employment_income_definition
 
+  - name: self_employment_tax_pipeline_domain_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 1401(c), fail-closed ordinary-case applicability boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "During any period in which there is in effect an agreement entered into pursuant to section 233 of the Social Security Act with any foreign country, the self-employment income of an individual shall be exempt from the taxes imposed by this section to the extent that such self-employment income is subject under such agreement exclusively to the laws applicable to the social security system of such foreign country."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: no_foreign_system_exclusive_se_income
+
   - name: federal_self_employment_income
     kind: derived
     entity: TaxUnit
@@ -313,15 +336,24 @@ rules:
             source:
               corpus_citation_path: us/statute/26/1401
               excerpt: "on the self-employment income of every individual"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/self_employment_tax_pipeline#self_employment_tax_pipeline_domain_is_valid
+              output: self_employment_tax_pipeline_domain_is_valid
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          sum_where(
-            self_employed_individual_of_tax_unit,
-            old_age_survivors_and_disability_insurance_tax,
-            self_employment_tax_pipeline_person_is_included
-          )
+          if self_employment_tax_pipeline_domain_is_valid:
+            sum_where(
+              self_employed_individual_of_tax_unit,
+              old_age_survivors_and_disability_insurance_tax,
+              self_employment_tax_pipeline_person_is_included
+            )
+          else:
+            0
 
   - name: federal_self_employment_hospital_insurance_tax
     kind: derived
@@ -344,15 +376,24 @@ rules:
             source:
               corpus_citation_path: us/statute/26/1401
               excerpt: "a tax equal to 2.9 percent of the amount of the self-employment income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/self_employment_tax_pipeline#self_employment_tax_pipeline_domain_is_valid
+              output: self_employment_tax_pipeline_domain_is_valid
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          sum_where(
-            self_employed_individual_of_tax_unit,
-            self_employment_income_tax,
-            self_employment_tax_pipeline_person_is_included
-          )
+          if self_employment_tax_pipeline_domain_is_valid:
+            sum_where(
+              self_employed_individual_of_tax_unit,
+              self_employment_income_tax,
+              self_employment_tax_pipeline_person_is_included
+            )
+          else:
+            0
 
   - name: federal_self_employment_tax
     kind: derived
@@ -369,12 +410,21 @@ rules:
             source:
               corpus_citation_path: us/statute/26/1401
               excerpt: "In addition to the tax imposed by the preceding subsection"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/self_employment_tax_pipeline#self_employment_tax_pipeline_domain_is_valid
+              output: self_employment_tax_pipeline_domain_is_valid
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          federal_self_employment_oasdi_tax
-          + federal_self_employment_hospital_insurance_tax
+          if self_employment_tax_pipeline_domain_is_valid:
+            federal_self_employment_oasdi_tax
+            + federal_self_employment_hospital_insurance_tax
+          else:
+            0
 
 inputs:
   - name: gross_self_employment_profit
@@ -410,3 +460,8 @@ inputs:
     dtype: Boolean
     period: Year
     description: Section 1402(b) statutory territory-resident exception fact.
+  - name: no_foreign_system_exclusive_se_income
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required attestation that no self-employment income of the tax unit is exempt from section 1401 under subsection (c) because it is subject exclusively to a foreign social-security system under a section 233 agreement.
