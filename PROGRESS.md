@@ -2,7 +2,7 @@
 
 ## State
 
-- Evidence collection is complete against exact PR head
+- Re-review complete with verdict `REQUEST-CHANGES` against exact PR head
   `8fab0f1e22ae8b177d874808cf257456ecac5452`
   (`fed-parity/revproc`).
 - The prior blocking legal-output finding is resolved by removing and explicitly
@@ -12,8 +12,8 @@
   commits behind live `main`.
 - One new low-severity hygiene finding remains: `git diff --check` reports an
   extra blank line at the policy file's EOF.
-- The shared dirty checkout is untouched. Review execution is isolated in
-  `/private/tmp/rereview-1009-head.W7yN2c`; audit-only commits live on
+- The shared dirty checkout is untouched. The exact-head review worktree has
+  been deleted; audit-only commits live on
   `codex/rereview-1009-adversarial`.
 
 ## Done
@@ -55,10 +55,18 @@
   that selected outputs are deferred.
 - Confirmed `git diff --check` exits 2 at
   `qualified-business-income.yaml:335` for a new blank line at EOF.
+- Re-fetched the live body and workflows immediately before verdict writing;
+  the body remained unchanged, Repository Checks remained failed, and
+  program-artifacts remained in progress.
+- Wrote and committed `scratchpad/rereview-1009-VERDICT.md` at
+  `52fef4e6`.
+- Copied the byte-identical committed report to the required external verdict
+  and output paths; all three copies have SHA-256
+  `0eb1802cd05c5eb1bb39b2f50fa9ef2d0892823e4cb1063aa6a6630b66ad4e51`.
+- Deleted `/private/tmp/rereview-1009-head.W7yN2c`, including its disposable
+  GitNexus index.
 
 ## Next
 
-- Re-fetch the PR body and workflow state once to capture final live status.
-- Write and commit `scratchpad/rereview-1009-VERDICT.md`.
-- Copy the committed report to the required external verdict and output paths.
-- Commit final progress, delete the throwaway worktrees, and report the verdict.
+- Commit this final progress state and remove the audit worktree. No review work
+  remains.
