@@ -1,0 +1,186 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+    upstream_source_check:
+      status: delegated_parameter_source
+      checked_paths:
+        - us:regulations/7-cfr/273/9#snap_utility_allowance_for_shelter_costs
+      rationale: |-
+        7 CFR 273.9 delegates SNAP utility allowance treatment to state-set standards. This Indiana manual page supplies the state criteria for the standard utility allowance options and is the delegated source for the encoded conditions.
+  summary: |-
+    Four Standard Utility Allowances are available. SUA 1 is the heating/cooling allowance and requires a recurring primary heating or cooling expense, qualifying LIHEAP or similar energy assistance, seasonal continuation, room air conditioning, specified landlord billing, or public housing excess heating/cooling charges. SUA 2 is the non-heating/cooling allowance and requires billing for at least two included expenses. A Single SUA may be used for a utility expense other than heating/cooling or telephone. The Telephone Standard is allowed for AGs that incur only a telephone expense and do not have a heating or cooling expense. There is never a prorating of utility expenses when an ineligible or disqualified member pays part or all of the AG utility cost.
+rules:
+  - name: indiana_snap_sua1_energy_assistance_payment_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Year
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, SUA 1 LIHEAP/EAP qualification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+              excerpt: greater than $20 annually
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          20
+
+  - name: indiana_snap_sua2_minimum_billed_expense_count
+    kind: parameter
+    dtype: Count
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, SUA 2 qualification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+              excerpt: billed for at least two of the expenses included in the SUA 2
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          2
+
+  - name: snap_heating_cooling_standard_utility_allowance_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, SUA 1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+              excerpt: greater than $20 annually
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          recurring_primary_heating_or_cooling_expense
+          or seasonal_heating_or_cooling_expense_obligation_ended_solely_because_seasonal_need_ended
+          or room_air_conditioner_in_ag
+          or private_rental_housing_billed_by_landlord_for_individual_usage_or_flat_rate_heating_or_cooling
+          or public_housing_unit_charged_only_for_excess_heating_or_cooling_costs
+          or (energy_assistance_payment_received_in_current_or_immediately_preceding_liheap_lookback_period and energy_assistance_payment_annual_amount > indiana_snap_sua1_energy_assistance_payment_threshold)
+
+  - name: snap_non_heating_cooling_standard_utility_allowance_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, SUA 2
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+              excerpt: billed for at least two of the expenses included in the SUA 2
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          sua2_included_expense_billed_count >= indiana_snap_sua2_minimum_billed_expense_count
+
+  - name: snap_single_standard_utility_allowance_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, Single SUA
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          utility_expense_other_than_heating_cooling_or_telephone
+          and not snap_heating_cooling_standard_utility_allowance_allowed
+          and not snap_non_heating_cooling_standard_utility_allowance_allowed
+
+  - name: snap_telephone_standard_utility_allowance_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, Telephone Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          assistance_group_incurs_only_telephone_expense
+          and not assistance_group_has_heating_or_cooling_expense
+
+  - name: snap_any_standard_utility_allowance_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, four SUA options
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          snap_heating_cooling_standard_utility_allowance_allowed
+          or snap_non_heating_cooling_standard_utility_allowance_allowed
+          or snap_single_standard_utility_allowance_allowed
+          or snap_telephone_standard_utility_allowance_allowed
+
+  - name: snap_entire_applicable_utility_standard_allowed_without_proration
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348, no prorating
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-in/manual/dfr/snap-tanf-program-policy-manual/page-348
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          snap_any_standard_utility_allowance_allowed
+          and ssn_ineligible_ineligible_alien_or_disqualified_member_pays_part_or_all_utility_cost_for_ag
+
+  - name: indiana_snap_utility_allowance_delegation_implementation
+    kind: source_relation
+    source: Indiana DFR SNAP/TANF Program Policy Manual page 348; 7 CFR 273.9(d)(6)(iii)
+    source_relation:
+      type: implements
+      target: us:regulations/7-cfr/273/9#snap_utility_allowance_for_shelter_costs
+      value: us-in:policies/dfr/snap-tanf-program-policy-manual/page-348#snap_any_standard_utility_allowance_allowed
+      basis:
+        delegation: us:regulations/7-cfr/273/9#snap_state_standard_utility_allowance_delegation
