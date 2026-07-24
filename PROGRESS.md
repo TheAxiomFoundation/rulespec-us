@@ -5,8 +5,8 @@
 - Branch: `fed-parity/aca-ptc`
 - Starting head: `cf5ae8bfcb4ba218fdc9cf6bdbc0be9e21aca7ae`
 - Base: `origin/main` at `eaad4c3079192e20c06a199e5fd0e1a5a485a80b`
-- Phase: source edits, companion cases, and generated metadata sync complete;
-  canonical gate battery next.
+- Phase: implementation and canonical gate battery complete; reports and
+  standard campaign closeout next.
 - Signing: reserved for the main lane; this lane will only run the required dry run.
 
 ## Done
@@ -59,11 +59,33 @@
   `rulespec-us` checkout. The exact current oracle surface adds the private ACA
   guard parameter and drains 27 now-mapped declarations, producing 2,304
   pending declarations.
+- Recreated the canonical snapshot at `ec5149f12bcc`, then confirmed validation
+  passes, proof validation checks all 37 atoms, and the ACA companion passes all
+  11 cases.
+- The repository money-atom gate passes across 4,455 files and 52 roots: 118 of
+  2,846 obligations remain missing, within the ratcheted allowance of 151.
+- The pending-ledger rerun is unchanged and its check passes at 2,304 applied
+  declarations with zero stale entries.
+- The signing dry run selects exactly one manifest group covering
+  `ptc_pipeline.yaml` and `ptc_pipeline.test.yaml`; actual signing remains the
+  main lane's job.
+- Repository pytest reports 58 passed, one warning, and one expected failure:
+  the ACA module's intentionally stale signed-manifest hash.
+- The full companion sweep covers 16,525 cases. Its four failures are the same
+  unrelated 26 U.S.C. 32 failures reproduced at the PR base, where the sweep
+  covers 16,514 cases.
+- Program artifacts pass at 33/33 with the pinned composer and engine.
+- The existing six-case ACA PolicyEngine comparison remains 6/6. It does not
+  include the new 210%-FPL case; a direct pinned probe shows PolicyEngine uses
+  the unrounded rate and returns approximately `$5,209.9668`, so it diverges
+  from the deliberate fail-closed zero until the regulation is ingested.
+- Exact pending-ledger delta from base to this head is 2,300 to 2,304:
+  17 ACA additions, 13 now-mapped SNAP removals, net `+4`.
 
 ## Next
 
-1. Commit the synchronized pending ledger.
-2. Recreate the canonical snapshot at that commit, then run the signing dry run
-   and full gate battery.
-3. Write the corrected PR-body Gates paragraph and final DONE report with
-   exact counts, ledger delta, and local commit SHAs.
+1. Commit this completed gate record.
+2. Remove this session ledger in the standard campaign closeout because root
+   `PROGRESS.md` is not an admitted repository artifact.
+3. Recheck the final committed head, then write and commit the corrected
+   PR-body Gates paragraph and final DONE report with exact local SHAs.
