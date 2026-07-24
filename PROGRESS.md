@@ -54,11 +54,13 @@
   missing money atoms. Direct validation from this worktree hit the known
   noncanonical-basename import-resolution limitation; the same gate remains
   queued in a committed canonical-basename clone.
+- Added the two-positive-earner SECA case proving independent per-person wage
+  coordination and OASDI caps before TaxUnit aggregation; all 12 current SECA
+  companions pass.
 
 ## Next
 
-- Add the exact section 1402(b) floor and two-positive-earner SECA companion
-  cases.
+- Add the exact section 1402(b) post-adjustment $400 floor companion case.
 - Run the full gate battery and signing dry-run.
 - Produce `scratchpad/fix-1003-BODY.md` and `scratchpad/fix-1003-DONE.md` with
   exact counts, ledger delta, gate results, and commit SHAs.
