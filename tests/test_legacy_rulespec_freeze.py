@@ -113,7 +113,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
 
     assert "legacy-rulespec-freeze:" in workflow
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
-    assert "19673fb6314ce511bbde59b9a9451cbc18c8c201" in workflow
+    assert "862f56d18ffb9d56d6f327e718ce1a8c5ba1010d" in workflow
     assert (
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
