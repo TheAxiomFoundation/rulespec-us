@@ -1,0 +1,592 @@
+name: Hard-cut waiver fingerprint census
+
+on:
+  pull_request:
+    branches:
+      - hard-cut/canonical-layout-us
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hard-cut-waiver-fingerprint-census
+  cancel-in-progress: false
+
+env:
+  AXIOM_ENCODE_REF: caebbda1a190181ef8184ed7aaffedb3789202a3
+  AXIOM_RULES_ENGINE_REF: 05eac9d2f89dabe5c6673176260762cef3a58f47
+  AXIOM_CORPUS_REF: 0fd35bfbda98836c406ec539a492c4e661c6695d
+  CORPUS_RELEASE: us-rulespec-2026-07-24-snap-cms-pit-union
+  CORPUS_RELEASE_SHA256: cb275c76c4f07f8ad37470a32296bb1763e5db853d152697524ab07021b6d544
+  RULESPEC_EVIDENCE_REF: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      chunks: ${{ steps.matrix.outputs.chunks }}
+      module_count: ${{ steps.matrix.outputs.module_count }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Build active-waiver matrix
+        id: matrix
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RULESPEC_EVIDENCE_REF"
+          mapfile -t changed < <(
+            git diff --name-only "$PR_BASE_SHA" "$RULESPEC_EVIDENCE_REF"
+          )
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = ".github/workflows/waiver-fingerprint-census.yml"
+          test "$(git show "$PR_BASE_SHA:known-validation-gaps.yaml" | sha256sum | cut -d ' ' -f 1)" = \
+            "$(sha256sum known-validation-gaps.yaml | cut -d ' ' -f 1)"
+          python -m pip install --quiet pyyaml
+          python - <<'PY' > "$RUNNER_TEMP/active-waiver-paths.txt"
+          from pathlib import Path
+
+          import yaml
+
+          payload = yaml.safe_load(Path("known-validation-gaps.yaml").read_text())
+          failures = payload["validate_failures"]
+          paths = sorted(
+              path
+              for path, states in failures.items()
+              if isinstance(states, dict) and "active" in states
+          )
+          if len(paths) != 1468:
+              raise SystemExit(f"expected 1468 active waivers, found {len(paths)}")
+          print("\n".join(paths))
+          PY
+          python - "$RUNNER_TEMP/active-waiver-paths.txt" <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import sys
+          from pathlib import Path
+
+          count = len(Path(sys.argv[1]).read_text().splitlines())
+          chunks = [f"{index:03d}" for index in range((count + 29) // 30)]
+          print("chunks=" + json.dumps(chunks, separators=(",", ":")))
+          print(f"module_count={count}")
+          PY
+
+  fingerprint:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        chunk: ${{ fromJSON(needs.matrix.outputs.chunks) }}
+    steps:
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ env.AXIOM_ENCODE_REF }}
+          path: _axiom/axiom-encode
+          persist-credentials: false
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          ref: ${{ env.AXIOM_RULES_ENGINE_REF }}
+          path: _axiom/axiom-rules-engine
+          persist-credentials: false
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: ${{ env.AXIOM_CORPUS_REF }}
+          path: _axiom/axiom-corpus
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.1
+          cache: false
+
+      - name: Install protected encoder
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml
+          python -m pip install --target "$RUNNER_TEMP/axiom-verification-site-packages" \
+            ./_axiom/axiom-encode
+
+      - name: Fetch signed corpus release
+        env:
+          SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          destination="_axiom/axiom-corpus/releases/$CORPUS_RELEASE/$CORPUS_RELEASE_SHA256.json"
+          mkdir -p "$(dirname "$destination")"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$destination.response" \
+            "https://swocpijqqahhuwtuahwc.supabase.co/rest/v1/release_objects?select=release_object&release_name=eq.$CORPUS_RELEASE&content_sha256=eq.$CORPUS_RELEASE_SHA256&limit=2"
+          python - "$destination.response" "$destination" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          response, destination = map(Path, sys.argv[1:])
+          rows = json.loads(response.read_bytes())
+          if not isinstance(rows, list) or len(rows) != 1:
+              raise SystemExit("expected exactly one signed release object")
+          destination.write_text(
+              json.dumps(rows[0]["release_object"], indent=2, sort_keys=True) + "\n"
+          )
+          response.unlink()
+          PY
+
+      - name: Authenticate signed release provenance
+        run: |
+          set -euo pipefail
+          object="_axiom/axiom-corpus/releases/$CORPUS_RELEASE/$CORPUS_RELEASE_SHA256.json"
+          release_commit="$(
+            python - "$object" <<'PY'
+          import json
+          import sys
+
+          print(json.load(open(sys.argv[1]))["content"]["git"]["commit"])
+          PY
+          )"
+          [[ "$release_commit" =~ ^[0-9a-f]{40}$ ]]
+          git -C _axiom/axiom-corpus fetch --no-tags origin \
+            refs/heads/main:refs/remotes/origin/main
+          git -C _axiom/axiom-corpus merge-base --is-ancestor \
+            "$release_commit" "$AXIOM_CORPUS_REF"
+          git -C _axiom/axiom-corpus merge-base --is-ancestor \
+            "$release_commit" refs/remotes/origin/main
+
+      - name: Provision verification supervisor
+        working-directory: _axiom/axiom-encode
+        env:
+          TRUST_APPLY_ROOT: ${{ vars.AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY }}
+          TRUST_EVAL_ROOT: ${{ vars.AXIOM_ENCODE_EVAL_SIGNING_PUBLIC_KEY }}
+          TRUST_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+          TRUST_RETIRED_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_RETIRED_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TRUST_APPLY_ROOT"
+          test -n "$TRUST_EVAL_ROOT"
+          test -n "$TRUST_CORPUS_RELEASE_ROOT"
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \
+            -o "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            ./cmd/axiom-encode-signing-supervisor
+          sudo rm -rf /opt/axiom-verification
+          sudo "$(command -v python)" scripts/provision_verification_supervisor.py \
+            --destination /opt/axiom-verification \
+            --supervisor "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            --site-packages "$RUNNER_TEMP/axiom-verification-site-packages" \
+            --apply-root "$TRUST_APPLY_ROOT" \
+            --eval-root "$TRUST_EVAL_ROOT" \
+            --corpus-release-root "$TRUST_CORPUS_RELEASE_ROOT" \
+            --retired-corpus-release-root "$TRUST_RETIRED_CORPUS_RELEASE_ROOT" \
+            --git "$(command -v git)"
+          sudo chown -R 0:0 /opt/axiom-verification
+          sudo chmod -R go-w /opt/axiom-verification
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
+
+      - name: Build rules engine
+        working-directory: _axiom/axiom-rules-engine
+        run: cargo build --locked
+
+      - name: Fingerprint active waiver chunk
+        env:
+          CHUNK: ${{ matrix.chunk }}
+        run: |
+          set -euo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/active-waiver-paths.txt"
+          from pathlib import Path
+
+          import yaml
+
+          payload = yaml.safe_load(Path("known-validation-gaps.yaml").read_text())
+          print("\n".join(sorted(
+              path
+              for path, states in payload["validate_failures"].items()
+              if isinstance(states, dict) and "active" in states
+          )))
+          PY
+          start=$((10#$CHUNK * 30 + 1))
+          end=$((start + 29))
+          mapfile -t modules < <(
+            sed -n "${start},${end}p" "$RUNNER_TEMP/active-waiver-paths.txt"
+          )
+          test "${#modules[@]}" -gt 0
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+            --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+            --trusted-python-runtime-root /opt/axiom-verification/python \
+            --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+            --trusted-python-package-root /opt/axiom-verification/python/lib/python3.13/site-packages/axiom_encode \
+            -- /opt/axiom-verification/axiom-encode \
+            validation-waivers fingerprint \
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+            --root "$GITHUB_WORKSPACE" \
+            --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
+            --json "${modules[@]}" > "waiver-census-chunk-${CHUNK}.json"
+
+      - name: Upload chunk
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: waiver-census-chunk-${{ matrix.chunk }}
+          path: waiver-census-chunk-${{ matrix.chunk }}.json
+          if-no-files-found: error
+
+  aggregate:
+    needs: [matrix, fingerprint]
+    runs-on: ubuntu-latest
+    outputs:
+      discrepancy_count: ${{ steps.aggregate.outputs.discrepancy_count }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: waiver-census-chunk-*
+          path: waiver-census-chunks
+          merge-multiple: true
+
+      - name: Aggregate parallel census
+        id: aggregate
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          ledger = yaml.safe_load(Path("known-validation-gaps.yaml").read_text())
+          active = {
+              path: states["active"]["fingerprint"]
+              for path, states in ledger["validate_failures"].items()
+              if isinstance(states, dict) and "active" in states
+          }
+          actual = {}
+          files = sorted(Path("waiver-census-chunks").glob("*.json"))
+          for path in files:
+              payload = json.loads(path.read_text())
+              if payload.get("success") is not True:
+                  raise SystemExit(f"unsuccessful fingerprint artifact: {path}")
+              for row in payload["modules"]:
+                  module = row["path"]
+                  if module in actual:
+                      raise SystemExit(f"duplicate module result: {module}")
+                  actual[module] = row
+          if set(actual) != set(active):
+              missing = sorted(set(active) - set(actual))
+              extra = sorted(set(actual) - set(active))
+              raise SystemExit(f"census coverage mismatch: missing={missing}, extra={extra}")
+          discrepancies = []
+          for module in sorted(active):
+              row = actual[module]
+              expected = active[module]
+              if row["passed"] or row["fingerprint"] != expected:
+                  discrepancies.append({
+                      "path": module,
+                      "expected_fingerprint": expected,
+                      "parallel": row,
+                  })
+          output = {
+              "schema_version": 1,
+              "evidence_type": "rulespec-waiver-parallel-census/v1",
+              "rulespec_ref": os.environ["RULESPEC_EVIDENCE_REF"],
+              "axiom_encode_ref": os.environ["AXIOM_ENCODE_REF"],
+              "axiom_rules_engine_ref": os.environ["AXIOM_RULES_ENGINE_REF"],
+              "axiom_corpus_ref": os.environ["AXIOM_CORPUS_REF"],
+              "active_count": len(active),
+              "discrepancy_count": len(discrepancies),
+              "discrepancies": discrepancies,
+          }
+          Path("waiver-census-parallel.json").write_text(
+              json.dumps(output, indent=2, sort_keys=True) + "\n"
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              print(f"discrepancy_count={len(discrepancies)}", file=stream)
+          print(
+              f"Parallel census: {len(active)} active waivers, "
+              f"{len(discrepancies)} discrepancies."
+          )
+          PY
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: waiver-census-parallel
+          path: waiver-census-parallel.json
+          if-no-files-found: error
+
+  isolate:
+    needs: aggregate
+    if: ${{ needs.aggregate.outputs.discrepancy_count != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: waiver-census-parallel
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ env.AXIOM_ENCODE_REF }}
+          path: _axiom/axiom-encode
+          persist-credentials: false
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          ref: ${{ env.AXIOM_RULES_ENGINE_REF }}
+          path: _axiom/axiom-rules-engine
+          persist-credentials: false
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: ${{ env.AXIOM_CORPUS_REF }}
+          path: _axiom/axiom-corpus
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.1
+          cache: false
+
+      - name: Install protected encoder
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml
+          python -m pip install --target "$RUNNER_TEMP/axiom-verification-site-packages" \
+            ./_axiom/axiom-encode
+
+      - name: Fetch signed corpus release
+        env:
+          SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          destination="_axiom/axiom-corpus/releases/$CORPUS_RELEASE/$CORPUS_RELEASE_SHA256.json"
+          mkdir -p "$(dirname "$destination")"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$destination.response" \
+            "https://swocpijqqahhuwtuahwc.supabase.co/rest/v1/release_objects?select=release_object&release_name=eq.$CORPUS_RELEASE&content_sha256=eq.$CORPUS_RELEASE_SHA256&limit=2"
+          python - "$destination.response" "$destination" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          response, destination = map(Path, sys.argv[1:])
+          rows = json.loads(response.read_bytes())
+          if not isinstance(rows, list) or len(rows) != 1:
+              raise SystemExit("expected exactly one signed release object")
+          destination.write_text(
+              json.dumps(rows[0]["release_object"], indent=2, sort_keys=True) + "\n"
+          )
+          response.unlink()
+          PY
+
+      - name: Authenticate signed release provenance
+        run: |
+          set -euo pipefail
+          object="_axiom/axiom-corpus/releases/$CORPUS_RELEASE/$CORPUS_RELEASE_SHA256.json"
+          release_commit="$(
+            python - "$object" <<'PY'
+          import json
+          import sys
+
+          print(json.load(open(sys.argv[1]))["content"]["git"]["commit"])
+          PY
+          )"
+          [[ "$release_commit" =~ ^[0-9a-f]{40}$ ]]
+          git -C _axiom/axiom-corpus fetch --no-tags origin \
+            refs/heads/main:refs/remotes/origin/main
+          git -C _axiom/axiom-corpus merge-base --is-ancestor \
+            "$release_commit" "$AXIOM_CORPUS_REF"
+          git -C _axiom/axiom-corpus merge-base --is-ancestor \
+            "$release_commit" refs/remotes/origin/main
+
+      - name: Provision verification supervisor
+        working-directory: _axiom/axiom-encode
+        env:
+          TRUST_APPLY_ROOT: ${{ vars.AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY }}
+          TRUST_EVAL_ROOT: ${{ vars.AXIOM_ENCODE_EVAL_SIGNING_PUBLIC_KEY }}
+          TRUST_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+          TRUST_RETIRED_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_RETIRED_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TRUST_APPLY_ROOT"
+          test -n "$TRUST_EVAL_ROOT"
+          test -n "$TRUST_CORPUS_RELEASE_ROOT"
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \
+            -o "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            ./cmd/axiom-encode-signing-supervisor
+          sudo rm -rf /opt/axiom-verification
+          sudo "$(command -v python)" scripts/provision_verification_supervisor.py \
+            --destination /opt/axiom-verification \
+            --supervisor "$RUNNER_TEMP/axiom-encode-signing-supervisor" \
+            --site-packages "$RUNNER_TEMP/axiom-verification-site-packages" \
+            --apply-root "$TRUST_APPLY_ROOT" \
+            --eval-root "$TRUST_EVAL_ROOT" \
+            --corpus-release-root "$TRUST_CORPUS_RELEASE_ROOT" \
+            --retired-corpus-release-root "$TRUST_RETIRED_CORPUS_RELEASE_ROOT" \
+            --git "$(command -v git)"
+          sudo chown -R 0:0 /opt/axiom-verification
+          sudo chmod -R go-w /opt/axiom-verification
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
+
+      - name: Build rules engine
+        working-directory: _axiom/axiom-rules-engine
+        run: cargo build --locked
+
+      - name: Isolate every discrepancy
+        run: |
+          set -euo pipefail
+          jq -r '.discrepancies[].path' waiver-census-parallel.json \
+            > "$RUNNER_TEMP/discrepancy-paths.txt"
+          : > "$RUNNER_TEMP/isolated.jsonl"
+          while IFS= read -r module; do
+            /opt/axiom-verification/axiom-encode-signing-supervisor \
+              --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+              --trusted-python-runtime-root /opt/axiom-verification/python \
+              --trusted-python-import-root /opt/axiom-verification/python/lib/python3.13/site-packages \
+              --trusted-python-package-root /opt/axiom-verification/python/lib/python3.13/site-packages/axiom_encode \
+              -- /opt/axiom-verification/axiom-encode \
+              validation-waivers fingerprint \
+              --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+              --root "$GITHUB_WORKSPACE" \
+              --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
+              --json "$module" > "$RUNNER_TEMP/isolated-one.json"
+            jq -c '.modules[0]' "$RUNNER_TEMP/isolated-one.json" \
+              >> "$RUNNER_TEMP/isolated.jsonl"
+          done < "$RUNNER_TEMP/discrepancy-paths.txt"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          parallel = json.loads(Path("waiver-census-parallel.json").read_text())
+          isolated = {
+              row["path"]: row
+              for row in (
+                  json.loads(line)
+                  for line in Path(
+                      os.environ["RUNNER_TEMP"], "isolated.jsonl"
+                  ).read_text().splitlines()
+              )
+          }
+          expected_paths = {
+              row["path"] for row in parallel["discrepancies"]
+          }
+          if set(isolated) != expected_paths:
+              raise SystemExit("isolated census coverage mismatch")
+          ledger = yaml.safe_load(Path("known-validation-gaps.yaml").read_text())
+          active = {
+              path: states["active"]["fingerprint"]
+              for path, states in ledger["validate_failures"].items()
+              if isinstance(states, dict) and "active" in states
+          }
+          reconciliation = []
+          for module in sorted(isolated):
+              row = isolated[module]
+              expected = active[module]
+              if row["passed"]:
+                  action = "remove_stale_active"
+              elif row["fingerprint"] != expected:
+                  action = "approve_replacement_fingerprint"
+              else:
+                  action = "parallel_false_positive"
+              reconciliation.append({
+                  "path": module,
+                  "action": action,
+                  "expected_fingerprint": expected,
+                  "isolated": row,
+              })
+          output = {
+              "schema_version": 1,
+              "evidence_type": "rulespec-waiver-isolated-census/v1",
+              "rulespec_ref": parallel["rulespec_ref"],
+              "axiom_encode_ref": parallel["axiom_encode_ref"],
+              "axiom_rules_engine_ref": parallel["axiom_rules_engine_ref"],
+              "axiom_corpus_ref": parallel["axiom_corpus_ref"],
+              "parallel_discrepancy_count": len(expected_paths),
+              "isolated_reconciliation_count": len(reconciliation),
+              "reconciliation": reconciliation,
+          }
+          Path("waiver-census-isolated.json").write_text(
+              json.dumps(output, indent=2, sort_keys=True) + "\n"
+          )
+          counts = {}
+          for row in reconciliation:
+              counts[row["action"]] = counts.get(row["action"], 0) + 1
+          print("Isolated reconciliation:", json.dumps(counts, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: waiver-census-isolated
+          path: waiver-census-isolated.json
+          if-no-files-found: error
