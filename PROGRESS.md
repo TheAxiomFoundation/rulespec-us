@@ -53,8 +53,10 @@
   workflows are green.
 - Wrote `round3-1003-VERDICT.md` with the residual, body, focused-gate,
   exact-head CI, and round-2-only diff conclusions.
+- Copied the committed verdict to the requested scratchpad output and
+  verified byte identity, the required first line, and SHA-256
+  `8269382405a4af9e4dd7bd52b08dcf82e775130dca3f9bec95ace20efd049dbd`.
 
 ## Next
 
-- Copy the committed verdict to the requested scratchpad output, verify it,
-  and remove the throwaway worktree.
+- Remove this throwaway worktree. No product, PR, or remote changes remain.
