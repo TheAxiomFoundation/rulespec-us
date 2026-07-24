@@ -27,10 +27,20 @@
 - Attempted the GitNexus debugging workflow. Its analyzer could not register
   inside the sandbox and indexed unrelated content, so the generated untracked
   index was removed and source inspection is being used instead.
+- Added `niit_verified_domain_applies`, which requires zero qualified-plan and
+  section-1401(b) inputs, zero imported section-911 adjustment amounts, a
+  disjoint post-classification category attestation, and a zero separate
+  working-capital slot.
+- Gated the public NIIT Money output to return zero whenever that Judgment is
+  `not_holds`.
+- Declared three deferred unrestricted NIIT surfaces tied to the rulespec-us
+  upstream issues referenced in the PR body.
+- Added six isolated NIIT fail-closed cases; all 15 NIIT companions pass.
+- Pinned NIIT validation passes: schema/CI, 10 proof atoms, and zero missing
+  money atoms.
 
 ## Next
 
-- Add fail-closed NIIT domain guards and companion cases.
 - Add the section 1401(c) boundary gate and companion case.
 - Repair the locally authored section 1401 coordination proof citation.
 - Add the requested boundary and joint-earner companion cases.
