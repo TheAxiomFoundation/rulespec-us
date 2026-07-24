@@ -2,13 +2,13 @@
 
 ## State
 
-In progress on branch `fed-parity/surtaxes`. The ordinary SECA section 1401(c)
-guard and the section 1401(b)(2)(B) wage-coordination provenance adjudication
-are implemented and locally proved. Both floor straddles now exercise the
-imported operative branch directly; downstream hashes and generated metadata
-are reconciled through the oracle ledger; signing manifests and final gates
-remain. No pushes, GitHub writes, PR-body edits, or `us/statutes` edits are in
-scope.
+In progress on branch `fed-parity/surtaxes`. All three adjudicated residuals
+are implemented and pass the pinned focused gate battery. Downstream hashes
+and generated metadata are reconciled through the oracle ledger. The signed
+apply manifests cannot be refreshed in this session because
+`AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent; the remaining non-signing gates,
+repository pytest, and final scratchpad report are in progress. No pushes,
+GitHub writes, PR-body edits, or `us/statutes` edits are in scope.
 
 ## Done
 
@@ -39,8 +39,7 @@ scope.
   provenance.
 - Pinned Additional Medicare proof validation passes all 17 atoms and all 14
   companions pass, so the adjudicated deferred fail-closed fallback is not
-  triggered. Canonical validation currently reports only the expected stale
-  downstream SE module hash, to be refreshed after the floor edit is final.
+  triggered.
 - Removed the non-operative exact-$400 helper, its standalone input/case, and
   its now-unused explicit threshold import.
 - Reworked `seca-floor-below` and `seca-floor-above` as Person cases that assert
@@ -59,8 +58,18 @@ scope.
   `self_employment_tax_pipeline_domain_is_valid`; the ceiling remains `2327`,
   and pinned `oracle-coverage-pending check` reports no problems or stale
   entries.
+- Re-ran the full focused battery from a canonical-basename checkout at the
+  current committed head: 3/3 canonical validations, 46/46 proof atoms
+  (10 NIIT, 19 SECA, 17 Additional Medicare), and 42/42 companions
+  (15 NIIT, 13 SECA, 14 Additional Medicare).
+- Confirmed that the deterministic authoring checks accept the adjudicated
+  section 1401(b)(2)(B) wording, so no deferred fail-closed fallback is needed.
+- Pinned signing dry-run identifies the expected three surtax manifests
+  covering six files. The actual signing key is absent from this session, so
+  no manifest was rewritten or falsely attested.
 
 ## Next
 
-1. Refresh/check protected generated artifacts, run focused gates and full
-   repository pytest, and write `scratchpad/fix2-1003-DONE.md`.
+1. Run the remaining non-signing repository gates and full pytest.
+2. Write `scratchpad/fix2-1003-DONE.md` with the exact signing boundary and
+   gate results.
