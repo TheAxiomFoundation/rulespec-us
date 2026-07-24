@@ -2,7 +2,7 @@
 
 ## State
 
-- Review in progress; statutory values/windows are correct under the pinned
+- Review complete; statutory values/windows are correct under the pinned
   toolchain, but a blocking filing-status boundary defect is confirmed.
 - Live GitHub reports the PR mergeable but 27 commits behind `main`; its
   successful workflows were run against the original base.
@@ -46,10 +46,11 @@
   reverse-index, companion, proofs, oracle coverage, and program artifacts; those
   runs used synthetic merge base `ba8c2a0`, while live `main` is now `d5dcc6b3`
   and GitHub's final mergeability calculation reports `mergeable: true`.
+- Wrote and committed `scratchpad/review-1009-VERDICT.md` with first-line verdict
+  `VERDICT: REQUEST-CHANGES`, then copied the byte-identical report to the
+  required external scratchpad output path.
 
 ## Next
 
-- Write `scratchpad/review-1009-VERDICT.md` with `REQUEST-CHANGES` first and the
-  hand-recomputation/local-gate tables.
-- Reconfirm live PR state one final time, finalize/commit this ledger, and remove
-  the throwaway review and GitNexus worktrees.
+- Remove the throwaway review and GitNexus worktrees after this final progress
+  commit. No review work remains.
