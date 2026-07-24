@@ -5,11 +5,13 @@ module:
   source_verification:
     corpus_citation_paths:
       - us/statute/26/25A
+      - us/statute/26/25A/g/5
       - us/statute/26/26
     upstream_source_check:
       status: checked_higher_authority
       checked_paths:
         - us/statute/26/25A
+        - us/statute/26/25A/g/5
         - us/statute/26/26
       rationale: |-
         Section 25A's executable module derives eligible-person adjusted
@@ -19,7 +21,9 @@ module:
         Opportunity credit, the pre-section-26 potential, and the final
         tax-liability-capped Lifetime Learning credit. Section 26 was checked
         because the encoded final applies available tax after preceding
-        credits.
+        credits. Section 25A(g)(5) was checked because the imported module
+        does not itself subtract expenses for which another chapter 1
+        deduction is allowed.
   summary: |-
     Thin federal Lifetime Learning credit composition under 26 USC 25A(c)
     and (d) for tax year 2026. Qualified-expense, assistance, relationship,
@@ -27,6 +31,11 @@ module:
     coordination facts are supplied for people through the encoded education
     credit relation. Filing status, completed-return MAGI, alien-election
     facts, tax before credits, and preceding credits are TaxUnit boundaries.
+    The pipeline additionally requires a tax-unit attestation that every
+    supplied qualified-tuition amount is already net of expenses for which a
+    deduction is allowed under another chapter 1 provision, as section
+    25A(g)(5) requires. False returns zero; omission leaves the required
+    boundary unevaluable.
 
     The pipeline exposes two imported encoded outputs: the statutory
     Lifetime Learning credit potential before section 26 and the final credit
@@ -61,10 +70,19 @@ rules:
             source:
               corpus_citation_path: us/statute/26/25A
               excerpt: "an amount equal to 20 percent of the qualified tuition and related expenses"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/25A/g/5
+              excerpt: "No credit shall be allowed under this section for any expense for which a deduction is allowed under any other provision of this chapter."
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: lifetime_learning_credit_potential
+        formula: |-
+          if qualified_tuition_and_related_expenses_are_net_of_deduction_allowed_expenses:
+              lifetime_learning_credit_potential
+          else:
+              0
 
   - name: federal_lifetime_learning_credit
     kind: derived
@@ -87,10 +105,19 @@ rules:
             source:
               corpus_citation_path: us/statute/26/25A
               excerpt: "Lifetime Learning Credit"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/25A/g/5
+              excerpt: "No credit shall be allowed under this section for any expense for which a deduction is allowed under any other provision of this chapter."
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: lifetime_learning_credit
+        formula: |-
+          if qualified_tuition_and_related_expenses_are_net_of_deduction_allowed_expenses:
+              lifetime_learning_credit
+          else:
+              0
 
 inputs:
   - name: filing_status
@@ -137,12 +164,17 @@ inputs:
     dtype: Boolean
     period: Year
     description: Whether a qualifying section 6013 resident-alien election is in effect.
+  - name: qualified_tuition_and_related_expenses_are_net_of_deduction_allowed_expenses
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required attestation that every supplied qualified-tuition amount already excludes every expense for which a deduction is allowed under another provision of chapter 1, as required by section 25A(g)(5); false makes both pipeline outputs zero and omission is unevaluable.
   - name: qualified_tuition_and_related_expenses
     entity: Person
     dtype: Money
     period: Year
     unit: USD
-    description: Person's qualified tuition and related expenses before excludable assistance.
+    description: Person's qualified tuition and related expenses before excludable assistance but after excluding every expense for which another chapter 1 deduction is allowed under section 25A(g)(5).
   - name: excludable_educational_assistance
     entity: Person
     dtype: Money
