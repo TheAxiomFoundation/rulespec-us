@@ -2,13 +2,14 @@
 
 ## State
 
-Implementation and every available non-signing gate are complete on branch
-`fed-parity/surtaxes`. All three adjudicated residuals pass the pinned focused
-gate battery, and generated metadata outside the signed apply manifests is
-current. The manifests cannot be refreshed in this session because
-`AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent; consequently `guard-generated` and
-the one manifest-sync pytest fail closed exactly at that credential boundary.
-No pushes, GitHub writes, PR-body edits, or `us/statutes` edits were made.
+Implementation, every available non-signing gate, and the required scratchpad
+report are complete on branch `fed-parity/surtaxes`. All three adjudicated
+residuals pass the pinned focused gate battery, and generated metadata outside
+the signed apply manifests is current. The manifests cannot be refreshed in
+this session because `AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent; consequently
+`guard-generated` and the one manifest-sync pytest fail closed exactly at that
+credential boundary. No pushes, GitHub writes, PR-body edits, or
+`us/statutes` edits were made.
 
 ## Done
 
@@ -83,11 +84,10 @@ No pushes, GitHub writes, PR-body edits, or `us/statutes` edits were made.
   fail-closed manifest-sync failure naming the SECA and Additional Medicare
   main modules. `guard-generated` likewise refuses verification solely because
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent.
+- Wrote the complete handoff to `scratchpad/fix2-1003-DONE.md`.
 
 ## Next
 
-1. Write `scratchpad/fix2-1003-DONE.md` with the exact signing boundary and
-   gate results.
-2. An authorized keyholder signs all three dry-run manifest groups against
+1. An authorized keyholder signs all three dry-run manifest groups against
    `origin/main`, commits them locally, and reruns `guard-generated` plus
    repository pytest. Do not push or edit the PR body.
