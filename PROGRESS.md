@@ -9,6 +9,8 @@
   are available; cached `origin/main` is 18 commits ahead of the PR merge base.
 - Scope is QBID, the elderly/disabled credit, and the Lifetime Learning Credit.
   No `us/statutes` edits are permitted.
+- The saver pipeline is split out; its two source files remain byte-for-byte
+  available in the review scratchpad for the follow-up branch.
 
 ## Done
 
@@ -16,11 +18,13 @@
   adjudicated fix program.
 - Confirmed that the saver pipeline and its companion test are tracked on this
   branch and that the worktree had no pre-existing changes.
+- Preserved `savers_credit_pipeline.yaml` and its companion test with SHA-256
+  hashes `9620a6d0...ea4` and `2f0ef016...329`, then removed both from this
+  branch with `git rm`.
 
 ## Next
 
-1. Preserve the saver pipeline and test verbatim in the review scratchpad, then
-   remove their branch copies and dependent generated artifacts.
+1. Remove saver-dependent generated artifacts during regeneration.
 2. Implement the QBID output guards, local width rule, one-group contract,
    Rev. Proc. threshold import, and fixed 2026 minimum.
 3. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
