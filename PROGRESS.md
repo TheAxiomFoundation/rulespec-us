@@ -2,7 +2,8 @@
 
 ## State
 
-- Active on `fed-parity/surtaxes`.
+- Implementation and dry-run handoff are complete on
+  `fed-parity/surtaxes`; authorized manifest signing remains for the main lane.
 - Scope is limited to the three locally authored federal surtax pipelines,
   companion cases, generated local artifacts, and scratchpad handback files.
 - `us/statutes/**` is read-only for this wave.
@@ -50,10 +51,8 @@
   fullest exact excerpt served at `us/statute/26/1401`, including its
   cross-reference, and documented the corpus record's upstream `source_url`
   metadata defect without editing the corpus or statute module.
-- Pinned Additional Medicare proof validation passes all 17 atoms with zero
-  missing money atoms. Direct validation from this worktree hit the known
-  noncanonical-basename import-resolution limitation; the same gate remains
-  queued in a committed canonical-basename clone.
+- Pinned canonical validation and proof validation pass for Additional
+  Medicare: 17 atoms and zero focused money-atom omissions.
 - Added the two-positive-earner SECA case proving independent per-person wage
   coordination and OASDI caps before TaxUnit aggregation; all 12 current SECA
   companions pass.
@@ -71,9 +70,27 @@
 - The first canonical validation identified the SE pipeline's expected module
   hash change after adding the floor Judgment; updated the Additional Medicare
   sibling import pin to the validator-computed hash.
+- Final canonical focused gates pass: 3/3 validations, 44/44 proof atoms,
+  zero missing across two focused monetary obligations, and 42/42 companion
+  cases (NIIT 15, SECA 13, Additional Medicare 14).
+- Full-repository money proof ratchet passes with 118 missing atoms across
+  2,848 obligations, within the unchanged ceiling of 151.
+- Program Artifacts passes all 33 definitions with pinned compose
+  `fabe0b3b`, engine `ffd82132`, encoder `3869d66d`, and corpus `b157a201`.
+- Source staleness passes for all 43 pinned modules; reverse-index freshness,
+  oracle pending ratchet (2,327 applied / 0 stale), and
+  `git diff --check origin/main...HEAD` pass.
+- Signing dry-run identifies exactly three manifests covering the six surtax
+  policy/companion files and writes nothing, as required.
+- Repository pytest reports 58 passed and one expected failure: the three
+  changed policy files no longer match their old signed manifests.
+  `guard-generated` likewise fails closed without
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY`; both are resolved only by the authorized
+  keyholder executing the dry-run plan.
 
 ## Next
 
-- Run the remaining full gate battery and signing dry-run.
-- Produce `scratchpad/fix-1003-BODY.md` and `scratchpad/fix-1003-DONE.md` with
-  exact counts, ledger delta, gate results, and commit SHAs.
+- Main lane supplies the upstream issue numbers in the PR body and replaces
+  the Gates paragraph with `scratchpad/fix-1003-BODY.md`.
+- Authorized keyholder signs the three dry-run manifest groups, commits the
+  regenerated manifests, and reruns pytest plus `guard-generated`.
