@@ -68,6 +68,9 @@
 - Reconciled the current oracle classifier's exact 2,327-ID set with three new
   Judgment declarations, zero removals, and zero stale entries while preserving
   the ledger's existing serialization.
+- The first canonical validation identified the SE pipeline's expected module
+  hash change after adding the floor Judgment; updated the Additional Medicare
+  sibling import pin to the validator-computed hash.
 
 ## Next
 
