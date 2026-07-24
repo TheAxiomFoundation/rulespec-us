@@ -59,6 +59,7 @@ KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
     ".axiom/encoding-manifests/us/regulations/42-cfr/435/563.json",
     ".axiom/encoding-manifests/us/statutes/42/1396a/xx.json",
     ".axiom/encoding-manifests/us-al/policies/income_tax/2026_resident_liability_source_hold.json",
+    ".axiom/encoding-manifests/us-ar/policies/income_tax/2026_resident_liability_source_hold.json",
     ".axiom/encoding-manifests/us-ar/policies/income_tax/pilot_liability_pipeline.json",
     ".axiom/encoding-manifests/us-az/policies/income_tax/2026_resident_liability_source_hold.json",
     ".axiom/encoding-manifests/us-ca/policies/income_tax/2026_resident_liability_source_hold.json",
