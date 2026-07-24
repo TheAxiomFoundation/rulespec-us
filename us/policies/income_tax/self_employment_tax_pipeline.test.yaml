@@ -1,0 +1,184 @@
+# Hand-computed tax-year-2026 fixtures for ordinary 26 USC 1401(a),
+# 1401(b)(1), and 1402. For every Person:
+#
+#   paragraph-(12) deduction rate = 0.5 * (0.124 + 0.029) = 0.0765
+#   post-paragraph-(12) net earnings N = profit * (1 - 0.0765) = profit * 0.9235
+#   if N < 400, self-employment income is zero
+#   OASDI = 0.124 * min(N, max(0, 184,500 - wages))
+#   hospital insurance = 0.029 * N
+#
+# The $184,500 base is imported from the encoded official SSA 2026
+# contribution-and-benefit-base determination. Expected amounts below are
+# independent decimal arithmetic from those encoded parameters, never
+# PolicyEngine output. Filing status is not an input to these per-person taxes.
+
+- name: seca-person-wiring
+  # Deduction = 50,000 * 0.0765 = 3,825; N = 46,175.
+  # OASDI = 46,175 * 0.124 = 5,725.70; HI = 46,175 * 0.029 = 1,339.075.
+  period: &tax_year_2026
+    period_kind: tax_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    <<: &domestic_person_inputs
+      us:statutes/26/1402/b#input.individual_is_nonresident_alien: false
+      us:statutes/26/1402/b#input.agreement_under_social_security_act_section_233_provides_for_individual: false
+      us:statutes/26/1402/b#input.individual_is_not_united_states_citizen_and_resident_of_puerto_rico_virgin_islands_guam_or_american_samoa: false
+    us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 50000
+    us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#net_earnings_from_self_employment_determined_without_regard_to_paragraph_12: 50000
+    us:policies/income_tax/self_employment_tax_pipeline#net_earnings_from_self_employment: '46175'
+    us:policies/income_tax/self_employment_tax_pipeline#net_earnings_from_self_employment_for_paragraph_2_threshold_test: '46175'
+    us:policies/income_tax/self_employment_tax_pipeline#contribution_and_benefit_base_effective_for_calendar_year_in_which_taxable_year_begins: 184500
+    us:policies/income_tax/self_employment_tax_pipeline#self_employment_tax_pipeline_person_is_included: holds
+    us:statutes/26/1402/b#self_employment_income: '46175'
+    us:statutes/26/1402/b#self_employment_income_for_section_1401_a: '46175'
+    us:statutes/26/1401/a#old_age_survivors_and_disability_insurance_tax: '5725.7'
+    us:statutes/26/1401/b/1#self_employment_income_tax: '1339.075'
+
+- name: seca-under-floor
+  # Profit 400: deduction = 400 * 0.0765 = 30.60; N = 369.40 < 400.
+  # Section 1402(b)(2) therefore makes both components and the total zero.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 400
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output: &zero_tax_outputs
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '0'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '0'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '0'
+
+- name: seca-50k
+  # N = 50,000 * 0.9235 = 46,175.
+  # OASDI = 46,175 * 0.124 = 5,725.70.
+  # HI = 46,175 * 0.029 = 1,339.075; total = 7,064.775.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 50000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income: '46175'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income_for_oasdi: '46175'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '5725.7'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '1339.075'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '7064.775'
+
+- name: seca-120k
+  # N = 120,000 * 0.9235 = 110,820.
+  # OASDI = 110,820 * 0.124 = 13,741.68.
+  # HI = 110,820 * 0.029 = 3,213.78; total = 16,955.46.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 120000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '13741.68'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '3213.78'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '16955.46'
+
+- name: seca-300k
+  # N = 300,000 * 0.9235 = 277,050.
+  # OASDI is capped: 184,500 * 0.124 = 22,878.
+  # HI = 277,050 * 0.029 = 8,034.45; total = 30,912.45.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 300000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '22878'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '8034.45'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '30912.45'
+
+- name: seca-wage-mix
+  # N = 120,000 * 0.9235 = 110,820.
+  # Available OASDI base = 184,500 - 100,000 wages = 84,500.
+  # OASDI = 84,500 * 0.124 = 10,478.
+  # HI = 110,820 * 0.029 = 3,213.78; total = 13,691.78.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 120000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 100000
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '10478'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '3213.78'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '13691.78'
+
+- name: seca-joint-200k
+  # Filing jointly does not combine the spouses' ordinary SE-tax bases.
+  # Earning spouse: N = 200,000 * 0.9235 = 184,700.
+  # OASDI = 184,500 * 0.124 = 22,878; HI = 184,700 * 0.029 = 5,356.30.
+  # Non-earning spouse contributes zero; TaxUnit total = 28,234.30.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 200000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '22878'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '5356.3'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '28234.3'
+
+- name: seca-zero
+  # N = 0 and both imported tax components are zero.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 0
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output: *zero_tax_outputs
+
+- name: seca-floor-below
+  # Profit 433 gives N = 433 * 0.9235 = 399.8755 < 400, so total = 0.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 433
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output: *zero_tax_outputs
+
+- name: seca-floor-above
+  # Profit 434 gives N = 434 * 0.9235 = 400.799.
+  # OASDI = 400.799 * 0.124 = 49.699076.
+  # HI = 400.799 * 0.029 = 11.623171; total = 61.322247.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 434
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 0
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '49.699076'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '11.623171'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '61.322247'
+
+- name: seca-wages-exhaust-oasdi-base
+  # N = 50,000 * 0.9235 = 46,175.
+  # Wages equal the 184,500 base, so OASDI = 0.
+  # HI remains 46,175 * 0.029 = 1,339.075; total = 1,339.075.
+  period: *tax_year_2026
+  input:
+    us:policies/income_tax/self_employment_tax_pipeline#relation.self_employed_individual_of_tax_unit:
+      - <<: *domestic_person_inputs
+        us:policies/income_tax/self_employment_tax_pipeline#input.gross_self_employment_profit: 50000
+        us:statutes/26/1402/b#input.wages_paid_to_individual_during_taxable_year_for_section_1401_a: 184500
+  output:
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_oasdi_tax: '0'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_hospital_insurance_tax: '1339.075'
+    us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_tax: '1339.075'

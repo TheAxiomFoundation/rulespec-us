@@ -1,0 +1,374 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/1401
+      - us/statute/26/1402
+      - us/guidance/ssa/contribution-and-benefit-base/2026/block-1
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us/statute/26/1401
+        - us/statute/26/1402
+        - us/guidance/ssa/contribution-and-benefit-base/2026/block-1
+      rationale: |-
+        Section 1402(a)(12) supplies the imported deduction equivalent to
+        one-half of the ordinary section 1401(a) and (b)(1) tax rates.
+        Section 1402(b) supplies the imported $400 floor, nonresident-alien
+        exclusions, general self-employment-income result, and the
+        contribution-base reduction by wages for section 1401(a). Sections
+        1401(a) and (b)(1) supply the imported OASDI and hospital-insurance
+        taxes. SSA's official 2026 determination supplies the imported
+        $184,500 contribution and benefit base.
+  summary: |-
+    Federal ordinary self-employment-tax composition for tax year 2026. For
+    each related Person, the module accepts completed-return net
+    trade-or-business profit after every applicable section 1402(a)
+    inclusion, exclusion, deduction, and special rule except paragraph (12).
+    This is the GRID-CONTRACT `SE net profit` boundary, despite the runtime
+    input's historical `gross_self_employment_profit` label; it is never gross
+    receipts. The module imports paragraph (12)'s deduction, then imports
+    section 1402(b)'s $400 floor and OASDI contribution-base/wage coordination
+    rather than recreating either mechanism.
+
+    The resulting per-person section 1401(a) OASDI tax and section 1401(b)(1)
+    hospital-insurance tax are imported and aggregated to TaxUnit outputs.
+    Filing status is deliberately not an input: these ordinary components are
+    imposed on each individual's self-employment income. The combined output
+    excludes section 1401(b)(2)'s 0.9-percent additional Medicare tax, which
+    belongs to the separate additional-Medicare composition.
+
+    The executable slice assumes no church-employee subsection 1402(j)(2)
+    special floor rule and no section 1401(c) foreign-exclusive social
+    security coverage. Those mechanisms, full upstream section 1402(a)
+    completed-return construction, and the complete cross-referenced wage
+    definition remain explicit deferred boundaries below.
+  deferred_outputs:
+    - output: us:statutes/26/1402/a#net_earnings_from_self_employment_before_paragraph_12
+      reason: |-
+        The upstream section 1402(a) encoding is status: deferred and does not
+        execute the full trade-or-business, partnership, deduction, exclusion,
+        community-income, and special-rule composition. This module therefore
+        accepts the completed-return amount immediately before paragraph (12)
+        as its principal runtime boundary.
+    - output: us:statutes/26/1402/b#wages_for_paragraph_1
+      reason: |-
+        The encoded section 1402(b) module itself defers the complete wage
+        definition that cross-references sections 3121(a), 3121(l), 3201, and
+        3211. The caller supplies the completed per-person wage amount consumed
+        by that encoded cap formula.
+    - output: us:statutes/26/1402/b#church_employee_income_special_rules_for_paragraph_2
+      reason: |-
+        Section 1402(b)'s final sentence invokes subsection (j)(2) for church
+        employee income, but no executable subsection (j)(2) machinery exists
+        in the surveyed tree. The ordinary-case threshold-test amount below
+        therefore equals post-paragraph-(12) net earnings.
+    - output: us:statutes/26/1401#self_employment_tax_after_international_agreement_exemption
+      reason: |-
+        Section 1401(c) exempts income subject exclusively to a foreign social
+        security system under a section 233 agreement. The cap-aware,
+        Person-level section 1401(a) and (b)(1) submodules do not encode that
+        exemption, while the root section 1401 module is TaxUnit-level and
+        does not consume section 1402(b)'s Person-level capped OASDI result.
+imports:
+  - us:statutes/26/1402/a/12#self_employment_tax_equivalent_deduction
+  - us:statutes/26/1402/b#self_employment_income
+  - us:statutes/26/1402/b#self_employment_income_for_section_1401_a
+  - us:statutes/26/1401/a#old_age_survivors_and_disability_insurance_tax
+  - us:statutes/26/1401/b/1#self_employment_income_tax
+  - us:policies/ssa/contribution-and-benefit-base/2026#contribution_and_benefit_base_under_section_230_of_social_security_act
+rules:
+  - name: self_employed_individual_of_tax_unit
+    kind: data_relation
+    data_relation:
+      predicate: self_employed_individual_of_tax_unit
+      arity: 2
+      arguments:
+        - TaxUnit
+        - Person
+
+  - name: net_earnings_from_self_employment_determined_without_regard_to_paragraph_12
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(a), supplied completed-return net earnings immediately before paragraph (12)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "net earnings from self-employment derived by an individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: gross_self_employment_profit
+
+  - name: net_earnings_from_self_employment
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(a)(12), net earnings after the imported paragraph-(12) deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/a/12#self_employment_tax_equivalent_deduction
+              output: self_employment_tax_equivalent_deduction
+              hash: sha256:c53810dc9af09fce53e6c0b0deef49c0b9d4e32aa3e1fa8912d95bf6c37bb83d
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "there shall be allowed a deduction equal to the product of"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          net_earnings_from_self_employment_determined_without_regard_to_paragraph_12
+          - self_employment_tax_equivalent_deduction
+
+  - name: net_earnings_from_self_employment_for_paragraph_2_threshold_test
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(b)(2), ordinary non-church-employee threshold-test amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "shall not include ... net earnings ... less than $400"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: net_earnings_from_self_employment
+
+  - name: contribution_and_benefit_base_effective_for_calendar_year_in_which_taxable_year_begins
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: SSA contribution and benefit base determination for 2026, imported section 230 base
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/ssa/contribution-and-benefit-base/2026#contribution_and_benefit_base_under_section_230_of_social_security_act
+              output: contribution_and_benefit_base_under_section_230_of_social_security_act
+              hash: sha256:a9c7c7c7806ecb40db5f5f23a28b30eac79964e8a2fd3c4870692d78cdd27664
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: contribution_and_benefit_base_under_section_230_of_social_security_act
+
+  - name: self_employment_tax_pipeline_person_is_included
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 1402(b), include Persons not excluded from the statutory definition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/b#individual_excluded_from_self_employment_income_definition
+              output: individual_excluded_from_self_employment_income_definition
+              hash: sha256:c896119f414593d2f209bf70870628d7c8bf2b2c3f5e63c1e981c770aadbe546
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: not individual_excluded_from_self_employment_income_definition
+
+  - name: federal_self_employment_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(b), sum of imported per-person self-employment income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/b#self_employment_income
+              output: self_employment_income
+              hash: sha256:c896119f414593d2f209bf70870628d7c8bf2b2c3f5e63c1e981c770aadbe546
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "means the net earnings from self-employment derived by an individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          sum_where(
+            self_employed_individual_of_tax_unit,
+            self_employment_income,
+            self_employment_tax_pipeline_person_is_included
+          )
+
+  - name: federal_self_employment_income_for_oasdi
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1402(b)(1), sum of imported wage-coordinated per-person OASDI bases
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1402/b#self_employment_income_for_section_1401_a
+              output: self_employment_income_for_section_1401_a
+              hash: sha256:c896119f414593d2f209bf70870628d7c8bf2b2c3f5e63c1e981c770aadbe546
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1402
+              excerpt: "contribution and benefit base ... minus ... the amount of the wages paid to such individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          sum_where(
+            self_employed_individual_of_tax_unit,
+            self_employment_income_for_section_1401_a,
+            self_employment_tax_pipeline_person_is_included
+          )
+
+  - name: federal_self_employment_oasdi_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(a), sum of imported per-person OASDI taxes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1401/a#old_age_survivors_and_disability_insurance_tax
+              output: old_age_survivors_and_disability_insurance_tax
+              hash: sha256:2f843acca9f5c052af42da3d01133225b4a46f06838d96b297228fa8769d87a1
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "on the self-employment income of every individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          sum_where(
+            self_employed_individual_of_tax_unit,
+            old_age_survivors_and_disability_insurance_tax,
+            self_employment_tax_pipeline_person_is_included
+          )
+
+  - name: federal_self_employment_hospital_insurance_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(b)(1), sum of imported per-person hospital-insurance taxes
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1401/b/1#self_employment_income_tax
+              output: self_employment_income_tax
+              hash: sha256:f944f4e1891bb22ba413facb01af011b93631782577909064b3f329990868e55
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "a tax equal to 2.9 percent of the amount of the self-employment income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          sum_where(
+            self_employed_individual_of_tax_unit,
+            self_employment_income_tax,
+            self_employment_tax_pipeline_person_is_included
+          )
+
+  - name: federal_self_employment_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1401(a) and (b)(1), ordinary self-employment tax excluding subsection (b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "In addition to the tax imposed by the preceding subsection"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          federal_self_employment_oasdi_tax
+          + federal_self_employment_hospital_insurance_tax
+
+inputs:
+  - name: gross_self_employment_profit
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return section 1402(a) net trade-or-business profit before paragraph (12), matching the GRID-CONTRACT SE-net-profit boundary and never gross receipts.
+  - name: wages_paid_to_individual_during_taxable_year_for_section_1401_a
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed per-person section 1402(b)(1) wage amount used to reduce the OASDI contribution base.
+  - name: individual_is_nonresident_alien
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Section 1402(b) nonresident-alien fact.
+  - name: agreement_under_social_security_act_section_233_provides_for_individual
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Section 1402(b) section-233 agreement fact relevant to the nonresident-alien exclusion.
+  - name: individual_is_not_united_states_citizen_and_resident_of_puerto_rico_virgin_islands_guam_or_american_samoa
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Section 1402(b) statutory territory-resident exception fact.
