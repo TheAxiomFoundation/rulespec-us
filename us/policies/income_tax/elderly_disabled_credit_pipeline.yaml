@@ -16,17 +16,25 @@ module:
         the $5,000/$7,500/$3,750 initial amounts, the disability-income bound,
         the nontaxable-benefit reduction, the one-half AGI-excess reduction,
         filing and nonresident-alien gates, and the final 15-percent credit.
-        Section 104(a)(4) was checked because section 22(c)(3) subtracts
-        qualifying service-injury pensions from the benefit reduction.
+        Section 104(a)(4) was checked because section 22(c)(3)(A) limits its
+        no-reduction exception to clause (i)(III). The imported module
+        subtracts related payments from the combined benefit reduction, so
+        this pipeline publishes a result only when that payment relation is
+        empty.
   summary: |-
     Thin federal credit for the elderly and permanently and totally disabled
     composition under 26 USC 22 for tax year 2026. The caller supplies
     completed-return AGI, filing and residency facts, excluded-benefit totals,
-    taxpayer/spouse person facts, and any section 104(a)(4) payment facts
-    consumed by the encoded module's two relations. This composition imports
-    and exposes the encoded final `elderly_disabled_credit`; it does not
-    reconstruct qualification, initial amounts, reductions, or the
-    15-percent rate.
+    and taxpayer/spouse person facts consumed by the encoded module's
+    relations. This composition imports the encoded final
+    `elderly_disabled_credit`; it does not reconstruct qualification, initial
+    amounts, reductions, or the 15-percent rate.
+
+    The section 104(a)(4) exception applies only to the veterans-benefit
+    bucket in section 22(c)(3)(A)(i)(III), while the imported module applies
+    related payments against its combined benefit reduction. Pending an
+    upstream bucket-specific correction, this pipeline therefore fails closed
+    to zero whenever `section_22_payment_of_tax_unit` is nonempty.
 
     The companion verifies both aged and under-65 disability branches. The
     joint case with only one qualified spouse uses the encoded and statutory
@@ -56,10 +64,19 @@ rules:
             source:
               corpus_citation_path: us/statute/26/22
               excerpt: "an amount equal to 15 percent of such individual’s section 22 amount"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/22
+              excerpt: "No reduction shall be made under clause (i)(III) for any amount described in section 104(a)(4)."
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: elderly_disabled_credit
+        formula: |-
+          if len(section_22_payment_of_tax_unit) == 0:
+              elderly_disabled_credit
+          else:
+              0
 
 inputs:
   - name: filing_status

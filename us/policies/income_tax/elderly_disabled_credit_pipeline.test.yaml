@@ -6,8 +6,10 @@
 #
 # The disability branch is fully executable, so `eld-disabled-under-65`
 # exercises it in addition to retaining every P7 row. Empty payment relations
-# mean no section 104(a)(4) service-injury adjustment. Expected amounts are
-# pre-section-26 credits; none comes from PolicyEngine.
+# pass the pipeline boundary. Any nonempty section 104(a)(4) relation fails
+# closed until the imported rule allocates the exception only to its lawful
+# veterans-benefit bucket. Expected amounts are pre-section-26 credits; none
+# comes from PolicyEngine.
 
 - name: eld-basic
   # Initial 5,000 - SS 2,000 - 50% * (8,000 - 7,500) = 2,750.
@@ -197,3 +199,33 @@
       - *aged_66
   output:
     us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '749.85'
+
+- name: eld-nonempty-section-104-payment-relation-fails-closed
+  # The imported rule wrongly lets this separate $5,000 Foreign Service
+  # section 808 annuity cancel the $5,000 Social Security reduction and would
+  # return $750. The exception belongs only to clause (i)(III), so this
+  # pipeline defers all nonempty payment relations and returns zero.
+  period: *tax_year_2026
+  input:
+    us:statutes/26/22#input.railroad_retirement_act_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.veterans_affairs_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.other_non_title_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.workers_compensation_treated_as_social_security_benefit: 0
+    us:statutes/26/22#input.is_nonresident_alien: false
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 0
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 5000
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+    us:statutes/26/22#relation.section_22_payment_of_tax_unit:
+      - us:statutes/26/104/a/4#input.payment_amount: 5000
+        us:statutes/26/104/a/4#input.payment_received_as_pension_annuity_or_similar_allowance: false
+        us:statutes/26/104/a/4#input.personal_injuries_or_sickness_resulted_from_active_service_in_armed_forces_of_any_country: false
+        us:statutes/26/104/a/4#input.personal_injuries_or_sickness_resulted_from_active_service_in_coast_and_geodetic_survey: false
+        us:statutes/26/104/a/4#input.personal_injuries_or_sickness_resulted_from_active_service_in_public_health_service: false
+        us:statutes/26/104/a/4#input.payment_received_as_disability_annuity_payable_under_section_808_of_foreign_service_act_1980: true
+  output:
+    us:statutes/26/22#elderly_disabled_credit: '750'
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '0'

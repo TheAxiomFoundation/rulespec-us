@@ -34,11 +34,14 @@
   statutory $1,000/$400 bases for 2026. In a temporary integration worktree
   containing cached `origin/fed-parity/revproc`, static validation, all 27 proof
   atoms, and all 14 companion cases pass.
+- Guarded the section 22 output on an empty section 104(a)(4) payment relation
+  and added the Foreign Service/Social Security counterexample. Static
+  validation, all 3 proof atoms, and all 11 companion cases pass.
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
-   double-benefit contract.
+2. Add the section 22 at-retirement permanence boundary and the section
+   25A(g)(5) double-benefit contract.
 3. Regenerate required derived artifacts, run the complete validation battery
    and signing dry-run, and prepare the corrected PR body and completion report.
