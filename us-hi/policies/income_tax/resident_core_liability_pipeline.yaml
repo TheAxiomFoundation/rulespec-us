@@ -10,6 +10,7 @@ module:
       - us-hi/statute/235-7
       - us-hi/statute/235-54
       - us-hi/statute/235-51
+      - us-hi/statute/235-53
       - us-hi/statute/235-55
       - us-hi/statute/235-55.6
       - us-hi/statute/235-55.7
@@ -27,6 +28,7 @@ module:
         - us-hi/statute/235-7
         - us-hi/statute/235-54
         - us-hi/statute/235-51
+        - us-hi/statute/235-53
         - us-hi/statute/235-55
         - us-hi/statute/235-55.6
         - us-hi/statute/235-55.7
@@ -53,8 +55,9 @@ module:
         exemption, unencoded Chapter 235 modification, other-jurisdiction
         credit, business credit, or cross-title credit is present.
 
-        The pinned corpus has no final 2026 N-11, 2026 credit ordering
-        instructions, 2026 forms for specialty credits, current military pay
+        The pinned corpus has no final 2026 N-11, Director-prescribed 2026 tax
+        tables or ceiling, 2026 credit ordering instructions, 2026 forms for
+        specialty credits, current military pay
         table needed to quantify the reserve-component exclusion, or the
         numerous cross-title provisions incorporated by Chapter 235. Those
         cases are typed holds, never caller-completed Hawaii amounts.
@@ -64,14 +67,15 @@ module:
     the module starts with federal adjusted gross income, applies directly
     sourced additions and exclusions, computes the enacted standard deduction
     and personal exemption, and derives Hawaii taxable income. It reconstructs
-    the capital-gain worksheet line-10 amount from federal gains and Hawaii
-    long- and short-term adjustments, then applies every bracket and the 7.25
-    percent alternative-tax limitation.
+    the capital-gain worksheet line-10 amount from federal gains when no
+    Hawaii-specific gain adjustment or Form N-158 amount exists, then applies
+    every bracket and the 7.25 percent alternative-tax limitation.
 
     It also computes the source-complete refundable earned-income,
     food/excise, low-income-renter, and child/dependent-care credits from raw
     facts, applies refundable-first ordering, and exposes supported-profile
-    liability before payments plus refundable excess. Diagnostic schedule
+    a signed liability before payments that becomes negative when refundable
+    credits exceed tax. Diagnostic schedule and refundable-excess amounts are
     amounts are private. Public monetary outputs return zero unless every
     transitive supported-profile condition holds.
 
@@ -91,14 +95,14 @@ module:
       reason: Section 235-55 requires a Hawaii-only counterfactual and satisfactory-evidence determinations not established by pinned 2026 forms.
       source_values:
         - us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_supported_profile_tax_before_credits
+    - output: us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_tax_table_tax
+      reason: Section 235-53 substitutes Director-prescribed tables for nonitemizers through a Director-set ceiling of at least $20,000; the final 2026 table and ceiling are not pinned.
+      source_values:
+        - us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_tax_table_source_hold_applies
     - output: us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_complete_specialty_credits
       reason: Chapter 235 and incorporated cross-title law contain specialty credits whose 2026 forms, ordering, and cross-title elements are not pinned.
       source_values:
         - us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_supported_profile_applies
-    - output: us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_net_income_tax_liability
-      reason: The public bounded liability is complete only for the explicit no-specialty-credit supported profile.
-      source_values:
-        - us-hi:policies/income_tax/resident_core_liability_pipeline#hi_pit_2026_supported_profile_net_income_tax_liability
 rules:
   - name: hi_pit_2026_schedule_a_floor
     kind: parameter
@@ -635,6 +639,23 @@ rules:
         effective_to: '2026-12-31'
         formula: '1144'
 
+  - name: hi_pit_2026_maximum_age_65_exemption_count
+    kind: parameter
+    dtype: Integer
+    period: Year
+    source: HRS 235-54(a), taxpayer and spouse age-65 exemptions
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-hi/statute/235-54, excerpt: "for the taxpayer or the taxpayer's spouse who is sixty-five years of age or older"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '2'
+
   - name: hi_pit_2026_cdcc_expense_cap
     kind: parameter
     dtype: Money
@@ -813,6 +834,24 @@ rules:
         effective_to: '2026-12-31'
         formula: '50'
 
+  - name: hi_pit_2026_statutory_minimum_tax_table_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: HRS 235-53(a)(2)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-hi/statute/235-53, excerpt: "amount (not less than $20,000) determined by the director"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '20000'
+
   - name: hi_pit_2026_input_domain_is_valid
     kind: derived
     entity: TaxUnit
@@ -831,24 +870,29 @@ rules:
         formula: |-
           hi_pit_2026_federal_exemption_count >= 0
           and hi_pit_2026_age_65_exemption_count >= 0
+          and hi_pit_2026_age_65_exemption_count <= hi_pit_2026_maximum_age_65_exemption_count
           and hi_pit_2026_dependent_earned_income >= 0
           and hi_pit_2026_section_912_income >= 0
           and hi_pit_2026_other_state_or_local_obligation_interest >= 0
           and hi_pit_2026_us_constitutionally_exempt_income >= 0
           and hi_pit_2026_public_retirement_system_income >= 0
           and hi_pit_2026_pension_for_past_services >= 0
-          and hi_pit_2026_federal_net_long_term_capital_gain >= 0
-          and hi_pit_2026_federal_net_capital_gain >= 0
-          and hi_pit_2026_form_n_158_line_4e >= 0
           and hi_pit_2026_federal_earned_income_tax_credit >= 0
-          and hi_pit_2026_food_credit_qualified_exemption_count >= 0
-          and hi_pit_2026_renter_credit_qualified_exemption_count >= 0
+          and hi_pit_2026_food_credit_exemption_presence_failure_count >= 0
+          and hi_pit_2026_renter_credit_exemption_presence_failure_count >= 0
           and hi_pit_2026_cash_rent_for_qualified_hawaii_residence >= 0
-          and hi_pit_2026_cdcc_qualifying_individual_count >= 0
+          and hi_pit_2026_cdcc_child_under_13_count >= 0
+          and hi_pit_2026_cdcc_incapable_dependent_count >= 0
+          and hi_pit_2026_cdcc_incapable_spouse_count >= 0
           and hi_pit_2026_cdcc_employment_related_expenses >= 0
           and hi_pit_2026_cdcc_dependent_care_assistance_exclusion >= 0
           and hi_pit_2026_taxpayer_earned_income >= 0
           and hi_pit_2026_spouse_earned_income >= 0
+          and hi_pit_2026_rental_unit_qualified_claimant_count >= 0
+          and (
+            not hi_pit_2026_claims_low_income_renter_credit
+            or hi_pit_2026_rental_unit_qualified_claimant_count >= 1
+          )
 
   - name: hi_pit_2026_filing_status_is_valid
     kind: derived
@@ -876,6 +920,7 @@ rules:
             hi_pit_2026_filing_status_joint_or_surviving_spouse
             or hi_pit_2026_filing_status_head_of_household
             or hi_pit_2026_filing_status_single
+            or hi_pit_2026_is_married_filing_separately
           )
           and not (
             hi_pit_2026_filing_status_joint_or_surviving_spouse
@@ -888,6 +933,22 @@ rules:
           and not (
             hi_pit_2026_filing_status_head_of_household
             and hi_pit_2026_filing_status_single
+          )
+          and not (
+            hi_pit_2026_filing_status_joint_or_surviving_spouse
+            and hi_pit_2026_is_married_filing_separately
+          )
+          and not (
+            hi_pit_2026_filing_status_head_of_household
+            and hi_pit_2026_is_married_filing_separately
+          )
+          and not (
+            hi_pit_2026_filing_status_single
+            and hi_pit_2026_is_married_filing_separately
+          )
+          and (
+            not hi_pit_2026_is_surviving_spouse
+            or hi_pit_2026_filing_status_joint_or_surviving_spouse
           )
 
   - name: hi_pit_2026_supported_profile_applies
@@ -921,7 +982,6 @@ rules:
           and hi_pit_2026_federal_and_hawaii_filing_units_are_aligned
           and not hi_pit_2026_has_post_2024_federal_conformity_difference
           and not hi_pit_2026_elects_itemized_deductions
-          and not hi_pit_2026_is_married_filing_separately
           and not hi_pit_2026_has_blind_deaf_or_totally_disabled_exemption
           and not hi_pit_2026_has_reserve_component_pay_exclusion
           and not hi_pit_2026_has_other_unencoded_hawaii_income_modification
@@ -933,6 +993,10 @@ rules:
           and not hi_pit_2026_has_other_chapter_235_or_cross_title_credit
           and not hi_pit_2026_has_prior_year_credit_carryforward
           and not hi_pit_2026_section_235_51_e_business_election_applies
+          and not hi_pit_2026_has_hawaii_capital_gain_adjustment_components
+          and not hi_pit_2026_has_form_n_158_amount
+          and not hi_pit_2026_has_cdcc_student_or_incapable_spouse_deemed_income
+          and not hi_pit_2026_tax_table_source_hold_applies
 
   - name: hi_pit_2026_total_additions_to_federal_adjusted_gross_income
     kind: derived
@@ -1124,12 +1188,9 @@ rules:
           max(
             0,
             min(
-              hi_pit_2026_federal_net_long_term_capital_gain + hi_pit_2026_hawaii_long_term_capital_gain_adjustment,
+              hi_pit_2026_federal_net_long_term_capital_gain,
               hi_pit_2026_federal_net_capital_gain
-              + hi_pit_2026_hawaii_long_term_capital_gain_adjustment
-              + hi_pit_2026_hawaii_short_term_capital_gain_adjustment
             )
-            - hi_pit_2026_form_n_158_line_4e
           )
 
   - name: hi_pit_2026_taxable_income
@@ -1152,6 +1213,28 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: max(0, hi_pit_2026_profile_candidate_taxable_income)
+
+  - name: hi_pit_2026_tax_table_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: HRS 235-53(a), missing Director-prescribed 2026 tax table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-hi/statute/235-53, excerpt: "In lieu of the tax imposed by section 235-51"}
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-hi/statute/235-53, excerpt: "amount (not less than $20,000) determined by the director"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          not hi_pit_2026_elects_itemized_deductions
+          and hi_pit_2026_taxable_income <= hi_pit_2026_statutory_minimum_tax_table_ceiling
 
   - name: hi_pit_2026_schedule_a_bracket
     kind: derived
@@ -1553,6 +1636,27 @@ rules:
           else:
             hi_pit_2026_regular_schedule_tax
 
+  - name: hi_pit_2026_cdcc_qualifying_individual_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: HRS 235-55.6(b)(1), raw qualifying-individual category counts
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source: {corpus_citation_path: us-hi/statute/235-55.6, excerpt: "The term qualifying individual means"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          hi_pit_2026_cdcc_child_under_13_count
+          + hi_pit_2026_cdcc_incapable_dependent_count
+          + hi_pit_2026_cdcc_incapable_spouse_count
+
   - name: hi_pit_2026_cdcc_expense_cap_class
     kind: derived
     entity: TaxUnit
@@ -1645,15 +1749,14 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           min(
+            hi_pit_2026_cdcc_employment_related_expenses,
             max(
               0,
-              min(
-                hi_pit_2026_cdcc_employment_related_expenses,
-                hi_pit_2026_cdcc_expense_cap[hi_pit_2026_cdcc_expense_cap_class]
-              )
+              hi_pit_2026_cdcc_expense_cap[hi_pit_2026_cdcc_expense_cap_class]
               - hi_pit_2026_cdcc_dependent_care_assistance_exclusion
             ),
-            if hi_pit_2026_filing_status_joint_or_surviving_spouse:
+            if hi_pit_2026_filing_status_joint_or_surviving_spouse
+            and not hi_pit_2026_is_surviving_spouse:
               min(hi_pit_2026_taxpayer_earned_income, hi_pit_2026_spouse_earned_income)
             else:
               hi_pit_2026_taxpayer_earned_income
@@ -1681,9 +1784,13 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if hi_pit_2026_claims_cdcc
-          and hi_pit_2026_cdcc_taxpayer_not_claimable_as_dependent
-          and hi_pit_2026_cdcc_maintains_household
-          and hi_pit_2026_cdcc_service_and_provider_conditions_met
+          and not hi_pit_2026_is_eligible_to_be_claimed_as_dependent
+          and hi_pit_2026_cdcc_taxpayer_furnished_over_half_household_cost
+          and hi_pit_2026_cdcc_services_not_overnight_camp
+          and hi_pit_2026_cdcc_outside_household_conditions_met
+          and hi_pit_2026_cdcc_provider_not_disallowed_related_person
+          and hi_pit_2026_cdcc_provider_identifying_information_furnished
+          and hi_pit_2026_cdcc_center_law_compliance_met
           and hi_pit_2026_cdcc_qualifying_individual_count > 0
           and not hi_pit_2026_has_cdcc_student_or_incapable_spouse_deemed_income:
             hi_pit_2026_cdcc_applicable_percentage * hi_pit_2026_cdcc_creditable_expenses
@@ -1712,11 +1819,54 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if hi_pit_2026_claims_hawaii_eitc
-          and hi_pit_2026_federal_and_hawaii_filing_status_and_dependents_match
+          and hi_pit_2026_hawaii_filing_status_matches_federal
+          and hi_pit_2026_hawaii_dependents_match_federal
           and not hi_pit_2026_eitc_disallowance_period_applies:
             hi_pit_2026_eitc_percentage * hi_pit_2026_federal_earned_income_tax_credit
           else:
             0
+
+  - name: hi_pit_2026_food_credit_qualified_exemption_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: HRS 235-55.85(c), federal exemptions with more-than-nine-month presence
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source: {corpus_citation_path: us-hi/statute/235-55.85, excerpt: "a person for whom exemption is claimed has been physically present in the State for more than nine months"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, hi_pit_2026_federal_exemption_count - hi_pit_2026_food_credit_exemption_presence_failure_count)
+
+  - name: hi_pit_2026_renter_credit_qualified_exemption_count
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: HRS 235-55.7(a)(2), chapter exemptions resident more than nine months
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source: {corpus_citation_path: us-hi/statute/235-55.7, excerpt: "has physically resided in the State for more than nine months"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          max(
+            0,
+            hi_pit_2026_federal_exemption_count
+            + hi_pit_2026_age_65_exemption_count
+            - hi_pit_2026_renter_credit_exemption_presence_failure_count
+          )
 
   - name: hi_pit_2026_food_credit_bracket
     kind: derived
@@ -1810,15 +1960,22 @@ rules:
           - path: versions[0].formula
             kind: condition
             source: {corpus_citation_path: us-hi/statute/235-55.7, excerpt: "adjusted gross income of less than $30,000"}
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-hi/statute/235-55.7, excerpt: "claim for credit shall be based upon a pro rata share of the rent paid"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
           if hi_pit_2026_claims_low_income_renter_credit
-          and hi_pit_2026_renter_occupancy_and_property_tax_conditions_met
+          and hi_pit_2026_renter_occupies_hawaii_principal_residence
+          and hi_pit_2026_renter_paid_cash_rent
+          and hi_pit_2026_rental_property_not_wholly_or_partly_property_tax_exempt
           and not hi_pit_2026_is_eligible_to_be_claimed_as_dependent
           and hi_pit_2026_profile_candidate_adjusted_gross_income < hi_pit_2026_renter_agi_limit
-          and hi_pit_2026_cash_rent_for_qualified_hawaii_residence > hi_pit_2026_renter_minimum_rent:
+          and hi_pit_2026_cash_rent_for_qualified_hawaii_residence
+          / max(1, hi_pit_2026_rental_unit_qualified_claimant_count)
+          > hi_pit_2026_renter_minimum_rent:
             hi_pit_2026_renter_credit_per_exemption
             * hi_pit_2026_renter_credit_qualified_exemption_count
             * (
@@ -1917,6 +2074,28 @@ rules:
           else:
             0
 
+  - name: hi_pit_2026_supported_profile_tax_after_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Public supported-profile tax after the zero specialty-nonrefundable-credit profile
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-hi/statute/235-91.5, excerpt: "followed by nonrefundable tax credits"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if hi_pit_2026_supported_profile_applies:
+            hi_pit_2026_income_tax_liability
+          else:
+            0
+
   - name: hi_pit_2026_supported_profile_net_income_tax_liability
     kind: derived
     entity: TaxUnit
@@ -1935,7 +2114,7 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if hi_pit_2026_supported_profile_applies:
-            max(0, hi_pit_2026_income_tax_liability - hi_pit_2026_total_refundable_credits)
+            hi_pit_2026_income_tax_liability - hi_pit_2026_total_refundable_credits
           else:
             0
 
@@ -1947,6 +2126,7 @@ rules:
     unit: USD
     source: Supported-profile refundable credit excess before payments
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -1986,7 +2166,12 @@ inputs:
     entity: TaxUnit
     dtype: Bool
     period: Year
-    description: Married-separate cases are an explicit bounded-profile hold.
+    description: True for a married individual filing a separate return.
+  - name: hi_pit_2026_is_surviving_spouse
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether the schedule-A filer is a surviving spouse rather than a married joint filer.
   - name: hi_pit_2026_federal_exemption_count
     entity: TaxUnit
     dtype: Integer
@@ -2085,54 +2270,71 @@ inputs:
     period: Year
     unit: USD
     description: Federal Schedule D line 16 or equivalent amount.
-  - name: hi_pit_2026_hawaii_long_term_capital_gain_adjustment
+  - name: hi_pit_2026_has_hawaii_capital_gain_adjustment_components
     entity: TaxUnit
-    dtype: Money
+    dtype: Bool
     period: Year
-    unit: USD
-    description: Signed total of separately determined Hawaii long-term gain adjustments.
-  - name: hi_pit_2026_hawaii_short_term_capital_gain_adjustment
+    description: Whether raw transactions require Hawaii-specific long- or short-term gain adjustments not encoded in this bounded profile.
+  - name: hi_pit_2026_has_form_n_158_amount
     entity: TaxUnit
-    dtype: Money
+    dtype: Bool
     period: Year
-    unit: USD
-    description: Signed total of separately determined Hawaii short-term gain adjustments.
-  - name: hi_pit_2026_form_n_158_line_4e
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Form N-158 line 4e amount subtracted by the capital-gain worksheet.
+    description: Whether Form N-158 contributes an amount to capital-gain worksheet line 9.
   - name: hi_pit_2026_claims_cdcc
     entity: TaxUnit
     dtype: Bool
     period: Year
     description: Whether the taxpayer claims the resident care credit.
-  - name: hi_pit_2026_cdcc_taxpayer_not_claimable_as_dependent
+  - name: hi_pit_2026_cdcc_taxpayer_furnished_over_half_household_cost
     entity: TaxUnit
     dtype: Bool
     period: Year
-    description: Whether the care-credit claimant cannot be claimed as another taxpayer's dependent.
-  - name: hi_pit_2026_cdcc_maintains_household
+    description: Whether the taxpayer furnished over half the household cost.
+  - name: hi_pit_2026_cdcc_services_not_overnight_camp
     entity: TaxUnit
     dtype: Bool
     period: Year
-    description: Whether the taxpayer furnishes over half the household cost.
-  - name: hi_pit_2026_cdcc_service_and_provider_conditions_met
+    description: Whether claimed care expenses exclude an overnight camp.
+  - name: hi_pit_2026_cdcc_outside_household_conditions_met
     entity: TaxUnit
     dtype: Bool
     period: Year
-    description: Whether raw service location, provider, relationship, and identifying-information conditions are met.
+    description: Whether outside-household care facts satisfy the eight-hour and child-care rules.
+  - name: hi_pit_2026_cdcc_provider_not_disallowed_related_person
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether no claimed payment was made to a statutorily disallowed related person.
+  - name: hi_pit_2026_cdcc_provider_identifying_information_furnished
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether the required provider identifying information or due-diligence exception is present.
+  - name: hi_pit_2026_cdcc_center_law_compliance_met
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether any dependent care center complied with applicable jurisdiction law.
   - name: hi_pit_2026_has_cdcc_student_or_incapable_spouse_deemed_income
     entity: TaxUnit
     dtype: Bool
     period: Year
     description: Whether month-level deemed spouse earned-income rules apply.
-  - name: hi_pit_2026_cdcc_qualifying_individual_count
+  - name: hi_pit_2026_cdcc_child_under_13_count
     entity: TaxUnit
     dtype: Integer
     period: Year
-    description: Number of qualifying individuals under HRS 235-55.6(b)(1).
+    description: Number of dependent children under age thirteen satisfying the dependency facts.
+  - name: hi_pit_2026_cdcc_incapable_dependent_count
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Number of dependents physically or mentally incapable of self-care.
+  - name: hi_pit_2026_cdcc_incapable_spouse_count
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Number of spouses physically or mentally incapable of self-care.
   - name: hi_pit_2026_cdcc_employment_related_expenses
     entity: TaxUnit
     dtype: Money
@@ -2168,11 +2370,16 @@ inputs:
     period: Year
     unit: USD
     description: Federal earned-income credit allowed, properly claimed, and reported.
-  - name: hi_pit_2026_federal_and_hawaii_filing_status_and_dependents_match
+  - name: hi_pit_2026_hawaii_filing_status_matches_federal
     entity: TaxUnit
     dtype: Bool
     period: Year
-    description: Whether Hawaii uses the federal filing status and federal dependents for the EITC.
+    description: Whether Hawaii uses the federal filing status for the EITC.
+  - name: hi_pit_2026_hawaii_dependents_match_federal
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether Hawaii claims the same dependents as the federal return for the EITC.
   - name: hi_pit_2026_eitc_disallowance_period_applies
     entity: TaxUnit
     dtype: Bool
@@ -2183,11 +2390,11 @@ inputs:
     dtype: Bool
     period: Year
     description: Whether the food and excise tax credit is claimed.
-  - name: hi_pit_2026_food_credit_qualified_exemption_count
+  - name: hi_pit_2026_food_credit_exemption_presence_failure_count
     entity: TaxUnit
     dtype: Integer
     period: Year
-    description: Qualified exemptions physically present over nine months for the food credit.
+    description: Federal exemptions whose person was not physically present in Hawaii more than nine months.
   - name: hi_pit_2026_food_credit_confinement_disqualification_applies
     entity: TaxUnit
     dtype: Bool
@@ -2198,22 +2405,37 @@ inputs:
     dtype: Bool
     period: Year
     description: Whether the low-income renter credit is claimed.
-  - name: hi_pit_2026_renter_occupancy_and_property_tax_conditions_met
+  - name: hi_pit_2026_renter_occupies_hawaii_principal_residence
     entity: TaxUnit
     dtype: Bool
     period: Year
-    description: Whether the Hawaii principal-residence occupancy and nonexempt-property conditions are met.
+    description: Whether the claimant occupied the Hawaii property as a principal residence.
+  - name: hi_pit_2026_renter_paid_cash_rent
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether the claimant paid cash rent for the residence.
+  - name: hi_pit_2026_rental_property_not_wholly_or_partly_property_tax_exempt
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether the rented real property was not wholly or partly exempt from property tax.
   - name: hi_pit_2026_cash_rent_for_qualified_hawaii_residence
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
     description: Cash occupancy rent excluding utilities, subsidies, ground rent, and deducted rent.
-  - name: hi_pit_2026_renter_credit_qualified_exemption_count
+  - name: hi_pit_2026_renter_credit_exemption_presence_failure_count
     entity: TaxUnit
     dtype: Integer
     period: Year
-    description: Renter-credit qualified exemptions resident more than nine months.
+    description: Chapter exemptions whose person did not reside in Hawaii more than nine months.
+  - name: hi_pit_2026_rental_unit_qualified_claimant_count
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Number of otherwise qualified individuals sharing the rental unit for the statutory pro-rata rent test.
   - name: hi_pit_2026_taxpayer_age_65_or_older
     entity: TaxUnit
     dtype: Bool
