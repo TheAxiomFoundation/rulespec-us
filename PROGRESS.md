@@ -4,8 +4,10 @@
 
 In progress on branch `fed-parity/surtaxes`. The ordinary SECA section 1401(c)
 guard and the section 1401(b)(2)(B) wage-coordination provenance adjudication
-are implemented and locally proved; operative floor coverage remains. No
-pushes, GitHub writes, PR-body edits, or `us/statutes` edits are in scope.
+are implemented and locally proved. Both floor straddles now exercise the
+imported operative branch directly; downstream hashes and generated metadata
+remain. No pushes, GitHub writes, PR-body edits, or `us/statutes` edits are in
+scope.
 
 ## Done
 
@@ -37,11 +39,19 @@ pushes, GitHub writes, PR-body edits, or `us/statutes` edits are in scope.
   companions pass, so the adjudicated deferred fail-closed fallback is not
   triggered. Canonical validation currently reports only the expected stale
   downstream SE module hash, to be refreshed after the floor edit is final.
+- Removed the non-operative exact-$400 helper, its standalone input/case, and
+  its now-unused explicit threshold import.
+- Reworked `seca-floor-below` and `seca-floor-above` as Person cases that assert
+  the imported section 1402(b) exclusion Judgment and operative
+  `self_employment_income` / OASDI-base outputs directly at `399.8755` and
+  `400.799`.
+- Documented in both cases that exact `N = 400` requires gross input
+  `800000 / 1847`, which has no finite decimal expansion.
+- Canonical SECA validation and all 19 proof atoms pass; all 13 revised SECA
+  companions pass.
 
 ## Next
 
-1. Rework both floor straddle companions to exercise the imported operative
-   floor outputs.
-2. Refresh the downstream SE import hash and required generated artifacts, run
+1. Refresh the downstream SE import hash and required generated artifacts, run
    focused gates and full repository
    pytest, and write `scratchpad/fix2-1003-DONE.md`.
