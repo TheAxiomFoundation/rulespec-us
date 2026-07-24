@@ -63,9 +63,14 @@
   repeating pre-adjustment amount or changing any public tax output.
 - All 13 SECA companions pass. Pinned validation passes with 17 proof atoms and
   zero focused money-atom omissions.
+- Regenerated and checked the reverse index; it remains current at 4,162
+  provisions, 4,934 edges, and 4,454 modules.
+- Reconciled the current oracle classifier's exact 2,327-ID set with three new
+  Judgment declarations, zero removals, and zero stale entries while preserving
+  the ledger's existing serialization.
 
 ## Next
 
-- Run the full gate battery and signing dry-run.
+- Run the remaining full gate battery and signing dry-run.
 - Produce `scratchpad/fix-1003-BODY.md` and `scratchpad/fix-1003-DONE.md` with
   exact counts, ledger delta, gate results, and commit SHAs.
