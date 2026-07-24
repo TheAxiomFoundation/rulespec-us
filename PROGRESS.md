@@ -49,9 +49,11 @@ scope.
   `800000 / 1847`, which has no finite decimal expansion.
 - Canonical SECA validation and all 19 proof atoms pass; all 13 revised SECA
   companions pass.
+- Refreshed the Additional Medicare proof-import pin to the finalized SECA
+  module hash
+  `sha256:3668c1e3e86ff0625cab484bc1a1623ac233a0c401bdef71fd2a2832a51af72b`.
 
 ## Next
 
-1. Refresh the downstream SE import hash and required generated artifacts, run
-   focused gates and full repository
+1. Reconcile required generated artifacts, run focused gates and full repository
    pytest, and write `scratchpad/fix2-1003-DONE.md`.
