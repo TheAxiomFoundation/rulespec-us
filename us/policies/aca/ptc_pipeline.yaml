@@ -53,9 +53,12 @@ module:
 
     Annual premium inputs are divided by section 36B(b)'s encoded divisor of
     12. This is neutral plumbing for the stated full-year, level-month fixture
-    surface; it does not model changing monthly premiums or coverage. Money and
-    applicable-percentage values remain at RuleSpec arithmetic precision.
-    Regulatory and filing-form rounding are deferred below.
+    surface; it does not model changing monthly premiums or coverage. Money
+    values remain at RuleSpec arithmetic precision. Because the pinned corpus
+    does not contain 26 CFR 1.36B-3(g), the general rounded applicable-
+    percentage surface is deferred below and the final credit fails closed
+    unless the raw interpolation already equals its nearest-0.01-percentage-
+    point value. Filing-form rounding is also deferred below.
   deferred_outputs:
     - output: us:statutes/26/36B/b/3/A#applicable_percentage
       reason: |-
@@ -107,10 +110,15 @@ module:
     - output: us:regulations/26-cfr/1.36B-3/g#rounded_applicable_percentage
       reason: |-
         The current regulation rounds an interpolated applicable percentage to
-        the nearest 0.01 percentage point, but that regulation is not encoded
-        in this repository and RuleSpec has no imported rounding rule here.
-        Required fixtures use table endpoints, constant bands, or an exact
-        midpoint, so this missing operation does not change their rates.
+        the nearest 0.01 percentage point. The pinned corpus resolver finds no
+        provision for 26 CFR 1.36B-3(g), so this module does not claim to
+        compute the general rounded rate. Instead, its runtime-input validity
+        guard admits only raw interpolations that already equal their nearest
+        0.01-percentage-point value; every other interpolation fails closed
+        before the annual premium tax credit is exported.
+      source_values:
+        - us:policies/aca/ptc_pipeline#aca_ptc_applicable_percentage
+        - us:policies/aca/ptc_pipeline#aca_ptc_full_year_runtime_inputs_valid
     - output: us:forms/irs/8962#filing_form_percentage_and_money_rounding
       reason: |-
         Form 8962 percentage truncation and whole-dollar filing mechanics are
@@ -403,6 +411,24 @@ rules:
                 )
                 * (applicable_final_percentage - applicable_initial_percentage)
 
+  - name: aca_ptc_applicable_percentage_rounding_grid_increment
+    kind: parameter
+    dtype: Rate
+    source: Guard-only 0.01-percentage-point increment required by un-ingested 26 CFR 1.36B-3(g); not a general rounded-rate output
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-25
+              excerpt: "the Applicable Percentage Table for purposes of § 36B(b)(3)(A)(i) and § 1.36B-3(g) is"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.0001'
+
   - name: applicable_percentage_for_taxable_year
     kind: derived
     entity: TaxUnit
@@ -479,7 +505,7 @@ rules:
     entity: TaxUnit
     dtype: Judgment
     period: Year
-    source: Narrow full-year aggregate-input boundary for this section 36B composition
+    source: Narrow full-year aggregate-input and fail-closed computability boundary pending ingestion of 26 CFR 1.36B-3(g)
     metadata:
       proof:
         atoms:
@@ -494,6 +520,18 @@ rules:
               target: us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
               output: required_contribution_annual_to_monthly_divisor
               hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/aca/ptc_pipeline#aca_ptc_applicable_percentage
+              output: aca_ptc_applicable_percentage
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/aca/ptc_pipeline#aca_ptc_applicable_percentage_rounding_grid_increment
+              output: aca_ptc_applicable_percentage_rounding_grid_increment
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -503,6 +541,13 @@ rules:
           and aca_ptc_annual_slcsp_benchmark_premium >= 0
           and aca_ptc_annual_enrolled_premium >= 0
           and aca_ptc_coverage_month_count == required_contribution_annual_to_monthly_divisor
+          and (
+            aca_ptc_applicable_percentage
+            / aca_ptc_applicable_percentage_rounding_grid_increment
+          ) == floor(
+            aca_ptc_applicable_percentage
+            / aca_ptc_applicable_percentage_rounding_grid_increment
+          )
 
   - name: aca_ptc_applicable_taxpayer
     kind: derived
