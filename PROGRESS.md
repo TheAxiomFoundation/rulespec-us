@@ -6,6 +6,7 @@ In progress on branch `fed-parity/surtaxes`. The ordinary SECA section 1401(c)
 guard and the section 1401(b)(2)(B) wage-coordination provenance adjudication
 are implemented and locally proved. Both floor straddles now exercise the
 imported operative branch directly; downstream hashes and generated metadata
+are reconciled through the oracle ledger; signing manifests and final gates
 remain. No pushes, GitHub writes, PR-body edits, or `us/statutes` edits are in
 scope.
 
@@ -52,8 +53,13 @@ scope.
 - Refreshed the Additional Medicare proof-import pin to the finalized SECA
   module hash
   `sha256:3668c1e3e86ff0625cab484bc1a1623ac233a0c401bdef71fd2a2832a51af72b`.
+- Reconciled `oracle-coverage-pending.yaml` as an exact one-for-one swap from
+  the retired floor-helper Judgment to
+  `self_employment_tax_pipeline_domain_is_valid`; the ceiling remains `2327`,
+  and pinned `oracle-coverage-pending check` reports no problems or stale
+  entries.
 
 ## Next
 
-1. Reconcile required generated artifacts, run focused gates and full repository
-   pytest, and write `scratchpad/fix2-1003-DONE.md`.
+1. Refresh/check protected generated artifacts, run focused gates and full
+   repository pytest, and write `scratchpad/fix2-1003-DONE.md`.
