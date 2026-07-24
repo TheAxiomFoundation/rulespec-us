@@ -2,13 +2,14 @@
 
 ## State
 
-- In progress on branch `fed-parity/surtaxes`.
-- Scope is limited to the Additional Medicare tax pipeline and its companion
-  cases at the current corpus pin.
-- The self-employment leg must fail closed until axiom-corpus#514's targeted
-  re-ingest is released and this repository's corpus pin is updated.
-- No pushes, GitHub writes, corpus edits, NIIT changes, or ordinary SECA
-  changes are in scope.
+- Complete within the authorized scope on branch `fed-parity/surtaxes`.
+- The Additional Medicare self-employment leg now fails closed until
+  axiom-corpus#514's targeted re-ingest is released and this repository's
+  corpus pin is updated.
+- The signed apply manifest remains intentionally stale because this task
+  authorizes signing dry-run only.
+- No pushes, GitHub writes, corpus edits, NIIT changes, ordinary SECA changes,
+  or statute changes were made.
 
 ## Done
 
@@ -30,13 +31,31 @@
   quotation.
 - Pinned focused gates pass: canonical validation, 18/18 proof atoms, and
   14/14 companion cases.
+- Full focused surtax gates pass: 3/3 canonical validations, 47/47 proof
+  atoms, and 42/42 companion cases.
+- Focused monetary proof passes with 2 obligations and 0 missing.
+- Repository-wide monetary proof passes with 118 known missing atoms across
+  2,850 obligations, within the unchanged allowance of 151.
+- The oracle-pending ratchet passes with 2,401 declared and applied entries
+  and zero stale entries; no ledger rewrite was needed.
+- The reverse index regenerates byte-for-byte unchanged and checks current at
+  4,184 provisions, 4,977 edges, and 4,465 modules.
+- All 43 pinned source hashes match the current corpus text.
+- Program Artifacts compiles all 33/33 definitions at the pinned compose and
+  rules-engine revisions.
+- Signing dry-run selects the expected three surtax manifests covering six
+  files and performs no writes.
+- Repository pytest finishes with 58 passed, 1 warning, and exactly one
+  expected manifest-sync failure naming only the changed Additional Medicare
+  module.
+- `guard-generated` fails closed solely because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable.
+- Final scope checks confirm no NIIT, ordinary SECA, or `us/statutes` delta,
+  no forbidden root progress file, and no repository scratchpad directory.
 
 ## Next
 
-1. Regenerate/check the reverse index and verify the oracle ledger remains
-   current.
-2. Run repository pytest and remaining repository/focused gates.
-3. Run signing dry-run only and record the expected manifest handoff.
-4. Verify the final diff excludes NIIT, ordinary SECA, and statute files.
-5. Write the task scratchpad's `fix3-1003-DONE.md` with the final SHA, case
-   table, and complete gate results.
+1. An authorized keyholder may refresh the selected manifests and rerun
+   `guard-generated` plus repository pytest; do not push from this task.
+2. After the targeted corpus re-ingest, release, and pin bump land, restore
+   the lawful section 1401(b)(2)(B) coordination proof and positive SE cases.
