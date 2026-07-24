@@ -86,7 +86,7 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 27
+    assert len(retired["artifacts"]) == 47
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
@@ -118,7 +118,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "b30ad48fab11e36073f24dbde90ab1af35d4144db704861e67b1a6b2e26b99de" in workflow
+    assert "2611af3595bc7bbc435bcd8fadb6d433a202f26dfd05106ddeee7ccb245ccb02" in workflow
     assert (
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
