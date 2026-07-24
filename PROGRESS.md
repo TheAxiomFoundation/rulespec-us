@@ -40,10 +40,12 @@
 - Added the required section 22 at-retirement permanence attestation and a
   false-attestation disability case. Static validation, all 5 proof atoms, and
   all 12 companion cases pass.
+- Added the section 25A(g)(5) net-expense attestation to both LLC boundaries
+  and a false-attestation double-benefit case. Static validation, all 6 proof
+  atoms, and all 13 companion cases pass.
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Add the section 25A(g)(5) double-benefit contract.
-3. Regenerate required derived artifacts, run the complete validation battery
+2. Regenerate required derived artifacts, run the complete validation battery
    and signing dry-run, and prepare the corrected PR body and completion report.
