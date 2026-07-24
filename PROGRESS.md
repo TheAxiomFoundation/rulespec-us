@@ -5,7 +5,7 @@
 - Branch: `fed-parity/aca-ptc`
 - Starting head: `cf5ae8bfcb4ba218fdc9cf6bdbc0be9e21aca7ae`
 - Base: `origin/main` at `eaad4c3079192e20c06a199e5fd0e1a5a485a80b`
-- Phase: fail-closed rounding fix complete and locally focused-gated; family-size contract correction next.
+- Phase: adjudicated source edits and companion cases complete; generated metadata sync next.
 - Signing: reserved for the main lane; this lane will only run the required dry run.
 
 ## Done
@@ -42,13 +42,20 @@
   `not_holds` and a zero final credit rather than the wrong raw-rate credit.
 - Pinned focused gates pass after the rounding edit: deterministic validation,
   proof validation (37 atoms), and the ACA companion (10 cases).
+- Reworded the family-size and poverty-line contract: the poverty line is a
+  trusted upstream fact for the household's family size and jurisdiction, and
+  this table-free module checks positivity but does not validate correspondence.
+- Added the deliberately mismatched family-size-4/size-1-poverty-line NOTE
+  case. It documents the non-goal by asserting the current trusted-input
+  behavior (`runtime_inputs_valid: holds`, credit `$3,600`) without endorsing
+  the mismatch as a valid legal fact.
+- Focused validation and proof validation still pass, and the ACA companion now
+  passes all 11 cases.
 
 ## Next
 
-1. Correct the family-size/FPL contract description and add the mismatch NOTE
-   case as a documented non-goal.
-2. Sync the added private guard parameter into the oracle-pending ledger and
+1. Sync the added private guard parameter into the oracle-pending ledger and
    regenerate the reverse index if required.
-3. Run the signing dry run and full canonical gate battery.
-4. Write the corrected PR-body Gates paragraph and final DONE report with
+2. Run the signing dry run and full canonical gate battery.
+3. Write the corrected PR-body Gates paragraph and final DONE report with
    exact counts, ledger delta, and local commit SHAs.
