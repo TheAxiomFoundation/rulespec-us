@@ -2,13 +2,17 @@
 
 ## State
 
-- Evidence collection is complete against exact live PR head
+- Confirmation review is complete with verdict `APPROVE` against exact live PR
+  head
   `12e280f162e36b9896c64d34af35cd703bbad27c`.
 - All five requested confirmation items pass: the body matches the head facts,
   CI is green at the head, EOF hygiene is clean, the module differs from round
   2 only by removal of one terminal LF, and GitHub reports the PR mergeable.
 - No PR, remote branch, reviewed source, comment, or review state will be
   changed.
+- The shared dirty checkout is untouched. The throwaway confirmation worktree
+  has been deleted; audit-only commits remain on
+  `codex/confirm-1009-round3`.
 
 ## Done
 
@@ -39,10 +43,16 @@
 - Verified GitHub now reports `mergeable: true`, has synthesized exact test
   merge `50cd566fe219c0b12981dda7d5efa8d61f16cfbd`, and compares the head as 14
   commits ahead / 0 behind with the live base as merge base.
+- Re-fetched live state at `2026-07-24T18:21:16.919Z`; the head and base were
+  unchanged, all four requested body phrases were still present, all three
+  workflows remained successful, and mergeability remained true.
+- Wrote and committed `scratchpad/confirm-1009-VERDICT.md` at `553f8c4d`.
+- Copied the byte-identical committed report to the external output path
+  `.git/codex-confirm-1009-progress/confirm-1009-VERDICT.md`; both copies have
+  SHA-256
+  `50e62bca254ccb8c9541bafbcd8cbffcff384f9e98e9e0a696b311eb47eac459`.
 
 ## Next
 
-- Write and commit `scratchpad/confirm-1009-VERDICT.md`.
-- Re-fetch the live head, body, workflows, and mergeability immediately before
-  finalizing.
-- Finalize and commit this ledger, then remove the throwaway worktree.
+- Commit this final ledger state and remove the throwaway worktree. No review
+  work remains.
