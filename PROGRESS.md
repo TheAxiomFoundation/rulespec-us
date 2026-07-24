@@ -43,9 +43,9 @@ scope.
 - Removed the non-operative exact-$400 helper, its standalone input/case, and
   its now-unused explicit threshold import.
 - Reworked `seca-floor-below` and `seca-floor-above` as Person cases that assert
-  the imported section 1402(b) exclusion Judgment and operative
-  `self_employment_income` / OASDI-base outputs directly at `399.8755` and
-  `400.799`.
+  the imported section 1402(b)(2) `$400` threshold, the nonresident-exclusion
+  control Judgment, and operative `self_employment_income` / OASDI-base outputs
+  directly at `399.8755` and `400.799`.
 - Documented in both cases that exact `N = 400` requires gross input
   `800000 / 1847`, which has no finite decimal expansion.
 - Canonical SECA validation and all 19 proof atoms pass; all 13 revised SECA
