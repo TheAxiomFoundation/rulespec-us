@@ -73,11 +73,10 @@ module:
 
     It also computes the source-complete refundable earned-income,
     food/excise, low-income-renter, and child/dependent-care credits from raw
-    facts, applies refundable-first ordering, and exposes supported-profile
-    a signed liability before payments that becomes negative when refundable
-    credits exceed tax. Diagnostic schedule and refundable-excess amounts are
-    amounts are private. Public monetary outputs return zero unless every
-    transitive supported-profile condition holds.
+    facts and applies refundable-first ordering. The schedule computation and
+    signed net amount remain explicit candidates. Public tax and liability
+    stages fail closed while the Director-prescribed 2026 table and ceiling
+    are absent. Diagnostic schedule and refundable-excess amounts are private.
 
     Itemized deductions, special disability exemptions, reserve pay requiring
     the missing military table, other-state credit limitation, renewable,
@@ -879,11 +878,17 @@ rules:
           and hi_pit_2026_pension_for_past_services >= 0
           and hi_pit_2026_federal_earned_income_tax_credit >= 0
           and hi_pit_2026_food_credit_exemption_presence_failure_count >= 0
+          and hi_pit_2026_food_credit_exemption_presence_failure_count <= hi_pit_2026_federal_exemption_count
+          and hi_pit_2026_food_credit_minor_child_dhs_support_count >= 0
+          and hi_pit_2026_food_credit_minor_child_social_security_survivor_count >= 0
           and hi_pit_2026_renter_credit_exemption_presence_failure_count >= 0
+          and hi_pit_2026_renter_credit_exemption_presence_failure_count
+          <= hi_pit_2026_federal_exemption_count + hi_pit_2026_age_65_exemption_count
           and hi_pit_2026_cash_rent_for_qualified_hawaii_residence >= 0
           and hi_pit_2026_cdcc_child_under_13_count >= 0
           and hi_pit_2026_cdcc_incapable_dependent_count >= 0
           and hi_pit_2026_cdcc_incapable_spouse_count >= 0
+          and hi_pit_2026_cdcc_incapable_spouse_count <= 1
           and hi_pit_2026_cdcc_employment_related_expenses >= 0
           and hi_pit_2026_cdcc_dependent_care_assistance_exclusion >= 0
           and hi_pit_2026_taxpayer_earned_income >= 0
@@ -996,7 +1001,14 @@ rules:
           and not hi_pit_2026_has_hawaii_capital_gain_adjustment_components
           and not hi_pit_2026_has_form_n_158_amount
           and not hi_pit_2026_has_cdcc_student_or_incapable_spouse_deemed_income
-          and not hi_pit_2026_tax_table_source_hold_applies
+          and not hi_pit_2026_has_other_like_minor_child_support_category
+          and not (
+            hi_pit_2026_is_married_filing_separately
+            and (
+              hi_pit_2026_claims_food_excise_credit
+              or hi_pit_2026_claims_low_income_renter_credit
+            )
+          )
 
   - name: hi_pit_2026_total_additions_to_federal_adjusted_gross_income
     kind: derived
@@ -1234,7 +1246,6 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           not hi_pit_2026_elects_itemized_deductions
-          and hi_pit_2026_taxable_income <= hi_pit_2026_statutory_minimum_tax_table_ceiling
 
   - name: hi_pit_2026_schedule_a_bracket
     kind: derived
@@ -1779,6 +1790,9 @@ rules:
           - path: versions[0].formula
             kind: condition
             source: {corpus_citation_path: us-hi/statute/235-55.6, excerpt: "who maintains a household which includes as a member one or more qualifying individuals"}
+          - path: versions[0].formula
+            kind: exception
+            source: {corpus_citation_path: us-hi/statute/235-55.6, excerpt: "Certain married individuals living apart"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -1792,6 +1806,11 @@ rules:
           and hi_pit_2026_cdcc_provider_identifying_information_furnished
           and hi_pit_2026_cdcc_center_law_compliance_met
           and hi_pit_2026_cdcc_qualifying_individual_count > 0
+          and (
+            not hi_pit_2026_is_married_filing_separately
+            or hi_pit_2026_mfs_is_legally_separated
+            or hi_pit_2026_mfs_living_apart_conditions_met
+          )
           and not hi_pit_2026_has_cdcc_student_or_incapable_spouse_deemed_income:
             hi_pit_2026_cdcc_applicable_percentage * hi_pit_2026_cdcc_creditable_expenses
           else:
@@ -1839,10 +1858,20 @@ rules:
           - path: versions[0].formula
             kind: definition
             source: {corpus_citation_path: us-hi/statute/235-55.85, excerpt: "a person for whom exemption is claimed has been physically present in the State for more than nine months"}
+          - path: versions[0].formula
+            kind: exception
+            source: {corpus_citation_path: us-hi/statute/235-55.85, excerpt: "a minor child receiving support from the department of human services of the State, social security survivor's benefits, and the like"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: max(0, hi_pit_2026_federal_exemption_count - hi_pit_2026_food_credit_exemption_presence_failure_count)
+        formula: |-
+          max(
+            0,
+            hi_pit_2026_federal_exemption_count
+            - hi_pit_2026_food_credit_exemption_presence_failure_count
+          )
+          + hi_pit_2026_food_credit_minor_child_dhs_support_count
+          + hi_pit_2026_food_credit_minor_child_social_security_survivor_count
 
   - name: hi_pit_2026_renter_credit_qualified_exemption_count
     kind: derived
@@ -1936,6 +1965,7 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if hi_pit_2026_claims_food_excise_credit
+          and not hi_pit_2026_is_married_filing_separately
           and not hi_pit_2026_is_eligible_to_be_claimed_as_dependent
           and not hi_pit_2026_food_credit_confinement_disqualification_applies:
             hi_pit_2026_food_excise_credit_per_exemption
@@ -1968,6 +1998,7 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if hi_pit_2026_claims_low_income_renter_credit
+          and not hi_pit_2026_is_married_filing_separately
           and hi_pit_2026_renter_occupies_hawaii_principal_residence
           and hi_pit_2026_renter_paid_cash_rent
           and hi_pit_2026_rental_property_not_wholly_or_partly_property_tax_exempt
@@ -2008,6 +2039,63 @@ rules:
           + hi_pit_2026_refundable_food_excise_tax_credit
           + hi_pit_2026_refundable_low_income_renter_credit
 
+  - name: hi_pit_2026_profile_candidate_tax_before_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Explicit section 235-51 schedule candidate pending the section 235-53 Director table
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-hi/statute/235-53, excerpt: "In lieu of the tax imposed by section 235-51"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: hi_pit_2026_income_tax_liability
+
+  - name: hi_pit_2026_profile_candidate_tax_after_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Explicit no-specialty-nonrefundable-credit profile candidate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-hi/statute/235-91.5, excerpt: "followed by nonrefundable tax credits"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: hi_pit_2026_income_tax_liability
+
+  - name: hi_pit_2026_profile_candidate_net_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Signed schedule candidate after refundable credits and before payments
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-hi/statute/235-91.5, excerpt: "offsetting of a taxpayer's income tax liability"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: hi_pit_2026_income_tax_liability - hi_pit_2026_total_refundable_credits
+
   - name: hi_pit_2026_supported_profile_taxable_income
     kind: derived
     entity: TaxUnit
@@ -2047,7 +2135,8 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if hi_pit_2026_supported_profile_applies:
+          if hi_pit_2026_supported_profile_applies
+          and not hi_pit_2026_tax_table_source_hold_applies:
             hi_pit_2026_income_tax_liability
           else:
             0
@@ -2091,7 +2180,8 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if hi_pit_2026_supported_profile_applies:
+          if hi_pit_2026_supported_profile_applies
+          and not hi_pit_2026_tax_table_source_hold_applies:
             hi_pit_2026_income_tax_liability
           else:
             0
@@ -2113,7 +2203,8 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if hi_pit_2026_supported_profile_applies:
+          if hi_pit_2026_supported_profile_applies
+          and not hi_pit_2026_tax_table_source_hold_applies:
             hi_pit_2026_income_tax_liability - hi_pit_2026_total_refundable_credits
           else:
             0
@@ -2136,7 +2227,8 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if hi_pit_2026_supported_profile_applies:
+          if hi_pit_2026_supported_profile_applies
+          and not hi_pit_2026_tax_table_source_hold_applies:
             max(0, hi_pit_2026_total_refundable_credits - hi_pit_2026_income_tax_liability)
           else:
             0
@@ -2172,6 +2264,16 @@ inputs:
     dtype: Bool
     period: Year
     description: Whether the schedule-A filer is a surviving spouse rather than a married joint filer.
+  - name: hi_pit_2026_mfs_is_legally_separated
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether a married-separate filer is legally separated under a divorce or separate-maintenance decree.
+  - name: hi_pit_2026_mfs_living_apart_conditions_met
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether a married-separate filer maintained the qualifying home, furnished over half its cost, and had no spouse household membership during the final six months.
   - name: hi_pit_2026_federal_exemption_count
     entity: TaxUnit
     dtype: Integer
@@ -2395,6 +2497,21 @@ inputs:
     dtype: Integer
     period: Year
     description: Federal exemptions whose person was not physically present in Hawaii more than nine months.
+  - name: hi_pit_2026_food_credit_minor_child_dhs_support_count
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Minor children not already in federal exemptions who receive Hawaii Department of Human Services support.
+  - name: hi_pit_2026_food_credit_minor_child_social_security_survivor_count
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Minor children not already in federal exemptions who receive Social Security survivor benefits.
+  - name: hi_pit_2026_has_other_like_minor_child_support_category
+    entity: TaxUnit
+    dtype: Bool
+    period: Year
+    description: Whether a minor child relies on another support category potentially within the statute's and-the-like clause.
   - name: hi_pit_2026_food_credit_confinement_disqualification_applies
     entity: TaxUnit
     dtype: Bool
