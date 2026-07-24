@@ -21,11 +21,13 @@
 - Preserved `savers_credit_pipeline.yaml` and its companion test with SHA-256
   hashes `9620a6d0...ea4` and `2f0ef016...329`, then removed both from this
   branch with `git rm`.
+- Guarded the final QBID output against corporations and added the active-QBI
+  minimum counterexample; the targeted companion and proof checks pass.
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Implement the QBID output guards, local width rule, one-group contract,
+2. Implement the remaining QBID local width rule, one-group contract,
    Rev. Proc. threshold import, and fixed 2026 minimum.
 3. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
    double-benefit contract.
