@@ -23,12 +23,15 @@
   branch with `git rm`.
 - Guarded the final QBID output against corporations and added the active-QBI
   minimum counterexample; the targeted companion and proof checks pass.
+- Replaced the imported `{1,4}` QBID width selector with a local five-status
+  rule and added the surviving-spouse band-top counterexample; targeted proof
+  validation and all 13 QBID cases pass.
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Implement the remaining QBID local width rule, one-group contract,
-   Rev. Proc. threshold import, and fixed 2026 minimum.
+2. Implement the remaining QBID one-group contract, Rev. Proc. threshold
+   import, and fixed 2026 minimum.
 3. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
    double-benefit contract.
 4. Regenerate required derived artifacts, run the complete validation battery

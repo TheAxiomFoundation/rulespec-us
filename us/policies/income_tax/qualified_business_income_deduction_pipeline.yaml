@@ -69,7 +69,6 @@ module:
         that upstream classification boundary and does not treat an unknown
         SSTB determination as false.
 imports:
-  - us:statutes/26/199A#qbi_phasein_range
   - us:statutes/26/199A#trade_or_business_wage_property_limit
   - us:statutes/26/199A#trade_or_business_qbi_amount_before_limits
   - us:statutes/26/199A#trade_or_business_excess_amount
@@ -99,6 +98,37 @@ rules:
         effective_to: '2026-12-31'
         formula: qualified_business_income_threshold_amount_2026
 
+  - name: pipeline_qbi_phasein_range
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Rev. Proc. 2025-32 section 4.26 and 26 USC 199A(b)(3)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
+              excerpt: "Filing Status Threshold amount Phase-in range amount Married Individuals Filing Joint Returns $403,500 $553,500 Married Individuals Filing Separate Returns $201,775 $276,775 All Other Returns $201,750 $276,750"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "threshold amount plus $75,000 ($150,000 in the case of a joint return)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          match filing_status:
+              0 => 75000
+              1 => 150000
+              2 => 75000
+              3 => 75000
+              4 => 75000
+
   - name: pipeline_trade_or_business_phasein_reduction
     kind: derived
     entity: TaxUnit
@@ -120,12 +150,6 @@ rules:
               target: us:statutes/26/199A#trade_or_business_excess_amount
               output: trade_or_business_excess_amount
               hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:statutes/26/199A#qbi_phasein_range
-              output: qbi_phasein_range
-              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -138,7 +162,7 @@ rules:
                   taxable_income_computed_without_section_199A
                   - pipeline_qualified_business_income_threshold_amount
               )
-              / qbi_phasein_range
+              / pipeline_qbi_phasein_range
           )
 
   - name: pipeline_trade_or_business_deductible_amount
@@ -171,12 +195,6 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us:statutes/26/199A#qbi_phasein_range
-              output: qbi_phasein_range
-              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
-          - path: versions[0].formula
-            kind: import
-            import:
               target: us:statutes/26/199A#cooperative_reduction
               output: cooperative_reduction
               hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
@@ -193,7 +211,7 @@ rules:
                   else:
                       if taxable_income_computed_without_section_199A
                           <= pipeline_qualified_business_income_threshold_amount
-                          + qbi_phasein_range:
+                          + pipeline_qbi_phasein_range:
                           trade_or_business_qbi_amount_before_limits
                           - pipeline_trade_or_business_phasein_reduction
                       else:
