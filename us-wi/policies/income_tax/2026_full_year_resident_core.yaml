@@ -28,42 +28,43 @@ module:
         2026 Form 1-ES. Chapter 71 supplies the federal-adjusted-gross-income
         starting point, directly stated additions and subtractions, personal
         exemptions, standard-deduction formula, ordinary tax rules, credits,
-        refundable-credit treatment, and statutory computation order. Form
-        1-ES supplies the operative 2026 resident bracket floors, cumulative
-        bases, and rates.
+        refundable-credit treatment, and statutory computation order. Section
+        71.06(3) requires annual personal income tax to be determined from the
+        Department's Tax Table, using income bands no wider than $100,
+        midpoint computation, and whole-dollar tax amounts.
 
         The official 2026 Form 1-ES publishes the Department-prescribed
         standard-deduction schedules for single, head-of-household,
-        married-joint, and married-separate returns as well as the resident
-        gross-tax schedules. This module uses those published amounts directly;
-        it does not project CPI changes or accept caller-completed Wisconsin
-        deductions, credits, tax, or liability.
+        married-joint, and married-separate returns. It also publishes
+        continuous resident gross-tax schedules for estimated-tax purposes.
+        This module uses the standard-deduction amounts directly and retains
+        the Form 1-ES tax schedules only as private estimated-tax probes; those
+        continuous schedules do not substitute for the annual Tax Table.
 
         The pinned corpus still lacks operative indexed 2026 limits for
         education, Wisconsin 529/ABLE, and employee college-savings provisions
         and the cross-title law needed to resolve every specialty subtraction,
         credit, recapture, and carryforward. Those branches remain typed holds
-        and are excluded by the disclosed supported profile. Within that
-        profile, the module completes Wisconsin adjusted gross income, the
-        standard deduction and exemptions, taxable income, gross tax, ordered
-        nonrefundable credits, refundable earned-income credit, and signed net
-        liability before payments.
+        and are excluded by the disclosed supported profile. The official 2026
+        annual Tax Table is also not pinned or published in the corpus. Within
+        the supported profile, the module therefore completes Wisconsin
+        adjusted gross income, the standard deduction and exemptions, taxable
+        income, and directly supported credit components, but holds and fails
+        closed all public annual gross-tax and final-liability outputs.
   summary: |-
     Wisconsin TY2026 full-year-resident individual-income-tax bounded core.
     The module starts with federal adjusted gross income and raw transaction
     facts, applies directly supported additions and subtractions, and computes
-    fixed personal exemptions. It also pins the complete official 2026
-    resident gross-tax schedules and reconstructs several common credits from
-    raw inputs.
+    fixed personal exemptions, the complete official 2026 standard deduction,
+    taxable income, and several common credit components from raw inputs.
 
-    The official TY2026 standard-deduction and resident gross-tax schedules
-    complete the bounded liability chain. Public completed Money outputs return
-    zero outside the supported profile while the source-hold Judgment identifies
-    genuinely unresolved specialty modifications, credits, carryforwards, and
-    recaptures. The signed net-liability output may be negative when the
-    refundable Wisconsin earned-income credit exceeds tax after nonrefundable
-    credits. Oracle comparison remains separate work; pending coverage is not
-    represented as parity.
+    Form 1-ES continuous tax schedules remain private estimated-tax probes.
+    They cannot complete annual gross tax because Wis. Stat. 71.06(3) requires
+    the Department's annual Tax Table and the official TY2026 table is not
+    pinned. A typed annual-table source hold therefore remains active, and all
+    public annual gross-tax, post-credit-tax, and net-liability outputs fail
+    closed to zero. Oracle comparison remains separate work; pending coverage
+    is not represented as parity.
 rules:
   - name: wi_pit_2026_first_bracket_upper
     kind: parameter
@@ -1148,12 +1149,29 @@ rules:
         effective_to: '2026-12-31'
         formula: false
 
+  - name: wi_pit_2026_annual_tax_table_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Official TY2026 annual DOR Tax Table required by Wis. Stat. 71.06(3) is not pinned
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-wi/statute/71.06, excerpt: "shall determine income tax from the tax table"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
   - name: wi_pit_2026_complete_liability_source_hold_applies
     kind: derived
     entity: TaxUnit
     dtype: Judgment
     period: Year
-    source: Typed hold for unresolved specialty modifications, credits, and recaptures
+    source: Typed hold for the missing annual Tax Table and unresolved specialty branches
     metadata:
       proof:
         atoms:
@@ -1164,7 +1182,8 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          not wi_pit_2026_supported_liability_profile_applies
+          wi_pit_2026_annual_tax_table_source_hold_applies
+          or not wi_pit_2026_supported_liability_profile_applies
 
   - name: wi_pit_2026_schedule_selector
     kind: derived
@@ -1593,12 +1612,12 @@ rules:
           else:
             0
 
-  - name: wi_pit_2026_final_bracket_within_schedule
+  - name: wi_pit_2026_estimated_tax_schedule_bracket_within_schedule_probe
     kind: derived
     entity: TaxUnit
     dtype: Integer
     period: Year
-    source: 2026 Form 1-ES resident gross-tax schedule bands
+    source: Private estimated-tax probe from 2026 Form 1-ES schedule bands
     metadata:
       private: true
       proof:
@@ -1624,12 +1643,12 @@ rules:
           else:
             3
 
-  - name: wi_pit_2026_final_bracket_selector
+  - name: wi_pit_2026_estimated_tax_schedule_bracket_selector_probe
     kind: derived
     entity: TaxUnit
     dtype: Integer
     period: Year
-    source: 2026 Form 1-ES Schedules A, B, and C
+    source: Private estimated-tax probe from 2026 Form 1-ES Schedules A, B, and C
     metadata:
       private: true
       proof:
@@ -1646,15 +1665,15 @@ rules:
           else:
             wi_pit_2026_schedule_selector
             * wi_pit_2026_brackets_per_schedule
-            + wi_pit_2026_final_bracket_within_schedule
+            + wi_pit_2026_estimated_tax_schedule_bracket_within_schedule_probe
 
-  - name: wi_pit_2026_profile_candidate_gross_tax
+  - name: wi_pit_2026_estimated_tax_schedule_gross_tax_probe
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: 2026 Form 1-ES resident gross-tax schedules
+    source: Private estimated-tax gross-tax probe from 2026 Form 1-ES
     metadata:
       private: true
       proof:
@@ -1666,14 +1685,14 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if wi_pit_2026_final_bracket_selector < 0:
+          if wi_pit_2026_estimated_tax_schedule_bracket_selector_probe < 0:
             0
           else:
-            wi_pit_2026_bracket_base[wi_pit_2026_final_bracket_selector]
-            + wi_pit_2026_bracket_rate[wi_pit_2026_final_bracket_selector]
+            wi_pit_2026_bracket_base[wi_pit_2026_estimated_tax_schedule_bracket_selector_probe]
+            + wi_pit_2026_bracket_rate[wi_pit_2026_estimated_tax_schedule_bracket_selector_probe]
             * (
               wi_pit_2026_profile_candidate_wisconsin_taxable_income
-              - wi_pit_2026_bracket_floor[wi_pit_2026_final_bracket_selector]
+              - wi_pit_2026_bracket_floor[wi_pit_2026_estimated_tax_schedule_bracket_selector_probe]
             )
 
   - name: wi_pit_2026_complete_gross_tax
@@ -1682,29 +1701,25 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: Public supported-profile 2026 Wisconsin gross tax
+    source: Annual gross tax withheld pending the official TY2026 DOR Tax Table
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
-            source: {corpus_citation_path: us-wi/form/individual-income-tax/2026/1-es/document-1, excerpt: "The 2026 Gross Tax is"}
+            source: {corpus_citation_path: us-wi/statute/71.06, excerpt: "shall determine income tax from the tax table"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: |-
-          if wi_pit_2026_supported_liability_profile_applies:
-            wi_pit_2026_profile_candidate_gross_tax
-          else:
-            0
+        formula: 0
 
-  - name: wi_pit_2026_tax_after_stillbirth_credit
+  - name: wi_pit_2026_estimated_tax_schedule_tax_after_stillbirth_credit_probe
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Wis. Stat. 71.10(4)(ct), stillbirth credit ordering
+    source: Private estimated-tax probe applying Wis. Stat. 71.10(4)(ct) ordering
     metadata:
       private: true
       proof:
@@ -1718,17 +1733,17 @@ rules:
         formula: |-
           max(
             0,
-            wi_pit_2026_profile_candidate_gross_tax
+            wi_pit_2026_estimated_tax_schedule_gross_tax_probe
             - wi_pit_2026_stillbirth_credit_before_tax_cap
           )
 
-  - name: wi_pit_2026_tax_after_transportation_credit
+  - name: wi_pit_2026_estimated_tax_schedule_tax_after_transportation_credit_probe
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Wis. Stat. 71.10(4)(cw), transportation credit ordering
+    source: Private estimated-tax probe applying Wis. Stat. 71.10(4)(cw) ordering
     metadata:
       private: true
       proof:
@@ -1742,17 +1757,17 @@ rules:
         formula: |-
           max(
             0,
-            wi_pit_2026_tax_after_stillbirth_credit
+            wi_pit_2026_estimated_tax_schedule_tax_after_stillbirth_credit_probe
             - wi_pit_2026_qualifying_transportation_credit_before_tax_cap
           )
 
-  - name: wi_pit_2026_tax_after_school_property_credit
+  - name: wi_pit_2026_estimated_tax_schedule_tax_after_school_property_credit_probe
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Wis. Stat. 71.10(4)(d), school-property credit ordering
+    source: Private estimated-tax probe applying Wis. Stat. 71.10(4)(d) ordering
     metadata:
       private: true
       proof:
@@ -1766,17 +1781,17 @@ rules:
         formula: |-
           max(
             0,
-            wi_pit_2026_tax_after_transportation_credit
+            wi_pit_2026_estimated_tax_schedule_tax_after_transportation_credit_probe
             - wi_pit_2026_school_property_credit_before_tax_cap
           )
 
-  - name: wi_pit_2026_profile_candidate_tax_after_nonrefundable_credits
+  - name: wi_pit_2026_estimated_tax_schedule_tax_after_nonrefundable_credits_probe
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Wis. Stat. 71.10(4)(g), married-persons credit ordering
+    source: Private estimated-tax probe applying Wis. Stat. 71.10(4)(g) ordering
     metadata:
       private: true
       proof:
@@ -1790,7 +1805,7 @@ rules:
         formula: |-
           max(
             0,
-            wi_pit_2026_tax_after_school_property_credit
+            wi_pit_2026_estimated_tax_schedule_tax_after_school_property_credit_probe
             - wi_pit_2026_married_persons_credit_before_tax_cap
           )
 
@@ -1800,29 +1815,25 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: Public supported-profile tax after ordered nonrefundable credits
+    source: Annual post-credit tax withheld pending the official TY2026 DOR Tax Table
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
-            source: {corpus_citation_path: us-wi/statute/71.10, excerpt: "make computations in the following order"}
+            source: {corpus_citation_path: us-wi/statute/71.06, excerpt: "shall determine income tax from the tax table"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: |-
-          if wi_pit_2026_supported_liability_profile_applies:
-            wi_pit_2026_profile_candidate_tax_after_nonrefundable_credits
-          else:
-            0
+        formula: 0
 
-  - name: wi_pit_2026_profile_candidate_net_income_tax_liability_before_payments
+  - name: wi_pit_2026_estimated_tax_schedule_net_liability_before_payments_probe
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: Wis. Stat. 71.07(9e)(f), refundable earned-income credit
+    source: Private estimated-tax probe applying Wis. Stat. 71.07(9e)(f)
     metadata:
       private: true
       proof:
@@ -1834,7 +1845,7 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          wi_pit_2026_profile_candidate_tax_after_nonrefundable_credits
+          wi_pit_2026_estimated_tax_schedule_tax_after_nonrefundable_credits_probe
           - wi_pit_2026_refundable_earned_income_credit
 
   - name: wi_pit_2026_net_income_tax_liability_before_payments
@@ -1843,21 +1854,17 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: Public signed supported-profile liability before payments
+    source: Annual net liability withheld pending the official TY2026 DOR Tax Table
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
-            source: {corpus_citation_path: us-wi/statute/71.07, excerpt: "or no taxes are due"}
+            source: {corpus_citation_path: us-wi/statute/71.06, excerpt: "shall determine income tax from the tax table"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: |-
-          if wi_pit_2026_supported_liability_profile_applies:
-            wi_pit_2026_profile_candidate_net_income_tax_liability_before_payments
-          else:
-            0
+        formula: 0
 
 inputs:
   - name: wi_pit_2026_federal_adjusted_gross_income
