@@ -5,7 +5,8 @@
 - Branch: `fed-parity/aca-ptc`
 - Starting head: `cf5ae8bfcb4ba218fdc9cf6bdbc0be9e21aca7ae`
 - Base: `origin/main` at `eaad4c3079192e20c06a199e5fd0e1a5a485a80b`
-- Phase: adjudicated source edits and companion cases complete; generated metadata sync next.
+- Phase: source edits, companion cases, and generated metadata sync complete;
+  canonical gate battery next.
 - Signing: reserved for the main lane; this lane will only run the required dry run.
 
 ## Done
@@ -51,11 +52,18 @@
   the mismatch as a valid legal fact.
 - Focused validation and proof validation still pass, and the ACA companion now
   passes all 11 cases.
+- Regenerated the reverse index with the repository tool and confirmed it is
+  byte-for-byte current at 4,171 provisions, 4,947 edges, and 4,454 modules.
+- Ran `oracle-coverage-pending sync` from the required
+  `ae-main-sync@212f6671fe7a` snapshot in a real canonical-basename
+  `rulespec-us` checkout. The exact current oracle surface adds the private ACA
+  guard parameter and drains 27 now-mapped declarations, producing 2,304
+  pending declarations.
 
 ## Next
 
-1. Sync the added private guard parameter into the oracle-pending ledger and
-   regenerate the reverse index if required.
-2. Run the signing dry run and full canonical gate battery.
+1. Commit the synchronized pending ledger.
+2. Recreate the canonical snapshot at that commit, then run the signing dry run
+   and full gate battery.
 3. Write the corrected PR-body Gates paragraph and final DONE report with
    exact counts, ledger delta, and local commit SHAs.
