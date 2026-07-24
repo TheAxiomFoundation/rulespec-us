@@ -3,9 +3,9 @@
 ## State
 
 In progress on branch `fed-parity/surtaxes`. The ordinary SECA section 1401(c)
-guard is implemented and locally proved; wage-coordination provenance and
-operative floor coverage remain. No pushes, GitHub writes, PR-body edits, or
-`us/statutes` edits are in scope.
+guard and the section 1401(b)(2)(B) wage-coordination provenance adjudication
+are implemented and locally proved; operative floor coverage remains. No
+pushes, GitHub writes, PR-body edits, or `us/statutes` edits are in scope.
 
 ## Done
 
@@ -27,13 +27,21 @@ operative floor coverage remain. No pushes, GitHub writes, PR-body edits, or
   pre-relief SE income of `$46,175` but returns zero for all three public taxes.
 - Pinned proof validation passes all 21 SECA atoms; all 14 current SECA
   companion cases pass.
+- Aligned both local section 1401(b)(2)(B) proof excerpts and the `wages`
+  input contract to the full coordination language: wages as defined in
+  section 3121(a), taken into account for the tax under section 3101(b)(2).
+- Documented exactly that the record's broken `source_url` metadata is tracked
+  as `axiom-corpus#514` and does not invalidate the record text's hash-chained
+  provenance.
+- Pinned Additional Medicare proof validation passes all 17 atoms and all 14
+  companions pass, so the adjudicated deferred fail-closed fallback is not
+  triggered. Canonical validation currently reports only the expected stale
+  downstream SE module hash, to be refreshed after the floor edit is final.
 
 ## Next
 
-1. Align the wage-input contract and proof excerpt to the actual pinned
-   section 1401(b)(2)(B) text, then run the deterministic authoring checks.
-2. Rework both floor straddle companions to exercise the imported operative
+1. Rework both floor straddle companions to exercise the imported operative
    floor outputs.
-3. Refresh the downstream SE import hash and required generated artifacts, run
+2. Refresh the downstream SE import hash and required generated artifacts, run
    focused gates and full repository
    pytest, and write `scratchpad/fix2-1003-DONE.md`.
