@@ -36,12 +36,20 @@ module:
     upstream bucket-specific correction, this pipeline therefore fails closed
     to zero whenever `section_22_payment_of_tax_unit` is nonempty.
 
+    The imported disability branch also establishes annual impairment facts
+    but not that permanent and total disability existed when the individual
+    retired. If any under-65 individual qualifies through that branch, the
+    final output additionally requires a tax-unit attestation that every such
+    individual was permanently and totally disabled at retirement. False
+    returns zero; omission leaves the required boundary unevaluable.
+
     The companion verifies both aged and under-65 disability branches. The
     joint case with only one qualified spouse uses the encoded and statutory
     $5,000 initial amount. Every expected value is the statutory section 22
     credit before section 26 applies.
 imports:
   - us:statutes/26/22#elderly_disabled_credit
+  - us:statutes/26/22#under_65_elderly_disabled_qualified_individual
 rules:
   - name: federal_elderly_disabled_credit
     kind: derived
@@ -69,11 +77,31 @@ rules:
             source:
               corpus_citation_path: us/statute/26/22
               excerpt: "No reduction shall be made under clause (i)(III) for any amount described in section 104(a)(4)."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/22
+              excerpt: "who retired on disability before the close of the taxable year and who, when he retired, was permanently and totally disabled"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/22#under_65_elderly_disabled_qualified_individual
+              output: under_65_elderly_disabled_qualified_individual
+              hash: sha256:b8f25c27474cb04699f57c9f68da133f38eb5555c01fcf0a3521d4e9efb8d242
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if len(section_22_payment_of_tax_unit) == 0:
+          if (
+              len(section_22_payment_of_tax_unit) == 0
+              and (
+                  count_where(
+                      taxpayer_or_spouse_of_tax_unit,
+                      under_65_elderly_disabled_qualified_individual
+                  ) == 0
+                  or all_under_65_section_22_qualified_individuals_were_permanently_and_totally_disabled_when_retired
+              )
+          ):
               elderly_disabled_credit
           else:
               0
@@ -135,6 +163,11 @@ inputs:
     dtype: Boolean
     period: Year
     description: Section 22(f) nonresident-alien ineligibility fact.
+  - name: all_under_65_section_22_qualified_individuals_were_permanently_and_totally_disabled_when_retired
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required attestation, whenever any under-65 individual qualifies through disability, that every such individual was permanently and totally disabled when retired as required by section 22(b)(2); false makes the final output zero and omission on that branch is unevaluable.
   - name: age
     entity: Person
     dtype: Integer
