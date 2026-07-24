@@ -43,9 +43,12 @@
 - Added the section 25A(g)(5) net-expense attestation to both LLC boundaries
   and a false-attestation double-benefit case. Static validation, all 6 proof
   atoms, and all 13 companion cases pass.
+- Removed the saver manifest, regenerated the source reverse index, and
+  reconciled the oracle pending ledger (7 saver outputs removed, 4 new QBID
+  helpers added; 2,313 declarations applied with no stale entries).
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Regenerate required derived artifacts, run the complete validation battery
-   and signing dry-run, and prepare the corrected PR body and completion report.
+2. Run the complete validation battery and signing dry-run, then prepare the
+   corrected PR body and completion report.
