@@ -113,7 +113,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
 
     assert "legacy-rulespec-freeze:" in workflow
     assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
-    assert "63f0cf25c862b822bc895f2dda72826ec02faa4e" in workflow
+    assert "0bfa8b1b6b8f4397109c81e4f8dbe351267996dd" in workflow
     assert (
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
@@ -123,7 +123,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "bedeb89a4d0cfce60d9a83a705fa3e15826685e636d71381192e70c2e5cfb1e3" in workflow
+    assert "396e188da03b212c978b8b7bc222af6e5ee9fd26b32d942b64e92aaf73f8b748" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     guard_expression = (
         "${{ !((github.event_name == 'pull_request' && "
