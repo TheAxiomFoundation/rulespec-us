@@ -38,12 +38,27 @@
 - Added six isolated NIIT fail-closed cases; all 15 NIIT companions pass.
 - Pinned NIIT validation passes: schema/CI, 10 proof atoms, and zero missing
   money atoms.
+- Added the required
+  `additional_medicare_tax_pipeline_self_employment_domain_is_valid` boundary.
+  When its section 1401(c) attestation fails, the public self-employment and
+  combined outputs return zero while the independently valid wage leg remains
+  observable.
+- Added a section 1401(c) fail-closed case and a joint two-positive-SE-earner
+  case proving one tax-unit threshold; all 14 Additional Medicare companions
+  pass.
+- Repaired both local section 1401(b)(2)(B) coordination proof atoms with the
+  fullest exact excerpt served at `us/statute/26/1401`, including its
+  cross-reference, and documented the corpus record's upstream `source_url`
+  metadata defect without editing the corpus or statute module.
+- Pinned Additional Medicare proof validation passes all 17 atoms with zero
+  missing money atoms. Direct validation from this worktree hit the known
+  noncanonical-basename import-resolution limitation; the same gate remains
+  queued in a committed canonical-basename clone.
 
 ## Next
 
-- Add the section 1401(c) boundary gate and companion case.
-- Repair the locally authored section 1401 coordination proof citation.
-- Add the requested boundary and joint-earner companion cases.
+- Add the exact section 1402(b) floor and two-positive-earner SECA companion
+  cases.
 - Run the full gate battery and signing dry-run.
 - Produce `scratchpad/fix-1003-BODY.md` and `scratchpad/fix-1003-DONE.md` with
   exact counts, ledger delta, gate results, and commit SHAs.
