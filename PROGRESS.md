@@ -29,13 +29,16 @@
 - Added the required only-qualified-business aggregation attestation and a
   false-attestation counterexample. The QBID module passes static validation,
   23 proof atoms, and all 14 companion cases.
+- Replaced the QBID threshold runtime input with the PR #1009 Rev. Proc.
+  module import and replaced the caller-supplied COLA with the unadjusted
+  statutory $1,000/$400 bases for 2026. In a temporary integration worktree
+  containing cached `origin/fed-parity/revproc`, static validation, all 27 proof
+  atoms, and all 14 companion cases pass.
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Implement the remaining QBID Rev. Proc. threshold import and fixed 2026
-   minimum.
-3. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
+2. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
    double-benefit contract.
-4. Regenerate required derived artifacts, run the complete validation battery
+3. Regenerate required derived artifacts, run the complete validation battery
    and signing dry-run, and prepare the corrected PR body and completion report.

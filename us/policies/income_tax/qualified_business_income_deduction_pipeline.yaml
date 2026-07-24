@@ -16,27 +16,27 @@ module:
       rationale: |-
         Section 199A supplies the deduction rate, taxable-income/net-capital-
         gain ceiling, W-2-wage/UBIA limitation, REIT/PTP component, cooperative
-        reduction, and active-QBI minimum. Revenue Procedure 2025-32,
-        section 4.26, supplies the unencoded tax-year-2026 threshold amounts:
-        $403,500 joint, $201,775 married filing separately, and $201,750 for
-        all other returns. Its published upper ends of $553,500, $276,775,
-        and $276,750 confirm the current statutory phase-in widths of $150,000
-        joint and $75,000 otherwise.
+        reduction, and active-QBI minimum. The Revenue Procedure 2025-32
+        qualified-business-income module supplies the encoded tax-year-2026
+        threshold amounts from section 4.26: $403,500 joint, $201,775 married
+        filing separately, and $201,750 for all other returns. The published
+        upper ends of $553,500, $276,775, and $276,750 confirm the current
+        statutory phase-in widths of $150,000 joint and $75,000 otherwise.
   summary: |-
     Federal qualified business income deduction composition under 26 USC
     199A for tax year 2026. The encoded section derives the final deduction,
     but its internal `threshold_amount_base` remains the unindexed statutory
-    base of $157,500 and RuleSpec imports cannot substitute the official 2026
-    amount. This module therefore imports the encoded deduction components,
-    accepts the applicable Revenue Procedure 2025-32 threshold as a runtime
-    input, and repeats only the threshold-dependent phase-in and final
+    base of $157,500. This module therefore imports the applicable indexed
+    threshold from the Revenue Procedure 2025-32 qualified-business-income
+    module (landing through PR #1009), imports the encoded deduction
+    components, and repeats only the threshold-dependent phase-in and final
     combination in locally proofed rules.
 
     The current section 199A text and Revenue Procedure 2025-32 use $75,000
     and $150,000 phase-in widths for 2026, not the pre-amendment $50,000 and
     $100,000 widths. The companion fixtures follow the current encoded statute
-    and official revenue procedure. They supply $201,750 for single returns
-    and $403,500 for joint returns.
+    and official revenue procedure. The filing-status input selects the
+    imported 2026 threshold; callers do not supply a policy amount.
 
     Qualified business income, W-2 wages, UBIA, cooperative amounts, REIT
     dividends, PTP income, and taxable income before this deduction are
@@ -57,11 +57,11 @@ module:
       reason: |-
         The encoded final output closes over an unindexed $157,500 threshold
         parameter. Revenue Procedure 2025-32 publishes materially different
-        2026 thresholds, and RuleSpec imports cannot replace that internal
-        parameter. The corrected pipeline output below uses the official
-        caller-supplied threshold while retaining the encoded component rules.
+        2026 thresholds. The corrected pipeline output below uses the indexed
+        threshold imported from the dedicated Revenue Procedure module while
+        retaining the encoded component rules.
       source_values:
-        - us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026
+        - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_amount
     - output: us:statutes/26/199A/c#qualified_business_income_definition
       reason: |-
         The encoded section consumes resolved qualified business income and
@@ -74,14 +74,15 @@ module:
         that upstream classification boundary and does not treat an unknown
         SSTB determination as false.
 imports:
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_amount
   - us:statutes/26/199A#trade_or_business_wage_property_limit
   - us:statutes/26/199A#trade_or_business_qbi_amount_before_limits
   - us:statutes/26/199A#trade_or_business_excess_amount
   - us:statutes/26/199A#cooperative_reduction
   - us:statutes/26/199A#qualified_reit_and_ptp_component
   - us:statutes/26/199A#qbi_taxable_income_limit
-  - us:statutes/26/199A#applicable_taxpayer_for_minimum_active_qbi_deduction
-  - us:statutes/26/199A#minimum_active_qbi_deduction_amount
+  - us:statutes/26/199A#active_qbi_minimum_threshold_base
+  - us:statutes/26/199A#minimum_active_qbi_deduction_base
 rules:
   - name: pipeline_qualified_business_income_threshold_amount
     kind: derived
@@ -98,10 +99,16 @@ rules:
             source:
               corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
               excerpt: "Filing Status Threshold amount"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_amount
+              output: qualified_business_income_threshold_amount
+              hash: sha256:b400bba8371ea7db11a1ec8519e86b1294782ca46b25fe525bb8cf4ee0c97fcb
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: qualified_business_income_threshold_amount_2026
+        formula: qualified_business_income_threshold_amount
 
   - name: pipeline_qbi_phasein_range_other
     kind: parameter
@@ -343,6 +350,38 @@ rules:
                   )
               )
 
+  - name: pipeline_applicable_taxpayer_for_minimum_active_qbi_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 199A(i)(2)-(3), unadjusted active-QBI threshold for tax year 2026
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "aggregate qualified business income with respect to all active qualified trades or businesses ... is at least $1,000"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/199A#active_qbi_minimum_threshold_base
+              output: active_qbi_minimum_threshold_base
+              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].effective_to
+            kind: effective_period
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "In the case of any taxable year beginning after 2026, the $400 amount ... and the $1,000 amount ... shall each be increased"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          aggregate_qualified_business_income_from_active_qualified_trades_or_businesses
+          >= active_qbi_minimum_threshold_base
+
   - name: federal_qualified_business_income_deduction
     kind: derived
     entity: TaxUnit
@@ -371,15 +410,14 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us:statutes/26/199A#applicable_taxpayer_for_minimum_active_qbi_deduction
-              output: applicable_taxpayer_for_minimum_active_qbi_deduction
+              target: us:statutes/26/199A#minimum_active_qbi_deduction_base
+              output: minimum_active_qbi_deduction_base
               hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:statutes/26/199A#minimum_active_qbi_deduction_amount
-              output: minimum_active_qbi_deduction_amount
-              hash: sha256:caa63943baa5fef539a7ae78ccf13c729149915e079f252cc44c97a7aa9db816
+          - path: versions[0].effective_to
+            kind: effective_period
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "In the case of any taxable year beginning after 2026, the $400 amount ... and the $1,000 amount ... shall each be increased"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -390,21 +428,15 @@ rules:
           ):
               0
           else:
-              if applicable_taxpayer_for_minimum_active_qbi_deduction:
+              if pipeline_applicable_taxpayer_for_minimum_active_qbi_deduction:
                   max(
                       pipeline_qbi_deduction_before_minimum_active_qbi,
-                      minimum_active_qbi_deduction_amount
+                      minimum_active_qbi_deduction_base
                   )
               else:
                   pipeline_qbi_deduction_before_minimum_active_qbi
 
 inputs:
-  - name: qualified_business_income_threshold_amount_2026
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Applicable 2026 section 199A threshold from Rev. Proc. 2025-32 section 4.26; $403,500 joint, $201,775 separate, or $201,750 otherwise.
   - name: filing_status
     entity: TaxUnit
     dtype: Integer
@@ -468,11 +500,6 @@ inputs:
     dtype: Boolean
     period: Year
     description: Whether the taxpayer is a corporation and therefore outside section 199A(a).
-  - name: minimum_deduction_cost_of_living_adjustment
-    entity: TaxUnit
-    dtype: Rate
-    period: Year
-    description: Section 199A(i)(3) adjustment used only after 2026; zero for the tax-year-2026 fixtures.
   - name: aggregate_qualified_business_income_from_active_qualified_trades_or_businesses
     entity: TaxUnit
     dtype: Money
