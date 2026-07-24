@@ -26,12 +26,15 @@
 - Replaced the imported `{1,4}` QBID width selector with a local five-status
   rule and added the surviving-spouse band-top counterexample; targeted proof
   validation and all 13 QBID cases pass.
+- Added the required only-qualified-business aggregation attestation and a
+  false-attestation counterexample. The QBID module passes static validation,
+  23 proof atoms, and all 14 companion cases.
 
 ## Next
 
 1. Remove saver-dependent generated artifacts during regeneration.
-2. Implement the remaining QBID one-group contract, Rev. Proc. threshold
-   import, and fixed 2026 minimum.
+2. Implement the remaining QBID Rev. Proc. threshold import and fixed 2026
+   minimum.
 3. Add the section 22 fail-closed boundaries and the section 25A(g)(5)
    double-benefit contract.
 4. Regenerate required derived artifacts, run the complete validation battery

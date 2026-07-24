@@ -42,11 +42,16 @@ module:
     dividends, PTP income, and taxable income before this deduction are
     completed-return TaxUnit boundaries. QBI classification under section
     199A(c)-(d), including specified-service-business determinations, remains
-    upstream as in the encoded section. All fixtures use resolved non-SSTB
-    QBI, zero UBIA, zero PTP income, zero cooperative amounts, and no net
-    capital gain. The no-wage above-band fixture also has zero active-QBI
-    aggregate, so section 199A(i)'s new $400 active-business minimum does not
-    replace the zero wage-limited result.
+    upstream as in the encoded section. Because the scalar trade-or-business
+    leg cannot perform the paragraph-(2) sum across nonaggregable businesses,
+    the final output requires an attestation that the supplied amounts form
+    the taxpayer's only qualified-trade-or-business aggregation group and
+    that no other qualified business exists. A false attestation returns zero;
+    omission leaves the required boundary unevaluable. All fixtures use
+    resolved non-SSTB QBI, zero UBIA, zero PTP income, zero cooperative
+    amounts, and no net capital gain. The no-wage above-band fixture also has
+    zero active-QBI aggregate, so section 199A(i)'s new $400 active-business
+    minimum does not replace the zero wage-limited result.
   deferred_outputs:
     - output: us:statutes/26/199A#qualified_business_income_deduction
       reason: |-
@@ -98,6 +103,52 @@ rules:
         effective_to: '2026-12-31'
         formula: qualified_business_income_threshold_amount_2026
 
+  - name: pipeline_qbi_phasein_range_other
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Rev. Proc. 2025-32 section 4.26 and 26 USC 199A(b)(3)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "threshold amount plus $75,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
+              excerpt: "All Other Returns $201,750 $276,750"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '75000'
+
+  - name: pipeline_qbi_phasein_range_joint
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Rev. Proc. 2025-32 section 4.26 and 26 USC 199A(b)(3)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "$150,000 in the case of a joint return"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
+              excerpt: "Married Individuals Filing Joint Returns $403,500 $553,500"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '150000'
+
   - name: pipeline_qbi_phasein_range
     kind: derived
     entity: TaxUnit
@@ -123,11 +174,11 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           match filing_status:
-              0 => 75000
-              1 => 150000
-              2 => 75000
-              3 => 75000
-              4 => 75000
+              0 => pipeline_qbi_phasein_range_other
+              1 => pipeline_qbi_phasein_range_joint
+              2 => pipeline_qbi_phasein_range_other
+              3 => pipeline_qbi_phasein_range_other
+              4 => pipeline_qbi_phasein_range_other
 
   - name: pipeline_trade_or_business_phasein_reduction
     kind: derived
@@ -313,6 +364,11 @@ rules:
               corpus_citation_path: us/statute/26/199A
               excerpt: "equal to the greater of"
           - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/199A
+              excerpt: "the sum of the amounts determined under paragraph (2) for each qualified trade or business carried on by the taxpayer"
+          - path: versions[0].formula
             kind: import
             import:
               target: us:statutes/26/199A#applicable_taxpayer_for_minimum_active_qbi_deduction
@@ -328,7 +384,10 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if taxpayer_is_corporation:
+          if (
+              taxpayer_is_corporation
+              or not supplied_amounts_are_for_taxpayers_only_qualified_trade_or_business
+          ):
               0
           else:
               if applicable_taxpayer_for_minimum_active_qbi_deduction:
@@ -351,6 +410,11 @@ inputs:
     dtype: Integer
     period: Year
     description: Filing-status code; 0 single/other, 1 joint, 2 married filing separately, 3 head of household, 4 surviving spouse.
+  - name: supplied_amounts_are_for_taxpayers_only_qualified_trade_or_business
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required attestation that the scalar QBI, W-2 wage, UBIA, and cooperative amounts form one permitted aggregation group constituting the taxpayer's only qualified trade or business, with no other qualified business outside the group; false makes the final output zero and omission is unevaluable.
   - name: qualified_trade_or_business_w2_wages
     entity: TaxUnit
     dtype: Money
