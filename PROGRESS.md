@@ -2,13 +2,13 @@
 
 ## State
 
-In progress on branch `fed-parity/surtaxes`. All three adjudicated residuals
-are implemented and pass the pinned focused gate battery. Downstream hashes
-and generated metadata are reconciled through the oracle ledger. The signed
-apply manifests cannot be refreshed in this session because
-`AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent; the remaining non-signing gates,
-repository pytest, and final scratchpad report are in progress. No pushes,
-GitHub writes, PR-body edits, or `us/statutes` edits are in scope.
+Implementation and every available non-signing gate are complete on branch
+`fed-parity/surtaxes`. All three adjudicated residuals pass the pinned focused
+gate battery, and generated metadata outside the signed apply manifests is
+current. The manifests cannot be refreshed in this session because
+`AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent; consequently `guard-generated` and
+the one manifest-sync pytest fail closed exactly at that credential boundary.
+No pushes, GitHub writes, PR-body edits, or `us/statutes` edits were made.
 
 ## Done
 
@@ -67,9 +67,27 @@ GitHub writes, PR-body edits, or `us/statutes` edits are in scope.
 - Pinned signing dry-run identifies the expected three surtax manifests
   covering six files. The actual signing key is absent from this session, so
   no manifest was rewritten or falsely attested.
+- Focused monetary proof coverage passes with 2 obligations and 0 missing.
+- The repo-wide monetary-proof ratchet passes with 118 known missing atoms
+  across 2,848 obligations, within the unchanged ceiling of 151.
+- The oracle-pending ratchet passes with 2,327 declared and applied entries,
+  zero stale entries, and the unchanged ceiling of 2,327.
+- The reverse index regenerates byte-for-byte unchanged and checks current at
+  4,162 provisions, 4,934 edges, and 4,454 modules.
+- All 43 source-hash pins match current corpus text.
+- Program Artifacts compiles all 33 definitions at the pinned compose and
+  engine revisions.
+- `git diff --check origin/main...HEAD` passes, and there is no
+  `d486f099..HEAD` delta under `us/statutes`.
+- Repository pytest completes with 58 passed, 1 warning, and exactly one
+  fail-closed manifest-sync failure naming the SECA and Additional Medicare
+  main modules. `guard-generated` likewise refuses verification solely because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent.
 
 ## Next
 
-1. Run the remaining non-signing repository gates and full pytest.
-2. Write `scratchpad/fix2-1003-DONE.md` with the exact signing boundary and
+1. Write `scratchpad/fix2-1003-DONE.md` with the exact signing boundary and
    gate results.
+2. An authorized keyholder signs all three dry-run manifest groups against
+   `origin/main`, commits them locally, and reruns `guard-generated` plus
+   repository pytest. Do not push or edit the PR body.
