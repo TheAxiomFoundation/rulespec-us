@@ -30,5 +30,5 @@
    preserving the lawful post-repair arithmetic as comments.
 4. Run focused validation, proof, companion, repository pytest, generated
    artifact checks, and signing dry-run.
-5. Write `scratchpad/fix3-1003-DONE.md` with the final SHA, case table, and
-   complete gate results.
+5. Write the task scratchpad's `fix3-1003-DONE.md` with the final SHA, case
+   table, and complete gate results.
