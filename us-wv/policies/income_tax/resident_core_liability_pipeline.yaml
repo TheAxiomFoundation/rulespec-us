@@ -82,7 +82,12 @@ module:
     the medical-savings-account surtax, the section 12(d) revenue-limited
     pension adjustment, legacy opportunity-zone entitlements, and every credit
     other than section 26. All unsigned held amounts must equal exactly zero,
-    and invalid negative category amounts fail closed.
+    and invalid negative category amounts fail closed. Every ungated
+    intermediate amount is marked private as a diagnostic; only outputs whose
+    names begin `wv_pit_2026_supported_profile_` expose tax amounts outside the
+    module, and those outputs return zero unless the supported profile holds.
+    Increasing-modification withdrawal inputs are expressly limited to amounts
+    not already included in federal adjusted gross income.
 
     The candidate is not represented as complete annual-return liability
     because specialty nonrefundable credits, the indexed low-income family
@@ -149,11 +154,11 @@ rules:
           and wv_pit_2026_interest_to_carry_state_exempt_obligations >= 0
           and wv_pit_2026_section_128_tax_exempt_savings_interest >= 0
           and wv_pit_2026_separately_taxed_federal_lump_sum_distribution >= 0
-          and wv_pit_2026_nonmedical_msa_withdrawals >= 0
-          and wv_pit_2026_nonqualified_529_withdrawals_previously_deducted >= 0
+          and wv_pit_2026_nonmedical_msa_withdrawals_not_in_federal_adjusted_gross_income >= 0
+          and wv_pit_2026_nonqualified_529_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income >= 0
           and wv_pit_2026_federal_section_199_deduction >= 0
-          and wv_pit_2026_nonqualified_able_withdrawals_previously_deducted >= 0
-          and wv_pit_2026_nonqualified_jumpstart_withdrawals_previously_deducted >= 0
+          and wv_pit_2026_nonqualified_able_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income >= 0
+          and wv_pit_2026_nonqualified_jumpstart_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income >= 0
           and wv_pit_2026_us_obligation_interest >= 0
           and wv_pit_2026_us_or_wv_authority_interest_and_dividends >= 0
           and wv_pit_2026_state_or_local_income_tax_refunds_in_federal_agi >= 0
@@ -210,6 +215,9 @@ rules:
             kind: exception
             source: {corpus_citation_path: us-wv/statute/11-21-9, excerpt: "20 percent additional tax imposed on taxable withdrawals from a medical savings account"}
           - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-wv/statute/11-21-10, excerpt: "Taxable year must be full taxable year"}
+          - path: versions[0].formula
             kind: exception
             source: {corpus_citation_path: us-wv/statute/11-21-22B, excerpt: "Tax Commissioner shall develop and publish on an annual basis two indexed tax credit tables"}
     versions:
@@ -231,7 +239,7 @@ rules:
           and not wv_pit_2026_has_age_disability_or_surviving_spouse_modification_facts
           and not wv_pit_2026_has_fiduciary_adjustment
           and not wv_pit_2026_has_partner_or_s_corporation_modification_items
-          and wv_pit_2026_nonmedical_msa_withdrawals == 0
+          and wv_pit_2026_nonmedical_msa_withdrawals_not_in_federal_adjusted_gross_income == 0
           and wv_pit_2026_msa_contributions_and_interest_potential_subtraction == 0
           and wv_pit_2026_prior_prepaid_tuition_carryforward == 0
           and wv_pit_2026_prior_autism_trust_carryforward == 0
@@ -259,6 +267,7 @@ rules:
     unit: USD
     source: W. Va. Code section 11-21-10
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -276,28 +285,34 @@ rules:
           - path: versions[0].formula
             kind: import
             import: {target: us-wv:statutes/11-21-10#eligible_taxpayer_separate_return_federal_adjusted_gross_income_threshold, output: eligible_taxpayer_separate_return_federal_adjusted_gross_income_threshold, hash: sha256:8f912827cd44372fae541e6b5ea803d1993b9059d939aefca8889b769be8acd0}
+          - path: versions[0].formula
+            kind: exception
+            source: {corpus_citation_path: us-wv/statute/11-21-10, excerpt: "Except in the case of a taxable year closed by reason of the death of the taxpayer, no credit shall be allowed under this section in the case of a taxable year covering a period of less than twelve months"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if wv_pit_2026_filing_status_is_married_separate:
-            if wv_pit_2026_federal_adjusted_gross_income
-              <= eligible_taxpayer_separate_return_federal_adjusted_gross_income_threshold:
-              min(
-                wv_pit_2026_earned_income_in_federal_adjusted_gross_income,
-                separate_return_earned_income_exclusion_cap
-              )
+          if wv_pit_2026_is_full_year_resident_return:
+            if wv_pit_2026_filing_status_is_married_separate:
+              if wv_pit_2026_federal_adjusted_gross_income
+                <= eligible_taxpayer_separate_return_federal_adjusted_gross_income_threshold:
+                min(
+                  wv_pit_2026_earned_income_in_federal_adjusted_gross_income,
+                  separate_return_earned_income_exclusion_cap
+                )
+              else:
+                0
             else:
-              0
+              if wv_pit_2026_federal_adjusted_gross_income
+                <= eligible_taxpayer_joint_or_unmarried_federal_adjusted_gross_income_threshold:
+                min(
+                  wv_pit_2026_earned_income_in_federal_adjusted_gross_income,
+                  annual_earned_income_exclusion_cap
+                )
+              else:
+                0
           else:
-            if wv_pit_2026_federal_adjusted_gross_income
-              <= eligible_taxpayer_joint_or_unmarried_federal_adjusted_gross_income_threshold:
-              min(
-                wv_pit_2026_earned_income_in_federal_adjusted_gross_income,
-                annual_earned_income_exclusion_cap
-              )
-            else:
-              0
+            0
 
   - name: wv_pit_2026_profile_candidate_additions
     kind: derived
@@ -307,6 +322,7 @@ rules:
     unit: USD
     source: W. Va. Code sections 11-21-12(b), 12(f), 12(g), 12(j), and 12(m)
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -334,11 +350,11 @@ rules:
           + wv_pit_2026_interest_to_carry_state_exempt_obligations
           + wv_pit_2026_section_128_tax_exempt_savings_interest
           + wv_pit_2026_separately_taxed_federal_lump_sum_distribution
-          + wv_pit_2026_nonmedical_msa_withdrawals
-          + wv_pit_2026_nonqualified_529_withdrawals_previously_deducted
+          + wv_pit_2026_nonmedical_msa_withdrawals_not_in_federal_adjusted_gross_income
+          + wv_pit_2026_nonqualified_529_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income
           + wv_pit_2026_federal_section_199_deduction
-          + wv_pit_2026_nonqualified_able_withdrawals_previously_deducted
-          + wv_pit_2026_nonqualified_jumpstart_withdrawals_previously_deducted
+          + wv_pit_2026_nonqualified_able_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income
+          + wv_pit_2026_nonqualified_jumpstart_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income
 
   - name: wv_pit_2026_retirement_subtraction_cap_per_person
     kind: parameter
@@ -366,6 +382,7 @@ rules:
     unit: USD
     source: W. Va. Code section 11-21-12(c)(1)-(8)
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -385,7 +402,16 @@ rules:
             source: {corpus_citation_path: us-wv/statute/11-21-12, excerpt: "retirement income from the uniformed services"}
           - path: versions[0].formula
             kind: formula
+            source: {corpus_citation_path: us-wv/statute/11-21-12, excerpt: "For taxable years beginning on or after January 1, 2022, 100 percent of the social security benefits"}
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-wv/statute/11-21-12, excerpt: "allowable only when the federal adjusted gross income of a married couple filing a joint return does not exceed $100,000, or $50,000 in the case of a single individual or a married individual filing a separate return"}
+          - path: versions[0].formula
+            kind: formula
             source: {corpus_citation_path: us-wv/statute/11-21-12, excerpt: "For taxable years beginning on or after January 1, 2026, 100 percent of the social security benefits"}
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-wv/statute/11-21-12, excerpt: "allowable only when the federal adjusted gross income of a married couple filing a joint return exceeds $100,000, or $50,000 in the case of a single individual or a married individual filing a separate return"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -463,6 +489,7 @@ rules:
     unit: USD
     source: W. Va. Code sections 11-21-10 and 11-21-12(a), (c), (e), (i), (j), (m), (n), and (o)
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -486,6 +513,9 @@ rules:
           - path: versions[0].formula
             kind: formula
             source: {corpus_citation_path: us-wv/statute/11-21-12N, excerpt: "not to exceed the amount of West Virginia gaming and gambling winnings"}
+          - path: versions[0].formula
+            kind: definition
+            source: {corpus_citation_path: us-wv/statute/11-21-9, excerpt: "the modification the person would have been allowed to claim pursuant to §11-21-12n of this code for the taxable year had the federal income tax law not been amended"}
           - path: versions[0].formula
             kind: formula
             source: {corpus_citation_path: us-wv/statute/11-21-12O, excerpt: "For taxable years beginning on or after January 1, 2026"}
@@ -521,6 +551,7 @@ rules:
     unit: USD
     source: Sum of directly encoded Article 21 decreasing modifications
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -541,6 +572,7 @@ rules:
     unit: USD
     source: W. Va. Code section 11-21-12(a)
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -562,6 +594,7 @@ rules:
     unit: USD
     source: W. Va. Code section 11-21-16(a) and (d)
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -573,6 +606,9 @@ rules:
           - path: versions[0].formula
             kind: formula
             source: {corpus_citation_path: us-wv/statute/11-21-16, excerpt: "for each exemption for which he is entitled to a deduction for the taxable year for federal income tax purposes"}
+          - path: versions[0].formula
+            kind: definition
+            source: {corpus_citation_path: us-wv/statute/11-21-9, excerpt: "the exemption the person would have been allowed to claim for the taxable year had the federal income tax law not been amended to eliminate the personal exemption"}
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
@@ -591,6 +627,7 @@ rules:
     unit: USD
     source: W. Va. Code sections 11-21-11, 11-21-13, and 11-21-16
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -720,6 +757,7 @@ rules:
     unit: USD
     source: W. Va. Code section 11-21-4J(a)-(b)
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
@@ -858,11 +896,11 @@ inputs:
   - {name: wv_pit_2026_interest_to_carry_state_exempt_obligations, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Federally deducted interest incurred to purchase or carry obligations exempt under Article 21.}
   - {name: wv_pit_2026_section_128_tax_exempt_savings_interest, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Section 128 savings-certificate interest excluded from federal gross income.}
   - {name: wv_pit_2026_separately_taxed_federal_lump_sum_distribution, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Lump-sum distribution separately taxed federally under section 402(e) and excluded from federal adjusted gross income.}
-  - {name: wv_pit_2026_nonmedical_msa_withdrawals, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Medical-savings-account withdrawals used other than for medical expenses; any positive amount invokes the deferred cross-title surtax branch.}
-  - {name: wv_pit_2026_nonqualified_529_withdrawals_previously_deducted, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Nonqualified college-plan withdrawals previously deducted under section 12(a).}
+  - {name: wv_pit_2026_nonmedical_msa_withdrawals_not_in_federal_adjusted_gross_income, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Medical-savings-account withdrawals used other than for medical expenses and not already included in federal adjusted gross income; any positive amount invokes the deferred cross-title surtax branch.}
+  - {name: wv_pit_2026_nonqualified_529_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Nonqualified college-plan withdrawals previously deducted under section 12(a), limited to the amount not already included in federal adjusted gross income.}
   - {name: wv_pit_2026_federal_section_199_deduction, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Any section 199 deduction present under the federal-law conformity cutoff and not already added.}
-  - {name: wv_pit_2026_nonqualified_able_withdrawals_previously_deducted, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Nonqualified West Virginia ABLE withdrawals previously deducted under section 12(j).}
-  - {name: wv_pit_2026_nonqualified_jumpstart_withdrawals_previously_deducted, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Jumpstart withdrawals previously deducted and not used for qualified expenses within the statutory period.}
+  - {name: wv_pit_2026_nonqualified_able_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Nonqualified West Virginia ABLE withdrawals previously deducted under section 12(j), limited to the amount not already included in federal adjusted gross income.}
+  - {name: wv_pit_2026_nonqualified_jumpstart_withdrawals_previously_deducted_not_in_federal_adjusted_gross_income, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Jumpstart withdrawals previously deducted and not used for qualified expenses within the statutory period, limited to the amount not already included in federal adjusted gross income.}
   - {name: wv_pit_2026_us_obligation_interest, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Federally included interest on obligations of the United States and its possessions.}
   - {name: wv_pit_2026_us_or_wv_authority_interest_and_dividends, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: Federally included authority or instrumentality interest and dividends exempt from West Virginia tax.}
   - {name: wv_pit_2026_state_or_local_income_tax_refunds_in_federal_agi, entity: TaxUnit, dtype: Money, period: Year, unit: USD, description: State or other-jurisdiction income-tax refunds included in federal adjusted gross income.}
