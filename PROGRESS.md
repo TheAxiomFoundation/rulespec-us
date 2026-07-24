@@ -1,56 +1,36 @@
-# PR 1009 Blind Adversarial Review Progress
+# PR 1009 Delta Re-review Progress
 
 ## State
 
-- Review complete; statutory values/windows are correct under the pinned
-  toolchain, but a blocking filing-status boundary defect is confirmed.
-- Live GitHub reports the PR mergeable but 27 commits behind `main`; its
-  successful workflows were run against the original base.
-- Frozen PR head: `3e31892d3b64cf63368927b57de1946e63bae196` (`origin/fed-parity/revproc`).
-- PR base reported by GitHub: `ba8c2a0158dd9d87cf304bded9c11fc8479d3e5e` (`main`).
-- Review scope is PR #1009 alone; PR #1004 is not being reviewed.
-- `git fetch origin` was attempted first and failed because the sandbox could not resolve `github.com`; live metadata is being read through the GitHub connector.
+- Re-review in progress against exact PR head
+  `8fab0f1e22ae8b177d874808cf257456ecac5452`
+  (`fed-parity/revproc`).
+- The prior verdict had one blocking finding: three derived selectors consumed
+  a module-local filing-status input and failed open for invalid status codes.
+- Candidate inspection and all requested local gates are pending.
+- The shared dirty checkout is untouched. Review execution is isolated in
+  `/private/tmp/rereview-1009-head.W7yN2c`; audit-only commits live on
+  `codex/rereview-1009-adversarial`.
 
 ## Done
 
 - Read the full `gitnexus-pr-review` skill.
-- Read the full tier-1 blind-review protocol and substituted PR #1009.
-- Confirmed live PR metadata, title, body, head SHA, base SHA, and five changed filenames.
-- Created `/private/tmp/review-1009` from `origin/fed-parity/revproc`.
-- Audited the aggregate PR diff: five expected files only, with no workflow,
-  `CODEOWNERS`, toolchain, or unrelated policy changes.
-- Verified the six published table values and three phase-in widths against the
-  pinned Rev. Proc. pages and 26 USC 199A.
-- Confirmed the shared oracle ledger changes semantically add exactly 12 QBI
-  outputs and remove zero entries; manifest file hashes match both companions.
-- Ran `validate --skip-reviewers`, `proof-validate` (40 atoms), the five-case
-  companion, and repository pytest (67 passed); all succeeded.
-- Confirmed the no-key generated guard fails closed locally and the recorded CI
-  generated-guard job succeeded with its signing secret.
-- Built a GitNexus index at the frozen PR head. YAML rules are represented only
-  as file nodes, with no executable process/caller edges; repository search also
-  finds no consumer of this new module in PR #1009.
-- Traced a misleading 2027 pass to a stale July 6 local engine binary. Rebuilt
-  exact pinned engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`; the pinned
-  engine correctly failed all five 2025 and all five 2027 probes, so the declared
-  effective window is executable and correct.
-- Ran the pinned encoder's filing-status boundary audit: all three derived
-  selectors are rejected because they synthesize local `#input.filing_status`
-  instead of importing an absolute upstream legal classification. No executable
-  upstream filing-status output exists at the frozen PR head.
-- Demonstrated the consequence with the exact pinned engine: changing the final
-  fixture's status from valid code `4` to invalid code `9` still passed and
-  selected the all-other amounts because match lowering uses the last arm as an
-  unconditional fallback.
-- Reconfirmed live workflow runs are all successful, including generated-guard,
-  reverse-index, companion, proofs, oracle coverage, and program artifacts; those
-  runs used synthetic merge base `ba8c2a0`, while live `main` is now `d5dcc6b3`
-  and GitHub's final mergeability calculation reports `mergeable: true`.
-- Wrote and committed `scratchpad/review-1009-VERDICT.md` with first-line verdict
-  `VERDICT: REQUEST-CHANGES`, then copied the byte-identical report to the
-  required external scratchpad output path.
+- Read `scratchpad/review-1009-VERDICT.md` in full and extracted every prior
+  blocking and non-blocking finding.
+- Read live PR metadata and body through the read-only GitHub connector.
+- Confirmed the connector-reported head SHA matches the local
+  `origin/fed-parity/revproc` ref.
+- Created a clean detached throwaway worktree at the exact current PR head.
+- Created this separate committed audit ledger without touching the PR branch or
+  the user's staged changes.
 
 ## Next
 
-- Remove the throwaway review and GitNexus worktrees after this final progress
-  commit. No review work remains.
+- Map the old-head-to-new-head fix wave and the aggregate PR diff.
+- Re-run the pinned filing-status local-input check and confirm zero rejections.
+- Run validate, proof-validate, and companions with `~/axiom-rules`.
+- Hand-recompute every new companion case and inspect for regressions.
+- Verify manifest/index/ledger integrity and the live PR body's gate claims and
+  post-review corrections section.
+- Write and commit the re-review verdict, copy the final report to the required
+  external output file, and delete the throwaway candidate worktree.
