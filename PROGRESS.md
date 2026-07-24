@@ -3,8 +3,12 @@
 ## State
 
 - Review in progress on a dedicated throwaway worktree and review-only branch.
-- The PR-1003 product residual is fixed at the exact head, but the live body
-  remains materially inconsistent with that head; this is currently blocking.
+- The named PR-1004 and PR-1003 product residuals are fixed at their exact
+  live heads, and the focused local gates pass.
+- The verdict remains `REQUEST-CHANGES`: PR 1003's live body materially
+  contradicts its current head, the round-3 progress record is stale after
+  the final re-sign, and one new companion no longer isolates the foreign
+  attestation boundary it purports to cover.
 - Live PR head reported by GitHub and checked out locally:
   `50b6ec228dba8279526bd692de85af4659557c78`.
 - Live base reported by GitHub:
@@ -49,11 +53,38 @@
   `8218c7baff9330cf1eb707bb7d2df87bfb4abcfc`, omits the current attestation,
   and reports `346.725` for the positive-SE case that now returns zero. Thus
   the live statement that all six domestic values are unchanged is false.
+- Checked PR 1004 at exact live head
+  `e25a31417997e27b50ef9d2315d67b9a9036f7b5`. Its QBI pipeline imports all
+  nine threshold/range-end/width parameters from the merged Rev. Proc.
+  module; its filing-status guard admits only statuses `0..4`; and its
+  status-9 companion proves a zero final deduction. Its focused gates pass:
+  validation `3/3`, proofs `43/43`, companions `40/40`.
+- Audited PR 1003's five post-round-3 commits
+  (`3327de19395465dee736061b2d4c33108416d261..50b6ec228dba8279526bd692de85af4659557c78`).
+  No executable or manifest defect was found. All current file/output hashes
+  and manifest supersession links are internally consistent.
+- Found a new committed documentation defect in
+  `bulk/fix3-1003/PROGRESS.md`: it still says the manifests are stale, expects
+  manifest-sync failure, says NIIT/SECA did not change, and requests a
+  keyholder refresh. Commit `50b6ec228` actually refreshed all three
+  manifests and made the manifest-sync test pass.
+- Found a new companion-coverage defect:
+  `amt-foreign-system-boundary-fails-closed` supplies both a false foreign
+  attestation and positive imported SE income. The new zero-SE conjunct alone
+  makes the domain false, so the case would still pass if the foreign
+  attestation guard were removed. A zero-SE, false-attestation companion is
+  needed to isolate that boundary.
+- Ran PR 1003's focused gates with the exact pinned encoder, engine, and corpus:
+  canonical validation `3/3`, proof validation `47/47`, companions `42/42`,
+  encoding-manifest pytest `3 passed`, and `git diff --check` all pass.
+  The subject worktree remained clean.
+- Re-fetched PR 1003 from GitHub after the audit. Its live head remains
+  `50b6ec228dba8279526bd692de85af4659557c78`, and the contradictory body text
+  remains live.
 
 ## Next
 
-- Verify the inherited PR-1004 threshold import and enumerated-status
-  fail-closed behavior, including status 9.
-- Review the five post-round-3 commits for regressions.
-- Run focused gates, re-fetch the live body/head, and write the final verdict
-  to `round4-1003-VERDICT.md` and the requested output file.
+- Write and commit `round4-1003-VERDICT.md`.
+- Copy the committed report to the requested scratchpad output path without
+  staging or otherwise disturbing the user's unrelated dirty checkout.
+- Verify artifact identity and remove the throwaway worktree.
