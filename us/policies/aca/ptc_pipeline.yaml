@@ -59,9 +59,11 @@ module:
     surface; it does not model changing monthly premiums or coverage. Money
     values remain at RuleSpec arithmetic precision. Because the pinned corpus
     does not contain 26 CFR 1.36B-3(g), the general rounded applicable-
-    percentage surface is deferred below and the final credit fails closed
-    unless the raw interpolation already equals its nearest-0.01-percentage-
-    point value. Filing-form rounding is also deferred below.
+    percentage surface is deferred below. The validity judgment tests the raw
+    interpolation internally, and every public percentage, contribution, and
+    assistance output fails closed unless that candidate already equals its
+    nearest-0.01-percentage-point value. Filing-form rounding is also deferred
+    below.
   deferred_outputs:
     - output: us:statutes/26/36B/b/3/A#applicable_percentage
       reason: |-
@@ -118,7 +120,8 @@ module:
         compute the general rounded rate. Instead, its runtime-input validity
         guard admits only raw interpolations that already equal their nearest
         0.01-percentage-point value; every other interpolation fails closed
-        before the annual premium tax credit is exported.
+        across the public applicable-percentage, contribution, assistance, and
+        annual-credit surfaces.
       source_values:
         - us:policies/aca/ptc_pipeline#aca_ptc_applicable_percentage
         - us:policies/aca/ptc_pipeline#aca_ptc_full_year_runtime_inputs_valid
@@ -401,18 +404,21 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if aca_ptc_applicable_percentage_band < 0:
+          if not aca_ptc_full_year_runtime_inputs_valid:
             0
           else:
-            if applicable_initial_percentage == applicable_final_percentage:
-              applicable_initial_percentage
+            if aca_ptc_applicable_percentage_band < 0:
+              0
             else:
-              applicable_initial_percentage
-              + (
-                  (household_income_percentage_of_federal_poverty_line - aca_ptc_applicable_percentage_band_lower_bound)
-                  / (aca_ptc_applicable_percentage_band_upper_bound - aca_ptc_applicable_percentage_band_lower_bound)
-                )
-                * (applicable_final_percentage - applicable_initial_percentage)
+              if applicable_initial_percentage == applicable_final_percentage:
+                applicable_initial_percentage
+              else:
+                applicable_initial_percentage
+                + (
+                    (household_income_percentage_of_federal_poverty_line - aca_ptc_applicable_percentage_band_lower_bound)
+                    / (aca_ptc_applicable_percentage_band_upper_bound - aca_ptc_applicable_percentage_band_lower_bound)
+                  )
+                  * (applicable_final_percentage - applicable_initial_percentage)
 
   - name: aca_ptc_applicable_percentage_rounding_grid_increment
     kind: parameter
@@ -449,7 +455,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: aca_ptc_applicable_percentage
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid:
+            aca_ptc_applicable_percentage
+          else:
+            0
 
   - name: monthly_premiums_for_exchange_qualified_health_plans_covering_taxpayer_spouse_or_dependents
     kind: derived
@@ -475,7 +485,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: aca_ptc_annual_enrolled_premium / required_contribution_annual_to_monthly_divisor
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid:
+            aca_ptc_annual_enrolled_premium / required_contribution_annual_to_monthly_divisor
+          else:
+            0
 
   - name: adjusted_monthly_premium_for_applicable_second_lowest_cost_silver_plan
     kind: derived
@@ -501,7 +515,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: aca_ptc_annual_slcsp_benchmark_premium / required_contribution_annual_to_monthly_divisor
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid:
+            aca_ptc_annual_slcsp_benchmark_premium / required_contribution_annual_to_monthly_divisor
+          else:
+            0
 
   - name: aca_ptc_full_year_runtime_inputs_valid
     kind: derived
@@ -526,9 +544,15 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us:policies/aca/ptc_pipeline#aca_ptc_applicable_percentage
-              output: aca_ptc_applicable_percentage
-              hash: sha256:local
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_initial_percentage
+              output: applicable_initial_percentage
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-25/aca-ptc#applicable_final_percentage
+              output: applicable_final_percentage
+              hash: sha256:201158994296816a54f387c58f0415badbfb9b3e97cf6bbfb3c9f82f1ca9be6f
           - path: versions[0].formula
             kind: import
             import:
@@ -545,10 +569,36 @@ rules:
           and aca_ptc_annual_enrolled_premium >= 0
           and aca_ptc_coverage_month_count == required_contribution_annual_to_monthly_divisor
           and (
-            aca_ptc_applicable_percentage
+            (
+              if aca_ptc_applicable_percentage_band < 0:
+                0
+              else:
+                if applicable_initial_percentage == applicable_final_percentage:
+                  applicable_initial_percentage
+                else:
+                  applicable_initial_percentage
+                  + (
+                      (household_income_percentage_of_federal_poverty_line - aca_ptc_applicable_percentage_band_lower_bound)
+                      / (aca_ptc_applicable_percentage_band_upper_bound - aca_ptc_applicable_percentage_band_lower_bound)
+                    )
+                    * (applicable_final_percentage - applicable_initial_percentage)
+            )
             / aca_ptc_applicable_percentage_rounding_grid_increment
           ) == floor(
-            aca_ptc_applicable_percentage
+            (
+              if aca_ptc_applicable_percentage_band < 0:
+                0
+              else:
+                if applicable_initial_percentage == applicable_final_percentage:
+                  applicable_initial_percentage
+                else:
+                  applicable_initial_percentage
+                  + (
+                      (household_income_percentage_of_federal_poverty_line - aca_ptc_applicable_percentage_band_lower_bound)
+                      / (aca_ptc_applicable_percentage_band_upper_bound - aca_ptc_applicable_percentage_band_lower_bound)
+                    )
+                    * (applicable_final_percentage - applicable_initial_percentage)
+            )
             / aca_ptc_applicable_percentage_rounding_grid_increment
           )
 
@@ -591,7 +641,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: required_monthly_contribution
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid:
+            required_monthly_contribution
+          else:
+            0
 
   - name: aca_ptc_monthly_premium_assistance_amount
     kind: derived
@@ -612,7 +666,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: premium_assistance_amount
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid:
+            premium_assistance_amount
+          else:
+            0
 
   - name: aca_ptc_annual_premium_assistance_amount
     kind: derived
@@ -632,7 +690,11 @@ rules:
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: aca_ptc_monthly_premium_assistance_amount * aca_ptc_coverage_month_count
+        formula: |-
+          if aca_ptc_full_year_runtime_inputs_valid:
+            aca_ptc_monthly_premium_assistance_amount * aca_ptc_coverage_month_count
+          else:
+            0
 
   - name: aca_ptc_annual_premium_tax_credit
     kind: derived
