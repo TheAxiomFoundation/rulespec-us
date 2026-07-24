@@ -26,24 +26,22 @@ module:
     Federal qualified business income deduction composition under 26 USC
     199A for tax year 2026. The encoded section derives the final deduction,
     but its internal `threshold_amount_base` remains the unindexed statutory
-    base of $157,500. The dedicated Revenue Procedure 2025-32
-    qualified-business-income module lands through PR #1009 and cannot be
-    imported while this branch must validate independently. This module
-    therefore retains the applicable indexed threshold as a runtime boundary,
-    requires a separate official-return-category attestation for the amount,
-    validates that category against this filing status, imports the encoded
-    deduction components, and repeats only the threshold-dependent phase-in
-    and final combination in locally proofed rules.
+    base of $157,500. This module imports all nine tax-year-2026 threshold,
+    range-end, and width parameters from the dedicated Revenue Procedure
+    2025-32 qualified-business-income module. It selects the applicable
+    parameters at this pipeline's declared filing-status boundary, imports the
+    encoded deduction components, and repeats only the threshold-dependent
+    phase-in and final combination in locally proofed rules.
 
     The current section 199A text and Revenue Procedure 2025-32 use $75,000
     and $150,000 phase-in widths for 2026, not the pre-amendment $50,000 and
     $100,000 widths. The companion fixtures follow the current encoded statute
-    and official revenue procedure. A filing-status-keyed validity rule guards
-    the final result by matching the amount's attested official return category
-    (all-other, joint, or married-filing-separately) to the pipeline filing
-    status. The runtime amount and category are a temporary upstream-resolved
-    boundary; once PR #1009 is available, its encoded threshold should replace
-    both. No dollar amount is hard-coded into that temporary validity rule.
+    and official revenue procedure. Filing status 1 selects the joint
+    parameters, status 2 selects the married-filing-separately parameters, and
+    statuses 0, 3, and 4 select the all-other parameters. Because the engine
+    lowers the final `match` arm as a fallback, a separate enumerated-status
+    judgment permits only statuses 0 through 4 and guards the final result
+    against any unrecognized status.
 
     Qualified business income, W-2 wages, UBIA, cooperative amounts, REIT
     dividends, PTP income, and taxable income before this deduction are
@@ -63,15 +61,13 @@ module:
     - output: us:statutes/26/199A#qualified_business_income_deduction
       reason: |-
         The encoded final output closes over an unindexed $157,500 threshold
-        parameter. Revenue Procedure 2025-32 publishes materially different
-        2026 thresholds. Until the dedicated Revenue Procedure module from
-        PR #1009 is available, the corrected pipeline below accepts the
-        indexed threshold together with a required filing-status-specific
-        official-value attestation while retaining the encoded component
-        rules.
+        parameter. The corrected pipeline below instead selects the imported
+        tax-year-2026 Revenue Procedure threshold, range end, and width while
+        retaining the encoded component rules.
       source_values:
-        - us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_2026
-        - us:policies/income_tax/qualified_business_income_deduction_pipeline#input.qualified_business_income_threshold_amount_official_return_category
+        - us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qualified_business_income_threshold_amount
+        - us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qbi_phasein_range_end
+        - us:policies/income_tax/qualified_business_income_deduction_pipeline#pipeline_qbi_phasein_range
     - output: us:statutes/26/199A/c#qualified_business_income_definition
       reason: |-
         The encoded section consumes resolved qualified business income and
@@ -84,6 +80,15 @@ module:
         that upstream classification boundary and does not treat an unknown
         SSTB determination as false.
 imports:
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_joint
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_range_end_joint
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_separate
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_range_end_separate
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_all_other
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_range_end_all_other
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_width_joint
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_width_separate
+  - us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_width_all_other
   - us:statutes/26/199A#trade_or_business_wage_property_limit
   - us:statutes/26/199A#trade_or_business_qbi_amount_before_limits
   - us:statutes/26/199A#trade_or_business_excess_amount
@@ -104,21 +109,45 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_joint
+              output: qualified_business_income_threshold_joint
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_separate
+              output: qualified_business_income_threshold_separate
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_threshold_all_other
+              output: qualified_business_income_threshold_all_other
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
             kind: parameter_table
             source:
               corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
-              excerpt: "Filing Status Threshold amount"
+              excerpt: "Filing Status Threshold amount Phase-in range amount Married Individuals Filing Joint Returns $403,500 $553,500 Married Individuals Filing Separate Returns $201,775 $276,775 All Other Returns $201,750 $276,750"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: qualified_business_income_threshold_amount_2026
+        formula: |-
+          match filing_status:
+              0 => qualified_business_income_threshold_all_other
+              1 => qualified_business_income_threshold_joint
+              2 => qualified_business_income_threshold_separate
+              3 => qualified_business_income_threshold_all_other
+              4 => qualified_business_income_threshold_all_other
 
-  - name: pipeline_qualified_business_income_threshold_amount_is_valid_for_filing_status
+  - name: pipeline_filing_status_is_enumerated
     kind: derived
     entity: TaxUnit
     dtype: Judgment
     period: Year
-    source: Rev. Proc. 2025-32 section 4.26, official threshold attestation keyed to this return's filing status
+    source: Declared pipeline filing-status boundary mapped to the Rev. Proc. 2025-32 section 4.26 return categories
     metadata:
       proof:
         atoms:
@@ -131,68 +160,55 @@ rules:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          (
-              qualified_business_income_threshold_amount_official_return_category == 1
-              and filing_status == 1
-          )
-          or (
-              qualified_business_income_threshold_amount_official_return_category == 2
-              and filing_status == 2
-          )
-          or (
-              qualified_business_income_threshold_amount_official_return_category == 0
-              and (
-                  filing_status == 0
-                  or filing_status == 3
-                  or filing_status == 4
-              )
-          )
+          filing_status == 0
+          or filing_status == 1
+          or filing_status == 2
+          or filing_status == 3
+          or filing_status == 4
 
-  - name: pipeline_qbi_phasein_range_other
-    kind: parameter
+  - name: pipeline_qbi_phasein_range_end
+    kind: derived
+    entity: TaxUnit
     dtype: Money
+    period: Year
     unit: USD
-    source: Rev. Proc. 2025-32 section 4.26 and 26 USC 199A(b)(3)(B)
+    source: Rev. Proc. 2025-32 section 4.26, applicable tax-year-2026 section 199A phase-in range end
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us/statute/26/199A
-              excerpt: "threshold amount plus $75,000"
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_range_end_joint
+              output: qualified_business_income_phase_in_range_end_joint
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
           - path: versions[0].formula
-            kind: formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_range_end_separate
+              output: qualified_business_income_phase_in_range_end_separate
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_range_end_all_other
+              output: qualified_business_income_phase_in_range_end_all_other
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
+            kind: parameter_table
             source:
               corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
-              excerpt: "All Other Returns $201,750 $276,750"
+              excerpt: "Filing Status Threshold amount Phase-in range amount Married Individuals Filing Joint Returns $403,500 $553,500 Married Individuals Filing Separate Returns $201,775 $276,775 All Other Returns $201,750 $276,750"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: '75000'
-
-  - name: pipeline_qbi_phasein_range_joint
-    kind: parameter
-    dtype: Money
-    unit: USD
-    source: Rev. Proc. 2025-32 section 4.26 and 26 USC 199A(b)(3)(B)
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: amount
-            source:
-              corpus_citation_path: us/statute/26/199A
-              excerpt: "$150,000 in the case of a joint return"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
-              excerpt: "Married Individuals Filing Joint Returns $403,500 $553,500"
-    versions:
-      - effective_from: '2026-01-01'
-        effective_to: '2026-12-31'
-        formula: '150000'
+        formula: |-
+          match filing_status:
+              0 => qualified_business_income_phase_in_range_end_all_other
+              1 => qualified_business_income_phase_in_range_end_joint
+              2 => qualified_business_income_phase_in_range_end_separate
+              3 => qualified_business_income_phase_in_range_end_all_other
+              4 => qualified_business_income_phase_in_range_end_all_other
 
   - name: pipeline_qbi_phasein_range
     kind: derived
@@ -205,12 +221,25 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/guidance/irs/rev-proc-2025-32/page-22
-              excerpt: "Filing Status Threshold amount Phase-in range amount Married Individuals Filing Joint Returns $403,500 $553,500 Married Individuals Filing Separate Returns $201,775 $276,775 All Other Returns $201,750 $276,750"
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_width_joint
+              output: qualified_business_income_phase_in_width_joint
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
           - path: versions[0].formula
-            kind: amount
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_width_separate
+              output: qualified_business_income_phase_in_width_separate
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/rev-proc-2025-32/qualified-business-income#qualified_business_income_phase_in_width_all_other
+              output: qualified_business_income_phase_in_width_all_other
+              hash: sha256:1220ffc5b3b22f28c7c64bdf518e2968b286d3d8d8c8a340da5ca408da9ffc32
+          - path: versions[0].formula
+            kind: formula
             source:
               corpus_citation_path: us/statute/26/199A
               excerpt: "threshold amount plus $75,000 ($150,000 in the case of a joint return)"
@@ -219,11 +248,11 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           match filing_status:
-              0 => pipeline_qbi_phasein_range_other
-              1 => pipeline_qbi_phasein_range_joint
-              2 => pipeline_qbi_phasein_range_other
-              3 => pipeline_qbi_phasein_range_other
-              4 => pipeline_qbi_phasein_range_other
+              0 => qualified_business_income_phase_in_width_all_other
+              1 => qualified_business_income_phase_in_width_joint
+              2 => qualified_business_income_phase_in_width_separate
+              3 => qualified_business_income_phase_in_width_all_other
+              4 => qualified_business_income_phase_in_width_all_other
 
   - name: pipeline_trade_or_business_phasein_reduction
     kind: derived
@@ -306,8 +335,7 @@ rules:
                       trade_or_business_qbi_amount_before_limits
                   else:
                       if taxable_income_computed_without_section_199A
-                          <= pipeline_qualified_business_income_threshold_amount
-                          + pipeline_qbi_phasein_range:
+                          <= pipeline_qbi_phasein_range_end:
                           trade_or_business_qbi_amount_before_limits
                           - pipeline_trade_or_business_phasein_reduction
                       else:
@@ -463,7 +491,7 @@ rules:
           if (
               taxpayer_is_corporation
               or not supplied_amounts_are_for_taxpayers_only_qualified_trade_or_business
-              or not pipeline_qualified_business_income_threshold_amount_is_valid_for_filing_status
+              or not pipeline_filing_status_is_enumerated
           ):
               0
           else:
@@ -476,17 +504,6 @@ rules:
                   pipeline_qbi_deduction_before_minimum_active_qbi
 
 inputs:
-  - name: qualified_business_income_threshold_amount_2026
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Temporary upstream-resolved boundary containing the applicable tax-year-2026 section 199A threshold from Rev. Proc. 2025-32 section 4.26; it is usable only when the separate filing-status-specific official-value attestation holds.
-  - name: qualified_business_income_threshold_amount_official_return_category
-    entity: TaxUnit
-    dtype: Integer
-    period: Year
-    description: Required upstream category attesting that qualified_business_income_threshold_amount_2026 is the exact official Rev. Proc. 2025-32 section 4.26 amount for category 0 all-other returns, 1 joint returns, or 2 married-filing-separately returns. The pipeline validates the category against filing_status without hard-coding dollar amounts; mismatch makes the final output zero and omission is unevaluable. This boundary is replaced by the dedicated Rev. Proc. module after PR #1009 lands.
   - name: filing_status
     entity: TaxUnit
     dtype: Integer
