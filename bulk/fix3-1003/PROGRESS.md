@@ -2,8 +2,7 @@
 
 ## State
 
-- In progress on branch `fed-parity/surtaxes` from
-  `3327de19395465dee736061b2d4c33108416d261`.
+- In progress on branch `fed-parity/surtaxes`.
 - Scope is limited to the Additional Medicare tax pipeline and its companion
   cases at the current corpus pin.
 - The self-employment leg must fail closed until axiom-corpus#514's targeted
@@ -19,16 +18,25 @@
   names `3121(b)(2)` instead of the lawful `3101(b)(2)`, so the round-2
   corrected proof excerpts are unsupported at the current pin.
 - Located the prior round-2 history and progress/report conventions.
+- Added the zero-SE restriction to the Additional Medicare domain Judgment.
+- Made the locally authored coordination helper return zero for every
+  SE-bearing tax unit and explicitly deferred it pending the corpus repair.
+- Made the public SE leg a deferred fail-closed zero while preserving the
+  independently valid wage leg.
+- Restricted the combined output to the wage-only domain.
+- Updated all retained SE-bearing companions to assert the fail-closed
+  boundary; wage-only arithmetic remains unchanged.
+- Removed both unsupported proof excerpts and the unsupported input-contract
+  quotation.
+- Pinned focused gates pass: canonical validation, 18/18 proof atoms, and
+  14/14 companion cases.
 
 ## Next
 
-1. Remove unsupported coordination excerpts and explicitly defer the
-   self-employment leg.
-2. Restrict the combined Additional Medicare output to tax units with zero
-   self-employment income.
-3. Convert the self-employment companion cases to fail-closed assertions while
-   preserving the lawful post-repair arithmetic as comments.
-4. Run focused validation, proof, companion, repository pytest, generated
-   artifact checks, and signing dry-run.
+1. Regenerate/check the reverse index and verify the oracle ledger remains
+   current.
+2. Run repository pytest and remaining repository/focused gates.
+3. Run signing dry-run only and record the expected manifest handoff.
+4. Verify the final diff excludes NIIT, ordinary SECA, and statute files.
 5. Write the task scratchpad's `fix3-1003-DONE.md` with the final SHA, case
    table, and complete gate results.
