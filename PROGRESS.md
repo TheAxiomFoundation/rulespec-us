@@ -57,10 +57,15 @@
 - Added the two-positive-earner SECA case proving independent per-person wage
   coordination and OASDI caps before TaxUnit aggregation; all 12 current SECA
   companions pass.
+- Added a source-backed, non-tax floor-characterization Judgment accepting a
+  completed post-paragraph-(12) amount. Its exact-$400 case proves that the
+  imported section 1402(b)(2) threshold is inclusive without approximating the
+  repeating pre-adjustment amount or changing any public tax output.
+- All 13 SECA companions pass. Pinned validation passes with 17 proof atoms and
+  zero focused money-atom omissions.
 
 ## Next
 
-- Add the exact section 1402(b) post-adjustment $400 floor companion case.
 - Run the full gate battery and signing dry-run.
 - Produce `scratchpad/fix-1003-BODY.md` and `scratchpad/fix-1003-DONE.md` with
   exact counts, ledger delta, gate results, and commit SHAs.
