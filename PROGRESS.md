@@ -2,8 +2,8 @@
 
 ## State
 
-- In progress: the scoped review supports `REQUEST-CHANGES`; exact-head
-  `program-artifacts` CI is the only outstanding observation.
+- In progress: the scoped review supports `REQUEST-CHANGES`; all requested
+  checks are complete and the verdict artifact is being finalized.
 - Review mode: read-only product review in a throwaway worktree.
 - Live PR head reported by GitHub and reviewed locally:
   `3327de19395465dee736061b2d4c33108416d261`.
@@ -45,11 +45,14 @@
   defect introduced by the round-2 commits.
 - Observed exact-head CI: Repository Checks `30124844097` and Source
   staleness/reverse index `30124843757` completed successfully.
+- Re-fetched the PR after the checks: head `3327de19` and the reviewed body
+  are unchanged.
+- Observed terminal exact-head CI: `program-artifacts` `30124843759`
+  completed successfully and built 33/33 program specs. All three live
+  workflows are green.
 
 ## Next
 
-- Record the terminal state of exact-head `program-artifacts` run
-  `30124843759`.
 - Write and commit `round3-1003-VERDICT.md`.
 - Copy the committed verdict to the requested scratchpad output and remove
   the throwaway worktree.
