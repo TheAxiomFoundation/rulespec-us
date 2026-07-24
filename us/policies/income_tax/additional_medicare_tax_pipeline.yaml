@@ -20,7 +20,8 @@ module:
         from each Person's gross-self-employment-profit boundary. Section
         1401(b)(2) supplies the locally authored SE-leg rate, filing-status
         thresholds, excess-income base, and FICA wage coordination. Section
-        1401(c)'s international-agreement relief remains deferred with the
+        1401(c) supplies the fail-closed ordinary-case boundary while its
+        international-agreement relief calculation remains deferred with the
         sibling pipeline's upstream
         `self_employment_tax_after_international_agreement_exemption` output.
   summary: |-
@@ -43,10 +44,14 @@ module:
 
     The executable self-employment and combined surfaces cover the ordinary
     case in which section 1401(c) foreign-system relief is not implicated. The
-    relief pathway is not modeled as zero: the former generic exemption and
-    taxable-income helpers are explicit deferred outputs below, and a
-    separately named ordinary-case alias carries the imported aggregate into
-    the existing public per-leg and combined outputs.
+    required `no_foreign_system_exclusive_se_income` boundary is exposed as
+    `additional_medicare_tax_pipeline_self_employment_domain_is_valid`. When
+    that Judgment is `not_holds`, both the public self-employment leg and the
+    public combined tax fail closed to zero; the independently valid imported
+    wage leg remains observable. The relief pathway is not modeled as zero:
+    the former generic exemption and taxable-income helpers are explicit
+    deferred outputs below, and a separately named ordinary-case alias carries
+    the imported aggregate into the guarded public outputs.
 
     Root `us:statutes/26/1401` is deliberately not imported. RuleSpec concept
     fragments merge complete modules, and that root's implicit TaxUnit
@@ -91,6 +96,28 @@ imports:
   - us:statutes/26/3101/b/2#additional_medicare_tax
   - us:policies/income_tax/self_employment_tax_pipeline#federal_self_employment_income
 rules:
+  - name: additional_medicare_tax_pipeline_self_employment_domain_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 1401(c), fail-closed ordinary-case applicability boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/1401
+              excerpt: "During any period in which there is in effect an agreement entered into pursuant to section 233 of the Social Security Act with any foreign country, the self-employment income of an individual shall be exempt from the taxes imposed by this section to the extent that such self-employment income is subject under such agreement exclusively to the laws applicable to the social security system of such foreign country."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: no_foreign_system_exclusive_se_income
+
+  # The exact corpus record below serves the decisive section
+  # 1401(b)(2)(B) coordination text. Its source_url metadata incorrectly points
+  # to 26 USC 45A; tracked in rulespec-us upstream issues, see PR body.
   - name: wages_taken_into_account_for_additional_medicare_tax
     kind: derived
     entity: TaxUnit
@@ -105,7 +132,7 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/1401
-              excerpt: "shall be reduced (but not below zero) by the amount of wages taken into account"
+              excerpt: "The amounts under clause (i), (ii), or (iii) (whichever is applicable) of subparagraph (A) shall be reduced (but not below zero) by the amount of wages taken into account in determining the tax imposed under section 3121(b)(2) with respect to the taxpayer."
     versions:
       - effective_from: '2013-01-01'
         formula: wages
@@ -236,7 +263,7 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/statute/26/1401
-              excerpt: "shall be reduced (but not below zero) by the amount of wages taken into account"
+              excerpt: "The amounts under clause (i), (ii), or (iii) (whichever is applicable) of subparagraph (A) shall be reduced (but not below zero) by the amount of wages taken into account in determining the tax imposed under section 3121(b)(2) with respect to the taxpayer."
     versions:
       - effective_from: '2013-01-01'
         formula: |-
@@ -327,12 +354,21 @@ rules:
             source:
               corpus_citation_path: us/statute/26/1401
               excerpt: "a tax equal to 0.9 percent of the self-employment income"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/additional_medicare_tax_pipeline#additional_medicare_tax_pipeline_self_employment_domain_is_valid
+              output: additional_medicare_tax_pipeline_self_employment_domain_is_valid
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          pipeline_additional_medicare_self_employment_tax_base
-          * pipeline_additional_medicare_self_employment_tax_rate
+          if additional_medicare_tax_pipeline_self_employment_domain_is_valid:
+            pipeline_additional_medicare_self_employment_tax_base
+            * pipeline_additional_medicare_self_employment_tax_rate
+          else:
+            0
 
   - name: federal_additional_medicare_tax
     kind: derived
@@ -355,12 +391,21 @@ rules:
             source:
               corpus_citation_path: us/statute/26/1401
               excerpt: "In addition to the tax imposed by paragraph (1) and the preceding subsection"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/additional_medicare_tax_pipeline#additional_medicare_tax_pipeline_self_employment_domain_is_valid
+              output: additional_medicare_tax_pipeline_self_employment_domain_is_valid
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          additional_medicare_tax
-          + federal_additional_medicare_self_employment_tax
+          if additional_medicare_tax_pipeline_self_employment_domain_is_valid:
+            additional_medicare_tax
+            + federal_additional_medicare_self_employment_tax
+          else:
+            0
 
 inputs:
   - name: filing_status
@@ -374,3 +419,8 @@ inputs:
     period: Year
     unit: USD
     description: Tax-unit wages subject to section 3101(b)(2), including both spouses' wages on a joint return.
+  - name: no_foreign_system_exclusive_se_income
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required attestation that no self-employment income of the tax unit is exempt from section 1401 under subsection (c) because it is subject exclusively to a foreign social-security system under a section 233 agreement.
