@@ -2,8 +2,9 @@
 
 ## State
 
-- In progress: the scoped review supports `REQUEST-CHANGES`; all requested
-  checks are complete and the verdict artifact is being finalized.
+- Verdict finalized: `REQUEST-CHANGES`.
+- All requested review checks are complete. The committed verdict is ready
+  for the requested scratchpad handoff.
 - Review mode: read-only product review in a throwaway worktree.
 - Live PR head reported by GitHub and reviewed locally:
   `3327de19395465dee736061b2d4c33108416d261`.
@@ -50,9 +51,10 @@
 - Observed terminal exact-head CI: `program-artifacts` `30124843759`
   completed successfully and built 33/33 program specs. All three live
   workflows are green.
+- Wrote `round3-1003-VERDICT.md` with the residual, body, focused-gate,
+  exact-head CI, and round-2-only diff conclusions.
 
 ## Next
 
-- Write and commit `round3-1003-VERDICT.md`.
-- Copy the committed verdict to the requested scratchpad output and remove
-  the throwaway worktree.
+- Copy the committed verdict to the requested scratchpad output, verify it,
+  and remove the throwaway worktree.
