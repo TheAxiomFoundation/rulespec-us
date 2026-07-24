@@ -2,7 +2,7 @@
 
 ## State
 
-- Review in progress on a dedicated throwaway worktree and review-only branch.
+- Review complete on a dedicated throwaway worktree and review-only branch.
 - The named PR-1004 and PR-1003 product residuals are fixed at their exact
   live heads, and the focused local gates pass.
 - The verdict remains `REQUEST-CHANGES`: PR 1003's live body materially
@@ -81,10 +81,22 @@
 - Re-fetched PR 1003 from GitHub after the audit. Its live head remains
   `50b6ec228dba8279526bd692de85af4659557c78`, and the contradictory body text
   remains live.
+- Wrote and committed `round4-1003-VERDICT.md` with first line
+  `VERDICT: REQUEST-CHANGES`.
+- Copied the committed report to the requested root scratchpad output path.
+  The committed and scratchpad copies are byte-identical at SHA-256
+  `5baebca8c293cd9446fe878823fef8841929c5d8171d6bbff6836b1a56efc22c`.
+- Performed a final GitHub re-fetch after writing the report. PR 1003 still
+  reports head `50b6ec228dba8279526bd692de85af4659557c78`; the stale proof claim, stale
+  unchanged-oracle-values claim, and appended withdrawal all remain live.
+- Verified the subject PR worktree is clean and the user's unrelated dirty
+  checkout was not staged, modified, or committed apart from the explicitly
+  requested untracked verdict output.
 
 ## Next
 
-- Write and commit `round4-1003-VERDICT.md`.
-- Copy the committed report to the requested scratchpad output path without
-  staging or otherwise disturbing the user's unrelated dirty checkout.
-- Verify artifact identity and remove the throwaway worktree.
+- No further review work is pending.
+- The PR author must resolve the three blocking findings in the verdict before
+  approval.
+- Remove the clean throwaway worktree after this final progress commit; the
+  committed review branch preserves the audit trail.
