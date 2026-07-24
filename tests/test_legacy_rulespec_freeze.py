@@ -176,11 +176,11 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "workflow_toolchain"
     ]
     assert toolchain == {
-        "axiom_encode_version": "0.2.1344",
+        "axiom_encode_version": "0.2.1345",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
-        "axiom_encode_ref": "2b62dc2c1bdb60531887ac33e819741a651d898e",
+        "axiom_encode_ref": "8504a7e57534a81c2090211384d853a74988ab6c",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
-        "axiom_corpus_ref": "01e00777cb05db84792c0de004b4fa24cfd453c3",
+        "axiom_corpus_ref": "cbf3d2492c8077ba454cd49df9676e8265c9b497",
         "rulespec_us_ref": "6bbb9bd3e49e75b66f378ff71cdb40addfa0b6c5",
     }
     release_toolchain = tomllib.loads((ROOT / ".axiom/toolchain.toml").read_text())[
