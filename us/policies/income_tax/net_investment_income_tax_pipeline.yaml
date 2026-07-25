@@ -1,0 +1,329 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/1411
+      - us/statute/26/911
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/statute/26/1411
+        - us/statute/26/911
+      rationale: |-
+        Section 1411's executable module already derives modified adjusted
+        gross income, filing-status thresholds, net investment income,
+        statutory exclusions, nonapplication rules, tax base, and final tax.
+        Section 911 was checked because section 1411(d) expressly modifies AGI
+        using the section 911(a)(1) exclusion and section 911(d)(6)
+        disallowances; those encoded concepts are transitive imports of the
+        section 1411 module.
+  summary: |-
+    Fail-closed federal individual net investment income tax composition under
+    26 USC 1411 for tax year 2026. Adjusted gross income is a completed-return
+    TaxUnit boundary. The caller supplies post-classification investment-income
+    components, allocable deductions, filing status, and section 1411(e)
+    applicability facts consumed by the encoded section 1411 module.
+
+    The imported section 1411 encoding is executable only inside a verified
+    domain. Its section 1411(c)(5) and (6) inputs must be zero because the
+    imported module treats excluded qualified-plan distributions and
+    section-1401(b) income as offsets against unrelated investment income. Its
+    two section 911-derived MAGI-adjustment amounts must also be zero because
+    the imported section 911(d)(6) surface does not preserve the statutory
+    section 1411(d)(2) filters. Finally, the caller must attest that every
+    supplied income category is a disjoint post-classification amount.
+    Working-capital investment income is collapsed into the applicable
+    interest, dividend, annuity, royalty, rent, business, or gain category and
+    the imported module's separate working-capital slot must be zero.
+
+    `niit_verified_domain_applies` exposes that runtime contract. The public tax
+    output returns the imported result only when the contract holds and returns
+    zero otherwise, so an out-of-domain input never produces a purported tax.
+    This composition does not reconstruct MAGI, net investment income,
+    thresholds, the 3.8-percent rate, or the lesser-of tax base.
+
+    The individual companion cases have no section 911 amounts, so encoded
+    modified adjusted gross income equals supplied AGI. Their AGI values equal
+    the GRID-CONTRACT wages plus listed investment items, but wages remain
+    fixture documentation rather than a second AGI computation.
+  deferred_outputs:
+    - output: us:policies/income_tax/net_investment_income_tax_pipeline#federal_estate_or_trust_net_investment_income_tax
+      reason: |-
+        This pipeline's declared runtime surface and companion cases cover
+        individuals only. Section 1411(a)(2)(B)(ii) requires the tax-year
+        amount at which section 1(e)'s highest estate/trust bracket begins;
+        no executable 2026 encoding of that amount was found in the surveyed
+        federal tree. Estate/trust wiring is therefore deferred rather than
+        assigning an invented policy value.
+    - output: us:policies/income_tax/net_investment_income_tax_pipeline#federal_net_investment_income_tax_with_nonzero_qualified_plan_or_1401_b_items
+      blocked_by:
+        - us:statutes/26/1411#net_investment_income
+      reason: |-
+        The imported section 1411(c)(5)-(6) encoding subtracts excluded items
+        from unrelated included income instead of keeping the categories out of
+        net investment income. This unrestricted surface is blocked by the
+        rulespec-us upstream issues, see PR body; the verified domain requires
+        both imported exclusion-item inputs to equal zero.
+      source_values:
+        - us:policies/income_tax/net_investment_income_tax_pipeline#niit_verified_domain_applies
+        - us:statutes/26/1411#net_investment_income_tax
+    - output: us:policies/income_tax/net_investment_income_tax_pipeline#federal_net_investment_income_tax_with_section_911_adjustments
+      blocked_by:
+        - us:statutes/26/1411#niit_modified_adjusted_gross_income
+      reason: |-
+        The imported section 1411(d)(2) path cannot establish that every
+        section 911 deduction or exclusion was taken into account in adjusted
+        gross income and is allocable to the section 911(a)(1) exclusion. This
+        unrestricted surface is blocked by the rulespec-us upstream issues, see
+        PR body; the verified domain requires both section 911-derived amounts
+        to equal zero.
+      source_values:
+        - us:policies/income_tax/net_investment_income_tax_pipeline#niit_verified_domain_applies
+        - us:statutes/26/1411#net_investment_income_tax
+    - output: us:policies/income_tax/net_investment_income_tax_pipeline#federal_net_investment_income_tax_without_disjoint_category_attestation
+      blocked_by:
+        - us:statutes/26/1411#net_investment_income_gross_items
+      reason: |-
+        The imported gross-items formula independently adds a working-capital
+        slot to the named income categories and cannot prove that the supplied
+        categories are post-classification and disjoint. This unrestricted
+        surface is blocked by the rulespec-us upstream issues, see PR body; the
+        verified domain requires a caller attestation and a zero separate
+        working-capital slot.
+      source_values:
+        - us:policies/income_tax/net_investment_income_tax_pipeline#niit_verified_domain_applies
+        - us:statutes/26/1411#net_investment_income_tax
+imports:
+  - us:statutes/26/1411#net_investment_income_tax
+  - us:statutes/26/911/a/1#foreign_earned_income_excluded_from_gross_income
+  - us:statutes/26/911/d/6#section_911_disallowed_deductions_and_exclusions
+rules:
+  - name: niit_verified_domain_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 1411(c)(1), (c)(3), (c)(5)-(6), and (d); fail-closed verified runtime domain
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/1411
+              excerpt: "other than such income which is derived in the ordinary course of a trade or business not described in paragraph (2)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/1411
+              excerpt: "Income on investment of working capital subject to tax"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/1411
+              excerpt: "shall not include any distribution from a plan or arrangement described in section 401(a), 403(a), 403(b), 408, 408A, or 457(b)"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/1411
+              excerpt: "shall not include any item taken into account in determining self-employment income for such taxable year on which a tax is imposed by section 1401(b)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/1411
+              excerpt: "adjusted gross income increased by the excess of"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/911/a/1#foreign_earned_income_excluded_from_gross_income
+              output: foreign_earned_income_excluded_from_gross_income
+              hash: sha256:6b3d485412c7039578b86df1ff0ca4e7ffce0c8414fe7dc0fb9f643eaea755fc
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/911/d/6#section_911_disallowed_deductions_and_exclusions
+              output: section_911_disallowed_deductions_and_exclusions
+              hash: sha256:ee94dfb18b7d04d16aefa2afbe70213feee3fcd04f4f80e7a26763e2ac841f30
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          niit_income_categories_are_disjoint_post_classification_amounts
+          and investment_of_working_capital_income == 0
+          and qualified_plan_distributions == 0
+          and self_employment_income_subject_to_1401_b == 0
+          and foreign_earned_income_excluded_from_gross_income == 0
+          and section_911_disallowed_deductions_and_exclusions == 0
+
+  - name: federal_net_investment_income_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 1411(a)(1), imported encoded final individual net investment income tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/1411#net_investment_income_tax
+              output: net_investment_income_tax
+              hash: sha256:8443d708729dfbb96068f13dae059614117dffac45ee0b3e721044c40ef05bfd
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/net_investment_income_tax_pipeline#niit_verified_domain_applies
+              output: niit_verified_domain_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/1411
+              excerpt: "a tax equal to 3.8 percent of the lesser of"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if niit_verified_domain_applies:
+            net_investment_income_tax
+          else:
+            0
+
+inputs:
+  - name: filing_status
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Section 1411(b) filing-status code; 0 single/other, 1 joint, 2 married filing separately, 3 head of household, 4 surviving spouse.
+  - name: adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return adjusted gross income before the encoded section 1411(d) modification.
+  - name: elected_foreign_earned_income_exclusion_amount
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Runtime fact consumed by the encoded section 911(a)(1) exclusion.
+  - name: deduction_under_subtitle_before_section_911_double_benefit_denial
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Runtime fact consumed by the encoded section 911(d)(6) disallowance.
+  - name: deduction_properly_allocable_or_chargeable_to_amounts_excluded_under_subsection_a
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Runtime fact consumed by the encoded section 911(d)(6) disallowance.
+  - name: exclusion_from_gross_income_under_subtitle_before_section_911_double_benefit_denial
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Runtime fact consumed by the encoded section 911(d)(6) disallowance.
+  - name: exclusion_properly_allocable_or_chargeable_to_amounts_excluded_under_subsection_a
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Runtime fact consumed by the encoded section 911(d)(6) disallowance.
+  - name: taxable_interest_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(i) taxable interest, including working-capital interest, disjoint from every other supplied income category.
+  - name: dividend_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(i) dividends, including working-capital dividends, disjoint from every other supplied income category.
+  - name: annuity_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(i) annuities, disjoint from every other supplied income category.
+  - name: royalty_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(i) royalties, disjoint from every other supplied income category.
+  - name: rental_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(i) rents after the ordinary-course exception, disjoint from every other supplied income category.
+  - name: passive_activity_business_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(ii) passive-activity business income, disjoint from every other supplied income category.
+  - name: financial_trading_business_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(ii) financial-instrument or commodity trading income, disjoint from every other supplied income category.
+  - name: investment_of_working_capital_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Must equal zero in the verified domain; section 1411(c)(3) working-capital income is classified once into the applicable named interest, dividend, annuity, royalty, rent, business, or gain input.
+  - name: taxable_net_gain_from_dispositions_after_active_partnership_s_corporation_exception
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Post-classification section 1411(c)(1)(A)(iii) taxable net gain after the subsection (c)(4) exception, including applicable working-capital gain, disjoint from every other supplied income category.
+  - name: allocable_investment_deductions
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Section 1411(c)(1)(B) deductions properly allocable to included income and gain.
+  - name: qualified_plan_distributions
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Must equal zero in the verified domain because the imported section 1411(c)(5) encoding incorrectly treats this excluded category as an offset.
+  - name: self_employment_income_subject_to_1401_b
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Must equal zero in the verified domain because the imported section 1411(c)(6) encoding incorrectly treats this excluded category as an offset.
+  - name: is_nonresident_alien
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Section 1411(e)(1) nonapplication fact.
+  - name: trust_all_unexpired_interests_devoted_to_section_170_c_2_B_purposes
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Section 1411(e)(2) nonapplication fact.
+  - name: is_individual
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Section 1411(a)(1) individual-applicability fact.
+  - name: niit_income_categories_are_disjoint_post_classification_amounts
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required caller attestation that each supplied section 1411(c)(1) income or gain amount has completed its ordinary-course, passive/trading, working-capital, and disposition classification and appears in exactly one category.
