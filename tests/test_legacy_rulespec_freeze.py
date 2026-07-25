@@ -118,7 +118,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "396f4cd3e3e305999d7c0039740e31282c996d4024306f77be902e719294b658" in workflow
+    assert "eebe9e5ce168e5e7382ea7d09c9073985caa9b3f8d3cba326c4bb199155d9617" in workflow
     assert (
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
