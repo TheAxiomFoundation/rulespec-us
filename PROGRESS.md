@@ -15,9 +15,9 @@
 - Confirmed PR 1003’s stale `bulk/fix3-1003/PROGRESS.md` is absent and its live body is coherent.
 - Checked the round delta: one companion rename/comment edit, deletion of the stale ledger, and three mechanical manifest re-signs.
 - Found the single remaining defect: the companion comment universally claims that positive SE profit makes the zero-imported-SE-income guard dominate, while the committed `$433` floor fixture derives imported SE income of zero from positive gross profit.
+- From a detached root literally named `rulespec-us`, reproduced the pinned focused gates: validation `3/3`, proof atoms `47/47`, companions `42/42`, Additional Medicare companion `14/14`, and encoding-manifest pytest `3/3`.
 
 ## Next
 
-- Run focused validation/proof/companion/canonical-basename gates.
 - Confirm settled CI and inspect only the round-over-round delta.
 - Write `scratchpad/confirm-1003-VERDICT.md`.
