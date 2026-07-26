@@ -16,6 +16,9 @@ Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e7
 - B3 mutant commit `2ae14ee6a`: reversed relation arguments to applicant-first/member-second.
 - The complete 39-case companion still passed on both requested and pinned engines (exit 0).
 - Pinned compiled IR remained `current_slot=1, related_slot=0`, proving the declared argument mutation was not observed at runtime.
+- B4 mutant commit `5fc355740`: swapped the selected current-month and projected-annual ratio streams.
+- The companion failed on both requested and pinned engines (exit 1; 11 assertions).
+- The asymmetric B4 case changed from ratio `1.5`/ineligible to `0.5545286506...`/eligible, directly detecting reversal.
 
 ## Next
 
