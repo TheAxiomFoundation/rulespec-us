@@ -10,16 +10,18 @@ module:
     income, public-assistance, homelessness, and foster-care paths; the
     child-only 10-percent over-income exception; the below-130-percent
     additional allowance; and the Tribal and Migrant or Seasonal paths with
-    the paragraph-(b) age predicates.
+    separate paragraph-(b) age predicates.
 
     Federal poverty-line dollars, verified family income, categorical facts,
     program enrollment-share and priority-policy facts, program context, and
-    school-age/date determinations remain explicit runtime inputs in their
-    encoded source modules. The 100-percent ordinary threshold is the direct
-    paragraph-(c) comparison to the poverty line. The encoded 1.00 multiplier
-    is only the lower bound of paragraph (d)(2)'s reporting interval; it is not
-    repurposed as an eligibility parameter. The 130-percent allowance is
-    strict: income exactly at 130 percent does not enter that path.
+    school-age/date determinations remain explicit runtime inputs. A
+    fail-closed domain contract requires nonnegative income and age, a positive
+    poverty line, and each enrollment share to be between zero and one. The
+    100-percent ordinary threshold is the direct paragraph-(c) comparison to
+    the poverty line. The encoded 1.00 multiplier is only the lower bound of
+    paragraph (d)(2)'s reporting interval; it is not repurposed as an
+    eligibility parameter. The 130-percent allowance is strict: income exactly
+    at 130 percent does not enter that path.
 
     These outputs mean that a person satisfies an eligibility or expressly
     authorized enrollment path. They do not determine selection, actual
@@ -55,12 +57,50 @@ imports:
   - us:regulations/45-cfr/1302/12#paragraph_c_participant_eligible
   - us:regulations/45-cfr/1302/12#paragraph_c_overincome_exception_participant_may_be_enrolled
   - us:regulations/45-cfr/1302/12#additional_allowance_participant_may_be_enrolled
-  - us:regulations/45-cfr/1302/12#tribal_service_area_participant_eligible
-  - us:regulations/45-cfr/1302/12#migrant_or_seasonal_participant_eligible
   - us:regulations/45-cfr/1302/12/b#early_head_start_age_requirement
   - us:regulations/45-cfr/1302/12/b#head_start_preschool_age_requirement
   - us:regulations/45-cfr/1302/12/b#migrant_or_seasonal_head_start_age_requirement
 rules:
+  - name: head_start_runtime_inputs_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(b)-(d), fail-closed runtime domain contract
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "The program must calculate total gross income using applicable sources of income."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "only make up to 10 percent of a program's enrollment"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "may enroll an additional 35 percent of participants"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "a child must be an infant or a toddler younger than three years old"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          family_income >= 0
+          and poverty_line_amount > 0
+          and program_paragraph_c_2_participant_share_after_enrollment >= 0
+          and program_paragraph_c_2_participant_share_after_enrollment <= 1
+          and program_additional_allowance_participant_share_after_enrollment >= 0
+          and program_additional_allowance_participant_share_after_enrollment <= 1
+          and child_age_years >= 0
+
   - name: family_does_not_meet_paragraph_c_criterion
     kind: derived
     entity: Person
@@ -84,14 +124,15 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          not paragraph_c_participant_eligible
+          head_start_runtime_inputs_valid
+          and not paragraph_c_participant_eligible
 
-  - name: participant_meets_age_requirements_under_paragraph_b
+  - name: head_start_ordinary_or_tribal_age_requirement_met
     kind: derived
     entity: Person
     dtype: Judgment
     period: Year
-    source: 45 CFR 1302.12(b), (e), and (f), program-context age bridge
+    source: 45 CFR 1302.12(b)(1)-(2), ordinary and Tribal program age bridge
     metadata:
       proof:
         atoms:
@@ -100,11 +141,6 @@ rules:
             source:
               corpus_citation_path: us/regulation/45/1302/12
               excerpt: "any pregnant women or children in the approved service area"
-          - path: versions[0].formula
-            kind: condition
-            source:
-              corpus_citation_path: us/regulation/45/1302/12
-              excerpt: "pregnant women and children are eligible for Migrant or Seasonal Head Start"
           - path: versions[0].formula
             kind: import
             import:
@@ -117,6 +153,35 @@ rules:
               target: us:regulations/45-cfr/1302/12/b#head_start_preschool_age_requirement
               output: head_start_preschool_age_requirement
               hash: sha256:c9bd32aa78c8ec3cf06b4b7c567f7810250eb1f654c29cb1ad9260373d46dcdd
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          head_start_runtime_inputs_valid
+          and (
+            participant_is_pregnant_woman
+            or (
+              participant_is_child
+              and (
+                early_head_start_age_requirement
+                or head_start_preschool_age_requirement
+              )
+            )
+          )
+
+  - name: head_start_migrant_or_seasonal_age_requirement_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(b)(3), Migrant or Seasonal program age bridge
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "pregnant women and children are eligible for Migrant or Seasonal Head Start"
           - path: versions[0].formula
             kind: import
             import:
@@ -126,27 +191,12 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          (
-            tribal_program
-            and (
-              participant_is_pregnant_woman
-              or (
-                participant_is_child
-                and (
-                  early_head_start_age_requirement
-                  or head_start_preschool_age_requirement
-                )
-              )
-            )
-          )
-          or (
-            migrant_or_seasonal_program
-            and (
-              participant_is_pregnant_woman
-              or (
-                participant_is_child
-                and migrant_or_seasonal_head_start_age_requirement
-              )
+          head_start_runtime_inputs_valid
+          and (
+            participant_is_pregnant_woman
+            or (
+              participant_is_child
+              and migrant_or_seasonal_head_start_age_requirement
             )
           )
 
@@ -173,7 +223,12 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          paragraph_c_participant_eligible
+          head_start_runtime_inputs_valid
+          and (
+            participant_is_child
+            or participant_is_pregnant_woman
+          )
+          and paragraph_c_participant_eligible
 
   - name: head_start_paragraph_c_overincome_exception_path_satisfied
     kind: derived
@@ -198,7 +253,8 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          participant_is_child
+          head_start_runtime_inputs_valid
+          and participant_is_child
           and paragraph_c_overincome_exception_participant_may_be_enrolled
 
   - name: head_start_additional_allowance_path_satisfied
@@ -224,7 +280,12 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          additional_allowance_participant_may_be_enrolled
+          head_start_runtime_inputs_valid
+          and (
+            participant_is_child
+            or participant_is_pregnant_woman
+          )
+          and additional_allowance_participant_may_be_enrolled
 
   - name: head_start_tribal_service_area_path_satisfied
     kind: derived
@@ -243,35 +304,15 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us:regulations/45-cfr/1302/12#tribal_service_area_participant_eligible
-              output: tribal_service_area_participant_eligible
-              hash: sha256:7fe3e127eee80566c38cf11f0dc974ec5edd152a10c59bcee5e572d6a72bc1bd
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:regulations/45-cfr/1302/12/b#early_head_start_age_requirement
-              output: early_head_start_age_requirement
-              hash: sha256:c9bd32aa78c8ec3cf06b4b7c567f7810250eb1f654c29cb1ad9260373d46dcdd
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:regulations/45-cfr/1302/12/b#head_start_preschool_age_requirement
-              output: head_start_preschool_age_requirement
-              hash: sha256:c9bd32aa78c8ec3cf06b4b7c567f7810250eb1f654c29cb1ad9260373d46dcdd
+              target: us:policies/hhs/head_start/eligibility_pipeline#head_start_ordinary_or_tribal_age_requirement_met
+              output: head_start_ordinary_or_tribal_age_requirement_met
+              hash: sha256:local
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          tribal_service_area_participant_eligible
-          and (
-            participant_is_pregnant_woman
-            or (
-              participant_is_child
-              and (
-                early_head_start_age_requirement
-                or head_start_preschool_age_requirement
-              )
-            )
-          )
+          head_start_tribal_program
+          and head_start_participant_in_approved_tribal_service_area
+          and head_start_ordinary_or_tribal_age_requirement_met
 
   - name: head_start_migrant_or_seasonal_path_satisfied
     kind: derived
@@ -290,27 +331,15 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us:regulations/45-cfr/1302/12#migrant_or_seasonal_participant_eligible
-              output: migrant_or_seasonal_participant_eligible
-              hash: sha256:7fe3e127eee80566c38cf11f0dc974ec5edd152a10c59bcee5e572d6a72bc1bd
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:regulations/45-cfr/1302/12/b#migrant_or_seasonal_head_start_age_requirement
-              output: migrant_or_seasonal_head_start_age_requirement
-              hash: sha256:c9bd32aa78c8ec3cf06b4b7c567f7810250eb1f654c29cb1ad9260373d46dcdd
+              target: us:policies/hhs/head_start/eligibility_pipeline#head_start_migrant_or_seasonal_age_requirement_met
+              output: head_start_migrant_or_seasonal_age_requirement_met
+              hash: sha256:local
     versions:
       - effective_from: '2021-01-01'
         formula: |-
           migrant_or_seasonal_program
-          and migrant_or_seasonal_participant_eligible
-          and (
-            participant_is_pregnant_woman
-            or (
-              participant_is_child
-              and migrant_or_seasonal_head_start_age_requirement
-            )
-          )
+          and head_start_family_has_primary_agricultural_employment_income
+          and head_start_migrant_or_seasonal_age_requirement_met
 
   - name: head_start_participation_path_satisfied
     kind: derived
@@ -359,11 +388,18 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          head_start_paragraph_c_path_satisfied
-          or head_start_paragraph_c_overincome_exception_path_satisfied
-          or head_start_additional_allowance_path_satisfied
-          or head_start_tribal_service_area_path_satisfied
-          or head_start_migrant_or_seasonal_path_satisfied
+          head_start_runtime_inputs_valid
+          and (
+            participant_is_child
+            or participant_is_pregnant_woman
+          )
+          and (
+            head_start_paragraph_c_path_satisfied
+            or head_start_paragraph_c_overincome_exception_path_satisfied
+            or head_start_additional_allowance_path_satisfied
+            or head_start_tribal_service_area_path_satisfied
+            or head_start_migrant_or_seasonal_path_satisfied
+          )
 
   - name: head_start_eligible
     kind: derived
@@ -394,7 +430,8 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          participant_is_child
+          head_start_runtime_inputs_valid
+          and participant_is_child
           and head_start_preschool_age_requirement
           and head_start_participation_path_satisfied
 
@@ -427,7 +464,8 @@ rules:
     versions:
       - effective_from: '2021-01-01'
         formula: |-
-          (
+          head_start_runtime_inputs_valid
+          and (
             participant_is_pregnant_woman
             or (
               participant_is_child
@@ -451,3 +489,18 @@ inputs:
     dtype: Boolean
     period: Year
     description: Caller fact that the eligibility determination is for a Migrant or Seasonal Head Start program.
+  - name: head_start_tribal_program
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller fact that the eligibility determination is for a Tribal Head Start program.
+  - name: head_start_participant_in_approved_tribal_service_area
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller fact that the participant is in the Tribal program's approved service area under paragraph (e).
+  - name: head_start_family_has_primary_agricultural_employment_income
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller determination that at least one family member's income comes primarily from agricultural employment for paragraph (f).
