@@ -1,0 +1,293 @@
+format: rulespec/v1
+module:
+  kind: composition
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/regulation/7/247/6
+      - us/regulation/7/247/9
+      - us/regulation/7/247/9/a
+      - us/regulation/7/247/9/b
+      - us/regulation/7/247/9/c
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/regulation/7/247/6
+        - us/regulation/7/247/9
+        - us/regulation/7/247/9/a
+        - us/regulation/7/247/9/b
+        - us/regulation/7/247/9/c
+      rationale: |-
+        Paragraph (a) supplies the inclusive age-60 condition and requires the
+        paragraph-(b) income test. Paragraph (b) supplies the direct
+        household-income ceiling, optional adjunctive-evidence routes, and the
+        legacy-certification exception. Section 247.6(c)(2) requires the
+        approved State Plan to identify which eligibility options the State
+        uses. This composition therefore consumes explicit applicant-specific
+        attestations for the governing State Plan's elections rather than
+        treating the federal maxima and State options as operative nationwide.
+  summary: |-
+    Person-month composition of the federal age and income requirements in
+    7 CFR 247.9(a)-(b). This module does not decide final CSFP eligibility.
+
+    The caller supplies a completed attestation that the applicant meets
+    paragraph (a)'s at-least-60 age condition. The caller also supplies the
+    State/local agency's completed annual countable-household-income amount,
+    the applicable annual poverty-guideline amount, and the governing State
+    agency's actual income-limit ratio. The module deliberately does not
+    annualize a monthly amount: paragraph (d) leaves the applicable income
+    measurement method to the State/local agency.
+
+    Paragraph (b)(1)-(2) says that a State agency may accept specified
+    certifications as income evidence. Each adjunctive route is therefore
+    gated by a required, applicant-specific attestation that the governing
+    approved State Plan elected that option. False blocks the route; omission
+    leaves the composition unevaluable and cannot produce an affirmative
+    result. The State ratio is checked only against the sourced 150-percent
+    federal ceiling. No unsupported positive floor is imposed, so a zero ratio
+    and zero income satisfy the direct comparison.
+
+    Optional paragraph-(e) nutritional-risk and service-area screens, all
+    other requirements in Part 247, and actual program/service availability
+    remain outside this deliberately scoped federal age-and-income output.
+  deferred_outputs:
+    - output: us:regulations/7-cfr/247/9/d#csfp_countable_household_income
+      reason: |-
+        Paragraph (d) defines gross income, exclusions, and the authorized
+        choice between current and previous-12-month-average income. The
+        pipeline accepts the State/local agency's completed annual-comparison
+        amount rather than recreating those determinations or inventing a
+        monthly-to-annual conversion rule.
+    - output: us:regulations/7-cfr/247/9/e#optional_state_csfp_requirements
+      reason: |-
+        A State agency may add nutritional-risk and service-area-residency
+        requirements. This module does not claim final eligibility because
+        those governing-State choices and applicant-satisfaction facts are
+        outside its federal age-and-income surface.
+    - output: us:programs/usda/csfp#commodity_package_or_benefit_amount
+      reason: |-
+        This lane composes only federal age and income requirements. Food
+        package issuance, service availability, and any monetized amount
+        remain out of scope.
+imports:
+  - us:regulations/7-cfr/247/9/b#maximum_csfp_household_income_limit_fpg_ratio
+  - us:regulations/7-cfr/247/9/b#certified_federal_program_adjunctive_income_eligible
+  - us:regulations/7-cfr/247/9/b#state_administered_program_adjunctive_income_eligible
+  - us:regulations/7-cfr/247/9/b#subject_to_prior_elderly_pilot_income_criteria
+rules:
+  - name: csfp_direct_income_runtime_inputs_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(b)-(d), direct-income runtime boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/b
+              excerpt: "households with income at or below this level"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/b#maximum_csfp_household_income_limit_fpg_ratio
+              output: maximum_csfp_household_income_limit_fpg_ratio
+              hash: sha256:5429426e80a220064349cbdca97c980ff12be42e3fa2907629b11349150fcbc5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          csfp_household_size > 0
+          and csfp_annual_federal_poverty_guideline_for_household > 0
+          and csfp_annual_countable_household_income >= 0
+          and csfp_state_agency_household_income_limit_fpg_ratio
+          <= maximum_csfp_household_income_limit_fpg_ratio
+
+  - name: household_income_at_or_below_state_agency_csfp_income_limit
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(b), direct household-income path
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/b
+              excerpt: "Participants in households with income at or below this level must be considered eligible"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/csfp/eligibility_pipeline#csfp_direct_income_runtime_inputs_valid
+              output: csfp_direct_income_runtime_inputs_valid
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          csfp_direct_income_runtime_inputs_valid
+          and csfp_annual_countable_household_income
+          <= csfp_annual_federal_poverty_guideline_for_household
+          * csfp_state_agency_household_income_limit_fpg_ratio
+
+  - name: csfp_adjunctive_income_evidence_accepted_under_applicable_state_plan
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.6(c)(2) and 247.9(b)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/6
+              excerpt: "income eligibility standards and the options to be used relating to income or other eligibility requirements"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/b
+              excerpt: "The State agency may accept as income-eligible for CSFP benefits"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/b#certified_federal_program_adjunctive_income_eligible
+              output: certified_federal_program_adjunctive_income_eligible
+              hash: sha256:5429426e80a220064349cbdca97c980ff12be42e3fa2907629b11349150fcbc5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/b#state_administered_program_adjunctive_income_eligible
+              output: state_administered_program_adjunctive_income_eligible
+              hash: sha256:5429426e80a220064349cbdca97c980ff12be42e3fa2907629b11349150fcbc5
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (applicable_state_plan_accepts_federal_program_certification_as_csfp_income_evidence
+          and certified_federal_program_adjunctive_income_eligible)
+          or (applicable_state_plan_accepts_state_program_participation_as_csfp_income_evidence
+          and state_administered_program_adjunctive_income_eligible)
+
+  - name: csfp_income_requirements_met_under_applicable_state_plan
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(b), State-plan-aware current income rule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/247/9/b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/247/9/b#subject_to_prior_elderly_pilot_income_criteria
+              output: subject_to_prior_elderly_pilot_income_criteria
+              hash: sha256:5429426e80a220064349cbdca97c980ff12be42e3fa2907629b11349150fcbc5
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/csfp/eligibility_pipeline#household_income_at_or_below_state_agency_csfp_income_limit
+              output: household_income_at_or_below_state_agency_csfp_income_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/csfp/eligibility_pipeline#csfp_adjunctive_income_evidence_accepted_under_applicable_state_plan
+              output: csfp_adjunctive_income_evidence_accepted_under_applicable_state_plan
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not subject_to_prior_elderly_pilot_income_criteria
+          and (household_income_at_or_below_state_agency_csfp_income_limit
+          or csfp_adjunctive_income_evidence_accepted_under_applicable_state_plan)
+
+  - name: csfp_federal_age_and_income_requirements_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 247.9(a)-(b), scoped federal age-and-income composition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/247/9/a
+              excerpt: "at least 60 years of age and meet the income eligibility requirements outlined in paragraph (b)"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/csfp/eligibility_pipeline#csfp_income_requirements_met_under_applicable_state_plan
+              output: csfp_income_requirements_met_under_applicable_state_plan
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          csfp_applicant_meets_paragraph_a_age_requirement
+          and csfp_income_requirements_met_under_applicable_state_plan
+inputs:
+  - name: csfp_applicant_meets_paragraph_a_age_requirement
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: |-
+      Required caller attestation that the applicant satisfies 7 CFR
+      247.9(a)'s age condition. This compose does NOT evaluate that condition:
+      247.9(a) is not encoded here, no formula computes or compares an age, and
+      the only numeral appears in quoted regulation text. The 247.9(a) proof
+      atom on the composed output records the source of the delegated age
+      conjunct and is what establishes the rule's Person scope (the paragraph-(b)
+      income text alone is Household-scoped; removing the atom makes validation
+      fail with a source-scope mismatch). False blocks the scoped output; omission
+      is unevaluable and cannot produce an affirmative result.
+  - name: csfp_household_size
+    entity: Person
+    dtype: Count
+    period: Month
+    description: Size of the applicant's CSFP household corresponding to the supplied poverty guideline.
+  - name: csfp_annual_countable_household_income
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: |-
+      State/local agency's completed nonnegative annual-comparison countable
+      household-income amount after applying the governing paragraph-(d)
+      measurement method and exclusions.
+  - name: csfp_annual_federal_poverty_guideline_for_household
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Annual HHS poverty-guideline dollars applicable to the applicant's household size and location in the certification month.
+  - name: csfp_state_agency_household_income_limit_fpg_ratio
+    entity: Person
+    dtype: Rate
+    period: Month
+    description: Governing State agency's actual CSFP household-income limit as a ratio of FPG, capped by paragraph (b) at 1.50.
+  - name: applicable_state_plan_accepts_federal_program_certification_as_csfp_income_evidence
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: |-
+      Required applicant-specific attestation that the governing approved State
+      Plan elected paragraph (b)(1)'s Federal-program certification option.
+      False blocks this route; omission is unevaluable.
+  - name: applicable_state_plan_accepts_state_program_participation_as_csfp_income_evidence
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: |-
+      Required applicant-specific attestation that the governing approved State
+      Plan elected paragraph (b)(2)'s State-program participation option. False
+      blocks this route; omission is unevaluable.
