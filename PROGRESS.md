@@ -13,6 +13,9 @@ Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e7
 - Confirmed PR-only history names no `PROGRESS` or session-ledger path and no other policy lane.
 - Baseline companion passes all 39 cases through the requested `~/axiom-rules` engine.
 - Baseline companion passes all 39 cases through the exact pinned engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
+- B3 mutant commit `2ae14ee6a`: reversed relation arguments to applicant-first/member-second.
+- The complete 39-case companion still passed on both requested and pinned engines (exit 0).
+- Pinned compiled IR remained `current_slot=1, related_slot=0`, proving the declared argument mutation was not observed at runtime.
 
 ## Next
 
