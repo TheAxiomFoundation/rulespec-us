@@ -13,6 +13,7 @@ POLICY_PATH = (
 )
 COMPANION_PATH = POLICY_PATH.with_suffix(".test.yaml")
 PREFIX = "us:policies/medicaid/magi_household_income_pipeline"
+RAW_RELATION = "medicaid_household_candidate_row_for_applicant"
 RELATION = "medicaid_household_member_of_applicant"
 RUNTIME = "medicaid_magi_household_runtime_inputs_valid"
 
@@ -64,17 +65,28 @@ def _top_level_boolean_operators(formula: str) -> list[str]:
     return operators
 
 
-def test_relation_order_matches_sums_and_asymmetric_fixture() -> None:
+def test_executable_relation_slots_match_sums_and_asymmetric_fixture() -> None:
     payload = _policy()
     rules = _rules(payload)
+    raw_relation = rules[RAW_RELATION]
     relation = rules[RELATION]
 
-    assert relation["kind"] == "data_relation"
-    assert relation["data_relation"] == {
-        "predicate": RELATION,
+    assert raw_relation["kind"] == "data_relation"
+    assert raw_relation["data_relation"] == {
+        "predicate": RAW_RELATION,
         "arity": 2,
-        "arguments": ["household_member", "medicaid_applicant"],
     }
+    assert relation["kind"] == "derived_relation"
+    assert relation["derived_relation"] == {
+        "arity": 2,
+        "source_relation": f"{PREFIX}#relation.{RAW_RELATION}",
+        "current_slot": 1,
+        "related_slot": 0,
+    }
+    assert relation["versions"][0]["formula"] == (
+        "household_row_candidate_is_the_applicant or "
+        "not household_row_candidate_is_the_applicant"
+    )
 
     expected_sums = {
         "internal_current_month_household_pre_disregard_magi": (
@@ -104,16 +116,15 @@ def test_relation_order_matches_sums_and_asymmetric_fixture() -> None:
     case = cases[
         "member_first_relation_orientation_is_observable_and_public_outputs_are_gated"
     ]
-    relation_key = f"{PREFIX}#relation.{RELATION}"
+    relation_key = f"{PREFIX}#relation.{RAW_RELATION}"
     current_magi_key = (
         f"{PREFIX}#input.household_row_current_month_magi_based_income"
     )
     self_key = f"{PREFIX}#input.household_row_candidate_is_the_applicant"
     rows = case["input"][relation_key]
 
-    # The runner creates member-first tuples in list order. These unequal,
-    # asymmetric rows make the consumed member slot observable, while the
-    # metadata assertion above catches a declared-order regression.
+    # The runner creates raw [candidate, applicant] tuples in list order.
+    # These unequal, asymmetric rows make member filtering observable.
     assert [
         (row[current_magi_key], row[self_key]) for row in rows
     ] == [(1330, True), (9876.54, False)]
@@ -124,6 +135,20 @@ def test_relation_order_matches_sums_and_asymmetric_fixture() -> None:
         f"{PREFIX}#medicaid_current_month_household_pre_disregard_magi"
     ] == 1330
     assert case["output"][f"{PREFIX}#{RUNTIME}"] == "holds"
+
+    probe = cases[
+        "executable_relation_slot_reversal_surfaces_nonzero_opposite_side_value"
+    ]
+    probe_rows = probe["input"][relation_key]
+    assert probe["input"][current_magi_key] == 9876.54
+    assert [row[current_magi_key] for row in probe_rows] == [1330]
+    assert probe["output"][
+        f"{PREFIX}#internal_current_month_household_pre_disregard_magi"
+    ] == 1330
+
+    derived_relation_key = f"{PREFIX}#relation.{RELATION}"
+    for fixture in cases.values():
+        assert derived_relation_key not in fixture.get("input", {})
 
 
 def test_self_row_cannot_trigger_dependent_income_exclusion() -> None:
