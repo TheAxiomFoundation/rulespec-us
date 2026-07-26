@@ -1,0 +1,2506 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/regulation/42/435/603/b
+      - us/regulation/42/435/603/c
+      - us/regulation/42/435/603/d
+      - us/regulation/42/435/603/e
+      - us/regulation/42/435/603/f
+      - us/regulation/42/435/603/h
+      - us/regulation/42/435/603/i
+      - us/regulation/42/435/603/j
+      - us/regulation/42/435/603/k
+      - us/regulation/42/435/110
+      - us/regulation/42/435/119
+      - us/statute/26/36B
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/regulation/42/435/603/b
+        - us/regulation/42/435/603/c
+        - us/regulation/42/435/603/d
+        - us/regulation/42/435/603/e
+        - us/regulation/42/435/603/f
+        - us/regulation/42/435/603/h
+        - us/regulation/42/435/603/i
+        - us/regulation/42/435/603/j
+        - us/regulation/42/435/603/k
+        - us/regulation/42/435/110
+        - us/regulation/42/435/119
+        - us/statute/26/36B
+      rationale: |-
+        This policy composition owns the applicant-to-member execution
+        relation because the imported paragraph-(d) relation's documentary
+        argument order is opposite the pinned engine's member-first slot
+        convention. The policy relation declares household_member first and
+        medicaid_applicant second, matching both the compiled sum and runtime
+        tuples.
+
+        Each relation row represents one person, not one payment. The caller
+        therefore supplies completed current-month and projected-annual
+        paragraph-(e) MAGI amounts for that person and attests that both
+        streams are complete. This avoids silently treating one payment as
+        the person's total MAGI.
+
+        Paragraph (d)(2)(ii) is scoped to the claiming taxpayer's household,
+        while paragraph (d)(3) is scoped to the paragraph-(f)(2)(i)
+        applicant's household. Counted member MAGI is therefore summed
+        separately from applicant-level cash support. Paragraph (f)(5)'s
+        mandatory fallback applies the paragraph-(f)(3) relationship body
+        when a filer cannot substantiate a claimed candidate.
+
+        Paragraph (h) supplies two distinct budget bases. Current-month and
+        projected-annual money remain separate; only their dimensionless FPL
+        ratios feed the common eligibility comparison. Applicants and new
+        enrollees use the required current-month route. A current beneficiary
+        must have a resolved, exclusive State-plan election before either
+        route is usable. Paragraph-(b) family-size elections, paragraph-(h)(3)
+        future-change treatment, and the section 435.119(c)(2) dependent-child
+        age election are also explicit inputs; no federal maximum or optional
+        treatment is assumed.
+
+        Paragraph (c) makes paragraph-(d) results subject to paragraphs (i),
+        (j), and (k). This module does not implement those alternative
+        methodologies. It therefore fails closed when any applies, when their
+        classification is unresolved, or when a State option needed by the
+        selected route is unresolved.
+  summary: |-
+    Fail-closed applicant-scoped Medicaid MAGI household-income composition.
+    The module constructs the paragraph-(f) household for each applicant,
+    including the mandatory paragraph-(f)(5) fallback; applies the
+    applicant-specific paragraph-(d)(2) exclusions; adds paragraph-(d)(3)
+    cash support only to the paragraph-(f)(2)(i) applicant's own household
+    under a resolved State election; and applies the five-percentage-point
+    subtraction only at the highest applicable MAGI standard.
+
+    Current-month and projected-annual amounts are published on separate
+    period surfaces. Public numeric outputs return zero and public Judgments
+    return not_holds unless relation structure, State elections, budget
+    basis, FPL correspondence, standard selection, and the paragraph-(c)
+    exception route are all resolved and valid.
+  deferred_outputs:
+    - output: us:regulations/42-cfr/435/603/b#family_size
+      reason: |-
+        The caller supplies the completed applicable family size and annual
+        FPL amount. This module requires an exclusive explicit State election
+        for counting another pregnant household member plus attestations that
+        paragraph-(b) pregnancy counting and the family-size, year, region,
+        and selected-budget-basis correspondence are complete.
+    - output: us:regulations/42-cfr/435/603/i#alternative_financial_eligibility_result
+      reason: |-
+        When paragraph (i) requires the 26 CFR 1.36B-1(e) methodology, this
+        paragraph-(d) pipeline fails closed instead of publishing an ordinary
+        MAGI denial or inventing the alternative result.
+    - output: us:regulations/42-cfr/435/603/j#non_magi_financial_eligibility_result
+      reason: |-
+        Paragraph-(j) groups require sections 435.601 and 435.602. This MAGI
+        pipeline fails closed for those groups.
+    - output: us:regulations/42-cfr/435/603/k#section_435_214_special_methodology_result
+      reason: |-
+        This pipeline detects resolved paragraph-(k) State options but does
+        not implement their special household, income, or family-size
+        treatment; any elected treatment fails closed.
+
+imports:
+  - us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_rate
+  - us:regulations/42-cfr/435/603/f#state_plan_child_age_threshold
+  - us:regulations/42-cfr/435/603/f#state_plan_full_time_student_age_threshold
+  - us:regulations/42-cfr/435/603/h#current_monthly_budget_period_required_for_applicant_or_new_enrollee
+  - us:regulations/42-cfr/435/603/h#current_beneficiary_current_monthly_budget_period_available
+  - us:regulations/42-cfr/435/603/h#current_beneficiary_projected_annual_budget_period_available
+  - us:regulations/42-cfr/435/603/i#fpl_threshold_for_alternative_household_income_method
+  - us:regulations/42-cfr/435/119#adult_group_minimum_age
+  - us:regulations/42-cfr/435/119#adult_group_maximum_age
+  - us:regulations/42-cfr/435/119#adult_group_income_limit_fpl_ratio
+  - us:regulations/42-cfr/435/119#dependent_child_default_age_threshold
+  - us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+
+rules:
+  - name: medicaid_household_member_of_applicant
+    kind: data_relation
+    source: 42 CFR 435.603(d)(1)
+    data_relation:
+      predicate: medicaid_household_member_of_applicant
+      arity: 2
+      arguments:
+        - household_member
+        - medicaid_applicant
+
+  - name: medicaid_applicant_under_state_plan_age
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(3)(iv), resolved State-plan age election
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/f#state_plan_child_age_threshold
+              output: state_plan_child_age_threshold
+              hash: sha256:82e4fc9da0d9256ad56169ef0aa6db2687601b4223ca9cb0846cfc1b25f24832
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/f#state_plan_full_time_student_age_threshold
+              output: state_plan_full_time_student_age_threshold
+              hash: sha256:82e4fc9da0d9256ad56169ef0aa6db2687601b4223ca9cb0846cfc1b25f24832
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_age_state_election_is_known
+          and (
+            medicaid_applicant_age < state_plan_child_age_threshold
+            or (
+              medicaid_state_plan_elects_full_time_student_age_21
+              and medicaid_applicant_is_full_time_student
+              and medicaid_applicant_age
+                < state_plan_full_time_student_age_threshold
+            )
+          )
+
+  - name: household_row_candidate_under_state_plan_age
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(3)(iv), candidate age under resolved State election
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_age_state_election_is_known
+          and (
+            household_row_candidate_age < state_plan_child_age_threshold
+            or (
+              household_row_state_plan_elects_full_time_student_age_21
+              and household_row_candidate_is_full_time_student
+              and household_row_candidate_age
+                < state_plan_full_time_student_age_threshold
+            )
+          )
+
+  - name: household_row_applicant_under_state_plan_age
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(3)(iv), applicant age copied onto relation row
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_age_state_election_is_known
+          and (
+            household_row_applicant_age < state_plan_child_age_threshold
+            or (
+              household_row_state_plan_elects_full_time_student_age_21
+              and household_row_applicant_is_full_time_student
+              and household_row_applicant_age
+                < state_plan_full_time_student_age_threshold
+            )
+          )
+
+  - name: household_row_applicant_uses_non_filer_household_rules
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(2)-(3)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          (
+            not household_row_applicant_expects_to_file_federal_tax_return
+            and not household_row_applicant_expects_to_be_claimed_as_tax_dependent
+          )
+          or household_row_applicant_is_described_in_paragraph_f_2_i
+          or household_row_applicant_is_described_in_paragraph_f_2_ii
+          or household_row_applicant_is_described_in_paragraph_f_2_iii
+
+  - name: household_row_matches_paragraph_f_3_relationship_body
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(3)(i)-(iii)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_candidate_is_the_applicant
+          or (
+            household_row_candidate_lives_with_applicant
+            and household_row_candidate_is_applicants_spouse
+          )
+          or (
+            household_row_candidate_lives_with_applicant
+            and household_row_candidate_is_applicants_child
+            and household_row_candidate_under_state_plan_age
+          )
+          or (
+            household_row_applicant_under_state_plan_age
+            and household_row_candidate_lives_with_applicant
+            and household_row_candidate_is_applicants_parent
+          )
+          or (
+            household_row_applicant_under_state_plan_age
+            and household_row_candidate_lives_with_applicant
+            and household_row_candidate_is_applicants_sibling
+            and household_row_candidate_under_state_plan_age
+          )
+
+  - name: household_row_paragraph_f_5_fallback_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(5), mandatory fallback to paragraph (f)(3)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+              excerpt: "the inclusion of such individual in the household of the taxpayer is determined in accordance with paragraph (f)(3) of this section."
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_applicant_expects_to_file_federal_tax_return
+          and not household_row_applicant_expects_to_be_claimed_as_tax_dependent
+          and not household_row_candidate_is_the_applicant
+          and household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+          and household_row_candidate_tax_dependency_substantiation_is_resolved
+          and not household_row_taxpayer_can_reasonably_establish_candidate_as_tax_dependent
+          and household_row_matches_paragraph_f_3_relationship_body
+
+  - name: household_row_internal_medicaid_household_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(1)-(5)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          (
+            household_row_applicant_expects_to_file_federal_tax_return
+            and not household_row_applicant_expects_to_be_claimed_as_tax_dependent
+            and (
+              household_row_candidate_is_the_applicant
+              or (
+                household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+                and household_row_candidate_tax_dependency_substantiation_is_resolved
+                and household_row_taxpayer_can_reasonably_establish_candidate_as_tax_dependent
+              )
+            )
+          )
+          or (
+            household_row_applicant_expects_to_be_claimed_as_tax_dependent
+            and not household_row_applicant_uses_non_filer_household_rules
+            and household_row_candidate_is_in_household_of_taxpayer_claiming_applicant
+          )
+          or (
+            household_row_applicant_uses_non_filer_household_rules
+            and household_row_matches_paragraph_f_3_relationship_body
+          )
+          or (
+            household_row_candidate_is_applicants_spouse
+            and household_row_candidate_lives_with_applicant
+          )
+          or household_row_paragraph_f_5_fallback_member
+
+  - name: household_row_magi_excluded_from_this_applicant_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d)(2), applicant-scoped child and dependent exclusions
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          (
+            household_row_candidate_is_in_household_of_natural_adopted_or_step_parent
+            and not household_row_candidate_expected_required_to_file_return_under_6012_a_1
+          )
+          or (
+            household_row_applicant_expects_to_file_federal_tax_return
+            and not household_row_applicant_expects_to_be_claimed_as_tax_dependent
+            and not household_row_candidate_is_the_applicant
+            and household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+            and household_row_candidate_is_described_in_paragraph_f_2_i
+            and not household_row_candidate_expected_required_to_file_return_under_6012_a_1
+          )
+
+  - name: household_row_current_month_counted_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(2) and (e), current-month counted member MAGI
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/e
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if household_row_magi_excluded_from_this_applicant_household:
+            0
+          else:
+            household_row_current_month_magi_based_income
+
+  - name: household_row_projected_annual_counted_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(2) and (h)(2), projected-annual counted member MAGI
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if household_row_magi_excluded_from_this_applicant_household:
+            0
+          else:
+            household_row_projected_annual_magi_based_income
+
+  - name: household_row_inputs_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d) and (f), structurally valid applicant/member row
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_age_state_election_is_known
+          and household_row_magi_based_income_streams_are_complete
+          and household_row_applicant_age >= 0
+          and household_row_candidate_age >= 0
+          and (
+            not household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+            or (
+              household_row_applicant_expects_to_file_federal_tax_return
+              and not household_row_applicant_expects_to_be_claimed_as_tax_dependent
+            )
+          )
+          and (
+            not (
+              household_row_applicant_is_described_in_paragraph_f_2_i
+              or household_row_applicant_is_described_in_paragraph_f_2_ii
+              or household_row_applicant_is_described_in_paragraph_f_2_iii
+            )
+            or household_row_applicant_expects_to_be_claimed_as_tax_dependent
+          )
+          and not (
+            household_row_applicant_is_described_in_paragraph_f_2_i
+            and household_row_applicant_is_described_in_paragraph_f_2_ii
+          )
+          and not (
+            household_row_applicant_is_described_in_paragraph_f_2_i
+            and household_row_applicant_is_described_in_paragraph_f_2_iii
+          )
+          and not (
+            household_row_applicant_is_described_in_paragraph_f_2_ii
+            and household_row_applicant_is_described_in_paragraph_f_2_iii
+          )
+          and (
+            not (
+              household_row_applicant_is_described_in_paragraph_f_2_ii
+              or household_row_applicant_is_described_in_paragraph_f_2_iii
+            )
+            or household_row_applicant_under_state_plan_age
+          )
+          and (
+            not household_row_candidate_is_the_applicant
+            or (
+              household_row_candidate_age == household_row_applicant_age
+              and not household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+              and (
+                household_row_candidate_is_described_in_paragraph_f_2_i
+                == household_row_applicant_is_described_in_paragraph_f_2_i
+              )
+              and not household_row_candidate_is_applicants_spouse
+              and not household_row_candidate_is_applicants_child
+              and not household_row_candidate_is_applicants_parent
+              and not household_row_candidate_is_applicants_sibling
+            )
+          )
+          and (
+            not household_row_candidate_is_described_in_paragraph_f_2_i
+            or (
+              not household_row_candidate_is_applicants_spouse
+              and not household_row_candidate_is_applicants_child
+            )
+          )
+          and (
+            not (
+              household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+              and not household_row_candidate_is_the_applicant
+            )
+            or (
+              household_row_candidate_tax_dependency_substantiation_is_resolved
+              and (
+                household_row_taxpayer_can_reasonably_establish_candidate_as_tax_dependent
+                or not household_row_taxpayer_can_reasonably_establish_candidate_as_tax_dependent
+              )
+            )
+          )
+
+  - name: medicaid_household_member_for_applicant
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(1)-(5), row-level fail-closed membership result
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_inputs_valid
+          and household_row_internal_medicaid_household_member
+
+  - name: household_row_is_valid_applicant_member
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f)(1)-(4), valid self membership
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          household_row_inputs_valid
+          and household_row_candidate_is_the_applicant
+          and household_row_internal_medicaid_household_member
+
+  - name: medicaid_household_relation_has_exactly_one_applicant_row
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f), every applicant household includes the individual
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          count_where(
+            medicaid_household_member_of_applicant,
+            household_row_candidate_is_the_applicant
+          ) == 1
+          and count_where(
+            medicaid_household_member_of_applicant,
+            household_row_is_valid_applicant_member
+          ) == 1
+
+  - name: medicaid_household_relation_rows_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d) and (f), every supplied candidate row is valid
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          len(medicaid_household_member_of_applicant) > 0
+          and count_where(
+            medicaid_household_member_of_applicant,
+            household_row_inputs_valid
+          ) == len(medicaid_household_member_of_applicant)
+
+  - name: medicaid_household_relation_applicant_facts_consistent
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(f), one applicant classification across all candidate rows
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/f
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          (
+            (
+              medicaid_applicant_expects_to_file_federal_tax_return
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_expects_to_file_federal_tax_return
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_applicant_expects_to_file_federal_tax_return
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_expects_to_file_federal_tax_return
+              ) == 0
+            )
+          )
+          and (
+            (
+              medicaid_applicant_expects_to_be_claimed_as_tax_dependent
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_expects_to_be_claimed_as_tax_dependent
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_applicant_expects_to_be_claimed_as_tax_dependent
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_expects_to_be_claimed_as_tax_dependent
+              ) == 0
+            )
+          )
+          and (
+            (
+              medicaid_applicant_is_described_in_paragraph_f_2_i
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_is_described_in_paragraph_f_2_i
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_applicant_is_described_in_paragraph_f_2_i
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_is_described_in_paragraph_f_2_i
+              ) == 0
+            )
+          )
+          and (
+            (
+              medicaid_applicant_is_described_in_paragraph_f_2_ii
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_is_described_in_paragraph_f_2_ii
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_applicant_is_described_in_paragraph_f_2_ii
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_is_described_in_paragraph_f_2_ii
+              ) == 0
+            )
+          )
+          and (
+            (
+              medicaid_applicant_is_described_in_paragraph_f_2_iii
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_is_described_in_paragraph_f_2_iii
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_applicant_is_described_in_paragraph_f_2_iii
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_is_described_in_paragraph_f_2_iii
+              ) == 0
+            )
+          )
+          and (
+            (
+              medicaid_applicant_under_state_plan_age
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_under_state_plan_age
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_applicant_under_state_plan_age
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_applicant_under_state_plan_age
+              ) == 0
+            )
+          )
+          and count_where(
+            medicaid_household_member_of_applicant,
+            household_row_age_state_election_is_known
+          ) == len(medicaid_household_member_of_applicant)
+          and (
+            (
+              medicaid_state_plan_elects_full_time_student_age_21
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_state_plan_elects_full_time_student_age_21
+              ) == len(medicaid_household_member_of_applicant)
+            )
+            or (
+              not medicaid_state_plan_elects_full_time_student_age_21
+              and count_where(
+                medicaid_household_member_of_applicant,
+                household_row_state_plan_elects_full_time_student_age_21
+              ) == 0
+            )
+          )
+
+  - name: medicaid_household_relation_contract_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(d) and (f), complete unique applicant/member relation
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_household_relation_candidates_are_complete_and_unique
+          and medicaid_household_relation_has_exactly_one_applicant_row
+          and medicaid_household_relation_rows_valid
+          and medicaid_household_relation_applicant_facts_consistent
+
+  - name: medicaid_budget_status_contract_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(h)(1)-(2), coherent applicant or beneficiary status
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_budget_status_classification_is_resolved
+          and (
+            (
+              current_monthly_budget_period_required_for_applicant_or_new_enrollee
+              and not individual_is_current_medicaid_beneficiary
+            )
+            or (
+              not current_monthly_budget_period_required_for_applicant_or_new_enrollee
+              and individual_is_current_medicaid_beneficiary
+              and individual_determined_financially_eligible_using_magi_based_methods
+            )
+          )
+
+  - name: medicaid_current_month_budget_basis_selected
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(h)(1)-(2), mandatory or elected current-month basis
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+              excerpt: "Financial eligibility for Medicaid for applicants, and other individuals not receiving Medicaid benefits"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/h#current_monthly_budget_period_required_for_applicant_or_new_enrollee
+              output: current_monthly_budget_period_required_for_applicant_or_new_enrollee
+              hash: sha256:bc04a078dd20a98d14ce4896560cac474df06d8f3e5724dee402a43b23928d77
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/h#current_beneficiary_current_monthly_budget_period_available
+              output: current_beneficiary_current_monthly_budget_period_available
+              hash: sha256:bc04a078dd20a98d14ce4896560cac474df06d8f3e5724dee402a43b23928d77
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          current_monthly_budget_period_required_for_applicant_or_new_enrollee
+          or (
+            medicaid_state_plan_budget_period_election_is_known
+            and state_plan_elects_current_monthly_household_income_and_family_size_budget_period
+            and not state_plan_elects_projected_annual_household_income_and_family_size_budget_period_for_remainder_of_current_calendar_year
+            and current_beneficiary_current_monthly_budget_period_available
+          )
+
+  - name: medicaid_projected_annual_budget_basis_selected
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(h)(2), resolved State-elected projected-annual basis
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+              excerpt: "For individuals who have been determined financially-eligible for Medicaid using the MAGI-based methods set forth in this section"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/h#current_beneficiary_projected_annual_budget_period_available
+              output: current_beneficiary_projected_annual_budget_period_available
+              hash: sha256:bc04a078dd20a98d14ce4896560cac474df06d8f3e5724dee402a43b23928d77
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          not current_monthly_budget_period_required_for_applicant_or_new_enrollee
+          and medicaid_state_plan_budget_period_election_is_known
+          and state_plan_elects_projected_annual_household_income_and_family_size_budget_period_for_remainder_of_current_calendar_year
+          and not state_plan_elects_current_monthly_household_income_and_family_size_budget_period
+          and current_beneficiary_projected_annual_budget_period_available
+
+  - name: medicaid_budget_period_contract_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(h), exactly one legally available budget basis
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_budget_status_contract_valid
+          and (
+            (
+              medicaid_current_month_budget_basis_selected
+              and not medicaid_projected_annual_budget_basis_selected
+            )
+            or (
+              medicaid_projected_annual_budget_basis_selected
+              and not medicaid_current_month_budget_basis_selected
+            )
+          )
+
+  - name: medicaid_scalar_contract_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 42 CFR 435.603(b), (d), and (f), resolved scalar boundaries
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "Federal poverty level for the applicable family size"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/b
+              excerpt: "the pregnant woman is counted, at State option, as either 1 or 2 person(s) or as herself plus the number of children she is expected to deliver"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+              excerpt: "the agency may adopt a reasonable method to include a prorated portion of reasonably predictable future income"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_applicant_age >= 0
+          and applicable_family_size > 0
+          and annual_federal_poverty_level_for_applicable_family_size > 0
+          and applicable_family_size_fpl_year_region_and_budget_correspondence_attested
+          and medicaid_paragraph_b_family_size_computation_is_complete
+          and medicaid_paragraph_b_family_size_state_elections_are_known
+          and (
+            (
+              medicaid_state_elects_count_other_pregnant_household_member_as_one
+              and not medicaid_state_elects_count_other_pregnant_household_member_as_two
+              and not medicaid_state_elects_count_other_pregnant_household_member_as_self_plus_expected_children
+            )
+            or (
+              not medicaid_state_elects_count_other_pregnant_household_member_as_one
+              and medicaid_state_elects_count_other_pregnant_household_member_as_two
+              and not medicaid_state_elects_count_other_pregnant_household_member_as_self_plus_expected_children
+            )
+            or (
+              not medicaid_state_elects_count_other_pregnant_household_member_as_one
+              and not medicaid_state_elects_count_other_pregnant_household_member_as_two
+              and medicaid_state_elects_count_other_pregnant_household_member_as_self_plus_expected_children
+            )
+          )
+          and highest_applicable_magi_standard_selection_complete_and_unadjusted
+          and highest_applicable_magi_income_standard_fpl_ratio >= 0
+          and state_plan_parent_or_caretaker_income_standard_fpl_ratio >= 0
+          and medicaid_household_age_state_election_is_known
+          and (
+            not (
+              medicaid_applicant_is_described_in_paragraph_f_2_i
+              or medicaid_applicant_is_described_in_paragraph_f_2_ii
+              or medicaid_applicant_is_described_in_paragraph_f_2_iii
+            )
+            or medicaid_applicant_expects_to_be_claimed_as_tax_dependent
+          )
+          and not (
+            medicaid_applicant_is_described_in_paragraph_f_2_i
+            and medicaid_applicant_is_described_in_paragraph_f_2_ii
+          )
+          and not (
+            medicaid_applicant_is_described_in_paragraph_f_2_i
+            and medicaid_applicant_is_described_in_paragraph_f_2_iii
+          )
+          and not (
+            medicaid_applicant_is_described_in_paragraph_f_2_ii
+            and medicaid_applicant_is_described_in_paragraph_f_2_iii
+          )
+          and medicaid_paragraph_h_3_state_method_election_is_known
+          and (
+            (
+              medicaid_agency_elects_paragraph_h_3_future_change_method
+              and medicaid_paragraph_h_3_future_change_facts_are_resolved
+              and medicaid_selected_income_and_family_size_include_elected_verified_paragraph_h_3_adjustment
+            )
+            or (
+              not medicaid_agency_elects_paragraph_h_3_future_change_method
+              and not medicaid_selected_income_and_family_size_include_elected_verified_paragraph_h_3_adjustment
+            )
+          )
+          and medicaid_section_435_119_c_2_state_election_is_known
+          and (
+            not medicaid_state_elected_435_222_higher_age_as_of_march_23_2010
+            or (
+              medicaid_state_elected_435_222_higher_age
+                >= medicaid_section_435_119_higher_age_minimum
+              and medicaid_state_elected_435_222_higher_age
+                <= medicaid_section_435_119_higher_age_maximum
+            )
+          )
+          and (
+            not medicaid_applicant_has_dependent_child_living_with_them
+            or medicaid_youngest_dependent_child_living_with_applicant_age >= 0
+          )
+          and cash_support_provided_by_applicant_to_other_candidate >= 0
+
+  - name: medicaid_cash_support_contract_valid_for_selected_basis
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(d)(3), resolved applicant-scoped State election
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "may, at State option, also include actually available cash support, exceeding nominal amounts"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          not medicaid_applicant_is_described_in_paragraph_f_2_i
+          or (
+            medicaid_cash_support_state_election_is_known
+            and (
+              not medicaid_state_option_includes_actually_available_cash_support
+              or (
+                medicaid_cash_support_nominal_amount_determination_is_resolved
+                and (
+                  (
+                    medicaid_current_month_budget_basis_selected
+                    and medicaid_current_month_actually_available_cash_support
+                      >= 0
+                  )
+                  or (
+                    medicaid_projected_annual_budget_basis_selected
+                    and medicaid_projected_annual_actually_available_cash_support
+                      >= 0
+                  )
+                )
+                and (
+                  not medicaid_cash_support_exceeds_nominal_amount
+                  or (
+                    (
+                      medicaid_current_month_budget_basis_selected
+                      and medicaid_current_month_actually_available_cash_support
+                        > 0
+                    )
+                    or (
+                      medicaid_projected_annual_budget_basis_selected
+                      and medicaid_projected_annual_actually_available_cash_support
+                        > 0
+                    )
+                  )
+                )
+              )
+            )
+          )
+
+  - name: internal_current_month_cash_support_included
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(3), current-month applicant-scoped optional support
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_applicant_is_described_in_paragraph_f_2_i:
+            if medicaid_cash_support_state_election_is_known:
+              if medicaid_state_option_includes_actually_available_cash_support:
+                if medicaid_cash_support_nominal_amount_determination_is_resolved:
+                  if medicaid_cash_support_exceeds_nominal_amount:
+                    medicaid_current_month_actually_available_cash_support
+                  else:
+                    0
+                else:
+                  0
+              else:
+                0
+            else:
+              0
+          else:
+            0
+
+  - name: internal_projected_annual_cash_support_included
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(3), projected-annual applicant-scoped optional support
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_applicant_is_described_in_paragraph_f_2_i:
+            if medicaid_cash_support_state_election_is_known:
+              if medicaid_state_option_includes_actually_available_cash_support:
+                if medicaid_cash_support_nominal_amount_determination_is_resolved:
+                  if medicaid_cash_support_exceeds_nominal_amount:
+                    medicaid_projected_annual_actually_available_cash_support
+                  else:
+                    0
+                else:
+                  0
+              else:
+                0
+            else:
+              0
+          else:
+            0
+
+  - name: internal_current_month_household_pre_disregard_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(3), current-month applicant household sum
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "the sum of the MAGI-based income, as defined in paragraph (e) of this section, of every individual included in the individual's household"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          sum_where(
+            medicaid_household_member_of_applicant,
+            household_row_current_month_counted_magi,
+            household_row_internal_medicaid_household_member
+          )
+          + internal_current_month_cash_support_included
+
+  - name: internal_projected_annual_household_pre_disregard_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(3) and (h)(2), projected-annual applicant household sum
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          sum_where(
+            medicaid_household_member_of_applicant,
+            household_row_projected_annual_counted_magi,
+            household_row_internal_medicaid_household_member
+          )
+          + internal_projected_annual_cash_support_included
+
+  - name: internal_current_month_federal_poverty_level_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(h)(1), annual FPL converted to current-month scale
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/36B/b#required_contribution_annual_to_monthly_divisor
+              output: required_contribution_annual_to_monthly_divisor
+              hash: sha256:bb6401d0e62ca78dfc0fca767db431e2d4c9e9c0ae1e20c991ee78b7455f08dc
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          annual_federal_poverty_level_for_applicable_family_size
+          / required_contribution_annual_to_monthly_divisor
+
+  - name: internal_selected_budget_period_household_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4) and (h), period-specific income/FPL ratio
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_current_month_budget_basis_selected:
+            internal_current_month_household_pre_disregard_magi
+            / internal_current_month_federal_poverty_level_amount
+          else:
+            internal_projected_annual_household_pre_disregard_magi
+            / annual_federal_poverty_level_for_applicable_family_size
+
+  - name: internal_household_income_after_five_percentage_point_subtraction_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4), mechanical five-point ratio candidate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "a state must subtract an amount equivalent to 5 percentage points of the Federal poverty level"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/d#fpl_five_percentage_point_disregard_rate
+              output: fpl_five_percentage_point_disregard_rate
+              hash: sha256:4f1b612b5ec02d063fd2a167182f4b94e502e1afc6690a4a411cd343c2093729
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          internal_selected_budget_period_household_income_as_fraction_of_fpl
+          - fpl_five_percentage_point_disregard_rate
+
+  - name: internal_five_percentage_point_disregard_changes_overall_magi_eligibility
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(d)(4), highest-standard-only eligibility backstop
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+              excerpt: "only to determine the eligibility of an individual for medical assistance under the eligibility group with the highest income standard using MAGI-based methodologies"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          internal_selected_budget_period_household_income_as_fraction_of_fpl
+            > highest_applicable_magi_income_standard_fpl_ratio
+          and internal_household_income_after_five_percentage_point_subtraction_as_fraction_of_fpl
+            <= highest_applicable_magi_income_standard_fpl_ratio
+
+  - name: internal_household_eligibility_comparison_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4), selected highest-standard comparison ratio
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if internal_five_percentage_point_disregard_changes_overall_magi_eligibility:
+            internal_household_income_after_five_percentage_point_subtraction_as_fraction_of_fpl
+          else:
+            internal_selected_budget_period_household_income_as_fraction_of_fpl
+
+  - name: internal_eligible_under_highest_applicable_magi_income_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(d)(4), ordinary paragraph-(d) highest-standard result
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          internal_household_eligibility_comparison_income_as_fraction_of_fpl
+          <= highest_applicable_magi_income_standard_fpl_ratio
+
+  - name: paragraph_i_alternative_household_income_method_required
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(i), alternative method trigger after ordinary denial
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/i
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/603/i#fpl_threshold_for_alternative_household_income_method
+              output: fpl_threshold_for_alternative_household_income_method
+              hash: sha256:2ace4d8d6b4b304ab607c4f7b476f93f3607fabd03aae05d82afc544b2378fd4
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_paragraph_i_alternative_income_facts_are_resolved
+          and not internal_eligible_under_highest_applicable_magi_income_standard
+          and medicaid_household_income_under_26_cfr_1_36b_1_e_as_fpl_ratio
+            < fpl_threshold_for_alternative_household_income_method
+
+  - name: paragraph_j_magi_based_methods_do_not_apply
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(j), non-MAGI eligibility groups
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/j
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#adult_group_maximum_age
+              output: adult_group_maximum_age
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_eligibility_does_not_require_agency_income_determination
+          or (
+            medicaid_applicant_age >= adult_group_maximum_age
+            and age_is_condition_of_medicaid_eligibility
+          )
+          or medicaid_eligibility_is_being_determined_on_basis_of_blindness_or_disability
+          or medicaid_long_term_care_services_and_supports_eligibility_evaluation
+          or medicaid_medicare_cost_sharing_assistance_eligibility_evaluation
+          or medicaid_medically_needy_coverage_eligibility_evaluation
+
+  - name: paragraph_k_special_methodology_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(k), resolved section 435.214 State options
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/k
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_eligibility_being_determined_under_section_435_214
+          and medicaid_section_435_214_state_option_elections_are_known
+          and (
+            medicaid_agency_uses_section_435_214_individual_only_household_option
+            or medicaid_agency_uses_section_435_214_count_only_individual_magi_option
+            or medicaid_agency_uses_section_435_214_family_size_increase_option
+          )
+
+  - name: paragraph_c_routes_to_paragraph_d_household_income
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(c), exception router for paragraphs (i), (j), and (k)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/c
+              excerpt: "Except as specified in paragraph (i), (j), and (k)"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_paragraph_c_exception_classification_is_resolved
+          and medicaid_financial_eligibility_is_being_determined
+          and not paragraph_j_magi_based_methods_do_not_apply
+          and (
+            not medicaid_eligibility_being_determined_under_section_435_214
+            or (
+              medicaid_section_435_214_state_option_elections_are_known
+              and not paragraph_k_special_methodology_applies
+            )
+          )
+          and (
+            internal_eligible_under_highest_applicable_magi_income_standard
+            or (
+              medicaid_paragraph_i_alternative_income_facts_are_resolved
+              and not paragraph_i_alternative_household_income_method_required
+            )
+          )
+
+  - name: medicaid_magi_household_runtime_inputs_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(b)-(k), fail-closed public computation contract
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/c
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/h
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_scalar_contract_valid
+          and medicaid_household_relation_contract_valid
+          and medicaid_budget_period_contract_valid
+          and medicaid_cash_support_contract_valid_for_selected_basis
+          and paragraph_c_routes_to_paragraph_d_household_income
+
+  - name: medicaid_current_month_cash_support_included
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(3), fail-closed current-month optional support
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_current_month_budget_basis_selected:
+            internal_current_month_cash_support_included
+          else:
+            0
+
+  - name: medicaid_projected_annual_cash_support_included
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(3), fail-closed projected-annual optional support
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_projected_annual_budget_basis_selected:
+            internal_projected_annual_cash_support_included
+          else:
+            0
+
+  - name: medicaid_current_month_household_pre_disregard_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(3) and (h)(1), fail-closed current-month income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_current_month_budget_basis_selected:
+            internal_current_month_household_pre_disregard_magi
+          else:
+            0
+
+  - name: medicaid_projected_annual_household_pre_disregard_magi
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(1)-(3) and (h)(2), fail-closed annual income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_projected_annual_budget_basis_selected:
+            internal_projected_annual_household_pre_disregard_magi
+          else:
+            0
+
+  - name: medicaid_current_month_federal_poverty_level_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(4) and (h)(1), fail-closed monthly FPL amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_current_month_budget_basis_selected:
+            internal_current_month_federal_poverty_level_amount
+          else:
+            0
+
+  - name: medicaid_projected_annual_federal_poverty_level_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4) and (h)(2), fail-closed annual FPL amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_projected_annual_budget_basis_selected:
+            annual_federal_poverty_level_for_applicable_family_size
+          else:
+            0
+
+  - name: medicaid_current_month_five_percentage_point_disregard_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(4), fail-closed current-month five-point amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_current_month_budget_basis_selected:
+            internal_current_month_federal_poverty_level_amount
+            * fpl_five_percentage_point_disregard_rate
+          else:
+            0
+
+  - name: medicaid_projected_annual_five_percentage_point_disregard_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4), fail-closed projected-annual five-point amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_projected_annual_budget_basis_selected:
+            annual_federal_poverty_level_for_applicable_family_size
+            * fpl_five_percentage_point_disregard_rate
+          else:
+            0
+
+  - name: medicaid_selected_budget_period_household_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4) and (h), fail-closed selected-basis raw ratio
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid:
+            internal_selected_budget_period_household_income_as_fraction_of_fpl
+          else:
+            0
+
+  - name: medicaid_household_income_after_five_percentage_point_subtraction_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4), fail-closed mechanical five-point candidate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid:
+            internal_household_income_after_five_percentage_point_subtraction_as_fraction_of_fpl
+          else:
+            0
+
+  - name: five_percentage_point_disregard_changes_overall_magi_eligibility
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(d)(4), fail-closed highest-standard backstop
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_magi_household_runtime_inputs_valid
+          and internal_five_percentage_point_disregard_changes_overall_magi_eligibility
+
+  - name: medicaid_household_eligibility_comparison_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4), fail-closed selected comparison ratio
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid:
+            internal_household_eligibility_comparison_income_as_fraction_of_fpl
+          else:
+            0
+
+  - name: medicaid_current_month_household_eligibility_comparison_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 42 CFR 435.603(d)(4), fail-closed current-month comparison amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_current_month_budget_basis_selected:
+            internal_household_eligibility_comparison_income_as_fraction_of_fpl
+            * internal_current_month_federal_poverty_level_amount
+          else:
+            0
+
+  - name: medicaid_projected_annual_household_eligibility_comparison_income
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 42 CFR 435.603(d)(4), fail-closed projected-annual comparison amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_magi_household_runtime_inputs_valid
+            and medicaid_projected_annual_budget_basis_selected:
+            internal_household_eligibility_comparison_income_as_fraction_of_fpl
+            * annual_federal_poverty_level_for_applicable_family_size
+          else:
+            0
+
+  - name: eligible_under_highest_applicable_magi_income_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.603(c)-(d), fail-closed overall ordinary MAGI result
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_magi_household_runtime_inputs_valid
+          and internal_eligible_under_highest_applicable_magi_income_standard
+
+  - name: adult_group_applicant_comparison_income_as_fraction_of_fpl
+    kind: derived
+    entity: Person
+    dtype: Rate
+    period: Month
+    source: 42 CFR 435.603(d)(4) and 435.119(b)(5), adult consumer bridge
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "individuals who:"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#adult_group_income_limit_fpl_ratio
+              output: adult_group_income_limit_fpl_ratio
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if adult_group_income_limit_fpl_ratio
+            == highest_applicable_magi_income_standard_fpl_ratio:
+            internal_household_eligibility_comparison_income_as_fraction_of_fpl
+          else:
+            internal_selected_budget_period_household_income_as_fraction_of_fpl
+
+  - name: parent_or_caretaker_applicant_income_at_or_below_state_plan_standard
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.110(b) and 435.603(d)(4), actual State-plan standard
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/110
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/42/435/603/d
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          (
+            state_plan_parent_or_caretaker_income_standard_fpl_ratio
+              == highest_applicable_magi_income_standard_fpl_ratio
+            and internal_household_eligibility_comparison_income_as_fraction_of_fpl
+              <= state_plan_parent_or_caretaker_income_standard_fpl_ratio
+          )
+          or (
+            state_plan_parent_or_caretaker_income_standard_fpl_ratio
+              != highest_applicable_magi_income_standard_fpl_ratio
+            and internal_selected_budget_period_household_income_as_fraction_of_fpl
+              <= state_plan_parent_or_caretaker_income_standard_fpl_ratio
+          )
+
+  - name: medicaid_section_435_119_higher_age_minimum
+    kind: parameter
+    dtype: Integer
+    source: 42 CFR 435.119(c)(2), lower allowed elected higher age
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "under age 20 or 21"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          20
+
+  - name: medicaid_section_435_119_higher_age_maximum
+    kind: parameter
+    dtype: Integer
+    source: 42 CFR 435.119(c)(2), upper allowed elected higher age
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "under age 20 or 21"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          21
+
+  - name: medicaid_section_435_119_dependent_child_age_threshold
+    kind: derived
+    entity: Person
+    dtype: Integer
+    period: Year
+    source: 42 CFR 435.119(c)(2), resolved State-elected dependent-child age
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "unless the State had elected as of March 23, 2010 to provide Medicaid to individuals under age 20 or 21"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#dependent_child_default_age_threshold
+              output: dependent_child_default_age_threshold
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          if medicaid_state_elected_435_222_higher_age_as_of_march_23_2010:
+            medicaid_state_elected_435_222_higher_age
+          else:
+            dependent_child_default_age_threshold
+
+  - name: medicaid_applicant_lives_with_dependent_child_under_state_selected_age
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.119(c)(1)-(2), derived dependent-child condition
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "living with a dependent child if the child is under the age specified in paragraph (c)(2)"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_applicant_has_dependent_child_living_with_them
+          and medicaid_youngest_dependent_child_living_with_applicant_age
+            < medicaid_section_435_119_dependent_child_age_threshold
+
+  - name: medicaid_adult_group_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.119(b), locally recomposed with unique pipeline inputs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/119
+              excerpt: "Are age 19 or older and under age 65"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#adult_group_minimum_age
+              output: adult_group_minimum_age
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/42-cfr/435/119#adult_group_maximum_age
+              output: adult_group_maximum_age
+              hash: sha256:0c9a76599b5604b754e25929deb339f6567f54634acc0acb8a2c60fd31736254
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_magi_household_runtime_inputs_valid
+          and medicaid_applicant_age >= adult_group_minimum_age
+          and medicaid_applicant_age < adult_group_maximum_age
+          and not medicaid_applicant_is_pregnant
+          and not medicaid_applicant_is_entitled_to_or_enrolled_in_medicare_part_a_or_b
+          and not medicaid_applicant_is_eligible_and_enrolled_for_mandatory_medicaid
+          and adult_group_applicant_comparison_income_as_fraction_of_fpl
+            <= adult_group_income_limit_fpl_ratio
+          and not (
+            medicaid_applicant_is_parent_or_caretaker_relative
+            and medicaid_applicant_lives_with_dependent_child_under_state_selected_age
+            and not medicaid_dependent_child_receives_medicaid
+            and not medicaid_dependent_child_receives_chip
+            and not medicaid_dependent_child_has_minimum_essential_coverage
+          )
+
+  - name: medicaid_parent_or_caretaker_relative_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 42 CFR 435.110(b), locally recomposed with actual State-plan standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/42/435/110
+              excerpt: "The agency must provide Medicaid to parents and other caretaker relatives"
+    versions:
+      - effective_from: '2014-01-01'
+        formula: |-
+          medicaid_magi_household_runtime_inputs_valid
+          and (
+            medicaid_applicant_is_parent_or_caretaker_relative
+            or medicaid_applicant_is_spouse_of_parent_or_caretaker_relative_living_with_them
+          )
+          and parent_or_caretaker_applicant_income_at_or_below_state_plan_standard
+
+inputs:
+  # Applicant-level scalar, classification, and attestation facts.
+  - name: applicable_family_size
+    entity: Person
+    dtype: Count
+    period: Year
+    description: Applicable paragraph-(b) family size for the selected budget basis.
+  - name: annual_federal_poverty_level_for_applicable_family_size
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Annual FPL for the applicable family size, year, and region; current-month calculations divide this amount by 12.
+  - name: applicable_family_size_fpl_year_region_and_budget_correspondence_attested
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Required attestation that family size and annual FPL correspond to each other and to the determination year, region, and selected paragraph-(h) basis.
+  - name: medicaid_paragraph_b_family_size_computation_is_complete
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Required attestation that applicable family size applies paragraph (b), including pregnancy counting, to the complete household.
+  - name: medicaid_paragraph_b_family_size_state_elections_are_known
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the State election for counting another pregnant household member is resolved.
+  - name: medicaid_state_elects_count_other_pregnant_household_member_as_one
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: State elects to count another pregnant household member as one person.
+  - name: medicaid_state_elects_count_other_pregnant_household_member_as_two
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: State elects to count another pregnant household member as two persons.
+  - name: medicaid_state_elects_count_other_pregnant_household_member_as_self_plus_expected_children
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: State elects to count another pregnant household member as herself plus the children she expects to deliver.
+  - name: highest_applicable_magi_income_standard_fpl_ratio
+    entity: Person
+    dtype: Rate
+    period: Year
+    description: Highest applicable unadjusted MAGI Medicaid standard; never include the five-point subtraction in this input.
+  - name: highest_applicable_magi_standard_selection_complete_and_unadjusted
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Required attestation that all applicable MAGI groups were considered and the selected highest standard is unadjusted.
+  - name: state_plan_parent_or_caretaker_income_standard_fpl_ratio
+    entity: Person
+    dtype: Rate
+    period: Year
+    description: Actual State-plan parent/caretaker standard, not a federal maximum.
+  - name: medicaid_household_relation_candidates_are_complete_and_unique
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Required attestation that relation IDs enumerate every candidate once; exactly one applicant row is also checked structurally.
+  - name: medicaid_applicant_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Applicant age.
+  - name: medicaid_applicant_is_full_time_student
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant full-time-student status for the State-plan age election.
+  - name: medicaid_household_age_state_election_is_known
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the paragraph-(f)(3)(iv) State-plan age election is resolved.
+  - name: medicaid_state_plan_elects_full_time_student_age_21
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Resolved State-plan election for the full-time-student age-21 alternative.
+  - name: medicaid_applicant_expects_to_file_federal_tax_return
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Single canonical applicant filing expectation used across all candidate rows.
+  - name: medicaid_applicant_expects_to_be_claimed_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Single canonical applicant tax-dependent expectation.
+  - name: medicaid_applicant_is_described_in_paragraph_f_2_i
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the applicant is the paragraph-(f)(2)(i) individual to whom paragraph-(d)(3) support may apply.
+  - name: medicaid_applicant_is_described_in_paragraph_f_2_ii
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant paragraph-(f)(2)(ii) status.
+  - name: medicaid_applicant_is_described_in_paragraph_f_2_iii
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant paragraph-(f)(2)(iii) status.
+  - name: medicaid_paragraph_h_3_state_method_election_is_known
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether the agency's paragraph-(h)(3) future-change method election is resolved.
+  - name: medicaid_agency_elects_paragraph_h_3_future_change_method
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Resolved agency election to use a reasonable paragraph-(h)(3) future-change method.
+  - name: medicaid_paragraph_h_3_future_change_facts_are_resolved
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether evidence and verification facts for an elected paragraph-(h)(3) method are resolved.
+  - name: medicaid_selected_income_and_family_size_include_elected_verified_paragraph_h_3_adjustment
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether selected income and family size include the elected and verified paragraph-(h)(3) adjustment.
+
+  # Applicant-level paragraph-(d)(3) State option and support facts.
+  - name: medicaid_cash_support_state_election_is_known
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the paragraph-(d)(3) cash-support State election is resolved for an (f)(2)(i) applicant.
+  - name: medicaid_state_option_includes_actually_available_cash_support
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Resolved paragraph-(d)(3) State election; false is operative only when the known flag is true.
+  - name: medicaid_cash_support_nominal_amount_determination_is_resolved
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the source-stated nominal-amount test is resolved.
+  - name: medicaid_cash_support_exceeds_nominal_amount
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether actually available support exceeds a nominal amount.
+  - name: medicaid_current_month_actually_available_cash_support
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Current-month cash support received by the (f)(2)(i) applicant from the claiming taxpayer.
+  - name: medicaid_projected_annual_actually_available_cash_support
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Projected-annual cash support received by the (f)(2)(i) applicant.
+  - name: cash_support_provided_by_applicant_to_other_candidate
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Nonnegative outgoing support, validated but never added to the providing applicant's household income.
+
+  # Paragraph-(h) status and election facts layered over imported choices.
+  - name: medicaid_budget_status_classification_is_resolved
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether applicant, new-enrollee, current-beneficiary, and prior-MAGI status facts are resolved.
+  - name: medicaid_state_plan_budget_period_election_is_known
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether a current beneficiary's mutually exclusive paragraph-(h)(2) State-plan budget election is resolved.
+
+  # Paragraph-(c) exception router and explicit State-option resolution.
+  - name: medicaid_paragraph_c_exception_classification_is_resolved
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Required attestation that paragraph-(i), (j), and (k) facts are completely classified.
+  - name: medicaid_financial_eligibility_is_being_determined
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether Medicaid financial eligibility is the determination at issue.
+  - name: medicaid_paragraph_i_alternative_income_facts_are_resolved
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Required after an ordinary denial before deciding whether paragraph (i) applies.
+  - name: medicaid_household_income_under_26_cfr_1_36b_1_e_as_fpl_ratio
+    entity: Person
+    dtype: Rate
+    period: Month
+    description: Alternative household income ratio used only when its resolved flag is true and ordinary MAGI denies eligibility.
+  - name: medicaid_eligibility_does_not_require_agency_income_determination
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Paragraph-(j)(1) classification.
+  - name: age_is_condition_of_medicaid_eligibility
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether age is a condition of the eligibility group under review.
+  - name: medicaid_eligibility_is_being_determined_on_basis_of_blindness_or_disability
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Paragraph-(j)(3) classification.
+  - name: medicaid_long_term_care_services_and_supports_eligibility_evaluation
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Paragraph-(j)(4) classification.
+  - name: medicaid_medicare_cost_sharing_assistance_eligibility_evaluation
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Paragraph-(j)(5) classification.
+  - name: medicaid_medically_needy_coverage_eligibility_evaluation
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Paragraph-(j)(6) classification.
+  - name: medicaid_eligibility_being_determined_under_section_435_214
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether paragraph-(k)'s optional section-435.214 methods could apply.
+  - name: medicaid_section_435_214_state_option_elections_are_known
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether all three paragraph-(k) State option elections are resolved.
+  - name: medicaid_agency_uses_section_435_214_individual_only_household_option
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Resolved paragraph-(k)(1) State option.
+  - name: medicaid_agency_uses_section_435_214_count_only_individual_magi_option
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Resolved paragraph-(k)(2) State option.
+  - name: medicaid_agency_uses_section_435_214_family_size_increase_option
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Resolved paragraph-(k)(3) State option.
+
+  # Pipeline-owned consumer facts; no duplicate 435.110/435.119 bare slot.
+  - name: medicaid_applicant_is_pregnant
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Adult-group pregnancy fact.
+  - name: medicaid_applicant_is_entitled_to_or_enrolled_in_medicare_part_a_or_b
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Adult-group Medicare fact.
+  - name: medicaid_applicant_is_eligible_and_enrolled_for_mandatory_medicaid
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Adult-group mandatory-coverage fact.
+  - name: medicaid_applicant_is_parent_or_caretaker_relative
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Single pipeline-owned parent/caretaker status used by both category consumers.
+  - name: medicaid_applicant_is_spouse_of_parent_or_caretaker_relative_living_with_them
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Parent/caretaker spouse status.
+  - name: medicaid_section_435_119_c_2_state_election_is_known
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the State's section 435.119(c)(2) dependent-child age election is resolved.
+  - name: medicaid_state_elected_435_222_higher_age_as_of_march_23_2010
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Resolved fact that the State elected an age-20 or age-21 section 435.222 threshold by March 23, 2010.
+  - name: medicaid_state_elected_435_222_higher_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Resolved elected higher age, restricted by the runtime contract to 20 or 21.
+  - name: medicaid_applicant_has_dependent_child_living_with_them
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Whether any dependent child lives with the applicant.
+  - name: medicaid_youngest_dependent_child_living_with_applicant_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Age of the youngest dependent child living with the applicant; required only when such a child exists.
+  - name: medicaid_dependent_child_receives_medicaid
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Adult-group dependent-child Medicaid exception.
+  - name: medicaid_dependent_child_receives_chip
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Adult-group dependent-child CHIP exception.
+  - name: medicaid_dependent_child_has_minimum_essential_coverage
+    entity: Person
+    dtype: Boolean
+    period: Month
+    description: Adult-group dependent-child minimum-essential-coverage exception.
+
+  # Candidate-row applicant copies, candidate relationships, and annual stream.
+  - name: household_row_age_state_election_is_known
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Row copy of the resolved paragraph-(f)(3)(iv) State election.
+  - name: household_row_magi_based_income_streams_are_complete
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Required attestation that the row's current-month and projected-annual paragraph-(e) person-level MAGI streams are complete.
+  - name: household_row_state_plan_elects_full_time_student_age_21
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Row copy of the State-plan age election.
+  - name: household_row_applicant_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Applicant age copied to this candidate row.
+  - name: household_row_applicant_is_full_time_student
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant student status copied to this candidate row.
+  - name: household_row_applicant_expects_to_file_federal_tax_return
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant filing expectation copied to this candidate row and checked for consistency.
+  - name: household_row_applicant_expects_to_be_claimed_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Applicant dependent expectation copied to this candidate row.
+  - name: household_row_applicant_is_described_in_paragraph_f_2_i
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Row copy of applicant paragraph-(f)(2)(i) status.
+  - name: household_row_applicant_is_described_in_paragraph_f_2_ii
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Row copy of applicant paragraph-(f)(2)(ii) status.
+  - name: household_row_applicant_is_described_in_paragraph_f_2_iii
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Row copy of applicant paragraph-(f)(2)(iii) status.
+  - name: household_row_candidate_is_the_applicant
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether this uniquely identified candidate is the applicant.
+  - name: household_row_applicant_expects_to_claim_candidate_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether the applicant expects to claim this candidate.
+  - name: household_row_candidate_tax_dependency_substantiation_is_resolved
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Whether paragraph-(f)(5) substantiation is resolved for this claimed candidate.
+  - name: household_row_taxpayer_can_reasonably_establish_candidate_as_tax_dependent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Resolved paragraph-(f)(5) substantiation result.
+  - name: household_row_candidate_is_in_household_of_taxpayer_claiming_applicant
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate membership in the household of the taxpayer claiming a dependent applicant.
+  - name: household_row_candidate_lives_with_applicant
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate co-residence with applicant.
+  - name: household_row_candidate_is_applicants_spouse
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant spouse relationship.
+  - name: household_row_candidate_is_applicants_child
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant child relationship.
+  - name: household_row_candidate_is_applicants_parent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant parent relationship.
+  - name: household_row_candidate_is_applicants_sibling
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate/applicant sibling relationship.
+  - name: household_row_candidate_age
+    entity: Person
+    dtype: Integer
+    period: Year
+    description: Candidate age.
+  - name: household_row_candidate_is_full_time_student
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate full-time-student status.
+  - name: household_row_candidate_is_in_household_of_natural_adopted_or_step_parent
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Paragraph-(d)(2)(i) parent-household scope for this candidate.
+  - name: household_row_candidate_expected_required_to_file_return_under_6012_a_1
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate section-6012(a)(1) required-filer determination.
+  - name: household_row_candidate_is_described_in_paragraph_f_2_i
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Candidate paragraph-(f)(2)(i) status used only for the claiming taxpayer's paragraph-(d)(2)(ii) exclusion.
+  - name: household_row_current_month_magi_based_income
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    description: Completed current-month paragraph-(e) MAGI for this person.
+  - name: household_row_projected_annual_magi_based_income
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed projected-annual paragraph-(e) MAGI for this candidate, used only under a resolved annual budget election.
