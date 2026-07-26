@@ -2,7 +2,7 @@
 
 ## State
 
-Reviewing exact PR head `efc1d36023d0d820d938f698ed8e431b37962f8d` in this disposable worktree. All substantive policy and focused-gate claims pass, but the explicit no-session-ledger-in-history claim fails and requires a request-changes verdict. No GitHub writes or pushes are authorized.
+Complete. Exact PR head `efc1d36023d0d820d938f698ed8e431b37962f8d` received a `REQUEST-CHANGES` verdict solely because the PR-only history retains the deleted session ledger. All substantive policy and focused-gate claims pass. No GitHub writes or pushes were made.
 
 ## Done
 
@@ -20,8 +20,10 @@ Reviewing exact PR head `efc1d36023d0d820d938f698ed8e431b37962f8d` in this dispo
 - Passed focused validation, proof validation (14 atoms), changed-module money proof, scoped `us/` money proof, and all 15 companion cases using `~/axiom-rules`.
 - Matched both manifest-recorded SHA-256 values to the exact policy and companion bytes; the manifest-sync pytest file passes.
 - Confirmed the corrected-head GitHub Actions `validate / generated-guard` job succeeds, verifying the signed manifest with the CI-held HMAC key.
+- Wrote `/private/tmp/rereview2-1008-VERDICT.md`.
+- Copied the byte-identical report to the requested Claude scratchpad path and verified both first lines and SHA-256 digests.
+- Removed the generated GitNexus index from the review worktree, leaving the disposable review branch clean.
 
 ## Next
 
-- Write the verdict to both requested output paths.
-- Finalize this committed progress log and report the disposable review branch/worktree.
+- No remaining review work.
