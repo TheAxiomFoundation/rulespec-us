@@ -145,6 +145,9 @@ def test_executable_relation_slots_match_sums_and_asymmetric_fixture() -> None:
     assert probe["output"][
         f"{PREFIX}#internal_current_month_household_pre_disregard_magi"
     ] == 1330
+    assert probe["output"][
+        f"{PREFIX}#internal_current_month_relation_orientation_witness"
+    ] == 1330
 
     derived_relation_key = f"{PREFIX}#relation.{RELATION}"
     for fixture in cases.values():
