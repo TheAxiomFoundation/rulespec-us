@@ -1,0 +1,302 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ut/statute/59-10-104
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-ut/statute/59-10-104
+      rationale: |-
+        The pinned official Utah Legislature corpus contains Utah Code
+        59-10-104 as effective January 1, 2026. It imposes tax on a resident
+        individual's state taxable income, sets the tax equal to that income
+        multiplied by 4.45 percent, and excludes an individual who is exempt
+        under section 59-10-104.1.
+
+        Section 59-10-104 does not construct state taxable income, determine
+        the cross-referenced section 59-10-104.1 exemption from underlying
+        facts, calculate the taxpayer tax credit, inventory other credits, or
+        establish final-return ordering. This one-section lane therefore
+        accepts completed state taxable income and exemption status as
+        explicit upstream boundaries, and narrows execution to an aligned
+        full-year-resident tax unit. It computes only the section 59-10-104
+        before-credit schedule. The taxpayer credit and final resident
+        liability remain typed source holds with fail-closed zero sentinels.
+        Those sentinels are not legal claims that the credit or liability is
+        zero.
+  summary: |-
+    Utah tax-year-2026 full-year-resident before-credit schedule. For an
+    aligned resident tax unit with a nonnegative completed Utah taxable-income
+    boundary, it applies the official 4.45 percent section 59-10-104 rate
+    unless the caller's upstream section 59-10-104.1 exemption boundary
+    applies.
+
+    This is not an end-to-end Utah return. It does not reconstruct Utah
+    taxable income or exemption eligibility, calculate the taxpayer tax
+    credit, close the complete credit surface, or claim final resident
+    liability or oracle parity. Withholding, estimated and extension payments,
+    penalties, interest, refunds of payments, local taxes, nonresident
+    sourcing, part-year allocation, estates, and trusts are outside scope.
+  deferred_outputs:
+    - output: us-ut:policies/income_tax/2026_full_year_resident_before_credit_schedule#ut_pit_2026_taxpayer_tax_credit
+      reason: |-
+        Section 59-10-104 establishes the before-credit tax product but does
+        not provide the taxpayer-credit calculation. The credit provision and
+        its operative tax-year-2026 inputs are outside this one-section lane.
+      source_values:
+        - us-ut:policies/income_tax/2026_full_year_resident_before_credit_schedule#ut_pit_2026_taxpayer_credit_source_hold_applies
+    - output: us-ut:policies/income_tax/2026_full_year_resident_before_credit_schedule#ut_pit_2026_final_resident_income_tax_liability_before_payments
+      reason: |-
+        Final signed resident liability requires the taxpayer credit, every
+        other applicable nonrefundable and refundable credit, and authoritative
+        final-return ordering, none of which section 59-10-104 supplies.
+      source_values:
+        - us-ut:policies/income_tax/2026_full_year_resident_before_credit_schedule#ut_pit_2026_final_resident_liability_source_hold_applies
+
+rules:
+  - name: ut_pit_2026_input_domain_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Bounded full-year-resident domain for the supplied Utah taxable-income and exemption boundaries
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "state taxable income of a resident individual"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "This section does not apply to a resident individual exempt from taxation under Section 59-10-104.1"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ut_pit_2026_is_full_year_utah_resident_return
+          and ut_pit_2026_federal_and_utah_filing_units_are_aligned
+          and ut_pit_2026_state_taxable_income >= 0
+
+  - name: ut_pit_2026_before_credit_schedule_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Utah Code 59-10-104 resident tax, subject to the section 59-10-104.1 exemption
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "A tax is imposed on the state taxable income of a resident individual"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "This section does not apply to a resident individual exempt from taxation under Section 59-10-104.1"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          ut_pit_2026_input_domain_is_valid
+          and not ut_pit_2026_is_exempt_under_section_59_10_104_1
+
+  - name: ut_pit_2026_income_tax_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Utah Code 59-10-104(2)(b), effective January 1, 2026
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "4.45%"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.0445'
+
+  - name: ut_pit_2026_resident_state_taxable_income_boundary
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Supplied completed Utah state taxable income for the bounded full-year-resident schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "the resident individual's state taxable income for that taxable year"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ut_pit_2026_input_domain_is_valid:
+            max(0, ut_pit_2026_state_taxable_income)
+          else:
+            0
+
+  - name: ut_pit_2026_resident_income_tax_before_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Utah Code 59-10-104(2), resident income tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "the tax is an amount equal to the product of"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "4.45%"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "This section does not apply to a resident individual exempt from taxation under Section 59-10-104.1"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ut_pit_2026_before_credit_schedule_applies:
+            ut_pit_2026_resident_state_taxable_income_boundary
+              * ut_pit_2026_income_tax_rate
+          else:
+            0
+
+  - name: ut_pit_2026_taxpayer_credit_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: The section 59-10-104 schedule does not establish the taxpayer-credit calculation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "the tax is an amount equal to the product of"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: ut_pit_2026_final_resident_liability_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Final Utah resident liability remains held beyond the one-section before-credit schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "the tax is an amount equal to the product of"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ut_pit_2026_taxpayer_credit_source_hold_applies
+
+  - name: ut_pit_2026_taxpayer_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed taxpayer-credit sentinel outside the section 59-10-104 before-credit lane
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "the tax is an amount equal to the product of"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if (
+            ut_pit_2026_before_credit_schedule_applies
+            and not ut_pit_2026_taxpayer_credit_source_hold_applies
+          ):
+            0
+          else:
+            0
+
+  - name: ut_pit_2026_final_resident_income_tax_liability_before_payments
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed signed final-liability sentinel beyond the section 59-10-104 schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ut/statute/59-10-104
+              excerpt: "A tax is imposed on the state taxable income of a resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if (
+            ut_pit_2026_before_credit_schedule_applies
+            and not ut_pit_2026_final_resident_liability_source_hold_applies
+          ):
+            0
+          else:
+            0
+
+inputs:
+  - name: ut_pit_2026_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed nonnegative Utah state taxable-income boundary; this module does not reconstruct it.
+  - name: ut_pit_2026_is_full_year_utah_resident_return
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Whether the return is for a full-year Utah resident individual.
+  - name: ut_pit_2026_federal_and_utah_filing_units_are_aligned
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Whether the supplied Utah taxable-income boundary belongs to the aligned federal and Utah filing unit.
+  - name: ut_pit_2026_is_exempt_under_section_59_10_104_1
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Completed upstream applicability boundary for the exemption cross-referenced by Utah Code 59-10-104(3).
