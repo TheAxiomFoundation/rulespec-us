@@ -25,6 +25,12 @@ Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e7
 - Focused contract tests pass: 4/4.
 - Reverse index regeneration check passes: 4,222 provisions, 5,043 edges, 4,476 modules.
 - Source policy is restored byte-for-byte to the live PR head after both mutants.
+- Manifest policy, companion, generated-output, and supersedes hashes all match exactly.
+- Independent B6 probes found two remaining fail-open contradictions: family-1 size with family-2 FPL plus a true attestation, and canonical age 19 with self-row age 65.
+- Base/head semantic comparison of `oracle-coverage-pending.yaml` found 17 removed non-Medicaid declarations: 12 Head Start and 5 WIC.
+- Merge commit `a8686bc05` remerge evidence identifies a shared-ledger conflict resolution as the removal source.
+- The pending-ratchet check reports those 17 outputs as undeclared; all 61 new Medicaid entries are present.
+- Live GitHub validation is red across all jurisdiction shards and the aggregate `validate` job at the unchanged PR head.
 
 ## Next
 
