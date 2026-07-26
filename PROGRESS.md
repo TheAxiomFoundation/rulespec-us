@@ -19,6 +19,12 @@ Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e7
 - B4 mutant commit `5fc355740`: swapped the selected current-month and projected-annual ratio streams.
 - The companion failed on both requested and pinned engines (exit 1; 11 assertions).
 - The asymmetric B4 case changed from ratio `1.5`/ineligible to `0.5545286506...`/eligible, directly detecting reversal.
+- Pinned `axiom-encode 0.2.1200` validate passes against the exact pinned corpus archive.
+- Proof validation passes with 82 atoms.
+- Federal money-proof passes: 40 missing among 540 obligations, within the 151 ratchet.
+- Focused contract tests pass: 4/4.
+- Reverse index regeneration check passes: 4,222 provisions, 5,043 edges, 4,476 modules.
+- Source policy is restored byte-for-byte to the live PR head after both mutants.
 
 ## Next
 
