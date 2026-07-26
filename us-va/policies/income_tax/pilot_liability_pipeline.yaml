@@ -3,132 +3,247 @@ module:
   proof_validation:
     required: true
   source_verification:
-    corpus_citation_paths:
-      - us-va/statute/58.1/58.1-320
-      - us-va/statute/58.1/58.1-321
+    corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+        - us-va/statute/58.1/58.1-320
+      rationale: |-
+        Virginia Code section 58.1-320 was checked as the higher-authority
+        individual-income-tax schedule. The Virginia Department of Taxation's
+        final 2026 Form 760ES is the current official tax-year parameter source
+        for this estimated-tax rate-schedule slice. Its Tax Rate Schedule
+        supplies all four cumulative-base-plus-excess rows: 2 percent through
+        $3,000; $60 plus 3 percent over $3,000 through $5,000; $120 plus 5
+        percent over $5,000 through $17,000; and $720 plus 5.75 percent over
+        $17,000.
+
+        The caller supplies completed nonnegative Virginia taxable income.
+        This module applies only the published schedule and does not construct
+        taxable income or claim final Form 760 liability.
   summary: |-
-    Composed Virginia individual income-tax pipeline for tax year 2026. It
-    accepts two TaxUnit-level completed-return boundaries: Virginia taxable
-    income and whether the return is within the Virginia filing requirement.
-    For an applicable return, it computes the section 58.1-320 marginal
-    schedule using the bracket bounds and rates imported from the encoded
-    statute module; otherwise it returns zero. The boundaries already reflect
-    the upstream federal and Virginia income, deduction, exemption, residency,
-    and filing-status mechanics, so this module makes no independent claim
-    about that chain. It deliberately targets tax before nonrefundable credits
-    and excludes every credit and payment. Both rules are bounded to 2026 so
-    adjacent years fail closed. This narrow boundary is suitable for comparison
-    with PolicyEngine's va_taxable_income and va_must_file feeding
-    va_income_tax_before_non_refundable_credits across full-year resident tax
-    units in the certified Populace.
-imports:
-  - us-va:statutes/58.1/58/1-320#first_bracket_upper_income
-  - us-va:statutes/58.1/58/1-320#first_bracket_rate
-  - us-va:statutes/58.1/58/1-320#second_bracket_upper_income
-  - us-va:statutes/58.1/58/1-320#second_bracket_rate
-  - us-va:statutes/58.1/58/1-320#third_bracket_upper_income
-  - us-va:statutes/58.1/58/1-320#third_bracket_rate
-  - us-va:statutes/58.1/58/1-320#top_bracket_rate
+    Virginia tax-year-2026 resident estimated-tax rate-schedule amount from a
+    single caller-supplied completed Virginia taxable-income boundary. The
+    calculation preserves the four exact Form 760ES rows and cumulative base
+    amounts, floors a defensive negative input to zero, and fails closed
+    outside 2026. It is an estimated-tax schedule component, not final Form
+    760 liability.
+  deferred_outputs:
+    - output: us-va:forms/760es#constructed_state_taxable_income
+      reason: Form 760ES taxable-income construction requires upstream federal and Virginia income adjustments that are outside the completed taxable-income boundary.
+    - output: us-va:forms/760es#deductions
+      reason: Virginia standard and itemized deductions are already reflected in the supplied completed taxable-income boundary and are not reconstructed here.
+    - output: us-va:forms/760es#credits_and_spouse_tax_adjustment
+      reason: Form 760ES credits and spouse tax adjustment occur after the rate schedule and require source and filing-unit surfaces outside this module.
+    - output: us-va:forms/760py#part_year_tax
+      reason: Part-year residency and allocation require Form 760PY and related authority, not the resident 760ES schedule encoded here.
+    - output: us-va:forms/760es#withholding_and_estimated_payments
+      reason: Withholding and estimated-payment accounting are payment stages downstream of the rate schedule.
+    - output: us-va:forms/760c#underpayment_additions
+      reason: Underpayment additions require timing, installment, exception, and prior-year facts outside this rate-schedule slice.
+    - output: us-va:forms/760#income_tax_liability
+      reason: Final Form 760 liability requires taxable-income construction, deductions, credits, spouse adjustment, residency handling, and final-return ordering not established by Form 760ES.
 rules:
-  - name: va_pit_pilot_bracket_tax
-    kind: derived
-    entity: TaxUnit
+  - name: va_pit_pilot_first_bracket_upper
+    kind: parameter
     dtype: Money
     period: Year
     unit: USD
-    source: Va. Code 58.1-320, marginal tax on supplied completed-return Virginia taxable income
+    source: Virginia 2026 Form 760ES first-bracket upper bound
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#first_bracket_upper_income
-              output: first_bracket_upper_income
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#first_bracket_rate
-              output: first_bracket_rate
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#second_bracket_upper_income
-              output: second_bracket_upper_income
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#second_bracket_rate
-              output: second_bracket_rate
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#third_bracket_upper_income
-              output: third_bracket_upper_income
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#third_bracket_rate
-              output: third_bracket_rate
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us-va:statutes/58.1/58/1-320#top_bracket_rate
-              output: top_bracket_rate
-              hash: sha256:c091b41b254398e27d46641db00799f7e38ea2e17d3f5a3fd3acf58ffac13d4b
-          - path: versions[0].formula
-            kind: formula
+            kind: amount
             source:
-              corpus_citation_path: us-va/statute/58.1/58.1-320
-              excerpt: "A tax is hereby annually imposed on the Virginia taxable income for each taxable year of every individual as follows"
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "Not over $3,000, your tax is 2% of your Virginia taxable income."
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
-        formula: |-
-          first_bracket_rate * min(va_pit_pilot_state_taxable_income, first_bracket_upper_income)
-          + second_bracket_rate * max(0, min(va_pit_pilot_state_taxable_income, second_bracket_upper_income) - first_bracket_upper_income)
-          + third_bracket_rate * max(0, min(va_pit_pilot_state_taxable_income, third_bracket_upper_income) - second_bracket_upper_income)
-          + top_bracket_rate * max(0, va_pit_pilot_state_taxable_income - third_bracket_upper_income)
-  - name: va_pit_pilot_income_tax_liability
-    kind: derived
-    entity: TaxUnit
+        formula: '3000'
+
+  - name: va_pit_pilot_second_bracket_upper
+    kind: parameter
     dtype: Money
     period: Year
     unit: USD
-    source: Va. Code 58.1-320 tax, subject to the Va. Code 58.1-321 no-tax and no-return threshold, before credits
+    source: Virginia 2026 Form 760ES second-bracket upper bound
     metadata:
+      private: true
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
+            kind: amount
             source:
-              corpus_citation_path: us-va/statute/58.1/58.1-320
-              excerpt: "A tax is hereby annually imposed on the Virginia taxable income for each taxable year of every individual"
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 3,000 $ 5,000 $ 60 + 3% $ 3,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '5000'
+
+  - name: va_pit_pilot_third_bracket_upper
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Virginia 2026 Form 760ES third-bracket upper bound
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 5,000 $ 17,000 $ 120 + 5% $ 5,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '17000'
+
+  - name: va_pit_pilot_bracket_floor
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: va_pit_pilot_bracket_selector
+    source: Virginia 2026 Form 760ES excess-over floors
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              table: {header: "TAX RATE SCHEDULE", row_key: bracket, column_key: excess_over}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 3000, 2: 5000, 3: 17000}
+
+  - name: va_pit_pilot_bracket_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    indexed_by: va_pit_pilot_bracket_selector
+    source: Virginia 2026 Form 760ES cumulative bracket bases
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              table: {header: "TAX RATE SCHEDULE", row_key: bracket, column_key: base_tax}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0, 1: 60, 2: 120, 3: 720}
+
+  - name: va_pit_pilot_bracket_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    indexed_by: va_pit_pilot_bracket_selector
+    source: Virginia 2026 Form 760ES marginal rates
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              table: {header: "TAX RATE SCHEDULE", row_key: bracket, column_key: marginal_rate}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        values: {0: 0.02, 1: 0.03, 2: 0.05, 3: 0.0575}
+
+  - name: va_pit_pilot_bracket_selector
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Virginia 2026 Form 760ES row selection for supplied completed Virginia taxable income
+    metadata:
+      private: true
+      proof:
+        atoms:
           - path: versions[0].formula
             kind: condition
             source:
-              corpus_citation_path: us-va/statute/58.1/58.1-321
-              excerpt: "No tax levied pursuant to § 58.1-320 is imposed, nor any return required to be filed"
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "Not over $3,000, your tax is 2% of your Virginia taxable income."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 3,000 $ 5,000 $ 60 + 3% $ 3,000"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 5,000 $ 17,000 $ 120 + 5% $ 5,000"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 17,000 $ 720 + 5.75% $ 17,000"
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          if va_pit_pilot_must_file: va_pit_pilot_bracket_tax else: 0
+          if max(0, va_pit_pilot_state_taxable_income) <= va_pit_pilot_first_bracket_upper: 0 else: if max(0, va_pit_pilot_state_taxable_income) <= va_pit_pilot_second_bracket_upper: 1 else: if max(0, va_pit_pilot_state_taxable_income) <= va_pit_pilot_third_bracket_upper: 2 else: 3
+
+  - name: va_pit_pilot_2026_760es_estimated_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Virginia Department of Taxation 2026 Form 760ES Tax Rate Schedule applied to supplied completed Virginia taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "Not over $3,000, your tax is 2% of your Virginia taxable income."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 3,000 $ 5,000 $ 60 + 3% $ 3,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 5,000 $ 17,000 $ 120 + 5% $ 5,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-va/form/individual-income-tax/2026/760es/tax-rate-schedule
+              excerpt: "$ 17,000 $ 720 + 5.75% $ 17,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          va_pit_pilot_bracket_base[va_pit_pilot_bracket_selector]
+          + va_pit_pilot_bracket_rate[va_pit_pilot_bracket_selector]
+          * (max(0, va_pit_pilot_state_taxable_income) - va_pit_pilot_bracket_floor[va_pit_pilot_bracket_selector])
 inputs:
   - name: va_pit_pilot_state_taxable_income
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    description: Nonnegative completed-return Virginia taxable income supplied by the caller as an upstream oracle boundary.
-  - name: va_pit_pilot_must_file
-    entity: TaxUnit
-    dtype: Boolean
-    period: Year
-    description: Whether the tax unit is within Virginia's filing requirement, supplied by the caller as an upstream applicability boundary.
+    description: Completed nonnegative Virginia taxable income supplied by the caller; all income, deduction, residency, and filing-status construction is upstream.
