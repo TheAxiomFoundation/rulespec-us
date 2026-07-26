@@ -9,6 +9,10 @@ Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e7
 - Loaded the PolicyEngine review workflow and original verdict.
 - Confirmed the source checkout is detached and dirty; created this isolated throwaway worktree instead.
 - Confirmed the live GitHub PR head/base metadata and that the head is four commits ahead of the current base.
+- Captured the exact six-path base-to-head diff; `git diff --check` passes.
+- Confirmed PR-only history names no `PROGRESS` or session-ledger path and no other policy lane.
+- Baseline companion passes all 39 cases through the requested `~/axiom-rules` engine.
+- Baseline companion passes all 39 cases through the exact pinned engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
 
 ## Next
 
