@@ -263,6 +263,56 @@ def test_family_size_fpl_mismatch_fails_closed_despite_attestation() -> None:
     ] == "not_holds"
 
 
+def test_canonical_and_self_row_age_contradiction_fails_closed() -> None:
+    rules = _rules(_policy())
+    facts_consistent = "".join(
+        _formula(
+            rules,
+            "medicaid_household_relation_applicant_facts_consistent",
+        ).split()
+    )
+    assert (
+        "sum_where(medicaid_household_member_of_applicant,"
+        "household_row_applicant_age,"
+        "household_row_candidate_is_the_applicant)==medicaid_applicant_age"
+        "*count_where(medicaid_household_member_of_applicant,"
+        "household_row_candidate_is_the_applicant)"
+        in facts_consistent
+    )
+    assert (
+        "sum_where(medicaid_household_member_of_applicant,"
+        "household_row_candidate_age,"
+        "household_row_candidate_is_the_applicant)==medicaid_applicant_age"
+        "*count_where(medicaid_household_member_of_applicant,"
+        "household_row_candidate_is_the_applicant)"
+        in facts_consistent
+    )
+
+    cases = {
+        case["name"]: case
+        for case in yaml.safe_load(COMPANION_PATH.read_text(encoding="utf-8"))
+    }
+    case = cases["contradictory_canonical_and_self_row_ages_fail_closed"]
+    relation_key = f"{PREFIX}#relation.{RAW_RELATION}"
+    row = case["input"][relation_key][0]
+    assert case["input"][f"{PREFIX}#input.medicaid_applicant_age"] == 19
+    assert row[f"{PREFIX}#input.household_row_applicant_age"] == 65
+    assert row[f"{PREFIX}#input.household_row_candidate_age"] == 65
+    assert case["output"][
+        f"{PREFIX}#medicaid_household_relation_rows_valid"
+    ] == "holds"
+    assert case["output"][
+        f"{PREFIX}#medicaid_household_relation_applicant_facts_consistent"
+    ] == "not_holds"
+    assert case["output"][
+        f"{PREFIX}#internal_eligible_under_highest_applicable_magi_income_standard"
+    ] == "holds"
+    assert case["output"][f"{PREFIX}#{RUNTIME}"] == "not_holds"
+    assert case["output"][
+        f"{PREFIX}#medicaid_adult_group_eligible"
+    ] == "not_holds"
+
+
 def test_parent_caretaker_fact_has_one_canonical_pipeline_slot() -> None:
     payload = _policy()
     rules = _rules(payload)
