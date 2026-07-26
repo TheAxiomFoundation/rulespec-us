@@ -2,7 +2,7 @@
 
 ## State
 
-Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e744471a54ca62`, compared with live base `8b5e7a18a9f91d73d1f618cdc4931ad16eac46fc`.
+Adversarial review complete at the unchanged live PR head `db782aeadddba87f2d00713ff3e744471a54ca62`, compared with live base `8b5e7a18a9f91d73d1f618cdc4931ad16eac46fc`. Verdict: request changes.
 
 ## Done
 
@@ -31,11 +31,14 @@ Adversarial review in progress at the live PR head `db782aeadddba87f2d00713ff3e7
 - Merge commit `a8686bc05` remerge evidence identifies a shared-ledger conflict resolution as the removal source.
 - The pending-ratchet check reports those 17 outputs as undeclared; all 61 new Medicaid entries are present.
 - Live GitHub validation is red across all jurisdiction shards and the aggregate `validate` job at the unchanged PR head.
+- Confirmed the original B1, B2, B4, and B5 defects are repaired and State elections fail closed when unresolved.
+- Replayed both B6 contradictions independently; exact normalized output hashes match the recorded probes.
+- Rechecked live PR metadata immediately before consolidation; head and base SHAs are unchanged.
 
 ## Next
 
-- Re-run the original B1–B6 counterexamples.
-- Mutate B3 relation order and B4 period direction and require their companions to fail.
-- Verify explicit State elections, fail-closed outputs, history/lane isolation, manifests, and focused gates.
-- Audit the repair range for new defects and issue the final verdict files.
+- Make the B3 companion fail when the declared relation arguments are reversed, including surfacing the `$9,876.54` nonmember sentinel.
+- Replace the family-size/FPL attestation with executable correspondence validation, and reject contradictory canonical versus row-level applicant ages.
+- Restore the 12 Head Start and 5 WIC pending-oracle declarations dropped by the repair merge, then rerun the exact CI ratchet.
+- Re-run the adversarial mutants and fail-closed counterexamples before approval.
 
