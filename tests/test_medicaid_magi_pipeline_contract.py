@@ -197,6 +197,69 @@ def test_self_row_cannot_trigger_dependent_income_exclusion() -> None:
     ] == 0
 
 
+def test_family_size_fpl_mismatch_fails_closed_despite_attestation() -> None:
+    rules = _rules(_policy())
+    scalar_contract = "".join(
+        _formula(rules, "medicaid_scalar_contract_valid").split()
+    )
+    assert (
+        "authoritative_fpl_lookup_family_size==applicable_family_size"
+        in scalar_contract
+    )
+    assert (
+        "authoritative_fpl_lookup_annual_guideline_amount"
+        "==annual_federal_poverty_level_for_applicable_family_size"
+        in scalar_contract
+    )
+
+    cases = {
+        case["name"]: case
+        for case in yaml.safe_load(COMPANION_PATH.read_text(encoding="utf-8"))
+    }
+    case = cases[
+        "family_size_fpl_amount_mismatch_with_true_attestation_fails_closed"
+    ]
+    inputs = case["input"]
+    assert inputs[f"{PREFIX}#input.applicable_family_size"] == 1
+    assert (
+        inputs[
+            f"{PREFIX}#input."
+            "annual_federal_poverty_level_for_applicable_family_size"
+        ]
+        == 21640
+    )
+    assert (
+        inputs[
+            f"{PREFIX}#input.authoritative_fpl_lookup_family_size"
+        ]
+        == 1
+    )
+    assert (
+        inputs[
+            f"{PREFIX}#input."
+            "authoritative_fpl_lookup_annual_guideline_amount"
+        ]
+        == 15960
+    )
+    assert (
+        inputs[
+            f"{PREFIX}#input."
+            "applicable_family_size_fpl_year_region_and_budget_correspondence_attested"
+        ]
+        is True
+    )
+    assert case["output"][
+        f"{PREFIX}#internal_eligible_under_highest_applicable_magi_income_standard"
+    ] == "holds"
+    assert case["output"][
+        f"{PREFIX}#medicaid_scalar_contract_valid"
+    ] == "not_holds"
+    assert case["output"][f"{PREFIX}#{RUNTIME}"] == "not_holds"
+    assert case["output"][
+        f"{PREFIX}#eligible_under_highest_applicable_magi_income_standard"
+    ] == "not_holds"
+
+
 def test_parent_caretaker_fact_has_one_canonical_pipeline_slot() -> None:
     payload = _policy()
     rules = _rules(payload)
