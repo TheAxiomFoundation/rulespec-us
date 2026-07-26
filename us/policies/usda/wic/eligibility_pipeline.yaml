@@ -11,26 +11,21 @@ module:
     Person-level WIC certification-eligibility composition. It combines the
     pregnant-woman, postpartum-woman, breastfeeding-woman, infant, and
     child-under-five category facts required by 7 CFR 246.7(c) with the
-    185-percent Federal poverty-guideline maximum income ceiling and the
-    adjunctive income-eligibility routes encoded from paragraph (d). The
-    185-percent branch matches the Federal maximum and the PolicyEngine
-    comparison surface; a State agency may adopt a lower compliant income
-    guideline, which is outside this Federal-parity pipeline.
+    operative State or local agency income guideline and the mandatory
+    adjunctive, unborn-child, and instream-migrant income-satisfaction routes
+    encoded from paragraph (d). The Federal 185-percent ceiling is not treated
+    as every applicant's operative guideline.
 
-    The caller supplies the Federal poverty-guideline dollar amount already
-    selected for family size and geography. The encoded paragraph-(c) module
-    exposes category membership as a fact rather than deriving the category
-    definitions, so the five category facts are caller-classified runtime
-    inputs. The paragraph-(d)(2)(vii) unborn-child adjustment is an explicit
-    imported income path; the caller supplies its pregnancy, income-only
-    failure, fetus-adjusted-guideline, and waiver facts. The completed family
-    income input already reflects any paragraph-(d)(2)(i) current-rate income
-    period or paragraph-(d)(2)(ix) migrant recertification determination.
-    Residency and certification facts are runtime inputs as well. Nutritional
-    risk is an explicit, required caller determination. The pipeline never
-    treats that determination as satisfied by default: 7 CFR 246.7(e) requires
-    a competent professional authority's medical and/or nutritional
-    assessment, and the source module remains deferred.
+    The caller supplies the operative guideline dollar amount already selected
+    for the applicable State or local agency, family size, geography, and
+    period. The encoded paragraph-(c) module exposes category membership as a
+    fact rather than deriving the category definitions, so the five category
+    facts are caller-classified runtime inputs. The paragraph-(d)(2)(vii)
+    unborn-child adjustment and paragraph-(d)(2)(ix) instream-migrant rule are
+    explicit imported income paths. Residency and certification facts are
+    runtime inputs as well. Nutritional risk is an explicit caller
+    determination, with a separate fail-closed boundary for an agency that
+    authorizes the paragraph-(e)(1)(v) presumptive pregnant-woman window.
   deferred_outputs:
     - output: us:regulations/7-cfr/246/7/d#unemployed_family_member_income_period_eligibility_applies
       reason: |-
@@ -38,67 +33,40 @@ module:
         adult family member becomes unemployed; it does not by itself conclude
         that income is below the guideline. The caller supplies the completed
         wic_family_income amount after applying that period rule.
-    - output: us:regulations/7-cfr/246/7/d#instream_migrant_family_satisfies_income_standard_and_documentation
-      reason: |-
-        Paragraph (d)(2)(ix) depends on a prior local-agency income
-        determination, a Verification of Certification card, and the
-        twelve-month instream period. This pipeline accepts the resulting
-        completed family-income/certification facts and does not silently infer
-        them from migrant status.
     - output: us:regulations/7-cfr/246/7/e#nutritional_risk_certification_and_priority_system
       reason: |-
         The encoded paragraph-(e) module is deferred because the medical or
         nutritional assessment, competent-professional determination,
         participant-file documentation, and priority administration are not
-        derivable from this scalar person-level surface. This pipeline exposes
-        that determination as the required
-        wic_nutritional_risk_requirement_met runtime input.
+        derivable from this scalar person-level surface. This pipeline consumes
+        the completed nutritional-risk determination and separately composes
+        the paragraph-(e)(1)(v) presumptive pregnant-woman exception only when
+        the caller attests that the governing agency authorizes it and that the
+        applicant remains within the authorized period.
 imports:
   - us:regulations/7-cfr/246/7/d#applicant_adjunctively_income_eligible
   - us:regulations/7-cfr/246/7/d#pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+  - us:regulations/7-cfr/246/7/d#instream_migrant_family_satisfies_income_standard_and_documentation
 rules:
-  - name: wic_income_limit_multiplier
-    kind: parameter
-    dtype: Decimal
-    source: 7 CFR 246.7(d)(2)(iii), maximum Federal income-guideline ceiling
-    metadata:
-      proof:
-        atoms:
-          - path: versions[0].formula
-            kind: parameter
-            source:
-              corpus_citation_path: us/regulation/7/246/7/d
-              excerpt: "gross income in excess of 185 percent of the Federal income guidelines"
-    versions:
-      - effective_from: '2008-10-01'
-        formula: |-
-          1.85
-
-  - name: wic_income_limit
+  - name: wic_numeric_inputs_valid
     kind: derived
     entity: Person
-    dtype: Money
+    dtype: Judgment
     period: Year
-    unit: USD
-    source: 7 CFR 246.7(d)(1), (d)(2)(iii)
+    source: 7 CFR 246.7(d)(1), fail-closed runtime domain contract
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
+            kind: condition
             source:
               corpus_citation_path: us/regulation/7/246/7/d
-              excerpt: "gross income in excess of 185 percent of the Federal income guidelines"
-          - path: versions[0].formula
-            kind: import
-            import:
-              target: us:policies/usda/wic/eligibility_pipeline#wic_income_limit_multiplier
-              output: wic_income_limit_multiplier
-              hash: sha256:local
+              excerpt: "income guidelines, definitions, and procedures to be used in determining an applicant's income eligibility"
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          wic_income_limit_multiplier * wic_federal_poverty_guideline
+          wic_family_income >= 0
+          and wic_state_or_local_income_guideline > 0
 
   - name: wic_categorical_eligible
     kind: derived
@@ -128,7 +96,7 @@ rules:
     entity: Person
     dtype: Judgment
     period: Year
-    source: 7 CFR 246.7(d)(1), (d)(2)(iii), (d)(2)(vi), (d)(2)(vii)
+    source: 7 CFR 246.7(d)(1), (d)(2)(vi), (d)(2)(vii), (d)(2)(ix)
     metadata:
       proof:
         atoms:
@@ -157,18 +125,53 @@ rules:
           - path: versions[0].formula
             kind: import
             import:
-              target: us:policies/usda/wic/eligibility_pipeline#wic_income_limit
-              output: wic_income_limit
+              target: us:regulations/7-cfr/246/7/d#instream_migrant_family_satisfies_income_standard_and_documentation
+              output: instream_migrant_family_satisfies_income_standard_and_documentation
+              hash: sha256:e4bf3b4442d844647b53225b3fd2a3a371f61a80846d4f3708ccd73aad92d5fb
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/wic/eligibility_pipeline#wic_numeric_inputs_valid
+              output: wic_numeric_inputs_valid
               hash: sha256:local
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          applicant_adjunctively_income_eligible
+          wic_numeric_inputs_valid
+          and (
+            applicant_adjunctively_income_eligible
+            or instream_migrant_family_satisfies_income_standard_and_documentation
+            or (
+              wic_applicant_is_pregnant_woman
+              and pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+            )
+            or wic_family_income <= wic_state_or_local_income_guideline
+          )
+
+  - name: wic_nutritional_risk_eligibility_requirement_met
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 7 CFR 246.7(e)(1)(v), completed risk determination or authorized presumptive pregnant-woman window
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/246/7/e
+              excerpt: "may be certified immediately without an evaluation of nutritional risk for a period up to 60 days"
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          wic_nutritional_risk_requirement_met
           or (
             wic_applicant_is_pregnant_woman
-            and pregnant_applicant_income_guidelines_satisfied_with_unborn_children
+            and wic_governing_agency_authorizes_presumptive_pregnant_woman_certification
+            and wic_applicant_is_within_presumptive_nutritional_risk_period
+            and wic_nutritional_risk_evaluation_remains_pending
           )
-          or wic_family_income <= wic_income_limit
 
   - name: wic_eligible
     kind: derived
@@ -201,6 +204,12 @@ rules:
               target: us:policies/usda/wic/eligibility_pipeline#wic_income_eligible
               output: wic_income_eligible
               hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/wic/eligibility_pipeline#wic_nutritional_risk_eligibility_requirement_met
+              output: wic_nutritional_risk_eligibility_requirement_met
+              hash: sha256:local
     versions:
       - effective_from: '2008-10-01'
         formula: |-
@@ -208,20 +217,20 @@ rules:
           and wic_residency_requirement_met
           and wic_income_eligible
           and wic_certification_requirements_met
-          and wic_nutritional_risk_requirement_met
+          and wic_nutritional_risk_eligibility_requirement_met
 inputs:
   - name: wic_family_income
     entity: Person
     dtype: Money
     period: Year
     unit: USD
-    description: Completed annual/current-rate family income after applicable 7 CFR 246.7(d)(2)(i) and (ix) period or recertification procedures.
-  - name: wic_federal_poverty_guideline
+    description: Nonnegative completed annual/current-rate family income after applying the governing agency's definitions, exclusions, and applicable 7 CFR 246.7(d)(2)(i) period rule.
+  - name: wic_state_or_local_income_guideline
     entity: Person
     dtype: Money
     period: Year
     unit: USD
-    description: Caller-supplied Federal poverty-guideline dollars for the applicable family size and geography used in the direct 185-percent screen; paragraph (d)(2)(vii)'s unborn-child exception is also exposed as an imported path.
+    description: Positive caller-attested operative State or local agency income-guideline dollars for the applicable family size, geography, and period; this is not inferred from the 185-percent Federal maximum.
   - name: wic_applicant_is_pregnant_woman
     entity: Person
     dtype: Boolean
@@ -261,4 +270,19 @@ inputs:
     entity: Person
     dtype: Boolean
     period: Year
-    description: Required caller-supplied competent-professional nutritional-risk determination under deferred 7 CFR 246.7(e); never assumed true.
+    description: Caller-supplied completed competent-professional nutritional-risk determination under deferred 7 CFR 246.7(e); never assumed true.
+  - name: wic_governing_agency_authorizes_presumptive_pregnant_woman_certification
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller attestation that the governing State or local agency authorizes the paragraph-(e)(1)(v) presumptive pregnant-woman certification option; false fails closed.
+  - name: wic_applicant_is_within_presumptive_nutritional_risk_period
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller attestation that the pregnant applicant remains within the authorized period of up to 60 days after presumptive certification; false fails closed.
+  - name: wic_nutritional_risk_evaluation_remains_pending
+    entity: Person
+    dtype: Boolean
+    period: Year
+    description: Caller attestation that the paragraph-(e)(1)(v) nutritional-risk evaluation has not yet been completed; a completed positive evaluation uses wic_nutritional_risk_requirement_met, while false ends the presumptive route even before day 60.
