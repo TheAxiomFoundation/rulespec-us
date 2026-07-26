@@ -29,7 +29,11 @@ module:
     excess. Upstream Ohio adjusted gross income, taxable-business-income
     separation, personal exemptions, residency and allocation decisions are
     outside this legal schedule module, as are the separate three-percent
-    business-income tax and all credits.
+    business-income tax, all credits, and final-return ordering. Typed
+    source-hold Judgments keep those omitted stages fail closed. This module
+    does not claim to construct Ohio taxable income or final Ohio IT 1040
+    liability, and it does not expose caller-completed business income,
+    exemptions, credits, or final tax as shortcut inputs.
 
     PolicyEngine-US 1.752.2 directly feeds `oh_taxable_income` into the
     distinct `oh_income_tax_before_non_refundable_credits` schedule target and
@@ -42,7 +46,15 @@ module:
     incomes, not a substantive schedule difference. All rules fail closed
     outside tax year 2026.
   deferred_outputs:
-    - output: us-oh:statutes/5747.02/b#taxable_business_income_after_excess_exemptions
+    - output: us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_constructed_nonbusiness_taxable_income
+      reason: |-
+        Section 5747.02(A)(3) constructs the nonbusiness balance from Ohio
+        adjusted gross income less taxable business income and exemptions.
+        The module's sole input is the completed-return result of that
+        construction; it does not derive the upstream components.
+      source_values:
+        - us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_nonbusiness_taxable_income_construction_source_hold_applies
+    - output: us-oh:statutes/5747/02#taxable_business_income_after_excess_exemptions
       reason: |-
         Section 5747.02(A)(4)(b) coordinates personal exemptions with Ohio's
         separate three-percent taxable-business-income schedule. This module
@@ -50,11 +62,115 @@ module:
         ends before that separate business-income branch; encoding it requires
         completed-return taxable business income and the excess-exemption
         allocation that this one-boundary schedule does not claim to derive.
+      source_values:
+        - us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_business_income_and_excess_exemption_source_hold_applies
+    - output: us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_tax_after_nonrefundable_credits
+      reason: |-
+        The two pinned sources establish the 2026 nonbusiness-income schedule,
+        not a complete tax-year-2026 credit inventory, eligibility surface,
+        limitations, or ordering chain.
+      source_values:
+        - us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_credit_surface_source_hold_applies
+    - output: us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_final_it_1040_liability
+      reason: |-
+        A final resident IT 1040 liability requires the omitted income
+        construction, business-income and excess-exemption branch, credits,
+        and final-return ordering. No final tax-year-2026 IT 1040 is pinned,
+        so this bounded schedule makes no final-return claim.
+      source_values:
+        - us-oh:policies/income_tax/pilot_liability_pipeline#oh_pit_pilot_final_return_ordering_source_hold_applies
 imports:
   - us-oh:statutes/5747/02#individual_income_tax_no_tax_threshold
   - us-oh:statutes/5747/02#individual_nonbusiness_income_tax_base_amount
   - us-oh:statutes/5747/02#individual_nonbusiness_income_tax_excess_rate
 rules:
+  - name: oh_pit_pilot_nonbusiness_taxable_income_construction_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Upstream Ohio adjusted-gross-income, business-income separation, and exemption construction is outside this bounded schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+              excerpt: "the tax imposed by this section on income other than taxable business income shall be measured by Ohio adjusted gross income, less taxable business income and less an exemption"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: oh_pit_pilot_business_income_and_excess_exemption_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Separate taxable-business-income tax and excess-exemption allocation are outside this bounded nonbusiness schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+              excerpt: "the tax imposed by this section on taxable business income shall equal three per cent"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+              excerpt: "the excess shall be deducted from taxable business income before computing the tax"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: oh_pit_pilot_credit_surface_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Complete tax-year-2026 Ohio credit inventory, eligibility, limitations, and ordering are not pinned by the bounded schedule sources
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-oh/guidance/lsc/hb96/final-analysis/tax/document-1
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: oh_pit_pilot_final_return_ordering_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Final tax-year-2026 Ohio IT 1040 liability and return ordering are not pinned
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-oh/statute/5747.02
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-oh/guidance/lsc/hb96/final-analysis/tax/document-1
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
   - name: oh_pit_pilot_taxable_income
     kind: derived
     entity: TaxUnit
@@ -158,4 +274,4 @@ inputs:
     dtype: Money
     period: Year
     unit: USD
-    description: Completed-return Ohio taxable nonbusiness income supplied by the caller as the sole upstream oracle boundary.
+    description: Completed-return Ohio taxable nonbusiness income supplied by the caller as the sole lawful upstream oracle boundary; not business income, exemptions, credits, or final IT 1040 tax.
