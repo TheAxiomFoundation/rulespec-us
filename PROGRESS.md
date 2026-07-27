@@ -2,8 +2,9 @@
 
 ## State
 
-Evidence assembly is in progress for the employee Medicare tax node defined by
-26 U.S.C. 3101(b)(1). No certification claim has been made.
+The direct employee Medicare node now has Medicare-only OASDI-seam fixtures.
+Cross-repository oracle, closure, and released-engine evidence assembly is in
+progress. No certification claim has been made.
 
 ## Done
 
@@ -11,10 +12,13 @@ Evidence assembly is in progress for the employee Medicare tax node defined by
 - Created branch `closure/medicare-evidence` from `origin/main`.
 - Created a fresh worktree under the writable repository metadata directory
   after the sandbox denied the requested sibling-directory worktree path.
+- Reviewed `closure/payroll-3101` and rejected its three-output family pipeline
+  for this target because it gates Medicare on unrelated OASDI facts.
+- Added direct §3101(b)(1) cases at $184,500, $184,501, and $300,000, retaining
+  the existing zero-wage and ordinary-wage cases.
 
 ## Next
 
-- Read the certified-node schema and inspect the prior payroll branch.
-- Map the provision, corpus inventory, closure paths, and existing suite shapes.
-- Build and validate the case grid, closure ledger, released-engine receipt, and
-  five-criteria evidence document.
+- Run the five direct companion cases and bind them to the PolicyEngine grid.
+- Finish the nine-row closure ledger and released-engine execution receipt.
+- Assemble and validate the five-criteria evidence document and golden case.
