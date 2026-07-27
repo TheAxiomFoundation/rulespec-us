@@ -2,11 +2,13 @@
 
 ## State
 
-Paragraphs (f), (g), and (j) are encoded, independently reviewed, and ready
-for draft PR review. Core validation and all 33 frozen-program artifact checks
-pass. The only repository-suite finding is the expected stale signed
+Paragraphs (f), (g), and (j) are encoded, independently reviewed, and locally
+ready for draft PR review. Core validation and all 33 frozen-program artifact
+checks pass. The only repository-suite finding is the expected stale signed
 encoding-manifest hash for the edited module; the signed manifest was not
-hand-edited.
+hand-edited. Remote delivery is blocked because this environment cannot
+resolve `github.com` and the connected GitHub branch-creation action was
+cancelled.
 
 ## Done
 
@@ -105,7 +107,13 @@ hand-edited.
   specs without editing any program composition.
 - Ran the full repository suite: 72 tests passed and one failed solely because
   the signed encoding manifest still records the pre-change `273/7.yaml` hash.
+- Committed all work on local branch `closure/enc-273-7-work`.
+- Attempted `git push -u origin closure/enc-273-7-work`; it failed because
+  `github.com` could not be resolved.
+- Attempted the connected GitHub API fallback; branch creation was cancelled,
+  so no remote branch or draft PR was created.
 
 ## Next
 
-- Push the branch and open the required draft PR.
+- Once GitHub write access is allowed, push the local branch and open the
+  required draft PR.
