@@ -10,8 +10,10 @@
 - A fresh fetch was attempted on 2026-07-27 but the sandbox could not resolve
   `github.com`; all work therefore uses the pinned local checkout and corpus.
 - The required census, retained-text audit, and exact PolicyEngine-US 1.767.3
-  trace are complete. Federal encode changes and companion mutation tests are
-  next.
+  report-path trace are complete. None of the three proposed federal rules is
+  missing or causally explains the residuals. The federal encodes are restored
+  unchanged after rejecting a composition-breaking candidate patch; final
+  reporting and verification remain.
 
 ## Done
 
@@ -69,9 +71,31 @@
   | No longer eligible | 0 | 18 | 0 | 17 | 0 | 35 |
   | **Total** | **0** | **42** | **0** | **43** | **0** | **85** |
 
-- Confirmed that the named MA case `ecps-1984` is categorical-only under
-  1.767.3. The named SC case `ecps-28671` is both categorically eligible and
-  net-income eligible.
+- Reproduced all 85 strict report rows through the current
+  `PopulaceUsCaseLoader` → `PolicyEngineRunner` bridge with the exact cached
+  PolicyEngine-US 1.767.3 package:
+
+  | Adapter-path disposition | AL | MA | NC | SC | TN | Total |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Eligible only through categorical path | 0 | 27 | 0 | 42 | 0 | 69 |
+  | Eligible through categorical and ordinary paths | 0 | 14 | 0 | 1 | 0 | 15 |
+  | Eligible only through ordinary income path | 0 | 1 | 0 | 0 | 0 | 1 |
+  | Ineligible | 0 | 0 | 0 | 0 | 0 | 0 |
+  | **Total** | **0** | **42** | **0** | **43** | **0** | **85** |
+
+- All 85 remain PolicyEngine-eligible in the current adapter path. Eighty-four
+  retain the report's exact `$23.973597208658855`; MA `ecps-2303` now receives
+  `$100.1699930826823`. MA `ecps-3128` is the sole ordinary-only case.
+- Confirmed that named MA `ecps-1984` and SC `ecps-28671` are both
+  categorical-only in the adapter path. Both pass PolicyEngine's elderly gross
+  exemption but fail its net test. The bridge omits source medical-expense
+  inputs; categorical eligibility, not the medical deduction, preserves their
+  eligibility.
+- Ran a medical-expense counterfactual for the sole ordinary-only case
+  (`ecps-3128`). Reducing projected health premiums to a nominal amount removes
+  its medical deduction, but it still passes both ordinary income tests and
+  remains eligible. Medical expenses therefore cause zero eligibility
+  residuals in this strict class.
 - Confirmed a PolicyEngine-side minimum-allotment defect: 1.767.3 calculates
   `0.08 * $298 = $23.84` without the regulation's nearest-dollar rounding.
   The report adapter further annual-averages a January request, producing
@@ -93,13 +117,15 @@
   incurred only by a nonqualifying spouse or dependent. The generic Populace
   projector does not map `snap_total_medical_expenses`, so it defaults that
   factual amount to zero outside the legal encode.
+- Classified the federal clearance estimate as zero in every state. A correct
+  out-of-scope categorical-input projection would directly explain the 69
+  categorical-only cases (MA 27, SC 42), offer an alternate path for 15 more,
+  and leave MA `ecps-3128` for a separate projection/gate disposition.
 
 ## Next
 
-1. Finish the Case-to-PolicyEngine 1.767.3 rerun and distinguish direct-H5
-   results from report-pipeline results.
-2. Re-run the unchanged federal companion suites and the representative
+1. Re-run the unchanged federal companion suites and the representative
    downstream suite after the rollback.
-3. Write and commit `WORKER-REPORT.md`, including a zero federal-clearance
+2. Write and commit `WORKER-REPORT.md`, including a zero federal-clearance
    estimate, the out-of-scope projection dispositions, exact law paths, and the
    PolicyEngine issue draft.
