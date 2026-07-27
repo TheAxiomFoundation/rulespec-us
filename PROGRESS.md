@@ -1,39 +1,26 @@
-# Saver's Credit Revival Progress
+# PR #1137 Blind Adversarial Review Progress
 
 ## State
 
-- Complete: the defensive correctness and completeness audit, implementation, mutation proof, reverse index, focused gates, and final report are committed locally.
-- Baseline: clean worktree at `6b0773d3f7fa6719f208154f3e609e292ab7abe7` (`origin/main`).
-- Constraints: local commits only; no push, GitHub writes, workflow/toolchain edits, or manifest signing.
+- Review branch: `review/pr-1137-995fff`.
+- Disposable worktree: `.git/review-worktrees/pr-1137-995fff`.
+- Reviewed PR head: `995fff6104a19a89843934e3832cd097c308af1d`.
+- Base: `origin/main` at `6b0773d3f7fa6719f208154f3e609e292ab7abe7`.
+- Pinned corpus: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
+- Status: initial evidence capture complete; substantive review pending.
 
 ## Done
 
-- Confirmed the requested worktree, branch, clean status, and base commit.
-- Established the required committed progress log.
-- Checked for GitNexus graph tooling; it is unavailable in this session, so the audit will use direct repository/corpus inspection and focused validation.
-- Recovered both files byte-for-byte from parent `9e6d90dc6ee064727822b2d65941bb95b7754061` of deletion commit `dc7a521fa`.
-- Verified recovered SHA-256 values:
-  - Pipeline: `9620a6d0efba298addbf7c5a9c77db275bbb2187ddef53d2940641a74e842ea4`.
-  - Companion: `2f0ef016c1e78b6df968cda6d75de759b01a3062fbe0d8d758da20d8c7dc9329`.
-- Confirmed the branch pins corpus commit `bf97b17baebfdf12601f7c23697524bf5adcdaed`, and the clean corpus checkout is at that exact commit.
-- Verified Notice 2025-67 rows 4-5 and section 25B rows 225, 230, 245, 914, and 919 directly in the pinned corpus.
-- Added a proof-required Notice 2025-67 parameter module containing all nine tax-year-2026 filing-status/tier limits and a companion value test.
-- Passed the module companion test, focused CI validation, proof validation, and zero-missing money-atom validation.
-- Replaced caller-supplied thresholds with nine notice imports and explicit joint/head-of-household/all-other selectors.
-- Preserved explicit, no-default §§911/931/933 add-back inputs and added a positive §911 threshold-crossing case.
-- Preserved separate primary/spouse $2,000 caps and added a both-spouses-over-cap case.
-- Expanded the pipeline companion to 25 cases, including every exact and one-dollar-over tier edge for single, joint, and head-of-household filers; MFS and surviving-spouse category checks; and eligibility screens.
-- Passed the 25-case companion, focused CI validation (using a temporary canonical checkout alias for this `wt-savers` worktree name), proof validation, and zero-missing money-atom validation.
-- Mutation proof: changing the first comparison from `<=` to `<` produced 8 assertion failures across the exact 50-percent-limit cases (single, joint, head of household, MFS, and surviving spouse); restoring `<=` returned all 25 cases to green.
-- Regenerated `.axiom/index/provisions_to_rules.json` (4,238 provisions, 5,077 edges, 4,485 modules) and confirmed `--check` is current.
-- Passed 15 focused repository layout/reverse-index tests; the final post-hardening rerun completed in 398.97 seconds.
-- The literal `uv run --with pyyaml` command could not initialize its sandboxed home cache; a temporary cache then could not reach PyPI. The same generator and check passed with the installed axiom-encode Python/PyYAML environment.
-- Ran a pinned-corpus citation-resolution audit over both modules. It caught and corrected one Notice excerpt that crossed the page-3/page-4 boundary; after correction, all 6 unique citation paths resolve and all 48 source proof excerpts are verbatim in their cited rows.
-- Re-passed the 25-case companion, proof/money-atom checks, and focused CI validation after the citation correction.
-- Strengthened the applicable-percentage proof atoms to cite the 50%, 20%, 10%, and zero statutory clauses explicitly; final proof validation passes with 27 Notice atoms, 42 pipeline atoms, and 0 of 9 money obligations missing.
-- Confirmed all 20 new output legal IDs are unmapped and documented the required main-lane pending sync and PolicyEngine divergence disposition.
-- Wrote `WORKER-REPORT.md` with recovery hashes, pinned-corpus evidence, mutation evidence, gate results, and oracle disposition.
+- Preserved the dirty primary checkout by creating a separate worktree and throwaway branch from the exact target commit.
+- Confirmed the target commit exists locally and its merge base with `origin/main` is the PR base.
+- Attempted the required `git ls-remote`; sandbox DNS blocked access to `github.com`.
+- Independently confirmed through the read-only GitHub connector that open PR #1137 has branch `fed-parity/savers` and full head SHA `995fff6104a19a89843934e3832cd097c308af1d`.
+- Confirmed the target commit pins axiom-corpus `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
+- Captured the 10-file PR diff. It includes `PROGRESS.md` and `WORKER-REPORT.md`, contrary to the requested PR hygiene invariant.
 
 ## Next
 
-- Main lane: sync the documented 20 oracle-pending legal IDs and apply the recorded PolicyEngine divergence disposition. No further worker-lane work remains.
+- Map the diff and affected flows with GitNexus if available.
+- Audit statutory and Notice fidelity against the pinned corpus.
+- Run companion, mutation, proof, manifest, ledger, index, and hygiene checks.
+- Write and commit the final verdict to `WORKER-REPORT.md`.
