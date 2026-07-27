@@ -3,12 +3,12 @@
 ## State
 
 Investigation is complete and the final report is in progress. No Tennessee encode
-change is justified: exact PolicyEngine-US 1.767.3 gives all 48 target cases a zero
-utility allowance, the supplied report used 1.752.2, and `ecps-35254` instead exposes
-an oracle-population bridge omission for PolicyEngine's endogenous Tennessee Families
-First/TANF income. The pinned corpus does not retain a current FY2026 Tennessee
-utility-allowance amount source, so PolicyEngine's amounts must not be copied into
-Axiom.
+change is justified: the actual report pipeline gives all 48 target cases a zero
+utility allowance under both PolicyEngine-US 1.752.2 and 1.767.3, and
+`ecps-35254` instead exposes an oracle-population bridge omission for
+PolicyEngine's endogenous Tennessee Families First/TANF income. The pinned corpus
+does not retain a current FY2026 Tennessee utility-allowance amount source, so
+PolicyEngine's amounts must not be copied into Axiom.
 
 ## Done
 
@@ -21,13 +21,22 @@ Axiom.
 - Confirmed `ecps-35254`: Axiom 667, PolicyEngine 564.6453450520834, delta +102.35465494791663.
 - Identified a provenance mismatch: the supplied reports use PolicyEngine-US 1.752.2, while the requested source comparison targets 1.767.3.
 - Located exact PolicyEngine-US 1.767.3 source at local git commit `49d19b239a593dbac8920ac6fd80cfe33372343a`.
+- Confirmed the report used the general `axiom-oracles-compare` loader and
+  household IDs, not the specialized SPM-unit SNAP bridge: `ecps-35254` is raw
+  household ID 35254 and its four ages match the report.
 - Confirmed the pinned corpus retains FY2024 FNS TN values and an older non-primary TN table, but no FY2026 Tennessee DHS utility chart or FY2026 FNS state table.
 - Confirmed 7 CFR 273.9(d)(6)(iii)(A)-(C) delegates utility standards to states, prohibits overlapping standards, and requires annual review and reporting.
-- Reproduced all 48 target cases under exact PolicyEngine-US 1.767.3: every case has
-  utility type `NONE` and SUA, LUA, individual, and total utility allowance of $0.
-- Found Tennessee Families First/TANF income in 8 of the 48 live cases, including
-  `ecps-35254`; PolicyEngine 1.767.3 assigns that household $362.03/month of Families
-  First and includes it as SNAP unearned income.
+- Reproduced all 48 target cases through the actual generic comparison pipeline
+  under exact PolicyEngine-US 1.752.2 and 1.767.3: every case has utility type
+  `NONE` and SUA, LUA, individual, and total utility allowance of $0.
+- Reproduced the report's `ecps-35254` PolicyEngine benefit exactly under 1.752.2:
+  $564.6453450520834/month. Version 1.767.3 gives the same value through this
+  pipeline.
+- Found Tennessee Families First/TANF income in 31 of the 48 cases under both
+  versions, including `ecps-35254`; PolicyEngine assigns that household
+  $362.03/month of Families First and includes it as SNAP unearned income. All 31
+  have Axiom benefits above PolicyEngine; the other 17 contain all 5 negative
+  deltas.
 - Traced the oracle bridge: `populace_input_mapping.yaml` expects `TANF_BENEFITS` when
   deriving `snap_total_monthly_unearned_income`, but
   `populace_us.py::_PERSON_NON_WAGE_VARIABLES` does not project PolicyEngine's
