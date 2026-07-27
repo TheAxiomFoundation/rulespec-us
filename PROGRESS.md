@@ -34,7 +34,7 @@ exclusion, vehicle, and transfer modules.
   in the top-level section module with narrower household-composition and
   dated-timeline deferrals.
 - Passed pinned deterministic validation, proof validation, and companion
-  execution for all four new modules: 7 paragraph (d), 38 paragraph (e), 17
+  execution for all four new modules: 7 paragraph (d), 38 paragraph (e), 18
   paragraph (f), and 10 paragraph (h) cases.
 - Regenerated and verified the provision-to-rule reverse index; the 7 CFR
   273.8 provision now points to all four new modules.
