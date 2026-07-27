@@ -8,7 +8,10 @@ authorized applied-file signing is blocked because the configured
 environment variable is present. The repaired § 3 root consumes the § 2
 household-income judgment unconditionally, and the pinned diagnostic suite
 passes all 23 companion cases. The signed manifests still describe the prior
-files.
+files. The branch is pushed; draft-PR creation is blocked by the invalid
+GitHub CLI credential. The implementation and main report are upstream
+through `b9a091d30`; this final delivery-status update remains one local
+commit ahead because subsequent pushes could not resolve `github.com`.
 
 ## Done
 
@@ -70,10 +73,18 @@ files.
 - Wrote the final repair report at
   `bulk/us-il-scretd-fix-report.md` and marked the prior assessment explicitly
   as the pre-repair baseline.
+- Pushed `closure/scretd` to the upstream repository. A fresh fetch could not
+  resolve `github.com`, but the subsequent branch push succeeded.
+- Verified that `gh` cannot create the requested draft PR because its active
+  `MaxGhenis` credential is invalid. A browser fallback was not used without
+  explicit approval.
+- Retried the final push three times after recording delivery status; each
+  attempt failed at DNS resolution. No remote state was guessed.
 
 ## Next
 
 - Produce and commit replacement signed manifests for §§ 2 and 3, then run
   `guard-generated` and the focused repository suite from a session with the
   authorized signing key. Do not forge or bypass an attestation.
-- Push and open a draft PR if GitHub becomes reachable.
+- Restore GitHub CLI/connector authentication, then open a draft PR
+  referencing rulespec-us#1135.

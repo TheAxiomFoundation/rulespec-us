@@ -206,6 +206,14 @@ Changed implementation artifacts:
 No file under `programs/`, no toolchain pin, no CI workflow, no CODEOWNERS
 file, and no `oracle-coverage-pending.yaml` entry was changed.
 
+`closure/scretd` was pushed successfully through the implementation and main
+report commit `b9a091d30`. This final delivery-status update remains one local
+commit ahead because three subsequent push attempts could not resolve
+`github.com`. No draft PR was opened: `gh auth status` reports that the active
+`MaxGhenis` token is invalid. The GitHub connector was offered as a fallback
+but was not installed, and a signed-in browser fallback was not used without
+explicit approval.
+
 Remaining mechanical unblock:
 
 1. unlock the authorized secret store or provide the signing key through the
@@ -215,4 +223,5 @@ Remaining mechanical unblock:
 3. commit the two generated manifests;
 4. rerun `guard-generated`, full validation, companion tests, and the focused
    repository suite; and
-5. push and open a draft PR referencing rulespec-us#1135.
+5. restore GitHub CLI/connector authentication and open a draft PR referencing
+   rulespec-us#1135.
