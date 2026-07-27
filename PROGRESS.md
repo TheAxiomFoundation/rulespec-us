@@ -22,13 +22,19 @@ still produces a $7,500 deferral.
 - Started independent read-only checks for the current ILGA text, corpus
   dependency arrival and closure taxonomy, and the authorized signed-apply
   workflow.
+- Verified the four computation-bearing values against Public Act 104-452,
+  current compiled ILCS, and IDOR guidance. The June 26 corpus is current for
+  that December 2025 amendment.
+- Found a narrower current-law gap: Public Act 104-468, effective June 16,
+  2026, changed § 3 lien priority without changing eligibility or the amount
+  formula. The June 26 corpus and compiled ILCS page both omit it.
+- Recorded the source comparison and exact current-law caveat in
+  `bulk/us-il-scretd-current-law-review.md`.
 
 ## Next
 
 - Poll corpus inventories by exact `citation_path` for all five outgoing
   definitions; cite landed records or declare precise `deferred_outputs`.
-- Compare current ILGA law with the corpus expression date and encoded income,
-  cap, equity, and interest values.
 - Apply the § 2 income gate through the signed encoder workflow and expand
   companion coverage to at least 15 cases.
 - Commit an eight-section closure ledger using only closed-taxonomy reasons.
