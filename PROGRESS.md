@@ -24,10 +24,11 @@ No certification claim has been made.
 - Replaced the three tax-year-2024 samples with a five-case tax-year-2025
   companion census crossing age 64/65 and taxable retirement income at zero,
   $5,999, $6,000, and $6,001.
+- Passed all five direct companion cases with `axiom-encode test` using the
+  released v0.1.1 engine source checkout.
 
 ## Next
 
 - Build and register a bounded case grid for tax year 2025.
-- Validate the five direct RuleSpec companion cases.
 - Compile the one-output program and probe it with released engine v0.1.1.
 - Assemble and validate the five-criteria evidence package.
