@@ -2,8 +2,8 @@
 
 ## State
 
-Encoding the federal resource-exclusion and vehicle-valuation rules after
-completing the required source and sibling review.
+Encoding the federal vehicle-valuation rules after completing the required
+source review and the resource-exclusion module.
 
 ## Done
 
@@ -15,10 +15,13 @@ completing the required source and sibling review.
 - Added federal paragraph (d) joint-resource attribution and tests.
 - Added federal paragraph (h) transfer disqualification, duration bands,
   effective-date judgments, and tests.
+- Added all twenty paragraph (e) resource-exclusion branches, including
+  partial-property valuation under (e)(16), and 30 complete companion cases.
+- Passed pinned deterministic validation, proof validation, and companion
+  execution for the paragraph (e) module.
 
 ## Next
 
-- Encode paragraph (e)'s exhaustive resource-exclusion list and tests.
 - Encode paragraph (f)'s fair-market-value, equity, and state-option vehicle
   valuation rules and tests.
 - Remove the four satisfied top-level deferred-output entries.
