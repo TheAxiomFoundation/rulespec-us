@@ -71,10 +71,10 @@ honestly receive the two required applied-file manifests here.
 - Replaced the removed parent deferral with a non-executable paragraph-(c)
   delegation to this child module; parent and child now pass pinned validation
   together while paragraph (b)'s deferral remains unchanged.
-- Re-ran the pinned checks on commit `85af3f6e7`: parent and child validation
-  pass, proof validation passes with 130 child atoms, all 73 companion cases
-  pass, the child compiles to 103 executable rules, and both monetary
-  obligations have proof atoms.
+- Re-ran the pinned checks on the final encoded state: parent and child
+  validation pass, proof validation passes with 130 child atoms, all 73
+  companion cases pass, the child compiles to 103 executable rules, and both
+  monetary obligations have proof atoms.
 - Confirmed the reverse index is current (4,232 provisions, 5,069 edges, 4,484
   modules), `git diff --check` passes, and no protected path changed.
 - Confirmed all 99 paragraph-(c) oracle outputs are
