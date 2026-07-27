@@ -6,7 +6,9 @@ Paragraph (g) is encoded with person-level application and time-limit effects,
 the State fiscal-year allocation cap, allocation charging, and
 nondiscrimination. The module passes the pinned encoder validation pipeline,
 proof validation, and all 17 companion cases. Repository-wide checks and
-direct-downstream import-hash maintenance remain.
+direct-downstream import-hash maintenance are complete. Final signed-manifest
+attestation and remote PR delivery are blocked on unavailable credentials and
+network/connector access.
 
 ## Done
 
@@ -86,9 +88,16 @@ direct-downstream import-hash maintenance remain.
   affected 7 CFR 273.11(c).
 - Confirmed the branch changes no file under `programs/` or any other
   protected path.
+- `git fetch origin main` cannot resolve `github.com` in this environment.
+- The connected GitHub attempt to create `closure/enc-273-24g` was canceled;
+  no remote branch or PR was created.
 
 ## Next
 
-- Obtain access to the existing apply-signing key, refresh and sign the
-  affected encoder apply manifests, then run the generated-file guard.
-- Push the branch and open the required draft PR.
+- Restore either `AXIOM_ENCODE_APPLY_SIGNING_KEY` or the missing
+  `agent-secrets/keychain-password` login-keychain credential, then refresh
+  and sign the two affected manifests.
+- Rerun pytest and the generated-file guard; both should clear their sole
+  manifest-attestation failure.
+- Enable GitHub network access or approve the connected branch-creation
+  action, then push `closure/enc-273-24g` and open the required draft PR.
