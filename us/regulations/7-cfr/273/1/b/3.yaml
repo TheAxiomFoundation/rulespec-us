@@ -1,0 +1,253 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/1
+  summary: |-
+    7 CFR 273.1(b)(3) bars residents of commercial boarding houses. A
+    noncommercial person or group paying at least the reasonable board amount
+    is a boarder, cannot participate independently of the provider household,
+    and may join that household only at its request. The reasonable amount is
+    the maximum allotment for more than two meals daily and two-thirds of that
+    allotment for two or fewer meals. An underpaying board recipient is not a
+    boarder and must join the provider household. The source's references to
+    paragraph (b)(7)(vii) are internally inconsistent with the current A-E
+    institution-exception placement; the exception-entity fact here maps to
+    the retained A-E list without relabeling the source.
+imports:
+  - us:policies/usda/snap/fy-2026-cola/maximum-allotments#snap_maximum_allotment
+rules:
+  - name: snap_boarder_full_meal_daily_threshold
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.1(b)(3)(ii)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: more than two meals per day
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2
+
+  - name: snap_boarder_reduced_meal_compensation_rate
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.1(b)(3)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: two-thirds of the maximum SNAP allotment for the appropriate size of the boarder household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2 / 3
+
+  - name: snap_boarding_establishment_is_commercial_boarding_house
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: A commercial boarding house is an establishment licensed to offer meals and lodging for compensation
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: a commercial establishment that offers meals and lodging for compensation with the intent of making a profit
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: It does not include any of the entities listed in paragraph (b)(7)(vii) of this section
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          boarder_unit_resides_at_boarding_establishment
+          and not boarding_establishment_is_referenced_institution_exception_entity
+          and (
+              boarding_establishment_is_licensed_to_offer_meals_and_lodging_for_compensation
+              or (
+                  not project_area_has_boarding_house_licensing_requirements
+                  and boarding_establishment_offers_meals_and_lodging_for_compensation
+                  and boarding_establishment_intends_to_make_profit
+              )
+          )
+
+  - name: snap_commercial_boarding_house_resident_ineligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Residents of a commercial boarding house, regardless of the number of residents, are not eligible to participate in the Program
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_boarding_establishment_is_commercial_boarding_house
+
+  - name: snap_minimum_reasonable_board_compensation
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.1(b)(3)(ii)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: For individuals whose board arrangement is for more than two meals per day, “reasonable compensation” must be an amount that equals or exceeds the maximum SNAP allotment for the appropriate size of the boarder household
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: For individuals whose board arrangement is for two meals or less per day, “reasonable compensation” must be an amount that equals or exceeds two-thirds of the maximum SNAP allotment for the appropriate size of the boarder household
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/3#snap_boarder_full_meal_daily_threshold
+              output: snap_boarder_full_meal_daily_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/3#snap_boarder_reduced_meal_compensation_rate
+              output: snap_boarder_reduced_meal_compensation_rate
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/usda/snap/fy-2026-cola/maximum-allotments#snap_maximum_allotment
+              output: snap_maximum_allotment
+              hash: sha256:2e4708b8df906b506f07d091fe93dbcc6aefe603a31500502ecc270d436e9f2e
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if board_arrangement_meals_per_day > snap_boarder_full_meal_daily_threshold:
+              snap_maximum_allotment
+          else:
+              snap_maximum_allotment * snap_boarder_reduced_meal_compensation_rate
+
+  - name: snap_noncommercial_boarder
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: individuals or groups of individuals paying a reasonable amount for meals or meals and lodging must be considered boarders
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          boarder_unit_has_board_arrangement
+          and not snap_boarding_establishment_is_commercial_boarding_house
+          and board_payment_amount >= snap_minimum_reasonable_board_compensation
+
+  - name: snap_boarder_independent_participation_prohibited
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: not eligible to participate in the Program independently of the household providing the board
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_noncommercial_boarder
+
+  - name: snap_boarder_unit_may_join_provider_household
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: only at the request of the household providing the boarder services
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_noncommercial_boarder
+          and provider_household_requests_boarder_unit_membership
+
+  - name: snap_underpaid_board_recipient_required_provider_household_member
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: An individual paying less than a reasonable amount for board must not be considered a boarder but must be considered, along with a spouse or children living with him or her, as a member of the household providing the board
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          boarder_unit_has_board_arrangement
+          and not snap_boarding_establishment_is_commercial_boarding_house
+          and board_payment_amount < snap_minimum_reasonable_board_compensation
+
+  - name: snap_boarder_treated_as_noninstitution_resident
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(3)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Boarders must not be considered to be residents of an institution
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_noncommercial_boarder

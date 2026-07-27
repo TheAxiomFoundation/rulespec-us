@@ -2,8 +2,9 @@
 
 ## State
 
-Core household formation is implemented and locally validated. Six remaining
-special-household modules will be implemented in two coherent commits.
+Core household formation and the elderly/disabled, boarder, and foster-child
+exceptions are implemented and locally validated. Three remaining boundary
+modules will be implemented in the next coherent commit.
 
 ## Done
 
@@ -35,10 +36,14 @@ special-household modules will be implemented in two coherent commits.
   adulthood, foster status, parental co-residence, and spouses.
 - Pinned `axiom-encode` validation and proof validation pass for both core
   modules; all 17 core companion cases pass on the available local engine.
+- Implemented `273/1/b/2` through `273/1/b/4`, including the elderly/disabled
+  separate-household option, the boarder compensation and provider-election
+  rules, and the foster-child boundary.
+- Pinned validation and proof validation pass for all three special-household
+  modules; all 17 companion cases pass on the available local engine.
 
 ## Next
 
-- Implement and commit `b/2` through `b/4` modules and tests.
 - Implement and commit `b/5` through `b/7` modules and tests.
 - Regenerate the reverse index; run the pinned validator, proof validator,
   companion tests, and repository tests.
