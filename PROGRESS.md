@@ -8,7 +8,8 @@ In progress on the four modules assigned by the 2026-07-27 closure audit:
   Person and Household judgments are supported.
 - `4.903.3`: encoded State Department ME-review responsibility, objectives,
   and their aggregate administrative compliance judgment.
-- `4.903.4`: decide whether the deferred output can be encoded now.
+- `4.903.4`: encoded the QA purposes and active/negative case review scope;
+  retained only the recurring annual interval as an exact engine deferral.
 - `4.702.4`: encoded the public-institution release-date restoration branch
   with a collision-free, branch-specific export.
 
@@ -36,10 +37,14 @@ The certified program composition remains frozen and out of scope.
   encoded the State Department's ME-review responsibilities and objectives.
 - Pinned validation, proof validation, and all three companion cases pass for
   `4.903.3`.
+- Encoded the 4.903.4 twelve-month value, federal QA purposes, and active and
+  negative case scope; removed the stale administrative-process deferral.
+- Narrowed `4.903.4#annual_federal_qa_review_period` to the pinned engine's
+  missing recurring-calendar construction and interval-output capabilities.
+- Pinned validation, proof validation, and all five companion cases pass for
+  `4.903.4`.
 
 ## Next
 
-- Resolve the executable part of `4.903.4` and precisely narrow its one
-  genuinely engine-blocked calendar-period output.
-- Run repository validation, commit each coherent step, push, and open the
+- Run aggregate repository validation, finalize this ledger, push, and open the
   requested draft PR referencing rulespec-us#1135.

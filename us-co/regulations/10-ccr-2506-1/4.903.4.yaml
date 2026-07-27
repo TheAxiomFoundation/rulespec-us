@@ -1,6 +1,5 @@
 format: rulespec/v1
 module:
-  status: deferred
   proof_validation:
     required: true
   source_verification:
@@ -10,17 +9,126 @@ module:
   deferred_outputs:
     - output: us-co:regulations/10-ccr-2506-1/4.903.4#annual_federal_qa_review_period
       reason: >-
-        The source defines an administrative federal QA review period using calendar
-        dates from October 1 through September 30. The supported RuleSpec formula
-        surface does not provide date-valued period construction or month/day
-        extraction needed to compute membership in that fiscal-year-style review
-        period without decomposing legal dates into unsupported date literals.
-    - output: us-co:regulations/10-ccr-2506-1/4.903.4#snap_qa_review_scope
-      reason: >-
-        The source states administrative purposes and review activities for active
-        and negative SNAP cases, but it does not define a computable benefit,
-        household eligibility condition, error-rate formula, liability amount, or
-        sampling statistic. Encoding these process descriptions as household or
-        case-level pass-through booleans would not be a source-faithful executable
-        legal computation.
-rules: []
+        This output must construct the recurring annual interval beginning
+        October 1 of one calendar year and ending September 30 of the next.
+        The pinned RuleSpec engine supports Date values, period_start,
+        period_end, date_add_days, and days_between, but its authoring formula
+        surface has no date-literal expression, calendar year/month/day
+        extraction, date-from-parts operation, month/year date arithmetic, or
+        interval-valued derived output. It therefore cannot derive these
+        recurring boundaries from an arbitrary query period. Hard-coding one
+        federal fiscal year or accepting preclassified month/day booleans would
+        misstate the annually recurring rule.
+      source_values:
+        - us-co:regulations/10-ccr-2506-1/4.903.4#annual_federal_qa_review_period_length_months
+rules:
+  - name: annual_federal_qa_review_period_length_months
+    kind: parameter
+    dtype: Count
+    source: 10 CCR 2506-1 section 4.903.4, introductory text
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.4
+              excerpt: "the twelve (12) month period"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: snap_qa_review_federal_purposes_satisfied
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.4(A)(1)-(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          qa_reviews_provide_systematic_method_for_measuring_snap_caseload_validity
+          and qa_reviews_provide_basis_for_determining_error_rates
+          and qa_reviews_provide_timely_and_continuous_information_for_corrective_action_at_all_levels_of_administration
+          and qa_reviews_provide_basis_for_establishing_error_liability_and_state_eligibility_for_increased_federal_administrative_funding_or_high_performance_bonuses
+
+  - name: snap_active_case_qa_review_scope_satisfied
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.4(B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          active_case_qa_reviews_determine_household_eligibility
+          and active_case_qa_reviews_determine_correct_snap_benefits_for_eligible_households
+
+  - name: snap_negative_case_qa_review_scope_satisfied
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.4(B)(2)(a)-(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          negative_case_qa_reviews_determine_denied_or_terminated_households_were_ineligible
+          and negative_case_qa_reviews_determine_households_received_accurate_timely_notice_under_sections_4_205_2_4_209_1_and_4_608
+          and negative_case_qa_reviews_include_household_case_record_review
+          and negative_case_qa_reviews_include_error_analysis
+          and negative_case_qa_reviews_include_client_notification
+          and negative_case_qa_reviews_include_reporting_of_review_findings
+
+  - name: snap_qa_review_scope
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 10 CCR 2506-1 section 4.903.4(B)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/regulation/10-ccr-2506-1/4.903.4
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.903.4#snap_active_case_qa_review_scope_satisfied
+              output: snap_active_case_qa_review_scope_satisfied
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-co:regulations/10-ccr-2506-1/4.903.4#snap_negative_case_qa_review_scope_satisfied
+              output: snap_negative_case_qa_review_scope_satisfied
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_active_case_qa_review_scope_satisfied
+          and snap_negative_case_qa_review_scope_satisfied
