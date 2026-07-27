@@ -43,12 +43,14 @@ index refresh and the unavailable signing-key handoff.
   gate.
 - Ran the repository suite: 63 tests passed; the reverse-index freshness test
   and edited-parent signing-manifest test failed as expected.
+- Regenerated the reverse index (4,232 provisions, 5,069 edges, 4,484 modules);
+  all eight reverse-index tests now pass.
 - Confirmed signing dry-run requires manifests for the parent and new child;
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable in this environment.
 
 ## Next
 
-- Regenerate and verify the reverse index.
-- Re-run the repository suite and record the remaining signing-manifest gate.
+- Re-run the full repository suite and record the remaining signing-manifest
+  gate.
 - Commit validation artifacts, push the branch, and open the draft pull
   request.
