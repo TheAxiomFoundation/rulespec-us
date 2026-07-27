@@ -10,8 +10,10 @@
   integrate the existing paragraph (c) treatment with the new canonical
   disqualification outputs, and classify purely procedural paragraphs for
   follow-up.
-- Status: implementation, review, and local module validation are complete;
-  the branch is ready for its unmerged pull request.
+- Status: implementation, review, and local module validation are complete.
+  Publication is blocked because this workspace disables outbound HTTPS and
+  the connected GitHub integration rejected both attempted branch writes
+  before creating remote state.
 - Source: `us/regulation/7/273/11` in
   `_closure-sprint/data/cfr-273.jsonl` (source as of 2026-07-09).
 - Worktree was clean at task start.
@@ -82,7 +84,8 @@
 
 ## Next
 
-- Push `encode-273-11-remainder` and open the unmerged PR titled
+- Authorize a GitHub write path, then push `encode-273-11-remainder` and open
+  the unmerged PR titled
   `Encode 7 CFR 273.11 special-circumstances remainder`, referencing #1135.
 - Preserve the encoded-versus-procedural classification in the PR body for
   future classification work.
