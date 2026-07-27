@@ -2,10 +2,11 @@
 
 ## State
 
-Paragraphs (f), (g), and (j) are encoded with focused fixtures. Core
-validation passes with the repository-pinned encoder and rules engine. The
-change remains additive so the existing composed work-requirement outputs and
-frozen program verdicts are not rewired.
+Paragraphs (f), (g), and (j) are encoded, independently reviewed, and ready
+for draft PR review. Core validation and all 33 frozen-program artifact checks
+pass. The only repository-suite finding is the expected stale signed
+encoding-manifest hash for the edited module; the signed manifest was not
+hand-edited.
 
 ## Done
 
@@ -98,8 +99,13 @@ frozen program verdicts are not rewired.
 - Both independent reviewers report no remaining concrete blocker.
 - Pinned validation, proof validation, and all 50 companion cases pass after
   the final re-review fixes.
+- Passed the reverse-index check with 4,232 provisions, 5,068 edges, and 4,483
+  modules.
+- Passed the exact-CI-pinned frozen-program artifact check for all 33 program
+  specs without editing any program composition.
+- Ran the full repository suite: 72 tests passed and one failed solely because
+  the signed encoding manifest still records the pre-change `273/7.yaml` hash.
 
 ## Next
 
-- Complete the remaining repository checks.
-- Update this log with final validation, push, and open the required draft PR.
+- Push the branch and open the required draft PR.
