@@ -213,9 +213,17 @@ consume its own Person age predicate.
 
 ## Delivery status
 
-The requested copy to
-`~/TheAxiomFoundation/_closure-sprint/out/m1-eitc-assessment.md` failed with
+The requested copies to
+`~/TheAxiomFoundation/_closure-sprint/out/m1-eitc-assessment.md` and
+`~/TheAxiomFoundation/_closure-sprint/out/m1-eitc.result.md` failed with
 `Operation not permitted` because that output directory is outside this
-task's writable sandbox. The committed assessment above is the canonical
-artifact. Push and draft-PR status will be recorded in a final delivery
-commit.
+task's writable sandbox. The committed assessment and final report above are
+the canonical artifacts.
+
+The branch was pushed successfully to
+`origin/closure/eitc-2026`. The GitHub CLI could not reach
+`api.github.com`, and the browser fallback reported that no browser was
+available, so no draft PR was opened. The pushed branch can be opened as a
+draft from:
+
+`https://github.com/TheAxiomFoundation/rulespec-us/compare/main...closure/eitc-2026?expand=1`

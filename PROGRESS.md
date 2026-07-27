@@ -43,9 +43,13 @@
   classification, runtime ancestry counts, closure wording, and golden case.
 - Ran the full repository test suite: 73 passed with one existing warning.
 - Wrote the final handoff report in the repository. The requested external
-  assessment path is not writable in this sandbox.
+  assessment and result paths are not writable in this sandbox.
+- Pushed the committed branch to `origin/closure/eitc-2026`.
+- GitHub's API hostname remained unreachable and no signed-in browser was
+  available, so a draft PR could not be opened from this environment.
 
 ## Next
 
-- Push the final commits, open a draft PR if GitHub is reachable, and record
-  the publication result.
+- Open a draft PR from the pushed branch when GitHub API access is available,
+  then review the assessment and program without treating either as a
+  certificate.
