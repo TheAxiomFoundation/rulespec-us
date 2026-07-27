@@ -6,22 +6,33 @@ module:
     corpus_citation_path: us/regulation/7/273/11
   summary: |-
     7 CFR 273.11(d) governs other nonhousehold members who are not subject to
-    paragraph (c). Their own income and resources are unavailable to the SNAP
-    household, while cash payments they make to the household count as income
-    and vendor payments do not. A household may deduct the identifiable amount
-    it pays toward a shared deductible expense; if contributions cannot be
-    differentiated, only the household's evenly prorated share is deductible.
-    Similarly, a household's identified share of a wage combined with a
-    nonhousehold member's wage counts as earned income, or the combined wage is
-    evenly prorated when the shares cannot be identified. Other nonhousehold
-    members are excluded from household size for benefit, income-standard, and
-    resource-limit purposes.
+    paragraph (c). Applicability and cash-payment contributions are evaluated
+    for each related person, then aggregated to the household through the
+    household-membership relation. Their own income and resources are
+    unavailable to the SNAP household, while cash payments they make to the
+    household count as income and vendor payments do not. A household may
+    deduct the identifiable amount it pays toward a shared deductible expense;
+    if contributions cannot be differentiated, only the household's evenly
+    prorated share is deductible. Similarly, a household's identified share of
+    a wage combined with a nonhousehold member's wage counts as earned income,
+    or the combined wage is evenly prorated when the shares cannot be
+    identified. Other nonhousehold members are excluded from household size
+    for benefit, income-standard, and resource-limit purposes.
 imports:
   - us:regulations/7-cfr/273/11/c#snap_member_is_specifically_mentioned_in_paragraph_c
 rules:
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+
   - name: snap_other_nonhousehold_member_treatment_applies
     kind: derived
-    entity: Household
+    entity: Person
     dtype: Judgment
     period: Month
     source: 7 CFR 273.11(d)
@@ -38,12 +49,40 @@ rules:
             import:
               target: us:regulations/7-cfr/273/11/c#snap_member_is_specifically_mentioned_in_paragraph_c
               output: snap_member_is_specifically_mentioned_in_paragraph_c
-              hash: sha256:a8cada663af98c9bfc67bed37507817d607c5551ab1162334cc4a3c81106a3f4
+              hash: sha256:b327c045844b129fc8ec0066ca829901b8b7caa09bef04e43a470861f0d766e4
     versions:
       - effective_from: '2008-10-01'
         formula: |-
           member_is_other_nonhousehold_member_under_section_273_1_b_1_or_b_2
           and not snap_member_is_specifically_mentioned_in_paragraph_c
+
+  - name: snap_household_has_other_nonhousehold_member_subject_to_paragraph_d
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: For all other nonhousehold members defined in § 273.1 (b)(1) and (b)(2) who are not specifically mentioned in paragraph (c) of this section
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_other_nonhousehold_member_treatment_applies
+              output: snap_other_nonhousehold_member_treatment_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          count_where(
+            member_of_household,
+            snap_other_nonhousehold_member_treatment_applies
+          ) > 0
 
   - name: snap_other_nonhousehold_members_countable_own_income
     kind: derived
@@ -83,6 +122,35 @@ rules:
       - effective_from: '2008-10-01'
         formula: '0'
 
+  - name: snap_other_nonhousehold_member_cash_payment_countable_income_contribution
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(d)(1)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: Cash payments from the nonhousehold member
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_other_nonhousehold_member_treatment_applies
+              output: snap_other_nonhousehold_member_treatment_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_other_nonhousehold_member_treatment_applies:
+            cash_payment_from_evaluated_other_nonhousehold_member_to_household
+          else: 0
+
   - name: snap_other_nonhousehold_member_cash_payment_countable_income
     kind: derived
     entity: Household
@@ -98,12 +166,26 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/11
               excerpt: Cash payments from the nonhousehold member to the household will be considered income under the normal income standards set in § 273.9(b)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_other_nonhousehold_member_cash_payment_countable_income_contribution
+              output: snap_other_nonhousehold_member_cash_payment_countable_income_contribution
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_other_nonhousehold_member_treatment_applies
+              output: snap_other_nonhousehold_member_treatment_applies
+              hash: sha256:local
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if snap_other_nonhousehold_member_treatment_applies:
-            cash_payments_from_other_nonhousehold_members
-          else: 0
+          sum_where(
+            member_of_household,
+            snap_other_nonhousehold_member_cash_payment_countable_income_contribution,
+            snap_other_nonhousehold_member_treatment_applies
+          )
 
   - name: snap_other_nonhousehold_member_vendor_payment_countable_income
     kind: derived
@@ -144,10 +226,16 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/11
               excerpt: If the payments or contributions cannot be differentiated, the expenses shall be prorated evenly among persons actually paying or contributing to the expense and only the household's pro rata share deducted
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_household_has_other_nonhousehold_member_subject_to_paragraph_d
+              output: snap_household_has_other_nonhousehold_member_subject_to_paragraph_d
+              hash: sha256:local
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if not snap_other_nonhousehold_member_treatment_applies:
+          if not snap_household_has_other_nonhousehold_member_subject_to_paragraph_d:
             0
           else:
             if shared_expense_contributions_can_be_differentiated:
@@ -179,10 +267,16 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/11
               excerpt: If the household's share cannot be identified the State agency shall prorate the earned income among all those whom it was intended to cover and count that prorated portion to the household
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_household_has_other_nonhousehold_member_subject_to_paragraph_d
+              output: snap_household_has_other_nonhousehold_member_subject_to_paragraph_d
+              hash: sha256:local
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if not snap_other_nonhousehold_member_treatment_applies:
+          if not snap_household_has_other_nonhousehold_member_subject_to_paragraph_d:
             0
           else:
             if combined_wage_household_share_can_be_identified:
@@ -208,14 +302,20 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/11
               excerpt: Such nonhousehold members shall not be included when determining the size of the household
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/d#snap_other_nonhousehold_member_treatment_applies
+              output: snap_other_nonhousehold_member_treatment_applies
+              hash: sha256:local
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if snap_other_nonhousehold_member_treatment_applies:
-            max(
-              0,
-              household_person_count_including_other_nonhousehold_members
-              - other_nonhousehold_member_count
-            )
-          else:
+          max(
+            0,
             household_person_count_including_other_nonhousehold_members
+            - count_where(
+              member_of_household,
+              snap_other_nonhousehold_member_treatment_applies
+            )
+          )
