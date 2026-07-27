@@ -41,9 +41,9 @@ of a school-age minor living alone. The current task is to preserve the exact
   outside this class and belongs to the shared federal owner.
 - Added and executed `tools/reproduce_policyengine_snap_teen.py` against the
   exact cached PolicyEngine US 1.767.3 wheel with PolicyEngine Core 3.26.0 and
-  SPM Calculator 0.2.0. Both AL age 17 and NC age 15 reproduce zero counted
-  income, eligibility, and a $291 monthly benefit; the school-status and
-  age-18 controls count income and return zero benefit.
+  SPM Calculator 0.2.0 for 2026-01. Both AL age 17 and NC age 15 reproduce
+  zero counted income, eligibility, and a $298 monthly benefit; the
+  school-status and age-18 controls count income and return zero benefit.
 
 ## Next
 

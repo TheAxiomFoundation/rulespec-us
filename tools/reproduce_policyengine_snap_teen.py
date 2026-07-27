@@ -5,8 +5,8 @@ from importlib.metadata import version
 from policyengine_us import Simulation
 
 
-YEAR = "2024"
-MONTH = "2024-01"
+YEAR = "2026"
+MONTH = "2026-01"
 ANNUAL_EARNINGS = 217_027.52
 
 
