@@ -5,7 +5,7 @@
 - Worktree: `x1-wa-tanf-standard`
 - Branch: `x1-wa-tanf-standard`
 - Base: cached `origin/main` at `ecb057ef35ab47fb055213b42459c42ae63485ef`
-- Status: five-criteria evidence assembly
+- Status: evidence assembly complete; publication handoff blocked by DNS
 - Network note: the initial `git fetch origin main` failed because `github.com`
   could not be resolved.
 
@@ -41,18 +41,29 @@
   build and an official cargo-dist release asset.
 - Built and registered the non-population
   `wa-tanf-payment-standard-grid` in an isolated `axiom-oracles` clone at
-  `38fadf0581bfb3eb9216a869972cc335ee4fb8ec`.
+  `637de738198bb761b552acab4128c3fe23b5bb9d`, including its generated
+  affected-comparison registration.
 - Ran all eleven legal size cases against the real PolicyEngine
   `wa_tanf_payment_standard` variable for June 2026: 11 matches, zero
   mismatches, and zero errors. The runner also verified the size-ten cap and
   all ten PolicyEngine table cells.
-- Passed 25 focused oracle tests and Ruff; no generated report, dashboard,
-  manifest, or population artifact is committed.
+- Passed 25 focused oracle tests plus the affected-map integrity check (26
+  tests total) and Ruff; no generated comparison report, dashboard file,
+  dashboard manifest, or population artifact is committed.
+- Added and independently fact-checked
+  `us-wa/tanf/v1-payment-standard-evidence.md`, with four criteria holding and
+  `executable` explicitly false.
+- Re-ran the final repository layout, encoding-manifest-structure, and
+  reverse-index suites (18 tests) and all 12 companion cases.
+- Attempted to push both RuleSpec and oracle branches. Both failed because
+  `github.com` could not be resolved, so no draft PR was opened.
 
 ## Next
 
-- Assemble and validate the five-criteria evidence package, with executable
-  left false unless a published artifact and official-binary stranger path
-  can actually be proved.
-- Write the final report, commit each coherent step, and attempt to push and
-  open a draft PR.
+- Publish the two local branches and open a draft PR when GitHub connectivity
+  is restored.
+- After the program freeze, land a one-output program spec, publish its
+  provenance-stamped artifact, and reproduce the golden case with a freshly
+  downloaded official v0.1.1 release binary.
+- Keep the candidate out of `certified-nodes.yaml` until that stranger path is
+  complete and a human reviews the evidence.
