@@ -7,7 +7,7 @@
 - GitHub metadata verification: complete (read-only connector)
 - PR base: `6b0773d3f7fa6719f208154f3e609e292ab7abe7`
 - Pinned corpus checkout: `bf97b17baebfdf12601f7c23697524bf5adcdaed`
-- Verdict: pending companion, validation, and mutation checks
+- Verdict: evidence complete; drafting final report
 
 ## Done
 
@@ -56,9 +56,21 @@
   is `fb57bb8116d835330dd58ce9c7be81797946d690dd51f369d3e29623cd6151c2`.
   The federal target definition itself is byte-identical and points to page 159's
   current telephone allowance formula in both artifacts.
+- Ran all three changed companion suites together with the prescribed invocation:
+  3 files and 34 cases passed.
+- Ran strict `validate --skip-reviewers` on pages 159, 163, and 165; all three passed.
+- Ran the required amount mutation (`388` to `389`): the independent suite failed
+  with five amount-path mismatches, then returned to 16/16 after restoration.
+- Ran a behavioral shared-residence mutation that made the gate tautological while
+  retaining both gate inputs: the independent suite failed with 19 mismatches across
+  all four disagreement variants (MUA, BUA, actual-cost, and telephone), then returned
+  to 16/16 after restoration.
+- Verified exact post-mutation restoration: page 159 SHA-256 is
+  `ac0c3cb1712f9f3688cba7ce1a411f948aad69303bf437ff8eeb06a78be7ad08`,
+  page 165 SHA-256 is
+  `072ff5be167fe30d2ae6e4c762281fa39a8974150bc3f5e91e65ecb7423dd30e`,
+  and the detached execution worktree is clean.
 
 ## Next
 
-- Run companions and both required fail-then-restore mutations.
-- Run strict validation for all three changed modules.
 - Record the evidence and final verdict in the review output file.
