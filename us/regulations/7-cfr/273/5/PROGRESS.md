@@ -3,8 +3,9 @@
 ## State
 
 - In progress: the 7 CFR 273.5(d) cross-reference is encoded without
-  duplicating the separately owned 7 CFR 273.11(d) treatment; local validation
-  remains.
+  duplicating the separately owned 7 CFR 273.11(d) treatment. Focused rule
+  validation passes; the repository manifest must still be signed before the
+  final guard and full suite can pass.
 
 ## Done
 
@@ -20,10 +21,19 @@
 - Narrowed the existing paragraph-(d) deferral to the canonical
   `snap_other_nonhousehold_member_treatment_applies` output in the separate
   273.11(d) worker's committed interface.
+- Passed `axiom-encode validate`, `proof-validate`, and all 8 existing
+  companion cases for the section module.
+- Regenerated the reverse index with no diff.
+- Ran the full repository suite: 64 tests passed and the only failure was the
+  expected stale-manifest check for the changed 273.5 module.
+- Moved this progress record under the assigned `us/**` slice because the
+  repository's pinned layout policy does not allow a root-level
+  `PROGRESS.md`.
 
 ## Next
 
-- Run repository validation, including source-relation schema checks and the
-  existing companion tests.
+- Regenerate and commit the signed applied-file manifest once the protected
+  signing credential is available.
+- Re-run the generated-file guard and full repository suite.
 - Finalize this progress record, push the branch, open the required draft PR,
   and write the final report.
