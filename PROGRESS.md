@@ -28,6 +28,8 @@
 - Regenerated `.axiom/index/provisions_to_rules.json` (4,238 provisions, 5,077 edges, 4,485 modules) and confirmed `--check` is current.
 - Passed 15 focused repository layout/reverse-index tests.
 - The literal `uv run --with pyyaml` command could not initialize its sandboxed home cache; a temporary cache then could not reach PyPI. The same generator and check passed with the installed axiom-encode Python/PyYAML environment.
+- Ran a pinned-corpus citation-resolution audit over both modules. It caught and corrected one Notice excerpt that crossed the page-3/page-4 boundary; after correction, all 6 unique citation paths resolve and all 45 source proof excerpts are verbatim in their cited rows.
+- Re-passed the 25-case companion, proof/money-atom checks, and focused CI validation after the citation correction.
 
 ## Next
 
