@@ -43,6 +43,9 @@ The certified program composition remains frozen and out of scope.
   missing recurring-calendar construction and interval-output capabilities.
 - Pinned validation, proof validation, and all five companion cases pass for
   `4.903.4`.
+- Independent source review tightened the 4.903.4 liability fact to errors
+  above the federal target and expanded the negative-case citation to include
+  the paragraph's lead sentence.
 
 ## Next
 
