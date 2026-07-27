@@ -73,17 +73,31 @@
   `0.08 * $298 = $23.84` without the regulation's nearest-dollar rounding.
   The report adapter further annual-averages a January request, producing
   `$23.973597208658855`. Axiom's encoded `$24` floor is correct.
-- Selected two small federal corrections supported by paragraph (a) and
-  paragraph (d)(3): include regular categorical eligibility in the federal
-  income-eligibility result, and derive medical-deduction entitlement from the
-  elderly/disabled household-member fact rather than an external Boolean.
+- Selected one federal correction supported by paragraph (a): include regular
+  categorical eligibility in the federal income-eligibility result. No medical
+  rule was changed: the federal calculation already subtracts qualifying
+  expenses above $35, while expense classification is expressly deferred to an
+  upstream determination. Replacing that classification with a household-age
+  check would incorrectly allow expenses incurred only by a nonqualifying
+  spouse or dependent.
+- Added the categorical bypass to `273/9.yaml` by importing the existing
+  `273/2/j` regular-categorical result. The companion case sets both ordinary
+  income tests to fail and proves that regular categorical eligibility still
+  satisfies the composed income gate.
+- Captured before-fix mutation evidence: the new companion failed twice because
+  `snap_regular_categorically_eligible` was not an executable output and its
+  PA/SSI factual input did not resolve in the compiled 273.9 graph.
+- Ran the required companion commands after the change:
+  - `273/9.test.yaml`: 5 cases passed.
+  - `273/10.test.yaml`: 5 cases passed.
 
 ## Next
 
-1. Add companion cases that fail against the pre-fix encode and record their
-   failure output as mutation evidence.
-2. Make the two selected federal encode changes and run both required companion
-   suites.
+1. Finish the Case-to-PolicyEngine 1.767.3 rerun and distinguish direct-H5
+   results from report-pipeline results.
+2. Review the composed input projection to determine how many categorical
+   cases this federal graph correction can clear without a separate oracle
+   mapping change.
 3. Write and commit `WORKER-REPORT.md`, including the stale-case dispositions,
    conservative clearance estimate, exact law paths, and PolicyEngine issue
    draft.
