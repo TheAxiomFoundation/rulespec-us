@@ -2,9 +2,9 @@
 
 ## State
 
-Both parts are implemented. The evidence package records 4/5 criteria holding;
-`executable` remains false because no published artifact and released-binary
-stranger path exists.
+Complete. Both parts are implemented, the final report is in `OUTPUT.md`, and
+the evidence package records 4/5 criteria holding. `executable` remains false
+because no published artifact and released-binary stranger path exists.
 
 ## Done
 
@@ -47,11 +47,17 @@ stranger path exists.
 - Wrote the five-criterion evidence package at
   `us/payroll/y1-employer-medicare-evidence.md`; it keeps `executable: false`
   and makes no certification claim.
+- Final RuleSpec guards pass 18/18 with one inherited warning; the reverse
+  index is current. The oracle checks and live grid remain green.
+- Attempted pushes for the dedicated branches and a draft RuleSpec PR. GitHub
+  DNS/API access was unavailable, so no remote branches or PR were created.
+- Wrote the final handoff report to `OUTPUT.md`.
 
 ## Next
 
-- Write and commit the final report to `OUTPUT.md`.
-- Run final validations, attempt all three branch pushes, and open draft PRs
-  if the branches reach GitHub.
-- Leave maintainer follow-up for corpus signing/merge and publication of a
-  one-output employer-Medicare artifact.
+- A maintainer with GitHub access should push the three branches and open the
+  intended draft PRs.
+- Review, sign, and merge the corpus successor before treating the new leaves
+  as shared provenance.
+- Publish a one-output employer-Medicare artifact and perform a stranger-path
+  released-binary run before reconsidering `executable`.
