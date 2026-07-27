@@ -2,9 +2,10 @@
 
 ## State
 
-Implementation and targeted validation complete on branch
-`closure/w3-eitc-32-eligibility` from `origin/main`. Assigned EITC frontier
-items: 1, 2, 5, 6, and 7.
+Implementation, targeted validation, and independent review are complete on
+branch `closure/w3-eitc-32-eligibility` from `origin/main`. Assigned EITC
+frontier items: 1, 2, 5, 6, and 7. Remote delivery is blocked by this
+workspace's network and signing-key constraints.
 
 ## Done
 
@@ -47,13 +48,20 @@ items: 1, 2, 5, 6, and 7.
     diagnostics;
   - repository layout: 9 tests passed;
   - section 24(d) non-reviewer validation passed.
+- Independent final review found no substantive statutory or RuleSpec defect
+  and approved the changes for a draft PR, subject to signed manifests.
+- A normal push was attempted and failed because the sandbox could not resolve
+  `github.com`; the connected GitHub write was cancelled, so no remote branch
+  or PR state is claimed.
 
 ## Next
 
-- Push and open the requested draft PR.
 - A key holder must refresh the signed applied-rule manifests for sections 32
   and 24(d). The repository signing command was attempted, but this workspace
   does not provide `AXIOM_ENCODE_APPLY_SIGNING_KEY`; no signature was forged or
   bypassed.
+- Push the branch and open the draft PR titled
+  `Encode §32 eligibility predicates (EITC frontier)`, referencing
+  `rulespec-us#1135`.
 - Separately repair the pre-existing stale section 32(c)(2) test references;
   they are outside this assignment.
