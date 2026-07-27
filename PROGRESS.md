@@ -6,7 +6,8 @@ In progress on the four modules assigned by the 2026-07-27 closure audit:
 
 - `4.000.1`: encoded all three assigned definitions after confirming that
   Person and Household judgments are supported.
-- `4.903.3`: decide whether the deferred output can be encoded now.
+- `4.903.3`: encoded State Department ME-review responsibility, objectives,
+  and their aggregate administrative compliance judgment.
 - `4.903.4`: decide whether the deferred output can be encoded now.
 - `4.702.4`: encoded the public-institution release-date restoration branch
   with a collision-free, branch-specific export.
@@ -31,10 +32,14 @@ The certified program composition remains frozen and out of scope.
   public-institution release-date restoration branch with companion tests.
 - Pinned validation, proof validation, and all four companion cases pass for
   `4.702.4`.
+- Removed the stale administrative-process deferral from `4.903.3` and
+  encoded the State Department's ME-review responsibilities and objectives.
+- Pinned validation, proof validation, and all three companion cases pass for
+  `4.903.3`.
 
 ## Next
 
-- Resolve `4.903.3` and the executable part of `4.903.4`; precisely narrow the
-  one genuinely engine-blocked calendar-period output.
+- Resolve the executable part of `4.903.4` and precisely narrow its one
+  genuinely engine-blocked calendar-period output.
 - Run repository validation, commit each coherent step, push, and open the
   requested draft PR referencing rulespec-us#1135.
