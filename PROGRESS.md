@@ -43,10 +43,15 @@ direct-downstream import-hash maintenance remain.
 - Composed an applied discretionary exemption into the existing ABAWD
   time-limit-inapplicable and time-limit-eligible results.
 - Added the paragraph (g)(4) State nondiscrimination judgment.
+- Scoped its eight discrimination facts to exemption administration, rather
+  than selection alone, so the compliance result covers all treatment of a
+  covered individual.
 - Added companion coverage for both covered-individual entry branches, every
   exclusion, assigned and unassigned covered recipients, the resulting
   time-limit effect, the otherwise-exempt allocation exception, the exact
   8 percent boundary, and nondiscrimination.
+- An independent legal/diff audit found no remaining blocking correctness
+  issue after the allocation-charge and nondiscrimination-scope corrections.
 - Passed:
   - pinned `axiom-encode` proof validation (25 atoms);
   - pinned `axiom-encode` companion execution (17 cases);
@@ -56,12 +61,25 @@ direct-downstream import-hash maintenance remain.
   `rulespec-*`, the ordinary `validate` entry point resolves absolute legal
   test inputs against a stale sibling checkout. The same pinned validation
   pipeline passes when supplied this worktree as its policy root.
+- Updated the directly affected 7 CFR 273.11(c) proof import hash for
+  `snap_member_abawd_time_limit_eligible` and assigned the new discretionary
+  exemption fact in its four ABAWD-dependent cases.
+- Passed the 7 CFR 273.11(c) companion suite (13 cases) and proof validation
+  (16 atoms). Its full validator reaches an unrelated baseline failure:
+  `origin/main` already pins the 7 CFR 273.10 import to
+  `sha256:c0fea2...`, while the unchanged 7 CFR 273.10 file is
+  `sha256:f9b9f0...`.
+- The deterministic repair/signing helper could not access its local signing
+  key because the `agent-secret` keychain is locked; no files were changed by
+  the failed helper invocation.
+- Recorded the paragraph (g)(3) threshold as an average-monthly ceiling, not
+  annual case-months, and accepted FNS's already-adjusted covered-individual
+  estimate as an external fact because the regulation does not specify an
+  executable FY 1996 quality-control/other-factor estimation method.
 
 ## Next
 
-- Update the directly affected 7 CFR 273.11(c) proof import hash and rerun its
-  companion tests.
 - Run repository-wide pytest and reverse-index checks.
-- Refresh and sign the encoder apply manifest, then run the generated-file
-  guard.
+- Obtain access to the existing apply-signing key, refresh and sign the
+  affected encoder apply manifests, then run the generated-file guard.
 - Push the branch and open the required draft PR.
