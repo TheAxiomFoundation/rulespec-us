@@ -31,9 +31,16 @@
 - Found an unsupported actual-cost exclusion: page 165 applies `household_utility_costs_included_in_rent_payment` to actual costs even though the retained text applies it only to BUA.
 - Found that page 163 does not encode the source's express “During the year” condition on incurred heating/cooling costs.
 - Confirmed no PolicyEngine or FNS-table value was used as policy authority for these pages.
+- Ran strict validation for all three modules with the pinned encoder; all passed.
+- Parsed all three manifests: each attests exactly its page YAML and companion, their union is exactly the six requested files, all six recomputed hashes match, generated-output hashes match the page YAMLs, import hashes match, and the pinned clean encoder commit is an ancestor/equal toolchain provenance match.
+- Local secret-backed HMAC verification was unavailable because the signing key is intentionally absent. Read-only GitHub check logs at the exact head show the protected-base `guard-generated` job received the masked secret and passed all changed RuleSpec manifests.
+- Verified the two-commit ancestry is linear (`base -> content/index -> manifests`) and the PR range contains only the six page files, three manifests, and reverse index—no program spec, toolchain, workflow, CODEOWNERS, dependency, report, or ledger paths.
+- Regenerated/checked the reverse index: it is current at 4,233 provisions, 5,069 edges, and 4,484 modules; its PR diff is only the expected nine-line page-159 citation mapping.
+- Ran the manifest and reverse-index hygiene tests with an available repository-compatible pytest environment: 9 passed. The pinned encoder environment lacks pytest and the system wrapper has a broken interpreter path; this was an environment limitation, not a test failure.
+- Reviewed page 163 and 165 against their earlier encode: the PR composes previously disconnected page-164 prerequisites/exclusions, adds verification and precedence, and replaces coarse local MUA/BUA inputs with authoritative outputs. The retained agreement/non-proration judgments remain disconnected; page 165 also adds the unsupported rent bar noted above.
 
 ## Next
 
 - Review federal utility-hook structural compatibility and current-scope inertness.
-- Verify manifests, reverse index, repository hygiene, and behavior neutrality for existing suites.
+- Verify current-scope behavior neutrality for existing suites.
 - Write and commit the final report to `REVIEW.md`.
