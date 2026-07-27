@@ -2,9 +2,9 @@
 
 ## State
 
-Core household formation and the elderly/disabled, boarder, and foster-child
-exceptions are implemented and locally validated. Three remaining boundary
-modules will be implemented in the next coherent commit.
+All eight household-concept modules and companion tests are implemented and
+locally validated. Repository-wide validation and generated-index refresh are
+next.
 
 ## Done
 
@@ -41,10 +41,22 @@ modules will be implemented in the next coherent commit.
   rules, and the foster-child boundary.
 - Pinned validation and proof validation pass for all three special-household
   modules; all 17 companion cases pass on the available local engine.
+- Implemented `273/1/b/5` through `273/1/b/7`, with direct imports of the
+  paragraph (b)(1) mandatory-combination result for roomers, attendants, and
+  institution exceptions.
+- Encoded the strict institution meal-share boundary, boarder override, all
+  five institution-exception settings, the “unless otherwise stated” gate,
+  all paragraph (b)(7) ineligibility paths, and the optional cross-program
+  disqualification only when the State option is active.
+- Kept institution exceptions limited to removing the institution bar:
+  another paragraph (b)(7) bar still excludes the person. Kept excluded
+  household members distinct from host-unit nonmembers and left downstream
+  income, resource, and size treatment to the applicable later rules.
+- Pinned validation and proof validation pass for all three final boundary
+  modules; all 38 companion cases pass on the available local engine.
 
 ## Next
 
-- Implement and commit `b/5` through `b/7` modules and tests.
 - Regenerate the reverse index; run the pinned validator, proof validator,
   companion tests, and repository tests.
 - Recheck coordination immediately before pushing, push, and open PR #1135.
