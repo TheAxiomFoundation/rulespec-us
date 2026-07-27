@@ -86,10 +86,24 @@
   semantic near-matches in sections 22, 61, 62, 1402, 1411, 151, and 7703.
   None qualifies as an imported producer. In particular, the Person age rule
   remains disconnected from the TaxUnit age conclusion.
+- Added all 21 diagnostic case IDs to the section 32 companion with the exact
+  2026 period and final `eitc` assertions required by the federal case-grid
+  runner. The pinned toolchain now passes all 25 companion cases with zero
+  failures.
+- Mechanically traced the `us-additional-medicare-grid` registration through
+  its manifest, federal generator, fixture validator, tests, report schema,
+  disposition merger, and provenance stamper. Recorded transfer-ready
+  manifest/config/disposition templates and the exact remaining generated
+  artifacts in `us/tax/eitc/u1-case-grid-registration-prep.md`.
+- Confirmed that `population: case-grid` is separate from
+  `provenance.run_kind: manual`, and schema-validated the two
+  `upstream_engine_gap` disposition entries. No comparison report or
+  dashboard/conformance artifact was generated.
+- Identified the hard registry blocker: the oracle runner requires a clean
+  canonical `rulespec-us` checkout at an exact upstream SHA/tree. Those pins
+  cannot be filled truthfully until this fixture lands on main.
 
 ## Next
 
-1. Mirror the `us-additional-medicare-grid` registration contract and stage
-   the EITC case-grid suite without generating a committed report.
-2. Run scoped and repository checks, write the requested output report,
+1. Run scoped and repository checks, write the requested output report,
    update this ledger, commit each coherent step, and push if DNS permits.
