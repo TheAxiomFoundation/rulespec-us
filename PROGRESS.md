@@ -2,8 +2,9 @@
 
 ## State
 
-Running repository-wide validation for the completed federal joint-resource,
-exclusion, vehicle, and transfer modules.
+Implementation and all non-manifest validation are complete. Publication is
+blocked by the unavailable manifest signing key and by GitHub network/action
+access from this environment.
 
 ## Done
 
@@ -38,12 +39,27 @@ exclusion, vehicle, and transfer modules.
   paragraph (f), and 10 paragraph (h) cases.
 - Regenerated and verified the provision-to-rule reverse index; the 7 CFR
   273.8 provision now points to all four new modules.
+- Passed monetary-proof validation with no missing atoms for all four modules
+  and passed all 62 repository tests outside the signed-manifest test file.
+- Confirmed the manifest-only test result is 1 failed and 2 passed: the sole
+  failure is the expected stale manifest for the minimally edited parent
+  `273/8.yaml`.
+- Confirmed signing dry-run requires five manifests covering nine RuleSpec
+  files. A real signing attempt fails before writing because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent.
+- Committed all changes on `closure/enc-273-8-res`. Direct push fails because
+  the sandbox cannot resolve `github.com`; the connected GitHub branch action
+  was canceled, so no draft PR was created.
 
 ## Next
 
-- Run monetary-proof and repository-wide test suites.
-- Generate signed encoding manifests if a signing key becomes available.
-- Push the branch and open the required draft PR.
+- In a key-holder environment, run `axiom-encode sign-applied-files` against
+  `origin/main...HEAD` with manual exception
+  `TheAxiomFoundation/rulespec-us#1135`, then commit the five manifests.
+- Push `closure/enc-273-8-res` and open a draft PR titled
+  `Encode 7 CFR 273.8 resource exclusions, vehicles and transfers`, referencing
+  `rulespec-us#1135`.
+- Rerun `guard-generated` and the full repository test suite after signing.
 
 ## Concerns
 
