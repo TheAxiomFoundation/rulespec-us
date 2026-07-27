@@ -5,7 +5,7 @@
 - Worktree: `x1-wa-tanf-standard`
 - Branch: `x1-wa-tanf-standard`
 - Base: cached `origin/main` at `ecb057ef35ab47fb055213b42459c42ae63485ef`
-- Status: PolicyEngine named-variable conformance grid
+- Status: five-criteria evidence assembly
 - Network note: the initial `git fetch origin main` failed because `github.com`
   could not be resolved.
 
@@ -39,10 +39,18 @@
 - Recorded the released-tag local run response, including size band ten and
   $1,662 USD, while preserving the distinction between this local source-tag
   build and an official cargo-dist release asset.
+- Built and registered the non-population
+  `wa-tanf-payment-standard-grid` in an isolated `axiom-oracles` clone at
+  `38fadf0581bfb3eb9216a869972cc335ee4fb8ec`.
+- Ran all eleven legal size cases against the real PolicyEngine
+  `wa_tanf_payment_standard` variable for June 2026: 11 matches, zero
+  mismatches, and zero errors. The runner also verified the size-ten cap and
+  all ten PolicyEngine table cells.
+- Passed 25 focused oracle tests and Ruff; no generated report, dashboard,
+  manifest, or population artifact is committed.
 
 ## Next
 
-- Build, register, and run the smallest honest PolicyEngine case grid.
 - Assemble and validate the five-criteria evidence package, with executable
   left false unless a published artifact and official-binary stranger path
   can actually be proved.
