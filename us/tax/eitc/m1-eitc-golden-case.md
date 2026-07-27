@@ -35,7 +35,7 @@ still enter the graph as frontier inputs.
    **$28,890 + $0 - $0 = $28,890**.
 3. For two qualifying children, 26 USC 32(b)(1) supplies a **40%** credit
    percentage and a **21.06%** phaseout percentage.
-4. Rev. Proc. 2025-32 section 3.06(1), implementing the section 32(j)
+4. Rev. Proc. 2025-32 section 4.06(1), implementing the section 32(j)
    inflation adjustment, supplies the 2026 two-child values: earned-income
    amount **$18,290**, maximum credit **$7,316**, and non-joint phaseout start
    **$23,890**. The rate calculation agrees exactly:
@@ -52,7 +52,7 @@ still enter the graph as frontier inputs.
    `max($0, min($7,316, $7,316 - $1,053)) = $6,263`.
 10. The supplied demographic and identification conditions hold, and
     investment income **$0** does not exceed the 2026 section 32(i) limit of
-    **$12,200** published in Rev. Proc. 2025-32 section 3.06(2).
+    **$12,200** published in Rev. Proc. 2025-32 section 4.06(2).
 
 The encoded output is therefore:
 

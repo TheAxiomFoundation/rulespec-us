@@ -11,11 +11,13 @@ Secretary's tables. At the published earned-income amount, Rev. Proc. 2025-32
 expressly says the published maximum is allowed.
 
 That makes this a **section 32(f) table/published-dollar boundary effect and a
-PolicyEngine boundary defect**, not an Axiom defect. Axiom is right on these
-two rows because it switches to the published maximum at the published
-earned-income amount. This adjudication does not validate Axiom's continuous
-rate calculation away from the two boundaries; the full section 32(f) table
-remains deferred.
+PolicyEngine boundary defect**, not an Axiom amount defect. Axiom is right on
+these two rows because it switches to the published maximum at the published
+earned-income amount. An independent audit did find a separate Axiom metadata
+defect: the parameter module labeled the source as section 3.06. The seven
+labels were corrected to the official section 4.06 without changing any
+value. This adjudication does not validate Axiom's continuous rate calculation
+away from the two boundaries; the full section 32(f) table remains deferred.
 
 Primary sources:
 

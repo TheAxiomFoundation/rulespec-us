@@ -160,7 +160,7 @@ derived node. Its genuine source roots are:
    joint-return, and tiebreaker rules;
 3. **26 USC 7703(a)** for the reached general marital-status rule;
 4. **26 USC 112** for the optional combat-pay inclusion in earned income; and
-5. **Rev. Proc. 2025-32 section 3.06(1)-(2), pages 14-15** for tax-year-2026
+5. **Rev. Proc. 2025-32 section 4.06(1)-(2), pages 14-15** for tax-year-2026
    dollar amounts.
 
 Section 7703's file also imports section 151 for unused section 7703(b) rules.
@@ -176,7 +176,7 @@ well beyond this minimum.
 `policies/`, but it is not an internal composition. It transcribes official
 primary-source IRS guidance; its module verification points to corpus
 provisions `us/guidance/irs/rev-proc-2025-32/page-14` and `page-15`; and each
-reached parameter cites Rev. Proc. 2025-32 section 3.06(1) or (2). Section
+reached parameter cites Rev. Proc. 2025-32 section 4.06(1) or (2). Section
 32(j) supplies the statutory inflation-adjustment rule, while the revenue
 procedure publishes the operative 2026 values. The corpus classifies the
 source as IRS primary guidance, subtype `revenue_procedure`, with an Internal

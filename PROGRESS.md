@@ -102,6 +102,11 @@
 - Identified the hard registry blocker: the oracle runner requires a clean
   canonical `rulespec-us` checkout at an exact upstream SHA/tree. Those pins
   cannot be filled truthfully until this fixture lands on main.
+- An independent audit caught seven stale Rev. Proc. source labels. Corrected
+  the live parameter module and the EITC handoff documents from section 3.06
+  to the official section 4.06. This was a citation-metadata defect only; no
+  parameter or expected amount changed. The pinned 25-case companion remained
+  green after the correction.
 
 ## Next
 

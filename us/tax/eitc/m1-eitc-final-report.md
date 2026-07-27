@@ -102,7 +102,7 @@ AGI as an explicit evidence-free bridge, 33 derived inputs remain.
 ## Provision roots and closure
 
 The genuine minimum semantic roots are 26 USC 32, 26 USC 152(c), 26 USC
-7703(a), 26 USC 112, and Rev. Proc. 2025-32 section 3.06(1)-(2), pages 14-15.
+7703(a), 26 USC 112, and Rev. Proc. 2025-32 section 4.06(1)-(2), pages 14-15.
 The unused section 151 import reached through the broader section 7703 module
 is a loader side effect, not a final-output dependency.
 
