@@ -2,8 +2,9 @@
 
 ## State
 
-Paragraphs (a) and (c) are implemented and tested. Implementing and reviewing
-the isolated paragraph (d) child module next.
+Paragraphs (a), (c), and (d) are implemented in isolated child modules and
+pass pinned compile, proof, validation, and companion-test checks. Integrating
+paragraph (d) into the parent deferral inventory next.
 
 ## Done
 
@@ -36,6 +37,22 @@ the isolated paragraph (d) child module next.
 - Narrowed the remaining paragraph (c) deferrals to the cross-referenced
   change-reporting and self-employment procedures and the State-selected
   statewide averaging method.
+- Added `273/10/d.yaml` and 57 companion cases for disallowed and reimbursed
+  expenses, billed/due timing, arrearages and nonduplication, fluctuating and
+  less-than-monthly averaging, one-time and 24-month medical elections,
+  anticipated utility and nonutility expenses, medical-change timing, weekly
+  and biweekly conversion, energy-assistance proration, and prospective
+  child-support method selection.
+- Required every averaging amount to be explicitly post-disallowance, composed
+  conversion directly from paragraph (d)(1), froze one-time medical averaging
+  divisors at the election month, and rejected overlapping State utility and
+  expense-conversion methods.
+- Narrowed unresolved paragraph (d) work to cross-section medical-change
+  processing, the obsolete printed dependent-care age-two cap, SSI-linked
+  restored deductions, and optional child-support composition or retrospective
+  budgeting that depends on sections 273.9 or 273.21.
+- Confirmed the paragraph (d) child compiles as 25 rules, proof-validates 42
+  atoms, and passes all 57 companion cases with the pinned encoder and engine.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction and recertification workflow; State income
   averaging methods; and cross-referenced medical/SSI/child-support case
@@ -43,7 +60,7 @@ the isolated paragraph (d) child module next.
 
 ## Next
 
-- Finish encoding and testing the paragraph (d) child module and remove its
-  satisfied umbrella deferral from the parent.
+- Remove the satisfied paragraph (d) umbrella deferral from the parent and
+  regenerate the reverse citation index.
 - Run repository validation, update this log, push the branch, and open the
   required draft PR.
