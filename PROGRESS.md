@@ -18,11 +18,16 @@ Assigned EITC frontier items: 1, 2, 5, 6, and 7.
   aggregate over the existing Person age predicate.
 - Added six aggregate tests covering ages 24, 25, 64, and 65 plus both
   either-spouse branches, and migrated the importing section 24(d) fixtures.
+- Encoded the section 32(k)(1) ten-year fraud and two-year
+  reckless-or-intentional-disregard windows, including the excluded
+  determination year and inclusive last years.
+- Encoded the section 32(k)(2) indefinite prior-deficiency gate and its
+  current-claim required-information exception.
+- Added ten disallowance-window cases and three prior-deficiency cases, and
+  migrated all affected section 32 and section 24(d) fixtures.
 
 ## Next
 
-- Encode the section 32(k)(1) disallowance windows and section 32(k)(2)
-  prior-deficiency information gate with statutory-boundary tests.
 - Encode the section 32(c)(3)(B) marital gate and declare the exact upstream
   section 151/152(e) entitlement wall.
 - Validate, document any genuine upstream-law wall, push, and open the
