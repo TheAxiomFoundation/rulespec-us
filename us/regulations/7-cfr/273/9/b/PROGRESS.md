@@ -2,9 +2,9 @@
 
 ## State
 
-Paragraph (b) implementation and companion tests are complete. Running proof,
-repository, and integration validation before publishing the draft pull
-request.
+Paragraph (b) implementation and companion tests are complete. Proof and
+targeted validation pass. Repository validation is down to the expected reverse
+index refresh and the unavailable signing-key handoff.
 
 ## Done
 
@@ -31,12 +31,24 @@ request.
   `273/9.yaml`; the separately owned paragraph (c) deferral remains.
 - Passed pinned RuleSpec structural/CI validation for the parent and new module,
   plus all 27 parent and paragraph-(b) companion cases (23 in this slice).
+- Hardened earned-source precedence over the broad government-payment residual,
+  conservative one-time treatment of genuine earned/unearned conflicts, the
+  foster-care-boarder exception, and the workers'/unemployment-only IPV
+  withholding rule.
+- Defined the paragraph-(c) boundary narrowly: only exclusions attributable to
+  income actually included here plus true household-level adjustments, with
+  exclusions already reflected upstream removed. The raw paragraph-(c) total
+  still requires a scope adapter.
+- Passed proof validation with 37 checked atoms and the zero-backlog money-atom
+  gate.
+- Ran the repository suite: 63 tests passed; the reverse-index freshness test
+  and edited-parent signing-manifest test failed as expected.
+- Confirmed signing dry-run requires manifests for the parent and new child;
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable in this environment.
 
 ## Next
 
-- Run proof validation and money-atom checks.
-- Run the repository test suite and regenerate the reverse index.
-- Audit signing-manifest availability and cross-worktree paragraph (c)
-  compatibility.
+- Regenerate and verify the reverse index.
+- Re-run the repository suite and record the remaining signing-manifest gate.
 - Commit validation artifacts, push the branch, and open the draft pull
   request.
