@@ -9,13 +9,16 @@ module:
     enterprise: income is averaged over its intended coverage period,
     anticipated earnings replace prior earnings for a substantially changed
     business, and an enterprise operating for less than one year is projected
-    from its own operating-period average. The resulting monthly enterprise
-    amounts are aggregated before allowable monthly production costs are
-    excluded. When a household elects to annualize irregular farm costs, the
-    annualized farm amount replaces only farm costs; allowable nonfarm
-    self-employment costs remain included. Cost-dependent income and benefit
-    outputs are guarded by the imported paragraph-(b) expense-determination
-    completeness status.
+    from its own operating-period average. Business-level rules select and
+    divide each enterprise's gross income and full capital gain, and a typed
+    Business-to-Household relation aggregates the complete monthly rows.
+    Completeness compares the number of related rows with valid denominators
+    to the household's explicit business count. Allowable monthly production
+    costs are then excluded. When a household elects to annualize irregular
+    farm costs, the annualized farm amount replaces only farm costs; allowable
+    nonfarm self-employment costs remain included. Cost-dependent income and
+    benefit outputs are guarded by the imported paragraph-(b)
+    expense-determination completeness status.
     Qualifying farm losses are prorated, offset first against other
     self-employment income, and then against earned and unearned income after
     the earned income deduction. A State may offer eligible households uneven
@@ -25,6 +28,267 @@ imports:
   - us:regulations/7-cfr/273/11/b#snap_allowable_self_employment_costs_under_state_elected_method
   - us:regulations/7-cfr/273/11/b#snap_self_employment_expense_determination_complete
 rules:
+  - name: self_employment_business_of_household
+    kind: data_relation
+    data_relation:
+      predicate: self_employment_business_of_household
+      arity: 2
+      arguments:
+        - Business
+        - Household
+
+  - name: snap_business_uses_anticipated_self_employment_earnings
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If the averaged amount does not accurately reflect the
+                household's actual circumstances because the household has
+                experienced a substantial increase or decrease in business,
+                the State agency must calculate the self-employment income on
+                the basis of anticipated, not prior, earnings.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          business_averaged_self_employment_income_does_not_accurately_reflect_actual_circumstances
+          and business_self_employment_experienced_substantial_increase_or_decrease
+
+  - name: snap_business_self_employment_averaging_months
+    kind: derived
+    entity: Business
+    dtype: Count
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)-(ii)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Self-employment income must be averaged over the period the
+                income is intended to cover
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                averaged over the period of time the business has been in
+                operation
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if business_self_employment_enterprise_in_operation_less_than_one_year:
+            business_self_employment_enterprise_months_in_operation
+          else: business_self_employment_income_intended_coverage_months
+
+  - name: snap_business_selected_gross_self_employment_income_for_averaging_period
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(1)(i), (a)(2)(i)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                add all gross self-employment income (either actual or
+                anticipated, as provided in paragraph (a)(1)(i) of this
+                section)
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_business_uses_anticipated_self_employment_earnings:
+            business_anticipated_gross_self_employment_income_excluding_capital_gains_for_averaging_period
+          else:
+            business_actual_gross_self_employment_income_excluding_capital_gains_for_averaging_period
+
+  - name: snap_business_selected_full_capital_gain_for_averaging_period
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(3)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the State agency must count the amount of capital gains the
+                household anticipates receiving during the months over which
+                the income is being averaged
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the State agency must count the full amount of the capital gain
+                as income for SNAP purposes
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_business_uses_anticipated_self_employment_earnings:
+            business_anticipated_full_capital_gain_calculated_under_federal_tax_method_for_averaging_period
+          else:
+            business_actual_full_capital_gain_calculated_under_federal_tax_method_for_averaging_period
+
+  - name: snap_business_self_employment_averaging_complete
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)-(ii), (a)(2)(i)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                divide the remaining amount of self-employment income by the
+                number of months over which the income will be averaged
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_business_self_employment_averaging_months > 0
+
+  - name: snap_business_monthly_gross_self_employment_income
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(1)(i)-(ii), (a)(2)(i)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                divide the remaining amount of self-employment income by the
+                number of months over which the income will be averaged
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the monthly amount projected for the coming year
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_business_self_employment_averaging_complete:
+            max(
+              0,
+              snap_business_selected_gross_self_employment_income_for_averaging_period
+            ) / snap_business_self_employment_averaging_months
+          else: 0
+
+  - name: snap_business_monthly_full_capital_gain
+    kind: derived
+    entity: Business
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(1), (a)(3)
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the State agency must count the amount of capital gains the
+                household anticipates receiving during the months over which
+                the income is being averaged
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_business_self_employment_averaging_complete:
+            max(
+              0,
+              snap_business_selected_full_capital_gain_for_averaging_period
+            ) / snap_business_self_employment_averaging_months
+          else: 0
+
+  - name: snap_complete_self_employment_business_averaging_count
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Self-employment income must be averaged over the period the
+                income is intended to cover
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          count_where(
+            self_employment_business_of_household,
+            snap_business_self_employment_averaging_complete
+          )
+
+  - name: snap_self_employment_business_averaging_rows_complete
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Self-employment income must be averaged over the period the
+                income is intended to cover
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          self_employment_business_count >= 0
+          and snap_complete_self_employment_business_averaging_count
+              <= self_employment_business_count
+          and snap_complete_self_employment_business_averaging_count
+              >= self_employment_business_count
+
   - name: snap_monthly_gross_self_employment_income_after_per_enterprise_averaging
     kind: derived
     entity: Household
@@ -54,10 +318,13 @@ rules:
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          max(
-            0,
-            aggregate_monthly_gross_self_employment_income_after_each_enterprise_uses_actual_or_anticipated_income_and_its_applicable_averaging_period
-          )
+          if snap_self_employment_business_averaging_rows_complete:
+            sum_where(
+              self_employment_business_of_household,
+              snap_business_monthly_gross_self_employment_income,
+              snap_business_self_employment_averaging_complete
+            )
+          else: 0
 
   - name: snap_farm_cost_annualization_option_available
     kind: derived
@@ -119,7 +386,7 @@ rules:
       - effective_from: '2008-10-01'
         formula: |-
           snap_self_employment_expense_determination_complete
-          and per_enterprise_self_employment_income_averaging_is_complete
+          and snap_self_employment_business_averaging_rows_complete
 
   - name: snap_monthly_allowable_self_employment_costs
     kind: derived
@@ -185,10 +452,13 @@ rules:
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          max(
-            0,
-            aggregate_monthly_full_capital_gain_after_each_enterprise_uses_actual_or_anticipated_income_and_its_applicable_averaging_period
-          )
+          if snap_self_employment_business_averaging_rows_complete:
+            sum_where(
+              self_employment_business_of_household,
+              snap_business_monthly_full_capital_gain,
+              snap_business_self_employment_averaging_complete
+            )
+          else: 0
 
   - name: snap_monthly_net_self_employment_income
     kind: derived
