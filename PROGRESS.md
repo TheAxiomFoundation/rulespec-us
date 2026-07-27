@@ -2,10 +2,9 @@
 
 ## State
 
-The citation gate passes: `provision_rooted` holds for
-`us-ma/regulation/106-cmr/364/400/block-1`. Exactly two raw corpus inventory
-records use that path, and each has a citation-keyed provision record with the
-same authoritative body. Evidence assembly may continue.
+The citation gate passes, and the companion fixture now carries the exact
+five-case statutory boundary grid at $0, $35, $36, $190, and $191. Oracle
+registration and released-engine evidence remain in progress.
 
 ## Done
 
@@ -30,11 +29,14 @@ same authoritative body. Evidence assembly may continue.
 - Confirmed the candidate is not one of j1's three malformed Massachusetts
   paths, which are `364/360/block-1`, `365/030/block-1`, and
   `366/140/block-1`.
+- Replaced the broader four-case medical sample with a five-case January 2026
+  boundary grid at $0, $35, $36, $190, and $191. Each case assigns the only
+  RuleSpec input fact used by the medical-deduction output.
 
 ## Next
 
-- Inspect the real PolicyEngine variable body and register a five-case boundary
-  grid with zero unexplained mismatches.
+- Inspect the real PolicyEngine variable body and register the five-case
+  boundary grid with zero unexplained mismatches.
 - Resolve the one-root/two-record closure ledger with zero pending paths.
 - Compile and locally run the one-output module with released engine v0.1.1,
   while preserving the unpublished-artifact blocker.
