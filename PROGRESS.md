@@ -2,12 +2,12 @@
 
 ## State
 
-Evidence assembly is in progress for the Alabama tax-year 2025 age-65
-retirement-income exemption. The current honest verdict is 3 of 5: the rooted
-and exercised criteria hold, conformance is being registered, repository
-closure has one pending path, and a local released-tag engine probe cannot
-substitute for the missing published artifact. No certification claim has been
-made.
+Evidence assembly is complete for the Alabama tax-year 2025 age-65
+retirement-income exemption. The honest verdict is 3 of 5:
+`provision_rooted`, `conformant`, and `exercised` hold; `closed` has one
+pending substantive section-root path; and `executable` is blocked by the
+missing published artifact and official stranger path. No certification claim
+has been made.
 
 ## Done
 
@@ -39,8 +39,22 @@ made.
   `40-18-19(a)`.
 - Confirmed that no Alabama income-tax program spec or published one-output
   artifact exists. The executable criterion therefore does not hold.
+- Registered the five-case TY2025 grid in
+  `axiom-oracles@76b8564ab38c01ffd4d2d361ce4f0cea978973a8`, with an exact
+  public nonnegative-input schema and the reviewed PolicyEngine stack.
+- Passed 30 focused and federal-runner regression tests plus Ruff check in
+  `axiom-oracles`.
+- Ran the registered grid against the pinned RuleSpec snapshot: 5 comparisons,
+  5 matches, 0 mismatches, and 0 errors. Receipt SHA-256:
+  `4924c5c78f25c99388aa4fa7f1d7b8e0838231f5e55abd862068013dd519de35`.
+- Wrote the complete five-criteria package at
+  `us-al/income-tax/v1-age65-retirement-exemption-evidence.md`.
 
 ## Next
 
-- Build and register a bounded case grid for tax year 2025.
-- Assemble and validate the five-criteria evidence package.
+- Obtain paragraph-granular corpus resolution for subsection (a)(13), or
+  encode the remaining substantive section body, before claiming `closed`.
+- Publish a provenance-stamped one-output artifact and reproduce the golden
+  value with an attested v0.1.1 release asset before claiming `executable`.
+- Human review only; do not add this candidate to `certified-nodes.yaml` while
+  either blocker remains.
