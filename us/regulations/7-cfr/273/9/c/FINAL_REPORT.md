@@ -18,6 +18,7 @@
 - `us/regulations/7-cfr/273/9/c.yaml`
 - `us/regulations/7-cfr/273/9/c.test.yaml`
 - `us/regulations/7-cfr/273/9/c/PROGRESS.md`
+- `us/regulations/7-cfr/273/9/c/FINAL_REPORT.md`
 - Minimal parent change in `us/regulations/7-cfr/273/9.yaml`
 - Regenerated `.axiom/index/provisions_to_rules.json`
 
