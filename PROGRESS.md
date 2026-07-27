@@ -2,10 +2,12 @@
 
 ## State
 
-Ready for review. The full §32(i)(2) disqualified-income aggregate is
-explicitly deferred on upstream-law walls. The independently supported
-§32(i)(1) threshold rule is verified against its exact corpus path and tested
-at the 2026 equality and first-disqualifying boundaries.
+Implementation and validation are complete. The full §32(i)(2)
+disqualified-income aggregate is explicitly deferred on upstream-law walls.
+The independently supported §32(i)(1) threshold rule is verified against its
+exact corpus path and tested at the 2026 equality and first-disqualifying
+boundaries. Remote delivery is blocked because the sandbox cannot resolve
+`github.com`; the connected GitHub write fallback was not authorized.
 
 The requested external worktree path was not writable in the execution
 sandbox. The branch is attached instead beneath the repository at
@@ -49,11 +51,16 @@ sandbox. The branch is attached instead beneath the repository at
   manifest-sync warning.
 - Confirmed the reverse index is current: 4,241 provisions, 5,080 edges, and
   4,486 modules.
+- Attempted to push `closure/w4-eitc-32i-invest`; Git failed with
+  `Could not resolve host: github.com`. No remote branch or pull request was
+  created.
 
 ## Next
 
-- Push `closure/w4-eitc-32i-invest`.
-- Open the required draft pull request referencing `rulespec-us#1135`.
+- When GitHub access is available, push `closure/w4-eitc-32i-invest`.
+- Open a draft pull request titled
+  `Encode §32(i) investment income disqualification (EITC frontier)` and
+  reference `rulespec-us#1135`.
 - Human review should preserve the §32(i)(2) deferral until the category-
   specific §61 inclusion/exclusion surface, §469 passive-activity definition,
   and §1402(a) net-earnings output are encoded.
