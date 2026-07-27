@@ -24,9 +24,10 @@ oracle grid and assemble the five-criterion evidence.
   inherited warnings as its predecessor; the focused corpus quality suite
   passes 17/17. The ingest attestation cannot be signed locally because the
   signing key is unavailable.
-- Repointed the section 3111(a) and (b) module/proof citations to their exact
-  native leaf identifiers and expanded the subsection (b) deterministic
-  boundary cases.
+- Preserved the signed modules' formal section-root citations: leaf production
+  itself resolves the audited `/a` and `/b` identifiers, while changing the
+  module paths would unnecessarily invalidate their signed encoding
+  manifests. Expanded only the subsection (b) deterministic boundary cases.
 
 ## Next
 
