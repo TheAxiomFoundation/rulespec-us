@@ -66,9 +66,28 @@ frozen program verdicts are not rewired.
   applied to both.
 - Re-ran pinned validation, proof validation, and all 39 companion cases
   successfully after those corrections.
+- Independent legal-fidelity and RuleSpec reviews identified and confirmed
+  additional edge cases before push.
+- Corrected sanction-only exemption logic to use the Federal minimum wage
+  while preserving the pre-existing composed exemption output unchanged.
+- Gated new sanctions for the pending-SSI work-requirement waiver.
+- Limited generic non-quit failures to general paragraph (i)(2)/(4) good
+  cause, and extended E&T-opening good cause until the State both identifies
+  an opening and informs the participant.
+- Required a currently active sanction and current paragraph (b)(1) exemption
+  for exemption-based reentry; broadened the application fact so paragraph
+  (j)(5)'s final-month application can cover post-sanction participation.
+- Replaced household ceiling-as-duration calculations with gated maximums,
+  State-selected duration validation, and actual selected durations.
+- Encoded the clear optional paragraph (f)(7)(iv) trigger and narrowed its
+  deferral to downstream effects blocked by the malformed cross-reference.
+- Encoded paragraph (j)(3)(vii)'s last-certification-period full-sanction
+  timing.
+- Passed pinned validation, proof validation, and all 46 companion cases
+  after the independent-review fixes.
 
 ## Next
 
-- Run the remaining repository checks and an independent fidelity review.
-- Address any findings in separate coherent commits.
+- Complete the independent re-review and remaining repository checks.
+- Address any remaining findings in separate coherent commits.
 - Update this log with final validation, push, and open the required draft PR.
