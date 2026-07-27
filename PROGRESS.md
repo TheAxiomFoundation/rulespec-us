@@ -85,9 +85,21 @@ frozen program verdicts are not rewired.
   timing.
 - Passed pinned validation, proof validation, and all 46 companion cases
   after the independent-review fixes.
+- The independent re-review found two final gaps and confirmed their fixes:
+  exemption-based reentry now requires both becoming exempt during an active
+  sanction and remaining currently exempt, while completed-period reentry
+  derives its application condition from reapplication or the paragraph
+  (j)(5) final-month exception.
+- Added invalid over-cap household selections and invalid first-occurrence
+  permanent selection boundaries.
+- Added a narrow paragraph (f)(7)(ii) deferral for the unresolved interaction
+  between the paragraph (a)(6) pending-SSI waiver and the otherwise mandatory
+  external Title IV-A/unemployment-compensation sanction.
+- Both independent reviewers report no remaining concrete blocker.
+- Pinned validation, proof validation, and all 50 companion cases pass after
+  the final re-review fixes.
 
 ## Next
 
-- Complete the independent re-review and remaining repository checks.
-- Address any remaining findings in separate coherent commits.
+- Complete the remaining repository checks.
 - Update this log with final validation, push, and open the required draft PR.
