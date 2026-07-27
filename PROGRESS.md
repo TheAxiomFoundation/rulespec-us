@@ -2,9 +2,10 @@
 
 ## State
 
-All eight household-concept modules and companion tests are implemented and
-locally validated. Repository-wide validation and generated-index refresh are
-next.
+All eight household-concept modules and companion tests are implemented. A
+final semantic audit identified and resolved three integration edges; the
+focused suites pass, and repository-wide validation will be repeated before
+push.
 
 ## Done
 
@@ -54,6 +55,15 @@ next.
   income, resource, and size treatment to the applicable later rules.
 - Pinned validation and proof validation pass for all three final boundary
   modules; all 38 companion cases pass on the available local engine.
+- Tightened paragraph (b)(2) so the disability must cause the inability to
+  purchase and prepare meals, and so the imported 165-percent poverty-table
+  size must equal the count of other residents after excluding the candidate
+  and spouse.
+- Tightened paragraph (b)(3) so the spouse, under-22 parent/child, and
+  under-18 nonparental-control combinations projected from paragraph (b)(1)
+  cannot be converted into optional boarder status.
+- Focused validation and proof validation pass for the tightened (b)(2) and
+  (b)(3) modules; their 19 companion cases pass.
 
 ## Next
 
