@@ -52,11 +52,13 @@ accounting items. Companion tests are being rebuilt for the final interfaces.
   paragraph-(c)(3) amount composition and completed the final module audit.
 - Confirmed the live 104-rule module parses, passes pinned proof validation
   (130 atoms), and compiles to 103 executable rules with the pinned engine.
+- Rebuilt the companion-test foundation from the live formulas: its neutral
+  fixture assigns all 198 factual inputs and verifies all 95 derived outputs.
 
 ## Next
 
-- Rebuild payment, education-case, donation-history, child-support, and
-  household companion tests with every input fact assigned.
+- Add focused payment, education-case, donation-history, child-support, and
+  household boundary and composition cases atop the complete neutral fixture.
 - Run pinned runtime/proof validation and repository-wide structural,
   coverage, reverse-index, and generated-artifact checks.
 - Record exact results, push the branch, and open the required draft PR.
