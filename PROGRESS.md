@@ -56,6 +56,16 @@ frozen program verdicts are not rewired.
 - Passed pinned `axiom-encode validate --skip-reviewers`,
   `axiom-encode proof-validate`, and all 37 companion cases with the pinned
   rules engine.
+- Tightened paragraph (j) after self-review so the 30-to-60-day validity gate
+  applies only to pre-application changes, while changes on or after
+  application remain reviewable independently.
+- Confined paragraph (j)(5)'s final-month application rule to
+  disqualifications caused by voluntary quit or reduced work effort.
+- Distinguished the initial household sanction duration from the remaining
+  duration carried into a newly joined household, with the 180-day cap
+  applied to both.
+- Re-ran pinned validation, proof validation, and all 39 companion cases
+  successfully after those corrections.
 
 ## Next
 
