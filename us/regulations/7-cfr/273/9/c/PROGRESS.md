@@ -42,6 +42,16 @@ accounting items. Companion tests are being rebuilt for the final interfaces.
 - Corrected the PASS, VISTA contract, student-break, migrant-travel, State-plan
   election, dependent-care coordination, partial demonstration, and partial
   combat-pay branches identified during independent legal review.
+- Capped payment, education-case, and charitable-donation exclusions at the
+  amounts staged by paragraph (b)'s pre-exclusion composition while leaving
+  paragraph (c)(9) costs and paragraph (c)(17) outgoing support uncapped by an
+  incoming receipt.
+- Added the shared paragraph-(c)(12) interface for quarterly limit already used
+  by donations resolved inside paragraph-(b)(3) or (b)(4) components.
+- Wired the standalone 20 U.S.C. 1087uu/BIA education determination into the
+  paragraph-(c)(3) amount composition and completed the final module audit.
+- Confirmed the live 104-rule module parses, passes pinned proof validation
+  (130 atoms), and compiles to 103 executable rules with the pinned engine.
 
 ## Next
 

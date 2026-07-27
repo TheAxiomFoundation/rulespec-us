@@ -29,7 +29,25 @@ module:
     $300 aggregate cap. ChildSupportPayment rows represent outgoing support,
     not incoming income. A monetary amount must be staged in only one of these
     relations; composite receipts must be split into nonoverlapping legal
-    portions.
+    portions. State election and State-plan facts repeated on Payment or
+    EducationalIncomeCase rows must be constant for all rows belonging to the
+    same household and evaluation period. The
+    `irregular_income_amount_in_quarter` fact is the household's total
+    qualifying irregular income for that quarter and likewise must be constant
+    across affected Payment rows. Each Payment also carries the amount actually
+    staged in paragraph (b)'s pre-exclusion inclusion composition; the final
+    payment exclusion is capped at that amount. Thus an in-kind benefit or
+    third-party value that paragraph (b) never included remains legally
+    classified here without subtracting unrelated household income. Education
+    cases and charitable donations carry the same pre-exclusion paragraph-(b)
+    amount boundary. The c(9) cost and c(17) outgoing-support adjustments are
+    intentionally not capped by incoming income rows. Relations supplied to
+    this module must omit amounts already represented by paragraph-(b)(3) or
+    (b)(4) components that were resolved after exclusions. Because an omitted
+    charitable donation still consumes part of paragraph (c)(12)'s shared
+    quarterly limit, the Household fact
+    `charitable_donation_quarter_limit_used_by_paragraph_b_3_or_b_4_components`
+    carries the amount of that limit already allocated by those components.
     Paragraph (c)(3)(ii)(A)'s printed “20 CFR 1087uu” reference is treated as
     the standalone Federal student-aid route described by that subparagraph;
     the ordinary education route requires qualifying enrollment and allowable
@@ -522,7 +540,7 @@ rules:
       - effective_from: '2025-10-01'
         formula: payment_is_hud_rent_or_mortgage_vendor_payment
 
-  - name: snap_educational_assistance_vendor_payment_exclusion_applies
+  - name: snap_educational_assistance_vendor_payment_uses_direct_assistance_treatment
     kind: derived
     entity: Payment
     dtype: Judgment
@@ -538,7 +556,7 @@ rules:
               excerpt: Educational assistance provided to a third party on behalf of the household for living expenses shall be treated the same as educational assistance payable directly to the household
     versions:
       - effective_from: '2025-10-01'
-        formula: payment_is_educational_assistance_vendor_payment and payment_is_staged_in_educational_income_case_relation
+        formula: payment_is_educational_assistance_vendor_payment
 
   - name: snap_reimbursement_vendor_payment_exclusion_applies
     kind: derived
@@ -618,6 +636,21 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: If a person or organization makes a payment to a third party on behalf of a household using funds that are not owed to the household, the payment shall be excluded
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: if the employer pays a household's rent directly to the landlord in addition to paying the household its regular wages, the rent payment shall be excluded from income
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: payments specified by a court order or other legally binding agreement to go directly to a third party rather than the household are excluded from income
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Support payments not required by a court order or other legally binding agreement (including payments in excess of the amount specified in a court order or written agreement) which are paid to a third party on the household's behalf shall be excluded from income
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -626,8 +659,9 @@ rules:
             and payment_uses_funds_not_owed_or_otherwise_payable_to_household
           )
           or employer_pays_rent_or_provides_housing_in_addition_to_regular_wages
-          or support_payment_is_required_directly_to_third_party_in_addition_to_household_support
-          or voluntary_support_payment_above_binding_amount_is_paid_to_third_party
+          or support_payment_is_specified_by_binding_order_or_agreement_to_go_directly_to_third_party_rather_than_household
+          or support_payment_not_required_by_binding_order_or_agreement_is_paid_to_third_party
+          or support_payment_in_excess_of_binding_amount_is_paid_to_third_party
 
   - name: snap_noncash_or_vendor_payment_income_exclusion_amount
     kind: derived
@@ -980,8 +1014,12 @@ rules:
         formula: |-
           min(
             max(0, educational_income_case_total_assistance_subject_to_c3_i_through_iv),
-            max(0, educational_income_case_section_1087uu_or_bia_earned_assistance_amount)
-            + max(0, educational_income_case_section_1087uu_or_bia_unearned_assistance_amount)
+            (
+              if snap_section_1087uu_or_bia_education_exclusion_applies:
+                max(0, educational_income_case_section_1087uu_or_bia_earned_assistance_amount)
+                + max(0, educational_income_case_section_1087uu_or_bia_unearned_assistance_amount)
+              else: 0
+            )
             + snap_ordinary_unearned_educational_assistance_exclusion_amount
             + snap_ordinary_earned_educational_assistance_exclusion_amount
           )
@@ -1068,8 +1106,14 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          snap_educational_assistance_c3_i_through_iv_exclusion_amount
-          + snap_state_medicaid_education_option_exclusion_amount
+          min(
+            max(
+              0,
+              educational_income_case_amount_in_paragraph_b_inclusion_composition_before_c
+            ),
+            snap_educational_assistance_c3_i_through_iv_exclusion_amount
+            + snap_state_medicaid_education_option_exclusion_amount
+          )
 
   - name: snap_educational_income_case_has_exclusion
     kind: derived
@@ -1394,6 +1438,11 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: any household member who is under age 18
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: the total earnings shall be prorated equally among the working members and the child's pro rata share excluded
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -1419,6 +1468,7 @@ rules:
                 min(
                   income_payment_amount,
                   undifferentiated_household_earnings_amount
+                  * qualifying_student_children_sharing_undifferentiated_earnings_count
                   / household_members_sharing_undifferentiated_earnings_count
                 )
               else: 0
@@ -1494,12 +1544,10 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if household_has_self_employment_income:
-            max(
-              0,
-              self_employment_cost_amount_applied_as_c9_exclusion_as_determined_under_section_273_11
-            )
-          else: 0
+          max(
+            0,
+            self_employment_cost_amount_applied_as_c9_exclusion_as_determined_under_section_273_11
+          )
 
   - name: snap_self_employment_production_cost_procedure_delegation
     kind: source_relation
@@ -1784,7 +1832,11 @@ rules:
         formula: |-
           (
             payment_is_one_time_as_needed_assistance_under_federal_or_state_law
-            or payment_is_down_or_final_installment_of_single_one_time_weatherization_or_emergency_repair_allowance
+            or (
+              payment_is_down_or_final_installment_of_single_one_time_weatherization_or_emergency_repair_allowance
+              and payment_is_applied_for_on_as_needed_basis
+              and payment_is_made_under_federal_or_state_law
+            )
           )
           and (
             payment_is_for_weatherization
@@ -1836,7 +1888,15 @@ rules:
             charitable_donation_is_cash_based_on_need
             and charitable_donation_received_on_or_after_february_1_1988
             and charitable_donation_from_private_nonprofit_charitable_organization
-          ): max(0, charitable_donation_amount) else: 0
+          ):
+            min(
+              max(0, charitable_donation_amount),
+              max(
+                0,
+                charitable_donation_amount_in_paragraph_b_inclusion_composition_before_c
+              )
+            )
+          else: 0
 
   - name: snap_charitable_donation_limit_used_before_current_month
     kind: derived
@@ -1858,11 +1918,15 @@ rules:
         formula: |-
           min(
             snap_charitable_donation_quarter_limit,
-            sum_where(
-              snap_charitable_donation_history_of_household,
-              snap_charitable_cash_donation_candidate_amount,
-              charitable_donation_received_earlier_in_same_federal_fiscal_quarter
+            max(
+              0,
+              charitable_donation_quarter_limit_used_by_paragraph_b_3_or_b_4_components
             )
+            + sum_where(
+                snap_charitable_donation_history_of_household,
+                snap_charitable_cash_donation_candidate_amount,
+                charitable_donation_received_earlier_in_same_federal_fiscal_quarter
+              )
           )
 
   - name: snap_current_month_charitable_donation_candidate_amount
@@ -2437,7 +2501,10 @@ rules:
             max(
               0,
               min(
-                max(0, income_payment_amount),
+                max(
+                  0,
+                  income_payment_amount_in_paragraph_b_inclusion_composition_before_c
+                ),
                 max(
                   snap_noncash_or_vendor_payment_income_exclusion_amount,
                   max(
