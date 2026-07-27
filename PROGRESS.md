@@ -4,8 +4,8 @@
 
 - Branch: `closure/w1-eitc-152-residency`, based on `origin/main`.
 - Scope: EITC frontier items 4, 8, and 9.
-- Status: all three assigned outputs are encoded and validated; final report,
-  push, and draft PR remain.
+- Status: complete locally. Push and draft PR are blocked only by unavailable
+  GitHub DNS in the execution environment.
 - Worktree note: the mandated external path was rejected by the filesystem sandbox, so this branch is isolated at `.git/codex-worktrees/w1-eitc-152-residency`.
 - Corpus pin inspected: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
 
@@ -79,8 +79,16 @@
   positive assertion for `eitc_qualifying_child`; the § 32 companion runner
   still reports the same four pre-existing § 32(c)(2) resolution failures as
   untouched `origin/main`.
+- Completed the scope audit: only § 152(c), the necessary § 32 proof/test
+  cascade, manifests, the reverse index, and the two standing-order reports
+  changed.
+- Wrote the complete handoff to `OUTPUT.md`.
+- Attempted
+  `git push --set-upstream origin closure/w1-eitc-152-residency`; it failed
+  with `Could not resolve host: github.com`, so no draft PR could be opened.
 
 ## Next
 
-- Inspect the final diff and write the committed output report.
-- Push and open the requested draft PR if network access permits.
+- When GitHub access is available, push the branch and open the requested
+  draft PR referencing `rulespec-us#1135`.
+- Human review; do not merge automatically.
