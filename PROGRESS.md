@@ -7,7 +7,7 @@
 - Reviewed PR head: `995fff6104a19a89843934e3832cd097c308af1d`.
 - Base: `origin/main` at `6b0773d3f7fa6719f208154f3e609e292ab7abe7`.
 - Pinned corpus: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
-- Status: executable and mutation checks complete; substantive evidence review in progress.
+- Status: executable, proof, provenance, and hygiene checks complete; final legal-fidelity synthesis in progress.
 
 ## Done
 
@@ -26,9 +26,16 @@
 - Baseline companion run passed: 2 files, 26 cases.
 - Mutated the first tier comparison from `<=` to `<`; the same suite failed eight assertions in the exact 50-percent-limit cases across single, joint, head-of-household, married-filing-separately, and surviving-spouse paths.
 - Restored `<=`; the same suite passed 2 files and 26 cases, the pipeline SHA-256 returned to `56fecc5f4ae448cb4422371ab49e7894410d26076ffedeea3847bf8f9fb5f787`, and the exact-head worktree is clean.
+- Removed the shared zero-valued section 911 input from the companion anchor; 21 cases failed with an explicit `missing input section_911_excluded_income` error. Restoring the input returned 26/26 and the test SHA-256 to `2621795e923fa8eac2eb147bab5d21a60c766cc6b415f85fcf69c03bd9f4af3a`.
+- Proof validation passes both modules: 42 pipeline atoms plus 27 Notice atoms; 0 of 9 monetary obligations lack proof.
+- Pinned-encoder CI validation passes the Notice module but rejects the pipeline: `pipeline_savers_credit_50_percent_agi_limit` composes an imported category while overlapping the Notice module's unresolved deferred generic limit.
+- The current GitHub `Repository Checks` run is red. Its failed layout step names the two forbidden top-level PR files, then skips RuleSpec validation, so it does not contradict the local pinned-validator failure.
+- Verified all 48 corpus-backed proof excerpts verbatim against uniquely resolved rows in pinned corpus `bf97b17ba`; Notice values and 2026 effective periods match pages 3-4, with no executable 2025 or `157500` stale values.
+- Verified the two manifest file unions and hashes cover exactly the four changed RuleSpec/test files at ancestor `953106a58`; HMAC authenticity cannot be checked because the signing key is unavailable.
+- Verified the oracle ledger grows from 2,293 to 2,313 by exactly the expected 20 IDs, with matching ceilings, no removals, and no foreign additions.
+- Verified the reverse index is current at 4,238 provisions, 5,077 edges, and 4,485 modules.
 
 ## Next
 
-- Audit statutory and Notice fidelity against the pinned corpus.
-- Run proof, manifest, ledger, index, and hygiene checks.
+- Complete statutory-fidelity synthesis and classify findings.
 - Write and commit the final verdict to `WORKER-REPORT.md`.
