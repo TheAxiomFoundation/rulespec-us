@@ -1,0 +1,949 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/10
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/10/c#snap_federal_gross_monthly_income_change_reporting_procedure
+      blocked_by:
+        - us:regulations/7-cfr/273/12#snap_household_income_change_reporting_procedure
+      reason: >-
+        Paragraph (c)(1)(i) directs households to report changes in gross
+        monthly income as required by 7 CFR 273.12. This module encodes the
+        income anticipation and averaging treatment in 273.10(c); the
+        reporting thresholds, deadlines, and agency response belong to the
+        cross-referenced 273.12 procedure.
+    - output: us:regulations/7-cfr/273/10/c#snap_federal_statewide_category_income_averaging_method
+      blocked_by:
+        - us:regulations/7-cfr/273/10/c#snap_federal_state_agency_income_averaging_method_configuration
+      reason: >-
+        Paragraph (c)(3)(i) permits income to be averaged under methods
+        established by each State agency and applied Statewide to categories
+        of households, but it does not prescribe those category-specific
+        methods. This module encodes federal eligibility, recalculation,
+        disclosure, and arithmetic constraints while accepting the applicable
+        Statewide method as implementation context.
+    - output: us:regulations/7-cfr/273/10/c#snap_federal_self_employed_income_averaging_procedure
+      blocked_by:
+        - us:regulations/7-cfr/273/11#snap_self_employed_income_averaging_procedure
+      reason: >-
+        Paragraph (c)(3)(ii) expressly assigns the procedures for averaging
+        self-employed income to 7 CFR 273.11. This module encodes when the
+        federal 12-month annual-income rule applies, but not the separate
+        self-employment calculation procedure.
+  summary: |-
+    7 CFR 273.10(c) requires the State agency to count income already received
+    during the certification period and anticipated income whose receipt month
+    and amount, or a portion of the amount, are reasonably certain. Uncertain
+    income is not counted. The prior 30 days are an indicator only when no
+    income change has occurred or is anticipated; a more accurate longer
+    period or comparable season may be used for fluctuating income, but past
+    income may never be attributed automatically. Anticipated income is
+    normally counted only in its expected receipt month. Full-month weekly and
+    biweekly income may be converted with factors of 4.3 and 2.15, a State
+    public-assistance conversion standard, or an exact anticipated monthly
+    figure. Nonrecurring lump sums are resources rather than income. The rule
+    also governs employee-requested and employer-practice wage holds, wage
+    advances, payment-timing shifts, income averaging and recalculation,
+    12-month annual contract or self-employment averaging, other contract
+    proration, and educational-income averaging over its intended coverage.
+rules:
+  - name: snap_federal_weekly_income_monthly_conversion_factor
+    kind: parameter
+    dtype: Decimal
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: multiplying weekly amounts by 4.3 and biweekly amounts by 2.15
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          4.3
+
+  - name: snap_federal_biweekly_income_monthly_conversion_factor
+    kind: parameter
+    dtype: Decimal
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: multiplying weekly amounts by 4.3 and biweekly amounts by 2.15
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          2.15
+
+  - name: snap_federal_annual_contract_income_averaging_months
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.10(c)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall have that income averaged over a 12-month period
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          12
+
+  - name: snap_federal_anticipated_income_is_reasonably_certain
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: reasonable certainty concerning the month in which the payment will be received and in what amount
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_anticipated_income_receipt_month_is_reasonably_certain
+          and snap_federal_anticipated_income_has_reasonably_certain_amount_portion
+
+  - name: snap_federal_countable_anticipated_income_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If the exact amount of the income is not known, that portion of it which can be anticipated with reasonable certainty shall be considered as income.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_federal_anticipated_income_is_reasonably_certain:
+            max(0, snap_federal_anticipated_income_portion_reasonably_certain)
+          else: 0
+
+  - name: snap_federal_certification_period_income_consideration_is_complete
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: take into account the income already received by the household during the certification period and any anticipated income
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_income_already_received_during_certification_period_is_taken_into_account
+          and snap_federal_reasonably_certain_anticipated_income_is_taken_into_account
+
+  - name: snap_federal_household_may_elect_income_averaging
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: In cases where the receipt of income is reasonably certain but the monthly amount may fluctuate, the household may elect to income average.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_anticipated_income_receipt_month_is_reasonably_certain
+          and snap_federal_anticipated_income_monthly_amount_may_fluctuate
+
+  - name: snap_federal_past_30_day_income_is_default_indicator
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Income received during the past 30 days shall be used as an indicator
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall not use past income as an indicator of income anticipated for the certification period if changes in income have occurred or can be anticipated
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_past_30_day_income_is_available
+          and not snap_federal_income_changes_have_occurred_or_are_anticipated
+
+  - name: snap_federal_longer_past_period_may_indicate_anticipated_income
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: may use a longer period of past time if it will provide a more accurate indication of anticipated fluctuations in future income
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall not use past income as an indicator of income anticipated for the certification period if changes in income have occurred or can be anticipated
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          not snap_federal_income_changes_have_occurred_or_are_anticipated
+          and snap_federal_income_fluctuates_beyond_30_day_accuracy
+          and snap_federal_longer_past_period_provides_more_accurate_indicator
+
+  - name: snap_federal_comparable_recent_season_may_indicate_anticipated_income
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: it may be appropriate to use the most recent season comparable to the certification period, rather than the last 30 days, as one indicator of anticipated income.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The State agency shall exercise particular caution in using income from a past season as an indicator of income for the certification period.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall not use past income as an indicator of anticipated income when changes in income have occurred or can be anticipated
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          not snap_federal_income_changes_have_occurred_or_are_anticipated
+          and snap_federal_income_fluctuates_seasonally
+          and snap_federal_comparable_recent_season_is_appropriate_indicator
+          and snap_federal_state_agency_exercised_particular_caution_with_past_season
+
+  - name: snap_federal_past_income_is_automatically_attributable
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: in no event shall the State agency automatically attribute to the household the amounts of any past income
+    versions:
+      - effective_from: '2008-10-01'
+        formula: false
+
+  - name: snap_federal_anticipated_income_counted_in_current_month
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: counted as income only in the month it is expected to be received, unless the income is averaged
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Nonrecurring lump-sum payments shall be counted as a resource starting in the month received and shall not be counted as income.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_federal_income_is_nonrecurring_lump_sum:
+            0
+          elif (
+            snap_federal_income_is_averaged
+            and snap_federal_current_month_is_within_income_averaging_period
+            and snap_federal_anticipated_income_receipt_month_is_reasonably_certain
+          ):
+            max(0, snap_federal_averaged_income_monthly_allocation)
+          elif snap_federal_current_month_is_expected_income_receipt_month:
+            snap_federal_countable_anticipated_income_amount
+          else: 0
+
+  - name: snap_federal_full_month_income_conversion_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: multiplying weekly amounts by 4.3 and biweekly amounts by 2.15, use the State Agency's PA conversion standard, or use the exact monthly figure
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10/c#snap_federal_weekly_income_monthly_conversion_factor
+              output: snap_federal_weekly_income_monthly_conversion_factor
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10/c#snap_federal_biweekly_income_monthly_conversion_factor
+              output: snap_federal_biweekly_income_monthly_conversion_factor
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            not snap_federal_full_month_income_is_anticipated
+            or not (
+              snap_federal_income_is_received_weekly
+              or snap_federal_income_is_received_biweekly
+            )
+            or not snap_federal_income_conversion_method_configuration_is_valid
+          ):
+            0
+          elif snap_federal_state_agency_uses_exact_monthly_income_figure:
+            max(0, snap_federal_exact_anticipated_monthly_income_amount)
+          elif (
+            snap_federal_state_agency_uses_pa_conversion_standard
+            and (
+              snap_federal_income_is_received_weekly
+              or snap_federal_income_is_received_biweekly
+            )
+          ):
+            max(
+              0,
+              snap_federal_income_payment_amount
+              * snap_federal_state_agency_pa_conversion_factor
+            )
+          elif snap_federal_income_is_received_weekly:
+            max(
+              0,
+              snap_federal_income_payment_amount
+              * snap_federal_weekly_income_monthly_conversion_factor
+            )
+          elif snap_federal_income_is_received_biweekly:
+            max(
+              0,
+              snap_federal_income_payment_amount
+              * snap_federal_biweekly_income_monthly_conversion_factor
+            )
+          else: 0
+
+  - name: snap_federal_income_conversion_method_configuration_is_valid
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: use the State Agency's PA conversion standard, or use the exact monthly figure if it can be anticipated for each month of the certification period
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          not (
+            snap_federal_state_agency_uses_exact_monthly_income_figure
+            and snap_federal_state_agency_uses_pa_conversion_standard
+          )
+          and (
+            not snap_federal_state_agency_uses_exact_monthly_income_figure
+            or snap_federal_exact_monthly_income_can_be_anticipated_for_each_certification_period_month
+          )
+
+  - name: snap_federal_nonrecurring_lump_sum_resource_starting_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Nonrecurring lump-sum payments shall be counted as a resource starting in the month received
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_income_is_nonrecurring_lump_sum
+            and snap_federal_current_month_is_lump_sum_receipt_month
+          ):
+            max(0, snap_federal_nonrecurring_lump_sum_payment_amount)
+          else: 0
+
+  - name: snap_federal_nonrecurring_lump_sum_is_counted_as_income
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall not be counted as income
+    versions:
+      - effective_from: '2008-10-01'
+        formula: false
+
+  - name: snap_federal_employee_requested_held_wages_countable_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Wages held at the request of the employee shall be considered income to the household in the month the wages would otherwise have been paid by the employer.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_wages_are_held_at_employee_request
+            and snap_federal_current_month_is_when_held_wages_would_have_been_paid
+          ):
+            max(0, snap_federal_employee_requested_held_wages_amount)
+          else: 0
+
+  - name: snap_federal_employer_practice_held_wages_countable_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: wages held by the employer as a general practice, even if in violation of law, shall not be counted as income
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: unless the household anticipates that it will ask for and receive an advance
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: it will receive income from wages that were previously held by the employer as a general practice and that were, therefore, not previously counted as income
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_wages_are_held_by_employer_as_general_practice
+            and snap_federal_anticipated_income_is_reasonably_certain
+          ):
+            (
+              if snap_federal_household_anticipates_asking_for_and_receiving_wage_advance_this_month:
+                max(
+                  0,
+                  snap_federal_anticipated_employer_held_wage_advance_reasonably_certain_portion
+                )
+              else: 0
+            )
+            + (
+              if (
+                snap_federal_household_anticipates_receiving_previously_held_wages_this_month
+                and not snap_federal_previously_held_wages_were_already_counted
+              ):
+                max(
+                  0,
+                  snap_federal_previously_held_wages_expected_receipt_reasonably_certain_portion
+                )
+              else: 0
+            )
+          else: 0
+
+  - name: snap_federal_wage_advance_countable_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Advances on wages shall count as income in the month received only if reasonably anticipated
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_wage_advance_is_received_this_month
+            and snap_federal_anticipated_income_is_reasonably_certain
+          ):
+            max(
+              0,
+              snap_federal_wage_advance_received_reasonably_certain_portion
+            )
+          else: 0
+
+  - name: snap_federal_recurring_income_amount_without_payment_timing_variation
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall not have their monthly income varied merely because of changes in mailing cycles or pay dates or because weekends or holidays cause additional payments to be received in a month
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            (
+              snap_federal_income_recurs_monthly
+              or snap_federal_income_recurs_semimonthly
+            )
+            and snap_federal_additional_payment_results_only_from_timing_shift
+          ):
+            max(0, snap_federal_normal_recurring_monthly_income_amount)
+          else:
+            max(0, snap_federal_actual_current_month_recurring_income_amount)
+
+  - name: snap_federal_income_averaging_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(1)(i), (c)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: the household may elect to income average
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Income may be averaged in accordance with methods established by the State agency to be applied Statewide for categories of households.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_household_may_elect_income_averaging
+          and snap_federal_household_elects_income_averaging
+          and snap_federal_statewide_category_averaging_method_applies
+
+  - name: snap_federal_averaged_monthly_income_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: When averaging income, the State agency shall use the household's anticipation of monthly income fluctuations over the certification period.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_income_averaging_applies
+            and snap_federal_income_averaging_period_month_count > 0
+          ):
+            max(0, snap_federal_total_anticipated_fluctuating_income)
+            / snap_federal_income_averaging_period_month_count
+          else: 0
+
+  - name: snap_federal_income_average_must_be_recalculated
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: An average must be recalculated at recertification and in response to changes in income
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_any_income_averaging_applies
+          and (
+            snap_federal_current_month_is_recertification
+            or snap_federal_income_change_requires_average_recalculation
+          )
+
+  - name: snap_federal_income_averaging_information_requirement_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: the State agency shall inform the household of the amount of income used to calculate the allotment
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          not snap_federal_any_income_averaging_applies
+          or snap_federal_state_agency_informed_household_of_income_amount_used
+
+  - name: snap_federal_weekly_or_biweekly_conversion_is_income_averaging
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Conversion of income received weekly or biweekly in accordance with paragraph (c)(2) of this section does not constitute averaging.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: false
+
+  - name: snap_federal_annual_contract_or_self_employment_averaging_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Households which, by contract or self-employment, derive their annual income in a period of time shorter than 1 year shall have that income averaged over a 12-month period
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: provided the income from the contract is not received on an hourly or piecework basis
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: these provisions do not apply to migrant or seasonal farmworkers
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          (
+            snap_federal_household_derives_annual_income_by_self_employment
+            or (
+              snap_federal_household_derives_annual_income_by_contract
+              and not snap_federal_contract_income_is_hourly_or_piecework
+            )
+          )
+          and snap_federal_annual_income_is_earned_in_less_than_one_year
+          and not snap_federal_household_is_migrant_or_seasonal_farmworker
+
+  - name: snap_federal_annual_contract_or_self_employment_monthly_income_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall have that income averaged over a 12-month period
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10/c#snap_federal_annual_contract_income_averaging_months
+              output: snap_federal_annual_contract_income_averaging_months
+              hash: sha256:local
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_annual_contract_or_self_employment_averaging_applies
+            and snap_federal_current_month_is_within_annual_contract_or_self_employment_averaging_period
+          ):
+            (
+              (
+                if snap_federal_household_derives_annual_income_by_self_employment:
+                  max(0, snap_federal_annual_self_employment_income_amount)
+                else: 0
+              )
+              + (
+                if (
+                  snap_federal_household_derives_annual_income_by_contract
+                  and not snap_federal_contract_income_is_hourly_or_piecework
+                ):
+                  max(0, snap_federal_annual_contract_income_amount)
+                else: 0
+              )
+            )
+            / snap_federal_annual_contract_income_averaging_months
+          else: 0
+
+  - name: snap_federal_nonannual_contract_income_proration_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Contract income which is not the household's annual income and is not paid on an hourly or piecework basis shall be prorated over the period the income is intended to cover.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_income_is_contract_income
+          and not snap_federal_contract_income_is_household_annual_income
+          and not snap_federal_contract_income_is_hourly_or_piecework
+          and snap_federal_contract_income_intended_coverage_month_count > 0
+
+  - name: snap_federal_nonannual_contract_monthly_income_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall be prorated over the period the income is intended to cover
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            snap_federal_nonannual_contract_income_proration_applies
+            and snap_federal_current_month_is_within_contract_intended_coverage_period
+          ):
+            max(0, snap_federal_nonannual_contract_income_amount)
+            / snap_federal_contract_income_intended_coverage_month_count
+          else: 0
+
+  - name: snap_federal_educational_income_averaging_starts_this_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Income shall be counted either in the month it is received, or in the month the household anticipates receiving it or receiving the first installment payment
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_educational_income_is_received_this_month
+          or snap_federal_household_anticipates_educational_income_or_first_installment_this_month
+
+  - name: snap_federal_educational_income_monthly_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(c)(3)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Earned and unearned educational income, after allowable exclusions, shall be averaged over the period which it is intended to cover.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: although it is still prorated over the period it is intended to cover
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_federal_educational_income_averaging_applies:
+            max(0, snap_federal_educational_income_after_allowable_exclusions)
+            / snap_federal_educational_income_intended_coverage_month_count
+          else: 0
+
+  - name: snap_federal_educational_income_averaging_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall be averaged over the period which it is intended to cover
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Income shall be counted either in the month it is received, or in the month the household anticipates receiving it or receiving the first installment payment
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_educational_income_intended_coverage_month_count > 0
+          and snap_federal_current_month_is_within_educational_income_coverage_period
+          and (
+            snap_federal_educational_income_averaging_start_occurred_before_current_month
+            or snap_federal_educational_income_averaging_starts_this_month
+          )
+
+  - name: snap_federal_any_income_averaging_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: When averaging income, the State agency shall use the household's anticipation of monthly income fluctuations over the certification period.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall have that income averaged over a 12-month period
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: shall be prorated over the period the income is intended to cover
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_federal_income_averaging_applies
+          or (
+            snap_federal_annual_contract_or_self_employment_averaging_applies
+            and snap_federal_current_month_is_within_annual_contract_or_self_employment_averaging_period
+          )
+          or (
+            snap_federal_nonannual_contract_income_proration_applies
+            and snap_federal_current_month_is_within_contract_intended_coverage_period
+          )
+          or snap_federal_educational_income_averaging_applies

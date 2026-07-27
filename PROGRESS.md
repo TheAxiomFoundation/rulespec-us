@@ -2,8 +2,8 @@
 
 ## State
 
-Paragraph (a) is implemented and tested. Implementing the isolated
-paragraphs (c) and (d) child modules next.
+Paragraphs (a) and (c) are implemented and tested. Implementing and reviewing
+the isolated paragraph (d) child module next.
 
 ## Done
 
@@ -27,6 +27,15 @@ paragraphs (c) and (d) child modules next.
   without changing any paragraph (e) rule, formula, or ordering.
 - Narrowed the remaining paragraph (a) deferrals to State fiscal-period
   configuration and certification/recertification case-action workflows.
+- Added `273/10/c.yaml` and its companion tests for reasonable-certainty
+  budgeting, historical income indicators, receipt-month timing, weekly and
+  biweekly conversion, lump sums, held wages, pay-cycle normalization, and
+  contract, self-employment, and educational-income averaging.
+- Removed the satisfied paragraph (c) umbrella deferral from `273/10.yaml`
+  while leaving the paragraph (e) rules unchanged.
+- Narrowed the remaining paragraph (c) deferrals to the cross-referenced
+  change-reporting and self-employment procedures and the State-selected
+  statewide averaging method.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction and recertification workflow; State income
   averaging methods; and cross-referenced medical/SSI/child-support case
@@ -34,7 +43,7 @@ paragraphs (c) and (d) child modules next.
 
 ## Next
 
-- Encode and test the paragraph (c) and (d) child modules, removing each
-  satisfied umbrella deferral from the parent as its module lands.
+- Finish encoding and testing the paragraph (d) child module and remove its
+  satisfied umbrella deferral from the parent.
 - Run repository validation, update this log, push the branch, and open the
   required draft PR.
