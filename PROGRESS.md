@@ -5,7 +5,8 @@
 - Branch: `closure/w5-eitc-112-combat`
 - Checkout: `.git/codex-worktrees/w5-eitc-112-combat` (the requested sibling worktree path is outside the writable sandbox)
 - Scope: EITC frontier items 19–23, the 26 U.S.C. §112 combat-zone and missing-status month rules
-- Status: source research complete; implementation in progress
+- Status: implementation and focused validation complete; generated
+  provenance/index refresh in progress
 
 ## Done
 
@@ -29,12 +30,39 @@
   - defer post-termination month computation on absent controlling
     Presidential termination designations.
 - Identified an existing unit mismatch: the consumer compares a count named
-  in months to a parameter encoded as 2 years. The implementation will use
-  the exact 24-month boundary and test months 24 and 25.
+  in months to a parameter encoded as 2 years. The implementation now
+  multiplies the source-stated 2-year limit by the 12-month calendar-unit
+  factor retained at 26 U.S.C. §7701(a)(24), and tests months 24 and 25.
+- Checked both inventory records for `us/statute/26/7701/a/24` at the corpus
+  pin (the original and deduplicated Title 26 inventories); their bodies and
+  identifiers agree.
+- Added executable Judgment outputs for:
+  - the hospitalization/service/medical-causation composition; and
+  - the Vietnam hospitalization month boundary after January 1978.
+- Added honest `deferred_outputs` entries for:
+  - civilian missing status (absent 5 U.S.C. §5561 definitions and retained
+    Vietnam termination designation);
+  - maximum enlisted amount (absent 37 U.S.C. pay table, §310, and §351);
+  - post-termination month computation (absent retained zone-specific
+    Presidential termination designations).
+- Rebound the §112, §32(c)(2), §32, and §24(d) fixtures from the two former
+  implicit frontier inputs to their new primitive facts, and refreshed the
+  exact §112 import hashes in §32(c)(2) and §24(d).
+- Added 13 §112 cases covering every hospitalization conjunct, months 24/25,
+  January/February 1978, non-Vietnam service, the hospitalization exclusion,
+  and the unaffected direct-service branch.
+- Focused validation with pinned `axiom-encode` 0.2.1200:
+  - `validate --skip-reviewers` passes for §112, §32(c)(2), and §24(d);
+  - §112 proof validation passes with 20 atoms;
+  - 21 cases across §112, §32(c)(2), and §24(d) pass.
+- Confirmed the four-case root §32 companion has the same four unrelated
+  stale-symbol failures on unmodified `origin/main`; this change does not
+  introduce them.
 
 ## Next
 
-1. Add the two derived rules, three exact deferrals, and granular proof atoms.
-2. Update all affected companion tests and add statutory boundary cases.
-3. Refresh generated provenance/index artifacts and commit each coherent step.
-4. Run focused and repository validation, update this ledger, push, and open the required draft PR if network access permits.
+1. Commit the validated module, companion fixtures, and proof-hash cascade.
+2. Refresh generated reverse-index/provenance artifacts.
+3. Run repository checks and record any signing-key limitation.
+4. Write the final report, push, and open the required draft PR if network
+   access permits.
