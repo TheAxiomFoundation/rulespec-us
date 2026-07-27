@@ -3,8 +3,10 @@
 ## State
 
 Paragraphs (a), (c), and (d) are implemented in isolated child modules, their
-umbrella deferrals are removed from the parent, and the complete pinned
-RuleSpec suite passes. Running repository and protected-artifact gates next.
+umbrella deferrals are removed from the parent, and all executable, proof,
+companion-test, reverse-index, regression, and scope gates pass. Delivery is
+ready except that the protected-artifact manifests cannot be refreshed without
+the unavailable signing key.
 
 ## Done
 
@@ -82,6 +84,22 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
   atoms, compiles 71 rules, and passes all 15 companion cases.
 - Confirmed the expanded paragraph (d) child validates, proof-validates 48
   atoms, compiles 31 rules, and passes all 63 companion cases.
+- Rebased onto the current `origin/main` after two unrelated upstream
+  CI/oracle merges landed; the rebase was conflict-free.
+- Reran the final pinned suite after the rebase: all four modules validate,
+  proof validation checks 151 atoms, the money-proof gate reports zero missing
+  atoms, compilation succeeds at 52/71/33/31 rules, and all 139 companion
+  cases pass.
+- Confirmed the reverse index is current, forbidden surfaces have an empty
+  diff, and the 18 paragraph (e) executable rule objects remain object-for-object
+  identical to `origin/main`; the golden $226/$478 case passes.
+- Ran the full repository tests: 72 passed and one failed solely because the
+  existing parent encoding manifest is stale; new child manifests are also
+  required by the stricter generated-artifact guard.
+- Confirmed the signing dry run identifies four manifests covering eight
+  RuleSpec files. Actual signing cannot run because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable, so `guard-generated`
+  reports those same eight files.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction, retrospective budgeting and
   certification-period assignment; State income averaging methods; and
@@ -89,6 +107,7 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
 
 ## Next
 
-- Run repository-level regression and protected-artifact gates.
-- Update this log with final gate results, push the branch, and open the required
-  draft PR.
+- Push the branch and open the required draft PR, documenting the signing-key
+  blocker for the four generated manifests.
+- Once an authorized signer is available, generate and commit the manifests,
+  then rerun `guard-generated` and the manifest-sync pytest.
