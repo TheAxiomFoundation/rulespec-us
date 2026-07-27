@@ -38,10 +38,15 @@ receipt. No certification claim has been made.
   the hand-checkable $300,000 golden case.
 - Passed 15 repository layout/reverse-index tests, all 5 companion cases, YAML
   parsing for every embedded evidence block, and `git diff --check`.
+- Passed an independent adversarial evidence review with no content blocker.
+- Committed the complete evidence assembly as
+  `3b3db02bc7624c7e99b2cb033b752f9b08abfe8b`.
+- Attempted to push both `closure/medicare-evidence` and the oracle branch
+  `closure/medicare-evidence-grid`; both failed because the sandbox could not
+  resolve `github.com`, so no draft PR could be opened.
 
 ## Next
 
-- Apply any final adversarial-review corrections and commit the evidence.
-- Attempt both branch pushes and open draft PRs only if the network permits.
-- Write the final report to the sprint output channel; the sandbox reports the
-  pre-created external output file as non-writable.
+- Write the final report to the sprint output channel. The sandbox reports the
+  pre-created external output file as non-writable, so the final response must
+  serve as the captured report.
