@@ -116,10 +116,11 @@ certificate it cannot reproduce.
 
 ## Publication and output delivery
 
-- Copying the assessment to
-  `/Users/maxghenis/TheAxiomFoundation/_closure-sprint/out/h1-payroll-assessment.md`
-  failed with `Operation not permitted` because that directory is outside the
-  writable sandbox.
+- Copying the assessment and final report to
+  `/Users/maxghenis/TheAxiomFoundation/_closure-sprint/out/`, including the
+  expected `h1-payroll-assessment.md` and `h1-payroll.result.md` paths, failed
+  with `Operation not permitted` because that directory is outside the writable
+  sandbox.
 - Fetching and pushing both repositories failed with
   `Could not resolve host: github.com`.
 - No draft PR was opened because neither branch could be pushed.

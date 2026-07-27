@@ -55,8 +55,8 @@ by DNS.
   IDs rather than treating every derived artifact rule as public.
 - Completed two independent reviews and follow-up verification; both are clean
   after the assessment-count and mapping-contract corrections.
-- Attempted to copy the assessment to
-  `_closure-sprint/out/h1-payroll-assessment.md`; the sandbox returned
+- Attempted to copy the assessment and final report to their closure-sprint
+  output paths, including `h1-payroll.result.md`; the sandbox returned
   `Operation not permitted`.
 - Attempted to fetch and push both repository branches; both failed because
   `github.com` could not be resolved, so no draft PR could be opened.
