@@ -4,8 +4,28 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-165
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9
+        - us:regulations/7-cfr/273/9/d/6/iii
+      rationale: |-
+        7 CFR 273.9(d)(6)(ii)(C) recognizes recurring telephone service as
+        an allowable utility cost, while paragraph (d)(6)(iii) controls state
+        standards and prevents overlapping standards. This page supplies South
+        Carolina's BUA exclusions and actual/telephone verification rules.
   summary: |-
-    "The BUA must not be given" to households with one or no utility expenses or whose utility costs are included in rent. "Actual utility costs are only allowed for households not entitled to the MUA or BUA." Multiple households in the same residence must agree on MUA, BUA, or actual costs; the Agency will not prorate the MUA or BUA in the stated shared-expense cases.
+    BUA is not given to households with one or no utility expenses or whose
+    utility costs are included in rent, and these exclusions govern the final
+    BUA entitlement. Actual utility costs are deductible only when the
+    household is not entitled to MUA or BUA, submitted verification supports
+    an actual cost, and claimed charges are reasonably anticipated to continue
+    during the certification period. A telephone-only household may receive
+    South Carolina's telephone standard on that verified actual-cost path.
+    Shared-residence households must agree on the allowance type, and MUA or
+    BUA is not prorated in the listed shared-cost circumstances.
+imports:
+  - us-sc:policies/dss/snap-policy-manual/page-163
 rules:
   - name: basic_utility_allowance_covered_cost_exists
     kind: derived
@@ -59,13 +79,21 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-165
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#household_entitled_to_basic_utility_allowance
+              output: household_entitled_to_basic_utility_allowance
+              hash: sha256:5d0a3f0f05f58b0ebd1a9fd4dba093718aaec2062c6970e6c3d6e7066143b360
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-165#basic_utility_allowance_prohibited
+              output: basic_utility_allowance_prohibited
+              hash: sha256:local
     versions:
       - effective_from: '0001-01-01'
         formula: |-
-          basic_utility_allowance_covered_cost_exists
+          household_entitled_to_basic_utility_allowance
           and not basic_utility_allowance_prohibited
 
   - name: multiple_utility_allowance_entitlement
@@ -78,15 +106,15 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-165
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#household_entitled_to_mandatory_utility_allowance
+              output: household_entitled_to_mandatory_utility_allowance
+              hash: sha256:5d0a3f0f05f58b0ebd1a9fd4dba093718aaec2062c6970e6c3d6e7066143b360
     versions:
       - effective_from: '0001-01-01'
         formula: |-
-          household_has_heating_or_cooling_costs
-          or household_received_liheap
-          or household_received_energy_assistance_under_state_law
+          household_entitled_to_mandatory_utility_allowance
 
   - name: actual_utility_costs_allowed
     kind: derived
@@ -101,11 +129,24 @@ rules:
             kind: condition
             source:
               corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-165
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-165#multiple_utility_allowance_entitlement
+              output: multiple_utility_allowance_entitlement
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-165#basic_utility_allowance_entitlement
+              output: basic_utility_allowance_entitlement
+              hash: sha256:local
     versions:
       - effective_from: '0001-01-01'
         formula: |-
           not multiple_utility_allowance_entitlement
           and not basic_utility_allowance_entitlement
+          and not household_utility_costs_included_in_rent_payment
 
   - name: actual_utility_cost_deduction_allowed
     kind: derived
@@ -120,19 +161,61 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-165
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-165#actual_utility_costs_allowed
+              output: actual_utility_costs_allowed
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-163#household_actual_verified_utility_cost_allowance_applies
+              output: household_actual_verified_utility_cost_allowance_applies
+              hash: sha256:5d0a3f0f05f58b0ebd1a9fd4dba093718aaec2062c6970e6c3d6e7066143b360
     versions:
       - effective_from: '0001-01-01'
         formula: |-
           actual_utility_costs_allowed
+          and household_actual_verified_utility_cost_allowance_applies
           and agency_reasonably_anticipates_claimed_utility_charges_continue_throughout_certification_period
-          and (claimed_utility_is_heating_fuel
-          or claimed_utility_is_cooking_fuel
-          or claimed_utility_is_water
-          or claimed_utility_is_sewerage
-          or claimed_utility_is_electricity
-          or claimed_utility_is_garbage_or_trash_collection
-          or claimed_utility_is_utility_installation_fee
-          or claimed_utility_is_state_standard_for_telephone)
+          and (
+            claimed_utility_is_heating_fuel
+            or claimed_utility_is_cooking_fuel
+            or claimed_utility_is_water
+            or claimed_utility_is_sewerage
+            or claimed_utility_is_electricity
+            or claimed_utility_is_garbage_or_trash_collection
+            or claimed_utility_is_utility_installation_fee
+            or claimed_utility_is_state_standard_for_telephone
+          )
+
+  - name: household_entitled_to_telephone_only_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Manual p. 165, actual utility costs and telephone standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-165
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/page-165#actual_utility_cost_deduction_allowed
+              output: actual_utility_cost_deduction_allowed
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_has_one_or_no_utility_expenses
+          and household_has_telephone_expense
+          and actual_utility_cost_deduction_allowed
+          and claimed_utility_is_state_standard_for_telephone
 
   - name: same_residence_utility_allowance_agreement_requirement_satisfied
     kind: derived
