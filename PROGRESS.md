@@ -70,10 +70,16 @@
   absent. No manifest was fabricated or altered. Consequently,
   `guard-generated` reports those four changed RuleSpec files as lacking a
   matching signed manifest.
+- Direct Git delivery is unavailable in this session: `git push` cannot
+  resolve `github.com`, and the connected GitHub write was canceled before it
+  created a branch. No remote branch or pull request was created.
 
 ## Next
 
 - Have an authorized signer run `sign-applied-files` for the two changed
   modules, then rerun `guard-generated` and the repository test suite.
-- Complete human review of the draft PR; do not merge while the signed
-  manifest gate remains unresolved.
+- Push `closure/w2-eitc-152-tiebreak` and open the required draft PR titled
+  `Encode §152(c)(4) claimant tiebreakers (EITC frontier)`, referencing
+  `rulespec-us#1135`.
+- Complete human review; do not merge while the signed-manifest gate remains
+  unresolved.
