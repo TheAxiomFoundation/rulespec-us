@@ -25,10 +25,16 @@ Assigned EITC frontier items: 1, 2, 5, 6, and 7.
   current-claim required-information exception.
 - Added ten disallowance-window cases and three prior-deficiency cases, and
   migrated all affected section 32 and section 24(d) fixtures.
+- Encoded the section 32(c)(3)(B) year-end marital-status gate and exercised
+  the unmarried, married-without-entitlement, and married-with-entitlement
+  branches.
+- Declared the composite section 151 entitlement / but-for-section-152(e)
+  output deferred: section 151 exports no per-child entitlement result, while
+  the section 152 parent and its subsection (e) adjusted bases are
+  entity/schema unsupported.
 
 ## Next
 
-- Encode the section 32(c)(3)(B) marital gate and declare the exact upstream
-  section 151/152(e) entitlement wall.
-- Validate, document any genuine upstream-law wall, push, and open the
-  requested draft PR.
+- Run final targeted, proof, schema, and repository validation.
+- Record final validation in this ledger, push, and open the requested draft
+  PR.
