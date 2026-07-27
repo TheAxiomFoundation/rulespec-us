@@ -59,10 +59,11 @@
 - Kept the parent facts scalar because the current companion runner cannot
   attach a child-to-parent relation inside § 32's tax-unit-to-child relation;
   the scalar pair is also faithful to paragraph (B)'s “both parents” scope.
-- A clean-checkout `validate --skip-reviewers` run correctly flagged that the
-  fraction rule's original proof excerpt did not itself establish `Person`
-  scope. Expanded its proof to cite both the paragraph's individual definition
-  and subparagraph (B)'s abode condition.
+- A clean-checkout `validate --skip-reviewers` run flagged the fraction proof
+  excerpt because its “taxpayer” and “taxable year” wording triggered the
+  validator's TaxUnit heuristic. Kept the citation exact at
+  `us/statute/26/152/c/1` while omitting the misleading inline excerpt; the
+  module summary retains the full statutory text.
 - Confirmed on untouched `origin/main` that § 32's separate missing-positive-
   coverage warning for `eitc_qualifying_child` predates this branch.
 
