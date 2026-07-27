@@ -46,6 +46,8 @@ The certified program composition remains frozen and out of scope.
 - Independent source review tightened the 4.903.4 liability fact to errors
   above the federal target and expanded the negative-case citation to include
   the paragraph's lead sentence.
+- Regenerated the deterministic provision-to-rule reverse index for the three
+  modules that gained proof-atom provenance.
 
 ## Next
 
