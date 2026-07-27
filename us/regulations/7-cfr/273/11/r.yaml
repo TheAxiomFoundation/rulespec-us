@@ -1,0 +1,248 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/11
+  summary: |-
+    7 CFR 273.11(r) immediately disqualifies a certified SNAP household when
+    a member receives substantial lottery or gambling winnings. Substantial
+    winnings are the member's allocated share of a cash prize won in a single
+    game, measured before taxes or other withholdings, when that share is at
+    least the annually adjusted maximum resource limit for elderly or disabled
+    households. The same threshold applies to every household. A household
+    disqualified in the prior period remains ineligible until it currently
+    meets both the resource requirements of 7 CFR 273.8 and the income
+    requirements of 7 CFR 273.9. Reporting requirements and State-agency
+    identification and disqualification workflow are not encoded.
+imports:
+  - us:regulations/7-cfr/273/8#snap_resource_eligible
+  - us:regulations/7-cfr/273/9#snap_standard_income_eligible
+rules:
+  - name: snap_household_received_substantial_lottery_or_gambling_winnings
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(r)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Substantial lottery or gambling winnings are defined as a cash
+                prize equal to or greater than the maximum allowable financial
+                resource limit for elderly or disabled households as defined
+                in § 273.8(b) won in a single game before taxes or other
+                withholdings.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                For the purposes of this provision, the resource limit defined
+                in § 273.8(b) applies to all households, including
+                non-elderly/disabled households, with substantial lottery and
+                gambling winnings.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If multiple individuals shared in the purchase of a ticket,
+                hand, or similar bet, then only the portion of the winnings
+                allocated to the member of the SNAP household would be counted
+                in the eligibility determination.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                The value of substantial winnings shall be adjusted annually
+                in accordance with § 273.8(b)(1) and (2).
+    versions:
+      - effective_from: '2019-06-14'
+        formula: |-
+          household_member_received_lottery_or_gambling_prize
+          and lottery_or_gambling_prize_is_cash
+          and lottery_or_gambling_cash_prize_was_won_in_single_game
+          and (
+            household_members_allocated_share_of_prize_before_taxes_or_other_withholdings
+            >= current_snap_maximum_allowable_financial_resource_limit_for_elderly_or_disabled_households
+          )
+
+  - name: snap_household_newly_disqualified_for_substantial_lottery_or_gambling_winnings
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(r)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Any household certified to receive benefits shall lose
+                eligibility for benefits immediately upon receipt by any
+                individual in the household of substantial lottery or gambling
+                winnings, as defined in paragraph (r)(2) of this section.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/r#snap_household_received_substantial_lottery_or_gambling_winnings
+              output: snap_household_received_substantial_lottery_or_gambling_winnings
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-06-14'
+        formula: |-
+          household_is_certified_to_receive_snap_benefits
+          and snap_household_received_substantial_lottery_or_gambling_winnings
+
+  - name: snap_household_continues_ineligible_for_substantial_lottery_or_gambling_winnings
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(r)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Such households shall remain ineligible until they meet the
+                allowable resources and income eligibility requirements
+                described in §§ 273.8 and 273.9, respectively.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8#snap_resource_eligible
+              output: snap_resource_eligible
+              hash: sha256:9066709ae8fa7e77d4bb4e96d7795b8d42d757a738dc4ec3fbadc8385318818a
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9#snap_standard_income_eligible
+              output: snap_standard_income_eligible
+              hash: sha256:76dd530624a00c5199f27bd4ec3ce866cd89e897fd7332b368164cf58f222b9f
+    versions:
+      - effective_from: '2019-06-14'
+        formula: |-
+          household_was_ineligible_under_section_273_11_r_in_immediately_prior_period
+          and not (snap_resource_eligible and snap_standard_income_eligible)
+
+  - name: snap_household_ineligible_under_section_273_11_r
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(r)-(r)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/r#snap_household_newly_disqualified_for_substantial_lottery_or_gambling_winnings
+              output: snap_household_newly_disqualified_for_substantial_lottery_or_gambling_winnings
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/r#snap_household_continues_ineligible_for_substantial_lottery_or_gambling_winnings
+              output: snap_household_continues_ineligible_for_substantial_lottery_or_gambling_winnings
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-06-14'
+        formula: |-
+          snap_household_newly_disqualified_for_substantial_lottery_or_gambling_winnings
+          or snap_household_continues_ineligible_for_substantial_lottery_or_gambling_winnings
+
+  - name: snap_household_eligible_under_section_273_11_r
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(r)-(r)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Such households shall remain ineligible until they meet the
+                allowable resources and income eligibility requirements
+                described in §§ 273.8 and 273.9, respectively.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/11/r#snap_household_ineligible_under_section_273_11_r
+              output: snap_household_ineligible_under_section_273_11_r
+              hash: sha256:local
+    versions:
+      - effective_from: '2019-06-14'
+        formula: not snap_household_ineligible_under_section_273_11_r
+
+inputs:
+  - name: household_member_received_lottery_or_gambling_prize
+    entity: Household
+    dtype: Boolean
+    period: Month
+    description: >-
+      Whether any household member received the evaluated lottery or gambling
+      prize during the current month.
+  - name: lottery_or_gambling_prize_is_cash
+    entity: Household
+    dtype: Boolean
+    period: Month
+    description: Whether the evaluated lottery or gambling prize is a cash prize.
+  - name: lottery_or_gambling_cash_prize_was_won_in_single_game
+    entity: Household
+    dtype: Boolean
+    period: Month
+    description: >-
+      Whether the evaluated cash prize was won in one game rather than being
+      an aggregate of winnings from multiple games.
+  - name: household_members_allocated_share_of_prize_before_taxes_or_other_withholdings
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    description: >-
+      The portion of the evaluated single-game cash prize allocated to the
+      member of the SNAP household, measured before taxes or other
+      withholdings.
+  - name: current_snap_maximum_allowable_financial_resource_limit_for_elderly_or_disabled_households
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    description: >-
+      The current annually adjusted 7 CFR 273.8(b) maximum financial-resource
+      limit for elderly or disabled households, supplied by the applicable
+      fiscal-year policy and used as the substantial-winnings threshold for
+      every household.
+  - name: household_is_certified_to_receive_snap_benefits
+    entity: Household
+    dtype: Boolean
+    period: Month
+    description: >-
+      Whether the household is certified to receive SNAP benefits when the
+      prize is received.
+  - name: household_was_ineligible_under_section_273_11_r_in_immediately_prior_period
+    entity: Household
+    dtype: Boolean
+    period: Month
+    description: >-
+      Whether the household carried a paragraph-(r) substantial-winnings
+      ineligibility from the immediately preceding month.
