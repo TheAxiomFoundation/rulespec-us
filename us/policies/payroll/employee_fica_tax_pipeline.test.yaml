@@ -1,0 +1,120 @@
+# Hand-computed tax-year-2026 fixtures for the employee-side federal FICA
+# wage-tax integration. The OASDI input is a completed wage fact before only
+# section 3121(a)(1)'s contribution-base exclusion; it is not W-2 box 3.
+#
+#   OASDI = 0.062 * min(pre-cap OASDI wages, 184,500)
+#   hospital insurance = 0.0145 * Person W-2 box 5 wages
+#   Additional Medicare = 0.009 * max(0, TaxUnit box 5 wages - threshold)
+#
+# Every expected amount is independent decimal arithmetic from the encoded
+# statutory rates and official SSA base, never a PolicyEngine output.
+
+- name: person-wages-below-contribution-base
+  period: &tax_year_2026
+    period_kind: tax_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    <<: &supported_person_wage_domain
+      us:policies/payroll/employee_fica_tax_pipeline#input.oasdi_wages_before_contribution_and_benefit_base_are_complete: true
+      us:policies/payroll/employee_fica_tax_pipeline#input.person_medicare_wages_and_tips_are_complete: true
+      us:policies/payroll/employee_fica_tax_pipeline#input.single_employer_or_successor_base_continuity_is_resolved: true
+      us:policies/payroll/employee_fica_tax_pipeline#input.no_person_wages_exempt_under_section_3101_c: true
+    us:policies/payroll/employee_fica_tax_pipeline#input.oasdi_wages_before_contribution_and_benefit_base: 100000
+    us:policies/payroll/employee_fica_tax_pipeline#input.person_medicare_wages_and_tips: 100000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_fica_person_wage_domain_is_valid: holds
+    us:policies/payroll/employee_fica_tax_pipeline#employee_oasdi_wage_tax: 6200
+    us:policies/payroll/employee_fica_tax_pipeline#employee_hospital_insurance_wage_tax: 1450
+
+- name: person-wages-exactly-at-contribution-base
+  period: *tax_year_2026
+  input:
+    <<: *supported_person_wage_domain
+    us:policies/payroll/employee_fica_tax_pipeline#input.oasdi_wages_before_contribution_and_benefit_base: 184500
+    us:policies/payroll/employee_fica_tax_pipeline#input.person_medicare_wages_and_tips: 184500
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_oasdi_wage_tax: 11439
+    us:policies/payroll/employee_fica_tax_pipeline#employee_hospital_insurance_wage_tax: 2675.25
+
+- name: person-wages-one-dollar-above-contribution-base
+  period: *tax_year_2026
+  input:
+    <<: *supported_person_wage_domain
+    us:policies/payroll/employee_fica_tax_pipeline#input.oasdi_wages_before_contribution_and_benefit_base: 184501
+    us:policies/payroll/employee_fica_tax_pipeline#input.person_medicare_wages_and_tips: 184501
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_oasdi_wage_tax: 11439
+    us:policies/payroll/employee_fica_tax_pipeline#employee_hospital_insurance_wage_tax: 2675.2645
+
+- name: person-wages-above-contribution-base
+  period: *tax_year_2026
+  input:
+    <<: *supported_person_wage_domain
+    us:policies/payroll/employee_fica_tax_pipeline#input.oasdi_wages_before_contribution_and_benefit_base: 190000
+    us:policies/payroll/employee_fica_tax_pipeline#input.person_medicare_wages_and_tips: 190000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_oasdi_wage_tax: 11439
+    us:policies/payroll/employee_fica_tax_pipeline#employee_hospital_insurance_wage_tax: 2755
+
+- name: person-domain-fails-closed-for-section-3101-c-wages
+  period: *tax_year_2026
+  input:
+    <<: *supported_person_wage_domain
+    us:policies/payroll/employee_fica_tax_pipeline#input.no_person_wages_exempt_under_section_3101_c: false
+    us:policies/payroll/employee_fica_tax_pipeline#input.oasdi_wages_before_contribution_and_benefit_base: 100000
+    us:policies/payroll/employee_fica_tax_pipeline#input.person_medicare_wages_and_tips: 100000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_fica_person_wage_domain_is_valid: not_holds
+    us:policies/payroll/employee_fica_tax_pipeline#employee_oasdi_wage_tax: 0
+    us:policies/payroll/employee_fica_tax_pipeline#employee_hospital_insurance_wage_tax: 0
+
+- name: single-exactly-at-additional-medicare-threshold
+  period: *tax_year_2026
+  input:
+    <<: &supported_tax_unit_wage_domain
+      us:policies/payroll/employee_fica_tax_pipeline#input.tax_unit_medicare_wages_and_tips_are_complete: true
+      us:policies/payroll/employee_fica_tax_pipeline#input.no_tax_unit_wages_exempt_under_section_3101_c: true
+    us:statutes/26/3101/b/2#input.filing_status: 0
+    us:policies/payroll/employee_fica_tax_pipeline#input.tax_unit_medicare_wages_and_tips: 200000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_fica_tax_unit_wage_domain_is_valid: holds
+    us:policies/payroll/employee_fica_tax_pipeline#employee_additional_medicare_wage_tax: 0
+
+- name: single-one-dollar-above-additional-medicare-threshold
+  period: *tax_year_2026
+  input:
+    <<: *supported_tax_unit_wage_domain
+    us:statutes/26/3101/b/2#input.filing_status: 0
+    us:policies/payroll/employee_fica_tax_pipeline#input.tax_unit_medicare_wages_and_tips: 200001
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_additional_medicare_wage_tax: '0.009'
+
+- name: single-wages-well-above-additional-medicare-threshold
+  period: *tax_year_2026
+  input:
+    <<: *supported_tax_unit_wage_domain
+    us:statutes/26/3101/b/2#input.filing_status: 0
+    us:policies/payroll/employee_fica_tax_pipeline#input.tax_unit_medicare_wages_and_tips: 300000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_additional_medicare_wage_tax: 900
+
+- name: joint-wages-above-additional-medicare-threshold
+  period: *tax_year_2026
+  input:
+    <<: *supported_tax_unit_wage_domain
+    us:statutes/26/3101/b/2#input.filing_status: 1
+    us:policies/payroll/employee_fica_tax_pipeline#input.tax_unit_medicare_wages_and_tips: 300000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_additional_medicare_wage_tax: 450
+
+- name: tax-unit-domain-fails-closed-for-section-3101-c-wages
+  period: *tax_year_2026
+  input:
+    <<: *supported_tax_unit_wage_domain
+    us:policies/payroll/employee_fica_tax_pipeline#input.no_tax_unit_wages_exempt_under_section_3101_c: false
+    us:statutes/26/3101/b/2#input.filing_status: 0
+    us:policies/payroll/employee_fica_tax_pipeline#input.tax_unit_medicare_wages_and_tips: 300000
+  output:
+    us:policies/payroll/employee_fica_tax_pipeline#employee_fica_tax_unit_wage_domain_is_valid: not_holds
+    us:policies/payroll/employee_fica_tax_pipeline#employee_additional_medicare_wage_tax: 0

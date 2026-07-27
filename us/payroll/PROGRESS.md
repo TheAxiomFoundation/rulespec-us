@@ -2,11 +2,11 @@
 
 ## State
 
-Assessment complete. The employee-side federal payroll-tax candidate is not
-certifiable yet. The immediate blockers are a real OASDI wage-base integration
-gap, corpus-pin drift, and the absence of computed closure/execution evidence.
-The checkout remains on `closure/payroll-3101`, based on locally cached
-`origin/main` commit `6b0773d3f7fa6719f208154f3e609e292ab7abe7`.
+Assessment and the narrow supported-domain program slice are complete. The new
+integration publishes three cap-aware employee FICA component outputs and
+fails closed outside explicit wage-domain boundaries. It is a build toward a
+certificate, not a certificate claim: corpus-pin drift and computed
+conformance/closure/execution evidence remain unresolved.
 
 ## Done
 
@@ -24,15 +24,20 @@ The checkout remains on `closure/payroll-3101`, based on locally cached
 - Confirmed the existing OASDI program imports the section 3121(a)(1)
   wage-base exclusion but does not bind that payment-level output into the
   section 3101(a) person-level tax.
+- Added `us/payroll/employee-fica-tax` as a sibling rather than changing the
+  narrower existing OASDI program.
+- Added a grounded integration module with separate pre-cap OASDI, Person
+  Medicare, and TaxUnit Medicare wage contracts.
+- Added ten companion cases covering wages below, exactly at, and above the
+  $184,500 base; exactly at and above the Additional Medicare thresholds; and
+  fail-closed section 3101(c) domain boundaries.
+- Passed proof validation, all ten new RuleSpec cases, relevant repository
+  structure tests, and pinned composer/engine compilation of the new program.
 
 ## Next
 
-1. Decide whether a narrowly stated, tested single-employer integration can be
-   added without implying that the deferred section 3121 wage definition is
-   complete; otherwise record an explicit implementation deferral.
-2. If confidence supports it, add the sibling program, boundary integration
-   tests, and golden case.
-3. Add mapping-only oracle entries in a fresh writable checkout without running
+1. Add and validate the hand-checkable golden case.
+2. Add mapping-only oracle entries in a fresh writable checkout without running
    any comparison suite or regenerating any report.
-4. Run permitted checks, request an independent review, update this file, push
+3. Run permitted checks, request an independent review, update this file, push
    if possible, and open draft PRs if network access returns.

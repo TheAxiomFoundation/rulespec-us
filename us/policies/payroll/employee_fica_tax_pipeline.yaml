@@ -1,0 +1,240 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/3101
+      - us/statute/26/3121
+      - us/guidance/ssa/contribution-and-benefit-base/2026/block-1
+    upstream_source_check:
+      status: composed_from_grounded_modules
+      checked_paths:
+        - us/statute/26/3101
+        - us/statute/26/3121
+        - us/guidance/ssa/contribution-and-benefit-base/2026/block-1
+      rationale: |-
+        Sections 3101(a), 3101(b)(1), and 3101(b)(2) supply the imported
+        employee rates and Additional Medicare Tax filing-status threshold.
+        Section 3121(a)(1) supplies the OASDI contribution-base exclusion, and
+        SSA's official 2026 determination supplies the imported $184,500 base.
+  summary: |-
+    Employee-side federal FICA wage-tax composition for tax year 2026. It
+    exposes the section 3101(a) OASDI tax, section 3101(b)(1) hospital-insurance
+    tax, and the wage-only section 3101(b)(2) Additional Medicare Tax as
+    separate outputs because the first two are Person amounts and the third is
+    a TaxUnit amount.
+
+    The OASDI input `oasdi_wages_before_contribution_and_benefit_base` is a
+    completed per-Person wage fact after every other applicable section 3121
+    exclusion but before paragraph 3121(a)(1)'s annual base exclusion. It is
+    not W-2 box 3, which is already base-limited. The ordinary Medicare input
+    `person_medicare_wages_and_tips` is the Person's W-2 box 5 amount. The
+    Additional Medicare input `tax_unit_medicare_wages_and_tips` is the
+    tax-unit sum of those box 5 amounts; callers must keep the Person and
+    TaxUnit facts consistent.
+
+    The supported OASDI profile has one employer during the year, or a
+    successor-employer history whose base continuity has already been resolved
+    in the supplied pre-cap wage fact. The supported profile excludes wages
+    exempt under section 3101(c)'s international-agreement rule. Explicit
+    completeness and domain facts enforce those boundaries and make every tax
+    output fail closed to zero outside them.
+
+    The wage-only Additional Medicare output does not include self-employment
+    income. A direct comparison to PolicyEngine's combined
+    `additional_medicare_tax` is therefore valid only when taxable
+    self-employment income is zero.
+  deferred_outputs:
+    - output: us:statutes/26/3121/a#wages
+      reason: |-
+        The parent section 3121(a) module defers the final wages definition
+        until every enumerated exclusion is executable. This pipeline accepts
+        the completed wage amounts described above as explicit frontier facts
+        and applies only the encoded paragraph-(1) contribution-base step.
+    - output: us:policies/payroll/employee_fica_tax_pipeline#employee_fica_taxes_after_section_3101_c_relief
+      blocked_by:
+        - us:statutes/26/3101/c#wages_exempt_from_section_3101_taxes_under_international_agreement
+      reason: |-
+        The encoded section 3101(c) exempt-wage amount is TaxUnit-level, while
+        the ordinary OASDI and hospital-insurance outputs are Person-level.
+        This first program slice therefore requires explicit no-exempt-wages
+        domain facts and fails closed instead of inventing an allocation.
+imports:
+  - us:statutes/26/3101/a#oasdi_wage_tax_rate
+  - us:statutes/26/3101/b/1#hospital_insurance_wage_tax_rate
+  - us:statutes/26/3101/b/2#additional_medicare_tax_rate
+  - us:statutes/26/3101/b/2#additional_medicare_wage_tax_threshold
+  - us:policies/ssa/contribution-and-benefit-base/2026#contribution_and_benefit_base_under_section_230_of_social_security_act
+rules:
+  - name: employee_fica_person_wage_domain_is_valid
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3101(a)-(c) and 3121(a)(1), supported Person wage boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3121
+              span: 26 USC 3121(a)(1)
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3101
+              span: 26 USC 3101(c)
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          oasdi_wages_before_contribution_and_benefit_base_are_complete
+          and person_medicare_wages_and_tips_are_complete
+          and single_employer_or_successor_base_continuity_is_resolved
+          and no_person_wages_exempt_under_section_3101_c
+          and oasdi_wages_before_contribution_and_benefit_base >= 0
+          and person_medicare_wages_and_tips >= 0
+
+  - name: employee_fica_tax_unit_wage_domain_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 3101(b)(2) and (c), supported TaxUnit wage boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/3101
+              span: 26 USC 3101(b)(2)
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3101
+              span: 26 USC 3101(c)
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          tax_unit_medicare_wages_and_tips_are_complete
+          and no_tax_unit_wages_exempt_under_section_3101_c
+          and tax_unit_medicare_wages_and_tips >= 0
+
+  - name: employee_oasdi_wage_tax
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3101(a), with the section 3121(a)(1) base for 2026
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3101
+              excerpt: "tax equal to 6.2 percent of the wages"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/3121
+              span: 26 USC 3121(a)(1)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3101/a#oasdi_wage_tax_rate
+              output: oasdi_wage_tax_rate
+              hash: sha256:ce063c68cbefbd8419ad42b5bcbef6ec193d14a971e5046a8222b7a82832eba7
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/ssa/contribution-and-benefit-base/2026#contribution_and_benefit_base_under_section_230_of_social_security_act
+              output: contribution_and_benefit_base_under_section_230_of_social_security_act
+              hash: sha256:a9c7c7c7806ecb40db5f5f23a28b30eac79964e8a2fd3c4870692d78cdd27664
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if employee_fica_person_wage_domain_is_valid:
+            min(
+              oasdi_wages_before_contribution_and_benefit_base,
+              contribution_and_benefit_base_under_section_230_of_social_security_act
+            ) * oasdi_wage_tax_rate
+          else:
+            0
+
+  - name: employee_hospital_insurance_wage_tax
+    kind: derived
+    entity: Person
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3101(b)(1), employee hospital-insurance tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3101
+              excerpt: "tax equal to 1.45 percent of the wages"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3101/b/1#hospital_insurance_wage_tax_rate
+              output: hospital_insurance_wage_tax_rate
+              hash: sha256:64d00415ea67352bdb3776153a15a32b8fa8554435a422dab0cda4f2b5e98863
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if employee_fica_person_wage_domain_is_valid:
+            person_medicare_wages_and_tips
+            * hospital_insurance_wage_tax_rate
+          else:
+            0
+
+  - name: employee_additional_medicare_wage_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 3101(b)(2), wage-only Additional Medicare Tax
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/3101
+              span: 26 USC 3101(b)(2)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3101/b/2#additional_medicare_wage_tax_threshold
+              output: additional_medicare_wage_tax_threshold
+              hash: sha256:f06b93b281a9f04e380d545bbc6f6484b0ae591237831b84051b57d05aa661fa
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/3101/b/2#additional_medicare_tax_rate
+              output: additional_medicare_tax_rate
+              hash: sha256:f06b93b281a9f04e380d545bbc6f6484b0ae591237831b84051b57d05aa661fa
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if employee_fica_tax_unit_wage_domain_is_valid:
+            max(
+              0,
+              tax_unit_medicare_wages_and_tips
+              - additional_medicare_wage_tax_threshold
+            ) * additional_medicare_tax_rate
+          else:
+            0
