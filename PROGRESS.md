@@ -4,7 +4,8 @@
 
 - Branch: `closure/w1-eitc-152-residency`, based on `origin/main`.
 - Scope: EITC frontier items 4, 8, and 9.
-- Status: all three assigned outputs are encoded; clean-checkout validation is in progress.
+- Status: all three assigned outputs are encoded and validated; final report,
+  push, and draft PR remain.
 - Worktree note: the mandated external path was rejected by the filesystem sandbox, so this branch is isolated at `.git/codex-worktrees/w1-eitc-152-residency`.
 - Corpus pin inspected: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
 
@@ -66,10 +67,20 @@
   module summary retains the full statutory text.
 - Confirmed on untouched `origin/main` that § 32's separate missing-positive-
   coverage warning for `eitc_qualifying_child` predates this branch.
+- Clean detached-checkout validation results:
+  - `axiom-encode validate --skip-reviewers us/statutes/26/152/c.yaml`:
+    passed.
+  - Full repository pytest suite: 73 passed, with the existing warning that
+    19 modules lack manifests.
+  - § 152(c) companion: 24/24 passed; § 152(c) proof validation: 18 atoms
+    passed; § 32 proof validation: 43 atoms passed.
+  - Manifest and reverse-index tests are included in the 73 passing tests.
+- The § 32 module validator still reports only the pre-existing missing
+  positive assertion for `eitc_qualifying_child`; the § 32 companion runner
+  still reports the same four pre-existing § 32(c)(2) resolution failures as
+  untouched `origin/main`.
 
 ## Next
 
-- Rerun the clean-checkout module validator after the proof-scope repair and
-  run the relevant repository regression checks.
-- Write the final report, push, and open the requested draft PR if network
-  access permits.
+- Inspect the final diff and write the committed output report.
+- Push and open the requested draft PR if network access permits.
