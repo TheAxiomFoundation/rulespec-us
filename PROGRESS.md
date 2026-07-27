@@ -44,14 +44,29 @@
   | (q) | Encode the child-support-arrears state option and exceptions; skip claim-collection procedure. |
   | (r) | Encode substantial-winnings disqualification and reentry conditions; skip reporting/action procedure. |
   | (s) | Encode qualifying-conviction, sentence/restriction, and conduct-date conditions. |
+- Implemented and committed companion-tested modules for paragraphs (a), (b),
+  (d), (e), (f), (g), (h), (j), (k), (m), and (n).
+- The pinned `axiom-encode` validator, proof validator, and rules-engine
+  companion tests pass for each committed module:
+
+  | Module | Proof atoms | Test cases |
+  | --- | ---: | ---: |
+  | `273/11/a` | 24 | 5 |
+  | `273/11/b` | 18 | 10 |
+  | `273/11/d` | 11 | 4 |
+  | `273/11/e` | 9 | 4 |
+  | `273/11/f` | 13 | 5 |
+  | `273/11/g` | 8 | 4 |
+  | `273/11/h` | 1 | 3 |
+  | `273/11/j` | 11 | 5 |
+  | `273/11/k` | 12 | 5 |
+  | `273/11/m` | 5 | 6 |
+  | `273/11/n` | 30 | 9 |
 
 ## Next
 
-- Implement and validate the self-employment and other-nonhousehold-member
-  modules for paragraphs (a), (b), and (d).
-- Implement and validate special-population modules for paragraphs (e)-(h).
-- Implement and validate current sanction/eligibility modules for paragraphs
-  (j), (k), and (m)-(s), excluding (l).
-- Validate each coherent implementation step with the repository tooling.
+- Finish and validate the state-option modules for paragraphs (o)-(q).
+- Finish and validate the substantial-winnings and convicted-felon modules for
+  paragraphs (r)-(s).
 - Run the full relevant local checks, finalize this progress record and the
   requested output report, then push and open an unmerged PR referencing #1135.
