@@ -6,15 +6,18 @@ module:
     corpus_citation_path: us/regulation/7/273/11
   summary: |-
     7 CFR 273.11(f) permits blind or disabled residents of qualifying group
-    living arrangements to apply through the arrangement or independently.
-    Residents applying through the arrangement's representative are treated as
-    one-person households; independent applicants use the ordinary household
-    definition and can continue after the arrangement loses FNS retailer
-    authorization if otherwise eligible. On departure, unspent debited
-    benefits are returned in full. When benefits were spent, a resident leaving
-    before the sixteenth receives half the monthly allotment, or a pro rata
-    share of half for a member of residents certified as one household; a
-    resident leaving on or after the sixteenth receives no additional benefits.
+    living arrangements to apply through the arrangement, through a
+    representative of their choice, or on their own behalf when the arrangement
+    determines that they can handle their affairs. Residents applying through
+    the arrangement's representative are treated as one-person households;
+    independent applicants use the ordinary household definition. FNS
+    disqualification suspends the arrangement's representative status, while
+    qualifying independent applicants can continue if otherwise eligible. On
+    departure, unspent debited benefits are returned in full. When benefits
+    were spent, a resident leaving before the sixteenth receives half the
+    monthly allotment, or a pro rata share of half for a member of residents
+    certified as one household; a resident leaving on or after the sixteenth
+    receives no additional benefits.
 rules:
   - name: snap_gla_departure_day_half_allotment_cutoff
     kind: parameter
@@ -66,15 +69,31 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/11
               excerpt: >-
-                Disabled or blind residents of a group living arrangement ...
                 may apply either through use of an authorized representative
                 employed and designated by the group living arrangement or on
-                their own behalf
+                their own behalf or through an authorized representative of
+                their choice.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                The GLA must determine if a resident may apply on his or her own
+                behalf based on the resident's physical and mental ability to
+                handle his or her own affairs.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
           resident_is_disabled_or_blind
           and residence_meets_group_living_arrangement_definition
+          and (
+            resident_applies_through_gla_authorized_representative
+            or resident_applies_through_authorized_representative_of_choice
+            or (
+              resident_applies_on_own_behalf
+              and gla_determined_resident_can_handle_own_affairs
+            )
+          )
 
   - name: snap_gla_qualifies_for_resident_certification
     kind: derived
@@ -120,11 +139,35 @@ rules:
                 Prior to certifying any residents, the State agency must verify
                 that the GLA is authorized by FNS or is certified by the
                 appropriate agency of the State
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If FNS disqualifies the GLA as an authorized retail food store,
+                the State agency must suspend its authorized representative
+                status for the same time; but residents applying on their own
+                behalf will still be able to participate if otherwise eligible.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
           snap_gla_resident_special_application_allowed
-          and snap_gla_qualifies_for_resident_certification
+          and (
+            (
+              resident_applies_through_gla_authorized_representative
+              and snap_gla_qualifies_for_resident_certification
+              and not gla_fns_disqualified
+            )
+            or (
+              not resident_applies_through_gla_authorized_representative
+              and not gla_fns_disqualified
+              and snap_gla_qualifies_for_resident_certification
+            )
+            or (
+              not resident_applies_through_gla_authorized_representative
+              and snap_independently_applying_gla_resident_may_continue_after_gla_fns_disqualification
+            )
+          )
 
   - name: snap_gla_resident_certification_household_size
     kind: derived
@@ -159,7 +202,7 @@ rules:
             else: max(0, resident_household_size_under_section_273_1)
           else: 0
 
-  - name: snap_self_applying_gla_resident_may_continue_after_gla_fns_disqualification
+  - name: snap_independently_applying_gla_resident_may_continue_after_gla_fns_disqualification
     kind: derived
     entity: Household
     dtype: Judgment
@@ -178,8 +221,17 @@ rules:
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          gla_fns_disqualified
-          and resident_applies_on_own_behalf
+          resident_is_disabled_or_blind
+          and residence_meets_group_living_arrangement_definition
+          and not resident_applies_through_gla_authorized_representative
+          and (
+            resident_applies_through_authorized_representative_of_choice
+            or (
+              resident_applies_on_own_behalf
+              and gla_determined_resident_can_handle_own_affairs
+            )
+          )
+          and gla_fns_disqualified
           and resident_otherwise_snap_eligible
 
   - name: snap_gla_unspent_benefits_returned_at_departure
@@ -203,7 +255,10 @@ rules:
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if any_current_month_gla_benefits_spent_on_household_behalf:
+          if (
+            not household_departed_from_group_living_arrangement
+            or any_current_month_gla_benefits_spent_on_household_behalf
+          ):
             0
           else: max(0, current_month_benefits_already_debited_by_gla)
 
@@ -244,7 +299,8 @@ rules:
       - effective_from: '2008-10-01'
         formula: |-
           if (
-            any_current_month_gla_benefits_spent_on_household_behalf
+            household_departed_from_group_living_arrangement
+            and any_current_month_gla_benefits_spent_on_household_behalf
             and gla_household_departure_day_of_month < snap_gla_departure_day_half_allotment_cutoff
           ):
             if (
