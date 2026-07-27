@@ -9,6 +9,7 @@
 - Pinned corpus: `bf97b17baebfdf12601f7c23697524bf5adcdaed`
 - GitHub PR metadata confirms open PR #1137, branch `fed-parity/savers`, currently points to the target commit.
 - Shell `git ls-remote` verification is pending retry because the sandbox could not resolve `github.com`.
+- GitNexus graph indexing is unavailable because the sandbox denied access to `~/.gitnexus/registry.json`; generated cache artifacts were removed and the audit is using the raw diff, pinned validator, and reverse-index regeneration.
 - Verdict: pending.
 
 ## Done
@@ -21,6 +22,7 @@
 - Audited all three PR-only commits. Their committed file changes contain only the expected eight paths; no `PROGRESS.md` or `WORKER-REPORT.md` exists in any PR-only commit tree.
 - Confirmed the final PR diff is 8 files, 1,555 insertions, 1 deletion, and `git diff --check` is clean.
 - Confirmed the three selected tier outputs use the new `pipeline_tier_{50,20,10}_applicable_ceiling_for_return_category` names, distinct from the notice module's generic deferred surfaces.
+- Attempted the required GitNexus index workflow in an isolated graph worktree; recorded its sandbox failure and verified cleanup.
 
 ## Next
 
