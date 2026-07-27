@@ -430,3 +430,10 @@ and this node must not enter `certified-nodes.yaml`.
 - No file under `programs/`, no certified-node registry, toolchain, CI,
   CODEOWNERS, or dependency pin was changed.
 
+## Handoff status
+
+The RuleSpec evidence was committed locally on `x3-ma-snap-medical`; the
+oracle grid was committed locally on `closure/ma-snap-medical-grid`. Pushes
+from both worktrees failed because the sandbox could not resolve
+`github.com`. No remote branch exists from this session, so no draft PR was
+opened or represented as opened.

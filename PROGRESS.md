@@ -60,6 +60,9 @@ derived outputs and is unpublished. This is not a certification.
   semantic completeness of the monolithic 364.400 provision.
 - Wrote the complete five-criterion package at
   `us-ma/snap/v1-medical-deduction-evidence.md`.
+- Committed the evidence package and attempted to push both RuleSpec and
+  oracle branches. Both attempts failed because the sandbox could not resolve
+  `github.com`; no draft PR was opened.
 
 ## Next
 
