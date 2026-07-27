@@ -2,10 +2,8 @@
 
 ## State
 
-Design complete for eight subsection-granular 7 CFR 273.1
-household-composition modules. Implementation will proceed in three coherent
-commits: core general/minor formation, special separate/boarder treatment, and
-remaining boundary/ineligible-member treatment.
+Core household formation is implemented and locally validated. Six remaining
+special-household modules will be implemented in two coherent commits.
 
 ## Done
 
@@ -30,10 +28,16 @@ remaining boundary/ineligible-member treatment.
   273.9 already consumes 273.10's `snap_total_gross_income`.
 - Confirmed the pinned validator rejects merge-anchor key overrides. New tests
   will spell every local factual input in every case.
+- Implemented `273/1/a` and `273/1/b/1` with strict source proofs and companion
+  tests.
+- Covered the live minor boundaries at ages 15, 16, 17, 18, 21, and 22,
+  including direct control, financial and other dependency, State-law
+  adulthood, foster status, parental co-residence, and spouses.
+- Pinned `axiom-encode` validation and proof validation pass for both core
+  modules; all 17 core companion cases pass on the available local engine.
 
 ## Next
 
-- Implement and commit `a` plus precision-focused `b/1` modules and tests.
 - Implement and commit `b/2` through `b/4` modules and tests.
 - Implement and commit `b/5` through `b/7` modules and tests.
 - Regenerate the reverse index; run the pinned validator, proof validator,
