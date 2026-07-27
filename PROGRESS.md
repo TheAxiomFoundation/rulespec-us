@@ -2,7 +2,7 @@
 
 ## State
 
-- In progress: corrected pipeline and full companion implemented and green; mutation/index/repository gates next.
+- In progress: implementation and mutation proof complete; reverse-index/repository gates next.
 - Baseline: clean worktree at `6b0773d3f7fa6719f208154f3e609e292ab7abe7` (`origin/main`).
 - Constraints: local commits only; no push, GitHub writes, workflow/toolchain edits, or manifest signing.
 
@@ -24,9 +24,9 @@
 - Preserved separate primary/spouse $2,000 caps and added a both-spouses-over-cap case.
 - Expanded the pipeline companion to 25 cases, including every exact and one-dollar-over tier edge for single, joint, and head-of-household filers; MFS and surviving-spouse category checks; and eligibility screens.
 - Passed the 25-case companion, focused CI validation (using a temporary canonical checkout alias for this `wt-savers` worktree name), proof validation, and zero-missing money-atom validation.
+- Mutation proof: changing the first comparison from `<=` to `<` produced 8 assertion failures across the exact 50-percent-limit cases (single, joint, head of household, MFS, and surviving spouse); restoring `<=` returned all 25 cases to green.
 
 ## Next
 
-- Flip one encoded tier boundary and record the expected companion failures, then restore and rerun green.
 - Regenerate/check the corpus-provision reverse index and run focused repository tests.
 - Inventory new output legal IDs, write `WORKER-REPORT.md`, and finalize the committed progress state.
