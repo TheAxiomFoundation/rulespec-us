@@ -2,10 +2,10 @@
 
 ## State
 
-The case inventory, retained-law review, and engine-source trace are complete.
-Axiom is correct for this class; PolicyEngine incorrectly excludes the earnings
-of a school-age minor living alone. The current task is to preserve the exact
-1.767.3 reproduction and prepare the report and proposed dispositions.
+Complete. Axiom is correct for this class; PolicyEngine incorrectly excludes
+the earnings of a school-age minor living alone. The exact 1.767.3
+reproduction and the full investigation report are committed. No encode or
+adapter change is needed for these cases.
 
 ## Done
 
@@ -44,10 +44,19 @@ of a school-age minor living alone. The current task is to preserve the exact
   SPM Calculator 0.2.0 for 2026-01. Both AL age 17 and NC age 15 reproduce
   zero counted income, eligibility, and a $298 monthly benefit; the
   school-status and age-18 controls count income and return zero benefit.
+- Ran the existing 7 CFR 273.9 and 273.10 companion suites against the pinned
+  engine fallback: all 4 and 5 cases passed, respectively.
+- Wrote `WORKER-REPORT.md` with the corrected 12-case inventory, retained-law
+  analysis, source trace, top-code investigation, issue draft, and five
+  proposed suite disposition documents.
+- Validated all five proposed disposition documents with
+  `axiom_oracles.comparison.dispositions.validate_dispositions`.
 
 ## Next
 
-- Run the existing federal companion tests as regression evidence.
-- Write `WORKER-REPORT.md` with the case table, exact retained-law citations,
-  root cause, issue draft, and proposed suite dispositions.
-- Record final validation and commit the completed report.
+- Regenerate the five oracle reports with PolicyEngine US 1.767.3.
+- File the drafted PolicyEngine issue and add its URL to the proposed
+  dispositions.
+- Add the validated dispositions in `axiom-oracles` after confirming the
+  regenerated case selectors.
+- Leave any broader 7 CFR 273.9(b)/(c) composition implementation to Worker A.

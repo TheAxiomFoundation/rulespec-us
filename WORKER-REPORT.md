@@ -673,3 +673,4 @@ or GitHub state was modified.
 - `d5f5d0d87` — `docs: record SNAP teen legal conclusion`
 - `92becd9bb` — `test: add PolicyEngine SNAP lone-minor repro`
 - `8207feb60` — `test: align SNAP teen repro to 2026 period`
+- `2a7990544` — `docs: report SNAP lone-minor oracle defect`
