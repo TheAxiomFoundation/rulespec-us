@@ -32,12 +32,17 @@
 - Composed a transient one-output payment-standard program, compiled it with
   released engine v0.1.1, and ran the size-11 golden case to $1,662/month.
   The program was deliberately not committed under the closure-sprint freeze.
+- Reproduced that compile from a clean RuleSpec snapshot at
+  `65bb172054984d83a5329d1d05cc5b1c605c0479`: two byte-identical format-2
+  artifacts have SHA-256
+  `0b3dca0bd174e4a6ea928b1ffc8276aa3a6dcc1193ed15e8a8be262a30e1b631`.
+- Recorded the released-tag local run response, including size band ten and
+  $1,662 USD, while preserving the distinction between this local source-tag
+  build and an official cargo-dist release asset.
 
 ## Next
 
 - Build, register, and run the smallest honest PolicyEngine case grid.
-- Reproduce and hash the local v0.1.1 compile/run receipt from a pinned clean
-  RuleSpec tree.
 - Assemble and validate the five-criteria evidence package, with executable
   left false unless a published artifact and official-binary stranger path
   can actually be proved.
