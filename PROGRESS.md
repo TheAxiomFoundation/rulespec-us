@@ -4,11 +4,14 @@
 
 - Active branch: `fed-parity/snap-fed`.
 - Starting commit: `1158ba5b248c3cbbfe1768357f03ca43c8b3618e`.
-- Worktree started clean and matches the locally cached `origin/main`.
+- Worktree started clean. On 2026-07-27, the locally cached
+  `origin/main` advanced to `6b0773d3fdc61d4926790509b89d70a9aa970736`;
+  the two progress commits were rebased onto that commit before encode edits.
 - A fresh fetch was attempted on 2026-07-27 but the sandbox could not resolve
   `github.com`; all work therefore uses the pinned local checkout and corpus.
-- The required residual census is complete. Legal/root-cause validation remains
-  in progress; no encode change has been selected yet.
+- The required census, retained-text audit, and exact PolicyEngine-US 1.767.3
+  trace are complete. Federal encode changes and companion mutation tests are
+  next.
 
 ## Done
 
@@ -38,13 +41,49 @@
   rulespec commit, already contain the elderly/disabled gross-test exemption
   and the one-/two-person minimum-benefit floor. The remaining code seam under
   investigation is the externally supplied medical-deduction entitlement flag.
+- Rechecked the retained 7 CFR Part 273 XML after the toolchain pin advanced
+  from `f7fe8471c415908b26cfac1e199e92d1580c8ff3` to
+  `bf97b17baebfdf12601f7c23697524bf5adcdaed`; the pinned Part 273 source has
+  the same SHA-256 (`92d5f3baba66e0f7f8ba2a2887a2a664166fcc0deb275b1b143a7ca23a4114a6`).
+- Verified the controlling retained text:
+  - `us/regulation/7/273/9`, paragraph (a), requires only the net test for an
+    elderly/disabled household and exempts a categorically eligible household
+    from both tests.
+  - `us/regulation/7/273/9/d/3` allows medical expenses over $35 incurred by an
+    elderly/disabled member, subject to the listed expense limitations.
+  - `us/regulation/7/273/10`, paragraph (e)(2)(ii)(C), sets the non-initial
+    one-/two-person minimum at 8 percent of the one-person maximum, rounded to
+    the nearest whole dollar.
+- Reproduced the 85 strict report rows against the pinned Populace rows with
+  PolicyEngine-US 1.767.3. The July 6 reports identify PolicyEngine-US 1.752.2,
+  so they are stale relative to the requested version:
+
+  | Current 1.767.3 disposition | AL | MA | NC | SC | TN | Total |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Eligible only through categorical path | 0 | 12 | 0 | 23 | 0 | 35 |
+  | Eligible through both categorical and ordinary income path | 0 | 11 | 0 | 3 | 0 | 14 |
+  | Eligible only through ordinary income path | 0 | 1 | 0 | 0 | 0 | 1 |
+  | No longer eligible | 0 | 18 | 0 | 17 | 0 | 35 |
+  | **Total** | **0** | **42** | **0** | **43** | **0** | **85** |
+
+- Confirmed that the named MA case `ecps-1984` is categorical-only under
+  1.767.3. The named SC case `ecps-28671` is both categorically eligible and
+  net-income eligible.
+- Confirmed a PolicyEngine-side minimum-allotment defect: 1.767.3 calculates
+  `0.08 * $298 = $23.84` without the regulation's nearest-dollar rounding.
+  The report adapter further annual-averages a January request, producing
+  `$23.973597208658855`. Axiom's encoded `$24` floor is correct.
+- Selected two small federal corrections supported by paragraph (a) and
+  paragraph (d)(3): include regular categorical eligibility in the federal
+  income-eligibility result, and derive medical-deduction entitlement from the
+  elderly/disabled household-member fact rather than an external Boolean.
 
 ## Next
 
-1. Read the retained text for 7 CFR 273.9(a)(2), 273.9(d)(3), and
-   273.10(e)(2)(ii)(C), then trace the current federal encodes.
-2. Reproduce representative cases in PolicyEngine-US 1.767.3 and isolate which
-   rule differences drive the mismatches.
-3. Make the smallest legally correct encode and companion-test changes, capture
-   mutation evidence, and run the required suites.
-4. Write and commit `WORKER-REPORT.md`.
+1. Add companion cases that fail against the pre-fix encode and record their
+   failure output as mutation evidence.
+2. Make the two selected federal encode changes and run both required companion
+   suites.
+3. Write and commit `WORKER-REPORT.md`, including the stale-case dispositions,
+   conservative clearance estimate, exact law paths, and PolicyEngine issue
+   draft.
