@@ -7,7 +7,7 @@
 - Reviewed PR head: `995fff6104a19a89843934e3832cd097c308af1d`.
 - Base: `origin/main` at `6b0773d3f7fa6719f208154f3e609e292ab7abe7`.
 - Pinned corpus: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
-- Status: executable, proof, provenance, and hygiene checks complete; final legal-fidelity synthesis in progress.
+- Status: all review dimensions complete; final request-changes report drafting in progress.
 
 ## Done
 
@@ -34,8 +34,11 @@
 - Verified the two manifest file unions and hashes cover exactly the four changed RuleSpec/test files at ancestor `953106a58`; HMAC authenticity cannot be checked because the signing key is unavailable.
 - Verified the oracle ledger grows from 2,293 to 2,313 by exactly the expected 20 IDs, with matching ceilings, no removals, and no foreign additions.
 - Verified the reverse index is current at 4,238 provisions, 5,077 edges, and 4,485 modules.
+- Verified legal fidelity against pinned statute rows 225, 230, 235, 240, 245, and 1,260: per-person caps, AGI add-backs, inclusive tiers, all primary/spouse eligibility screens, and the explicit section 25B(d)(2) deferral pass.
+- Confirmed the pinned validator detects the same deferred-surface defect in all three selected 50%, 20%, and 10% AGI-limit outputs; the CLI reports the first and exits 1.
+- Independently passed the 26-case suite on exact PR bytes using an offline build of pinned rules engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
+- Confirmed remote generated-manifest guard succeeds at the target head, while local HMAC verification remains unavailable without the signing key.
 
 ## Next
 
-- Complete statutory-fidelity synthesis and classify findings.
 - Write and commit the final verdict to `WORKER-REPORT.md`.
