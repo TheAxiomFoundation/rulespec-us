@@ -31,13 +31,15 @@ conformance/closure/execution evidence remain unresolved.
 - Added ten companion cases covering wages below, exactly at, and above the
   $184,500 base; exactly at and above the Additional Medicare thresholds; and
   fail-closed section 3101(c) domain boundaries.
-- Passed proof validation, all ten new RuleSpec cases, relevant repository
+- Passed proof validation, all eleven new RuleSpec cases, relevant repository
   structure tests, and pinned composer/engine compilation of the new program.
+- Added a $300,000 single-filer golden case with the section 3101(a),
+  3101(b)(1), and 3101(b)(2) derivation shown line by line, plus a matching
+  Person companion case.
 
 ## Next
 
-1. Add and validate the hand-checkable golden case.
-2. Add mapping-only oracle entries in a fresh writable checkout without running
+1. Add mapping-only oracle entries in a fresh writable checkout without running
    any comparison suite or regenerating any report.
-3. Run permitted checks, request an independent review, update this file, push
+2. Run permitted checks, request an independent review, update this file, push
    if possible, and open draft PRs if network access returns.
