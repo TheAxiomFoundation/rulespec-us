@@ -18,7 +18,7 @@ claim for those programs.
 |---|---|---|
 | `provision_rooted` | **holds** | Exact RuleSpec module and citation path resolve through both corpus inventory occurrences. |
 | `conformant` | **holds** | Registered 11-case grid against PolicyEngine `wa_tanf_payment_standard`: 11 matches, zero mismatches or errors. |
-| `exercised` | **holds** | Sizes 1 through 11 exercise every table cell once and the first value above the “10 or more” boundary. |
+| `exercised` | **holds** | Sizes 1 through 10 exercise every table cell; size 11 exercises the first value above the “10 or more” boundary. |
 | `closed` | **holds** | Two raw corpus records deduplicate to one legal citation path; that path is encoded, with zero pending. |
 | `executable` | **does not hold** | Released-tag local compile and golden run pass, but the artifact is unpublished and no official-binary stranger path exists. |
 
@@ -51,10 +51,10 @@ not an entry ready to paste: `attested_by` remains a placeholder and
       evidence: us-wa/tanf/v1-payment-standard-evidence.md:297
     closed:
       holds: true
-      evidence: us-wa/tanf/v1-payment-standard-evidence.md:352
+      evidence: us-wa/tanf/v1-payment-standard-evidence.md:353
     executable:
       holds: false
-      evidence: us-wa/tanf/v1-payment-standard-evidence.md:401; local load and value pass, published-artifact stranger path blocked
+      evidence: us-wa/tanf/v1-payment-standard-evidence.md:402; local load and value pass, published-artifact stranger path blocked
 ```
 
 The RuleSpec pin is the implementation-and-fixture commit, not this narrative
@@ -341,9 +341,10 @@ It contains eleven target-output cases for sizes 1 through 11. A twelfth,
 older fixture exercises the standalone indexed parameter and is not counted
 as a target-output case.
 
-All 12 file cases passed with `axiom-encode test` and released engine v0.1.1
-through a canonical `rulespec-us` path. Repository layout,
-encoding-manifest-structure, and reverse-index tests also passed: 18 tests.
+All 12 file cases passed with `axiom-encode test` and the local released-tag
+source build of engine v0.1.1 through a canonical `rulespec-us` path.
+Repository layout, encoding-manifest-structure, and reverse-index tests also
+passed: 18 tests.
 
 The checked-in encoding manifests retain pre-augmentation test hashes and are
 not used as evidence for the new cases. The evidence is the pinned fixture
@@ -470,7 +471,7 @@ artifact_format_version: 2
 selected_public_output_count: 1
 selected_public_output: us-wa:regulations/388/388-478/388-478-0020#cash_assistance_unit_maximum_monthly_payment_standard
 compiled_derived_node_count: 2
-compiled_dependencies:
+compiled_derived_nodes:
   - us-wa:regulations/388/388-478/388-478-0020#cash_assistance_payment_standard_size_band
   - us-wa:regulations/388/388-478/388-478-0020#cash_assistance_unit_maximum_monthly_payment_standard
 fast_path_strategy: generic_bulk
