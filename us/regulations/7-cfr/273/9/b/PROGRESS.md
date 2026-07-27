@@ -3,7 +3,8 @@
 ## State
 
 Paragraph (b) implementation and companion tests are complete. Targeted,
-proof, money-atom, and reverse-index validation pass. The sole remaining
+proof, money-atom, and reverse-index validation pass. Publication is waiting
+for approval of the connected GitHub branch-creation action. The sole remaining
 repository-suite failure is the unavailable signing-key handoff for the edited
 parent manifest.
 
@@ -50,9 +51,13 @@ parent manifest.
   only the edited-parent signing-manifest assertion fails.
 - Confirmed signing dry-run requires manifests for the parent and new child;
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable in this environment.
+- Confirmed remote `main` still matches the local base for both edited shared
+  files. Direct shell push is DNS-blocked, and two connected GitHub branch
+  creation attempts were canceled before making any remote change.
 
 ## Next
 
-- Audit the final diff, push the branch, and open the draft pull request.
+- Approve connected GitHub branch creation, publish the committed tree, and
+  open the draft pull request.
 - Hand off generation of the two signed apply manifests to an environment with
   `AXIOM_ENCODE_APPLY_SIGNING_KEY`.
