@@ -2,7 +2,8 @@
 
 ## State
 
-Design complete; implementation is next. The change will be additive so the
+Paragraph (j) is encoded and covered by focused fixtures. Paragraphs (f) and
+(g) are the active implementation step. The change remains additive so the
 existing composed work-requirement outputs and frozen program verdicts are not
 rewired.
 
@@ -29,15 +30,22 @@ rewired.
   comparable-disqualification cross-reference as `273.11(1)`. The optional
   identical Title IV-A sanction will be deferred rather than assigned a
   guessed target.
+- Removed the broad paragraph (j) deferral.
+- Encoded the State lookback-window limits, qualifying-job thresholds,
+  voluntary quit and reduced-work-effort determinations, incorporated general
+  good cause, quit-specific good cause, and the paragraph (j)(4) exceptions.
+- Added focused paragraph (j) fixtures covering boundary dates and earnings,
+  strike dismissal, comparable replacement work, exclusions, reduced effort,
+  minor variations, and good cause.
+- Parsed both YAML files and passed all nine repository-layout tests.
 
 ## Next
 
-- Remove the broad (f), (g), and (j) deferrals while retaining (k), (m), and
-  other out-of-slice deferrals.
+- Remove the broad (f) and (g) deferrals while retaining (k), (m), and other
+  out-of-slice deferrals.
 - Add a narrow (f)(7)(iv) deferral for the ambiguous optional identical
   Title IV-A sanction.
 - Encode and test disqualification triggers and periods, individual and
-  optional household effects, reentry, good cause, voluntary quit, and work
-  effort reduction.
+  optional household effects, and reentry.
 - Validate, update this log, commit each coherent step, push, and open the
   required draft PR.
