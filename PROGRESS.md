@@ -25,6 +25,22 @@
   registry registration was sandbox-blocked (`EPERM` on
   `/Users/maxghenis/.gitnexus/registry.json`), so graph queries are unavailable even
   though the local index completed.
+- Proved inertness independently:
+  - base/head composed source is byte-identical at 22,528 bytes and SHA-256
+    `a660a49b575dcce18a688309b385fb4bcb158c320a451181f9fa0e6c9273777b`;
+  - both selected-output closures contain exactly 77 unique derived definitions;
+  - full closure definitions have identical SHA-256
+    `0e15c89b2f91182fe49ac6f609266566ee27190bee897939d3ea7b6ef1f06f96`;
+  - no closure definitions were added, removed, or changed.
+- Spot-checked integrity: all six applied-file hashes and external import hashes
+  match; each re-signed manifest's ancestry matches its immediate parent; reverse
+  index generation/check passes; focused manifest/index tests report 9 passed; the
+  ten GitHub PR paths contain no program, toolchain, ledger, progress, or report path.
+- Diagnosed and corrected a review-path artifact: using a worktree whose basename was
+  not `rulespec-us` produced false unknown-ID/source-relation failures. A detached
+  execution worktree at the same exact head under a canonical `rulespec-us` basename
+  passes all 14 page-159 companion cases with both the prescribed local engine binary
+  and an isolated build of the pinned engine ref.
 
 ## Next
 
