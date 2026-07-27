@@ -2,8 +2,9 @@
 
 ## State
 
-In progress on branch `closure/w3-eitc-32-eligibility` from `origin/main`.
-Assigned EITC frontier items: 1, 2, 5, 6, and 7.
+Implementation and targeted validation complete on branch
+`closure/w3-eitc-32-eligibility` from `origin/main`. Assigned EITC frontier
+items: 1, 2, 5, 6, and 7.
 
 ## Done
 
@@ -32,9 +33,27 @@ Assigned EITC frontier items: 1, 2, 5, 6, and 7.
   output deferred: section 151 exports no per-child entitlement result, while
   the section 152 parent and its subsection (e) adjusted bases are
   entity/schema unsupported.
+- Aligned the child marriage input with the repository's point-in-time
+  `married_at_close` fact convention; the §32(c)(3)(B) text does not invoke
+  section 7703's taxpayer filing-status classification.
+- Updated the section 24(d) proof import hash for the changed section 32
+  module.
+- Validation completed:
+  - section 32 proof validation: 50 atoms, no issues;
+  - section 24(d) proof validation: 17 atoms, no issues;
+  - section 24(d) execution: 4 of 4 cases passed;
+  - section 32 execution: all 21 newly added cases passed; the two pre-existing
+    section 32(c)(2) fixtures still emit their same four stale-reference
+    diagnostics;
+  - repository layout: 9 tests passed;
+  - section 24(d) non-reviewer validation passed.
 
 ## Next
 
-- Run final targeted, proof, schema, and repository validation.
-- Record final validation in this ledger, push, and open the requested draft
-  PR.
+- Push and open the requested draft PR.
+- A key holder must refresh the signed applied-rule manifests for sections 32
+  and 24(d). The repository signing command was attempted, but this workspace
+  does not provide `AXIOM_ENCODE_APPLY_SIGNING_KEY`; no signature was forged or
+  bypassed.
+- Separately repair the pre-existing stale section 32(c)(2) test references;
+  they are outside this assignment.
