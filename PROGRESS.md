@@ -4,7 +4,7 @@
 
 - Branch: `closure/w1-eitc-152-residency`, based on `origin/main`.
 - Scope: EITC frontier items 4, 8, and 9.
-- Status: all three assigned outputs are encoded; broader validation is next.
+- Status: all three assigned outputs are encoded; clean-checkout validation is in progress.
 - Worktree note: the mandated external path was rejected by the filesystem sandbox, so this branch is isolated at `.git/codex-worktrees/w1-eitc-152-residency`.
 - Corpus pin inspected: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
 
@@ -59,10 +59,16 @@
 - Kept the parent facts scalar because the current companion runner cannot
   attach a child-to-parent relation inside § 32's tax-unit-to-child relation;
   the scalar pair is also faithful to paragraph (B)'s “both parents” scope.
+- A clean-checkout `validate --skip-reviewers` run correctly flagged that the
+  fraction rule's original proof excerpt did not itself establish `Person`
+  scope. Expanded its proof to cite both the paragraph's individual definition
+  and subparagraph (B)'s abode condition.
+- Confirmed on untouched `origin/main` that § 32's separate missing-positive-
+  coverage warning for `eitc_qualifying_child` predates this branch.
 
 ## Next
 
-- Run the available module validators and the relevant repository regression
-  checks, then inspect the complete diff for scope and provenance.
+- Rerun the clean-checkout module validator after the proof-scope repair and
+  run the relevant repository regression checks.
 - Write the final report, push, and open the requested draft PR if network
   access permits.
