@@ -10,8 +10,8 @@ assessment divide as follows:
 | Bucket | Count |
 |---|---:|
 | (a) Already computed in-graph | 0 |
-| (b) Declarable frontier fact | 13 |
-| (c) Must-encode | 21 |
+| (b) Declarable frontier fact | 11 |
+| (c) Must-encode | 23 |
 | **Total** | **34** |
 
 This applies the administrative-cut rule strictly. A value is in bucket (b)
@@ -39,10 +39,10 @@ features or administrative-data ingestion unless the row says otherwise.
 | 4 | `eitc_disallowance_period_applies` | (c) | 26 USC 32(k)(1); **1 path**, `us/statute/26/32/k/1`. About **2-4 hours** to compute the two- and ten-year windows from prior final-determination year/type facts. Form 8862's instructions describe the bans, but no filed line reports the active-period conclusion. |
 | 5 | `eitc_relevant_investment_income` | (c) | 26 USC 32(i)(2); **1 path**, `us/statute/26/32/i/2`. About **1-2 days** to assemble and net every statutory disqualified-income category and test the zero/netting boundaries. No return line reports this EITC-specific aggregate. |
 | 6 | `individual_principal_place_of_abode_with_taxpayer_fraction` | (c) | 26 USC 32(c)(3) through 152(c)(1)(B); **2 paths**, `us/statute/26/32/c/3` and `us/statute/26/152/c/1`. About **0.5-1 day** for day counting, birth/death and temporary-absence treatment, normalization, and tests. Form 8862 line 7 supplies days and Form 1040 Dependents row (5) supplies only the greater-than-half result, not this fraction. |
-| 7 | `prior_deficiency_denial_without_required_eligibility_information` | (b) | [Form 8862][f8862] header records that a non-math/clerical prior reduction or disallowance occurred; line 2's EIC box and Part II lines 3-11 are the Secretary-required eligibility information. IRS account status plus presence/completion of this filed form directly supplies the procedural boundary fact. |
+| 7 | `prior_deficiency_denial_without_required_eligibility_information` | (c) | 26 USC 32(k)(2); **1 path**, `us/statute/26/32/k/2`. About **0.5-1 day** to combine the prior deficiency determination with current Secretary-required eligibility-information compliance and test the no-credit gate. [Form 8862][f8862] exposes pieces of that procedure, but no line reports this exact composite. |
 | 8 | `qualifying_child_marital_status_requires_section_151_entitlement` | (c) | 26 USC 32(c)(3)(B); **1 path**, `us/statute/26/32/c/3`. About **2-4 hours** to add the child's year-end marital-status fact, derive the exception gate, and test it. No claimant-return line reports this precise gate. |
 | 9 | `satisfies_eitc_separated_spouse_rules` | (b) | [Form 1040][f1040] page 1 has the exact unnumbered checkbox after Dependents for MFS/HOH filers who lived apart for the last six months, or have a state-law written separation/decree and no shared household at year end. Those are the section 32(d)(2) administrative branches. |
-| 10 | `taxpayer_entitled_to_section_151_deduction_for_child_or_would_be_but_for_section_152_e` | (b) | [Form 1040][f1040] Dependents rows (1)-(4) record the claimed dependent; [Form 8862][f8862] line 16 directly asks whether the person is the filer's dependent; [Form 8332][f8332] Parts I-II record the current/future section 152(e) release. |
+| 10 | `taxpayer_entitled_to_section_151_deduction_for_child_or_would_be_but_for_section_152_e` | (c) | 26 USC 32(c)(3)(B), 151(c), and 152(e); **9 paths**: `us/statute/26/32/c/3`, `us/statute/26/151/c`, and all 7 paths at `us/statute/26/152/e` through `/6`. About **2-4 days** to encode dependency entitlement, the divorced/separated-parent release rule, child/tax-unit relations, and tests. Form 1040 dependent rows and [Form 8332][f8332] Parts I-II record a claim/release, not the complete entitlement-or-but-for conclusion. |
 | 11 | `taxpayer_is_dependent_for_section_151_to_another_taxpayer` | (b) | [Form 1040][f1040] line 12a says “Someone can claim You as a dependent”; [Form 8862][f8862] lines 11a-11b repeat the taxpayer/spouse conclusion. |
 | 12 | `taxpayer_is_nonresident_alien_for_any_portion_of_year` | (b) | [Form 1040][f1040] line 12c records dual-status-alien status; [Form 1040-NR][f1040nr] is the full-year nonresident return; [Schedule OI][f1040nro] items B, E, and H record tax residence, immigration status, and U.S.-presence days. IRS observes the filed residence classification and period from this return package. |
 | 13 | `taxpayer_is_qualifying_child_of_another_taxpayer` | (b) | [Form 8862][f8862] line 4 asks exactly whether the taxpayer or spouse could be claimed as another taxpayer's qualifying child. |

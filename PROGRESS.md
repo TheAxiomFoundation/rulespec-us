@@ -78,8 +78,8 @@
   `min_(maximum, earnings * phase_in_rate)`, drafted a no-tolerance-widening
   comparison disposition and upstream issue, and did not file it.
 - Classified all 34 derived frontier leaves with one row each: zero are
-  already computed in the final graph, 13 are exact IRS/SSA/military
-  administrative boundary facts, and 21 require encoding. Exact form fields,
+  already computed in the final graph, 11 are exact IRS/SSA/military
+  administrative boundary facts, and 23 require encoding. Exact form fields,
   operative corpus citation paths, and honest effort estimates are recorded
   in `us/tax/eitc/u1-frontier-classification.md`.
 - Cross-checked all 34 rows against the 28 reached derived rules and against
@@ -107,6 +107,11 @@
   to the official section 4.06. This was a citation-metadata defect only; no
   parameter or expected amount changed. The pinned 25-case companion remained
   green after the correction.
+- The same strict audit rejected two initially overbroad administrative cuts:
+  Form 8862 does not report the section 32(k)(2) prior-denial/information
+  composite, and dependent/release fields do not report the complete section
+  151-entitlement-or-section-152(e) conclusion. Both are now must-encode;
+  the final split is 0 already computed, 11 declarable, and 23 must-encode.
 
 ## Next
 
