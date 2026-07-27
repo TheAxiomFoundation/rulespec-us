@@ -2,7 +2,8 @@
 
 ## State
 
-- Review status: in progress.
+- Review status: complete.
+- Verdict: `APPROVE`.
 - Review worktree: `.git/review-worktrees/pr-1143-6573e95`.
 - Review branch: `review/pr-1143-6573e95`.
 - GitHub-confirmed PR branch: `fed-parity/addmed-se-leg`.
@@ -68,7 +69,4 @@
 
 ## Next
 
-- Establish the immutable PR-only range and inspect every changed byte.
-- Audit legal fidelity, wage-leg preservation, adversarial cases, manifests, reverse index, and PR history hygiene.
-- Run pinned-corpus validation, companion tests, required mutations, and restore-pass checks.
-- Write the evidence-backed verdict to `REVIEW.md` and complete this ledger.
+- None. The evidence-backed final verdict is recorded in `REVIEW.md`.
