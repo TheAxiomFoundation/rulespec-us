@@ -10,18 +10,24 @@ module:
         Paragraph (b)(3)(iii) refers foster-care-boarder income treatment to
         7 CFR 273.1(c)(6), but the current 273.1 has no paragraph (c)(6).
         The stale cross-reference does not supply a current computational
-        expense rule, so this branch is deferred rather than inferred.
+        expense rule, so a household with this enterprise type has an
+        incomplete expense determination rather than an inferred zero expense.
   summary: |-
     7 CFR 273.11(b) defines allowable costs of producing SNAP
     self-employment income. Actual allowable costs include identifiable labor,
     stock, raw-material, seed and fertilizer, principal, interest, insurance,
     tax, and other business costs. Prior-period losses, income taxes,
     retirement set-asides and personal work expenses, and depreciation are
-    not allowable. Boarder lodging and meal costs may not exceed the payments
-    received from boarders. In place of actual costs, a State agency may use
-    day-care reimbursement or per-meal standards, a maximum-allotment or
-    flat/percentage method for noncommercial non-foster boarders, a TANF
-    standard, or an FNS-approved amount.
+    not allowable. Boarder lodging and meal costs may not exceed payments
+    received from boarders. A State may instead use specified day-care,
+    noncommercial non-foster-boarder, TANF, or FNS-approved methods. Because
+    the regulation makes methods applicable to particular self-employment
+    types and expressly permits different methods for different types, this
+    module assigns each enterprise to one method and adds the resulting
+    type-specific expenses. Explicit validity and completeness outputs prevent
+    missing methods, multiple methods, invalid sub-options, inapplicable
+    type-specific methods, or the stale foster-boarder cross-reference from
+    being treated as an ordinary zero expense.
 rules:
   - name: snap_identifiable_allowable_nonboarder_self_employment_costs
     kind: derived
@@ -37,28 +43,46 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: identifiable costs of labor; stock; raw material; seed and fertilizer
+              excerpt: >-
+                identifiable costs of labor; stock; raw material; seed and
+                fertilizer
           - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: payments on the principal of the purchase price of income-producing real estate and capital assets
+              excerpt: >-
+                payments on the principal of the purchase price of
+                income-producing real estate and capital assets
           - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: interest paid to purchase income-producing property; insurance premiums; and taxes paid on income-producing property
+              excerpt: >-
+                interest paid to purchase income-producing property; insurance
+                premiums; and taxes paid on income-producing property
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          self_employment_labor_costs
-          + self_employment_stock_and_raw_material_costs
-          + self_employment_seed_and_fertilizer_costs
-          + self_employment_principal_payments_for_income_producing_property_and_assets
-          + self_employment_interest_paid_to_purchase_income_producing_property
-          + self_employment_insurance_premiums
-          + self_employment_taxes_paid_on_income_producing_property
-          + other_identifiable_allowable_self_employment_costs
+          max(0, actual_method_nonboarder_self_employment_labor_costs)
+          + max(0, actual_method_nonboarder_self_employment_stock_and_raw_material_costs)
+          + max(0, actual_method_nonboarder_self_employment_seed_and_fertilizer_costs)
+          + max(
+            0,
+            actual_method_nonboarder_self_employment_principal_payments_for_income_producing_property_and_assets
+          )
+          + max(
+            0,
+            actual_method_nonboarder_self_employment_interest_paid_to_purchase_income_producing_property
+          )
+          + max(0, actual_method_nonboarder_self_employment_insurance_premiums)
+          + max(
+            0,
+            actual_method_nonboarder_self_employment_taxes_paid_on_income_producing_property
+          )
+          + max(
+            0,
+            actual_method_other_identifiable_allowable_nonboarder_self_employment_costs
+          )
 
   - name: snap_allowable_boarder_lodging_and_meal_cost_actual_method
     kind: derived
@@ -74,13 +98,15 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: Any amount that exceeds the payment a household receives from a boarder for lodging and meals.
+              excerpt: >-
+                Any amount that exceeds the payment a household receives from a
+                boarder for lodging and meals.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
           min(
-            actual_boarder_lodging_and_meal_costs,
-            boarder_payments_received_for_lodging_and_meals
+            max(0, actual_method_boarder_lodging_and_meal_costs),
+            max(0, actual_method_boarder_payments_received_for_lodging_and_meals)
           )
 
   - name: snap_actual_allowable_self_employment_costs
@@ -89,7 +115,7 @@ rules:
     dtype: Money
     period: Month
     unit: USD
-    source: 7 CFR 273.11(b)(1)-(2)
+    source: 7 CFR 273.11(b)(1)-(3)
     metadata:
       proof:
         atoms:
@@ -97,17 +123,16 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: Allowable costs of producing self-employment income include, but are not limited to
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us/regulation/7/273/11
-              excerpt: Any amount that exceeds the payment a household receives from a boarder for lodging and meals.
+              excerpt: >-
+                State agencies may elect to use actual costs for allowable
+                expenses in accordance with paragraphs (b)(1) and (b)(2)
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          snap_identifiable_allowable_nonboarder_self_employment_costs
-          + snap_allowable_boarder_lodging_and_meal_cost_actual_method
+          if self_employment_enterprises_assigned_actual_cost_method_count > 0:
+            snap_identifiable_allowable_nonboarder_self_employment_costs
+            + snap_allowable_boarder_lodging_and_meal_cost_actual_method
+          else: 0
 
   - name: snap_allowable_previous_period_net_loss_cost
     kind: derived
@@ -142,7 +167,9 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: Federal, State, and local income taxes, money set aside for retirement purposes, and other work-related personal expenses
+              excerpt: >-
+                Federal, State, and local income taxes, money set aside for
+                retirement purposes, and other work-related personal expenses
     versions:
       - effective_from: '2008-10-01'
         formula: '0'
@@ -180,21 +207,31 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: The maximum SNAP allotment for a household size that is equal to the number of boarders
+              excerpt: >-
+                The maximum SNAP allotment for a household size that is equal
+                to the number of boarders
           - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: Any amount that exceeds the payment a household receives from a boarder for lodging and meals.
+              excerpt: >-
+                Any amount that exceeds the payment a household receives from a
+                boarder for lodging and meals.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
           min(
-            maximum_snap_allotment_for_household_size_equal_to_number_of_boarders,
-            boarder_payments_received_for_lodging_and_meals
+            max(
+              0,
+              maximum_snap_allotment_for_household_size_equal_to_boarders_assigned_boarder_expense_method
+            ),
+            max(
+              0,
+              boarder_method_payments_received_for_lodging_and_meals
+            )
           )
 
-  - name: snap_boarder_flat_or_percentage_method_cost
+  - name: snap_boarder_flat_amount_method_cost
     kind: derived
     entity: Household
     dtype: Money
@@ -213,18 +250,272 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: Any amount that exceeds the payment a household receives from a boarder for lodging and meals.
+              excerpt: >-
+                Any amount that exceeds the payment a household receives from a
+                boarder for lodging and meals.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
           min(
-            boarder_payments_received_for_lodging_and_meals,
-            if state_uses_boarder_fixed_percentage_method:
-              boarder_payments_received_for_lodging_and_meals
-              * state_boarder_fixed_expense_rate
-            else:
-              state_boarder_flat_expense_amount
+            max(0, state_boarder_flat_expense_amount_for_assigned_enterprises),
+            max(0, boarder_method_payments_received_for_lodging_and_meals)
           )
+
+  - name: snap_boarder_fixed_percentage_method_cost
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(b)(2)(iv), (b)(3)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: A flat amount or fixed percentage of the gross income
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Any amount that exceeds the payment a household receives from a
+                boarder for lodging and meals.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          min(
+            max(0, boarder_method_payments_received_for_lodging_and_meals)
+            * max(0, state_boarder_fixed_expense_rate),
+            max(0, boarder_method_payments_received_for_lodging_and_meals)
+          )
+
+  - name: snap_day_care_cacfp_reimbursement_method_expense
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(b)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                For income from day care, use the current reimbursement amounts
+                used in the Child and Adult Care Food Program
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(
+            0,
+            current_cacfp_reimbursement_amount_for_enterprises_assigned_day_care_expense_method
+          )
+
+  - name: snap_day_care_estimated_per_meal_method_expense
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(b)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: a standard amount based on estimated per-meal costs
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(
+            0,
+            state_estimated_per_meal_standard_amount_for_enterprises_assigned_day_care_expense_method
+          )
+
+  - name: snap_day_care_expense_method_option_selection_valid
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(b)(3)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                For income from day care, use the current reimbursement amounts
+                used in the Child and Adult Care Food Program or a standard
+                amount based on estimated per-meal costs.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          self_employment_enterprises_assigned_day_care_expense_method_count <= 0
+          or (
+            all_enterprises_assigned_day_care_expense_method_derive_income_from_day_care
+            and (
+              (
+                state_uses_cacfp_reimbursement_for_day_care_expense_method
+                and not state_uses_estimated_per_meal_standard_for_day_care_expense_method
+              )
+              or (
+                not state_uses_cacfp_reimbursement_for_day_care_expense_method
+                and state_uses_estimated_per_meal_standard_for_day_care_expense_method
+              )
+            )
+          )
+
+  - name: snap_boarder_expense_method_option_selection_valid
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(b)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                For income from boarders, other than those in commercial
+                boarding houses or from foster care boarders, use
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                provided that the method used to determine the flat amount or
+                fixed percentage is objective and justifiable and is stated in
+                the State's SNAP manual.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          self_employment_enterprises_assigned_boarder_expense_method_count <= 0
+          or (
+            all_enterprises_assigned_boarder_expense_method_are_noncommercial_nonfoster_boarders
+            and (
+              (
+                state_uses_maximum_allotment_for_boarder_expense_method
+                and not state_uses_flat_amount_for_boarder_expense_method
+                and not state_uses_fixed_percentage_for_boarder_expense_method
+              )
+              or (
+                not state_uses_maximum_allotment_for_boarder_expense_method
+                and state_uses_flat_amount_for_boarder_expense_method
+                and not state_uses_fixed_percentage_for_boarder_expense_method
+                and state_boarder_flat_or_percentage_method_is_objective_and_justifiable
+                and state_boarder_flat_or_percentage_method_is_stated_in_snap_manual
+              )
+              or (
+                not state_uses_maximum_allotment_for_boarder_expense_method
+                and not state_uses_flat_amount_for_boarder_expense_method
+                and state_uses_fixed_percentage_for_boarder_expense_method
+                and state_boarder_flat_or_percentage_method_is_objective_and_justifiable
+                and state_boarder_flat_or_percentage_method_is_stated_in_snap_manual
+              )
+            )
+          )
+
+  - name: snap_self_employment_expense_method_assignment_valid
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                State agencies may elect to use actual costs for allowable
+                expenses in accordance with paragraphs (b)(1) and (b)(2) of
+                this section or determine self-employment expenses as follows
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Different methods may be proposed for different types of
+                self-employment.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          self_employment_enterprise_count >= 0
+          and every_self_employment_enterprise_has_exactly_one_assigned_expense_method
+          and self_employment_enterprises_assigned_actual_cost_method_count >= 0
+          and self_employment_enterprises_assigned_day_care_expense_method_count >= 0
+          and self_employment_enterprises_assigned_boarder_expense_method_count >= 0
+          and self_employment_enterprises_assigned_tanf_expense_method_count >= 0
+          and self_employment_enterprises_assigned_fns_approved_expense_method_count >= 0
+          and foster_care_boarder_self_employment_enterprise_count >= 0
+          and (
+            self_employment_enterprises_assigned_actual_cost_method_count
+            + self_employment_enterprises_assigned_day_care_expense_method_count
+            + self_employment_enterprises_assigned_boarder_expense_method_count
+            + self_employment_enterprises_assigned_tanf_expense_method_count
+            + self_employment_enterprises_assigned_fns_approved_expense_method_count
+            + foster_care_boarder_self_employment_enterprise_count
+            <= self_employment_enterprise_count
+          )
+          and (
+            self_employment_enterprises_assigned_actual_cost_method_count
+            + self_employment_enterprises_assigned_day_care_expense_method_count
+            + self_employment_enterprises_assigned_boarder_expense_method_count
+            + self_employment_enterprises_assigned_tanf_expense_method_count
+            + self_employment_enterprises_assigned_fns_approved_expense_method_count
+            + foster_care_boarder_self_employment_enterprise_count
+            >= self_employment_enterprise_count
+          )
+          and snap_day_care_expense_method_option_selection_valid
+          and snap_boarder_expense_method_option_selection_valid
+          and (
+            self_employment_enterprises_assigned_fns_approved_expense_method_count <= 0
+            or fns_approved_expense_method_covers_all_assigned_self_employment_types
+          )
+
+  - name: snap_self_employment_expense_determination_complete
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                State agencies may elect to use actual costs for allowable
+                expenses in accordance with paragraphs (b)(1) and (b)(2) of
+                this section or determine self-employment expenses as follows
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                For income from foster care boarders, refer to § 273.1(c)(6).
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_self_employment_expense_method_assignment_valid
+          and foster_care_boarder_self_employment_enterprise_count <= 0
 
   - name: snap_day_care_self_employment_expense
     kind: derived
@@ -240,14 +531,55 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: use the current reimbursement amounts used in the Child and Adult Care Food Program or a standard amount based on estimated per-meal costs
+              excerpt: >-
+                For income from day care, use the current reimbursement amounts
+                used in the Child and Adult Care Food Program or a standard
+                amount based on estimated per-meal costs.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if state_uses_cacfp_day_care_expense_method:
-            current_cacfp_reimbursement_amount_for_day_care
-          else:
-            state_day_care_expense_standard_based_on_estimated_per_meal_costs
+          if (
+            self_employment_enterprises_assigned_day_care_expense_method_count > 0
+            and snap_day_care_expense_method_option_selection_valid
+          ):
+            if state_uses_cacfp_reimbursement_for_day_care_expense_method:
+              snap_day_care_cacfp_reimbursement_method_expense
+            else:
+              snap_day_care_estimated_per_meal_method_expense
+          else: 0
+
+  - name: snap_boarder_self_employment_expense
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(b)(3)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                For income from boarders, other than those in commercial
+                boarding houses or from foster care boarders, use
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            self_employment_enterprises_assigned_boarder_expense_method_count > 0
+            and snap_boarder_expense_method_option_selection_valid
+          ):
+            if state_uses_maximum_allotment_for_boarder_expense_method:
+              snap_boarder_maximum_allotment_method_cost
+            else:
+              if state_uses_flat_amount_for_boarder_expense_method:
+                snap_boarder_flat_amount_method_cost
+              else:
+                snap_boarder_fixed_percentage_method_cost
+          else: 0
 
   - name: snap_tanf_standard_self_employment_expense
     kind: derived
@@ -267,7 +599,12 @@ rules:
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          state_tanf_self_employment_expense_standard
+          if self_employment_enterprises_assigned_tanf_expense_method_count > 0:
+            max(
+              0,
+              state_tanf_standard_allowable_expense_for_assigned_enterprises_after_applying_boarder_payment_cap
+            )
+          else: 0
 
   - name: snap_fns_approved_self_employment_expense
     kind: derived
@@ -287,7 +624,12 @@ rules:
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          fns_approved_self_employment_expense_amount
+          if self_employment_enterprises_assigned_fns_approved_expense_method_count > 0:
+            max(
+              0,
+              fns_approved_allowable_expense_for_assigned_enterprises_after_applying_boarder_payment_cap
+            )
+          else: 0
 
   - name: snap_allowable_self_employment_costs_under_state_elected_method
     kind: derived
@@ -300,34 +642,27 @@ rules:
       proof:
         atoms:
           - path: versions[0].formula
-            kind: condition
+            kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: State agencies may elect to use actual costs for allowable expenses
+              excerpt: >-
+                State agencies may elect to use actual costs for allowable
+                expenses in accordance with paragraphs (b)(1) and (b)(2) of
+                this section or determine self-employment expenses as follows
           - path: versions[0].formula
-            kind: condition
+            kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/11
-              excerpt: or determine self-employment expenses as follows
+              excerpt: >-
+                Different methods may be proposed for different types of
+                self-employment.
     versions:
       - effective_from: '2008-10-01'
         formula: |-
-          if state_uses_actual_self_employment_expense_method:
+          if snap_self_employment_expense_determination_complete:
             snap_actual_allowable_self_employment_costs
-          else:
-            if state_uses_day_care_self_employment_expense_method:
-              snap_day_care_self_employment_expense
-            else:
-              if state_uses_noncommercial_nonfoster_boarder_expense_method:
-                if state_uses_boarder_maximum_allotment_method:
-                  snap_boarder_maximum_allotment_method_cost
-                else:
-                  snap_boarder_flat_or_percentage_method_cost
-              else:
-                if state_uses_tanf_self_employment_expense_method:
-                  snap_tanf_standard_self_employment_expense
-                else:
-                  if state_uses_fns_approved_self_employment_expense_method:
-                    snap_fns_approved_self_employment_expense
-                  else:
-                    0
+            + snap_day_care_self_employment_expense
+            + snap_boarder_self_employment_expense
+            + snap_tanf_standard_self_employment_expense
+            + snap_fns_approved_self_employment_expense
+          else: 0
