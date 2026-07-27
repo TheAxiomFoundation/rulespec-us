@@ -39,10 +39,14 @@ of a school-age minor living alone. The current task is to preserve the exact
 - Determined that there is no case-relevant encode or adapter change to make in
   this worktree. The broader deferred 7 CFR 273.9(b)/(c) composition work is
   outside this class and belongs to the shared federal owner.
+- Added and executed `tools/reproduce_policyengine_snap_teen.py` against the
+  exact cached PolicyEngine US 1.767.3 wheel with PolicyEngine Core 3.26.0 and
+  SPM Calculator 0.2.0. Both AL age 17 and NC age 15 reproduce zero counted
+  income, eligibility, and a $291 monthly benefit; the school-status and
+  age-18 controls count income and return zero benefit.
 
 ## Next
 
-- Add and execute the minimal PolicyEngine US 1.767.3 reproduction.
 - Run the existing federal companion tests as regression evidence.
 - Write `WORKER-REPORT.md` with the case table, exact retained-law citations,
   root cause, issue draft, and proposed suite dispositions.
