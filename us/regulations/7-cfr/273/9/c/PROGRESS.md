@@ -2,11 +2,11 @@
 
 ## State
 
-In progress. All twenty top-level exclusions and their nested conditions are
-encoded. The exclusion layer now separates ordinary payment rows from the
-education, charitable-donation, self-employment-cost, and outgoing-child-
-support aggregates that require shared pools, quarterly history, or non-income
-accounting items. Companion tests are being rebuilt for the final interfaces.
+Validation in progress. All twenty top-level exclusions and their nested
+conditions are encoded and covered by the companion suite. The exclusion layer
+separates ordinary payment rows from the education, charitable-donation,
+self-employment-cost, and outgoing-child-support aggregates that require shared
+pools, quarterly history, or non-income accounting items.
 
 ## Done
 
@@ -58,11 +58,16 @@ accounting items. Companion tests are being rebuilt for the final interfaces.
   subcategories, inclusion-layer caps, exact numeric boundaries, reimbursement
   exceptions, student allocation, TANF discretion, donation isolation, and
   overlap-once behavior; the pinned validator and all 30 current cases pass.
+- Completed 69 companion cases covering paragraph (c)(1)-(20), all four formal
+  State options, c(8) State discretion, every named c(10) route, education
+  expense ordering, the c(12) quarterly history cap, c(17) elections, empty and
+  multirow aggregates, negative clamps, and cross-layer composition.
+- Confirmed every one of the 95 derived outputs has both a neutral assertion
+  and at least one positive assertion; all cases and the pinned CI validator
+  pass with all 198 factual inputs explicitly assigned per applicable case.
 
 ## Next
 
-- Add focused paragraph-(c)(3), (c)(9)-(20), donation-history, child-support,
-  and household composition cases.
 - Run pinned runtime/proof validation and repository-wide structural,
   coverage, reverse-index, and generated-artifact checks.
 - Record exact results, push the branch, and open the required draft PR.
