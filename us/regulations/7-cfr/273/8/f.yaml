@@ -1,0 +1,362 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/8
+  summary: |-
+    7 CFR 273.8(f) values vehicles not excluded under paragraph (e). For each
+    nonexcluded licensed vehicle, the fair-market-value test counts the amount
+    above $4,650 without deducting encumbrances. Licensed and unlicensed
+    vehicles also receive an equity test unless the vehicle is excluded under
+    paragraph (e)(3), selected as one licensed vehicle for an adult counted
+    person, or used by a counted person under age 18 for qualifying employment
+    activity. When both tests produce countable amounts, only the greater
+    amount counts. A qualifying statewide TANF vehicle-rule substitution may
+    produce a lower per-vehicle attribution while preserving either regime's
+    exclusions.
+imports:
+  - us:regulations/7-cfr/273/8/e
+rules:
+  - name: licensed_vehicle_fair_market_value_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.8(f)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: exceeds $4,650 beginning October 1, 1996
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '4650'
+
+  - name: vehicle_fair_market_value_methodology_complies
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: must not increase the basic value of a vehicle by adding the value of low mileage or other factors such as optional equipment or special apparatus for the handicapped
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not state_agency_increased_basic_value_for_low_mileage
+          and not state_agency_increased_basic_value_for_optional_equipment
+          and not state_agency_increased_basic_value_for_disability_apparatus
+
+  - name: vehicle_value_verification_opportunity_requirement_satisfied
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: must be given the opportunity to acquire verification of the true value of the vehicle from a reliable source
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not household_claims_state_vehicle_value_inaccurate
+          or household_was_given_opportunity_to_verify_vehicle_value
+
+  - name: vehicle_fair_market_value_for_resource_test
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(f)(1)(i), 7 CFR 273.8(f)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Individually evaluate the fair market value of each licensed vehicle
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: opportunity to acquire verification of the true value of the vehicle from a reliable source
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            household_claims_state_vehicle_value_inaccurate
+            and household_acquired_reliable_source_vehicle_value
+          ):
+            max(0, household_verified_vehicle_fair_market_value)
+          else: max(0, state_agency_basic_vehicle_fair_market_value)
+
+  - name: licensed_vehicle_fair_market_value_test_amount
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(f)(1)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Count in full toward the household's resource level, regardless of any encumbrances on the vehicle, that portion of the fair market value that exceeds $4,650
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/e#vehicle_excluded_under_paragraph_e_3
+              output: vehicle_excluded_under_paragraph_e_3
+              hash: sha256:8fb30e6f83cf809aef16aafec0ad03ce074c15252e7d144935e6006468148e45
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/f#licensed_vehicle_fair_market_value_threshold
+              output: licensed_vehicle_fair_market_value_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            resource_is_vehicle
+            and vehicle_is_licensed
+            and not vehicle_excluded_under_paragraph_e_3
+          ):
+            max(
+              0,
+              vehicle_fair_market_value_for_resource_test
+              - licensed_vehicle_fair_market_value_threshold
+            )
+          else: 0
+
+  - name: vehicle_exempt_from_equity_value_test
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Vehicles excluded under paragraph (e)(3)(i)
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: One licensed vehicle per adult household member
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Any other vehicle a household member under age 18
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/e#vehicle_excluded_under_paragraph_e_3
+              output: vehicle_excluded_under_paragraph_e_3
+              hash: sha256:8fb30e6f83cf809aef16aafec0ad03ce074c15252e7d144935e6006468148e45
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          vehicle_excluded_under_paragraph_e_3
+          or (
+            vehicle_is_licensed
+            and vehicle_selected_as_one_equity_exempt_vehicle_for_adult_counted_person
+          )
+          or (
+            vehicle_driven_by_counted_person_under_age_18
+            and (
+              vehicle_used_to_commute_to_and_from_employment
+              or vehicle_used_for_training_or_education_preparatory_to_employment
+              or vehicle_used_to_seek_employment
+              or (
+                driver_under_18_temporarily_unemployed
+                and vehicle_customarily_used_to_commute_to_employment
+              )
+            )
+          )
+
+  - name: vehicle_equity_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(f)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: equity value (fair market value less encumbrances)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+            0,
+            vehicle_fair_market_value_for_resource_test
+            - vehicle_encumbrances
+          )
+
+  - name: vehicle_equity_value_test_amount
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(f)(1)(iii), 7 CFR 273.8(f)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Evaluate such licensed vehicles as well as all unlicensed vehicles for their equity value
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: exempt from the equity value test
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            resource_is_vehicle
+            and not vehicle_excluded_under_paragraph_e_3
+            and not vehicle_exempt_from_equity_value_test
+          ):
+            vehicle_equity_value
+          else: 0
+
+  - name: federal_vehicle_resource_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(f)(1)(iv), 7 CFR 273.8(f)(4)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Count as a resource only the greater of the two amounts
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Exclude from household resources any vehicles excluded by either the substituted TANF vehicle rules or the SNAP vehicle rules
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/e#resource_full_exclusion_applies
+              output: resource_full_exclusion_applies
+              hash: sha256:8fb30e6f83cf809aef16aafec0ad03ce074c15252e7d144935e6006468148e45
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if resource_is_vehicle and not resource_full_exclusion_applies:
+            max(
+              licensed_vehicle_fair_market_value_test_amount,
+              vehicle_equity_value_test_amount
+            )
+          else: 0
+
+  - name: state_tanf_vehicle_substitution_validly_selected
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: program in that State that uses TANF or State or local funds to meet TANF maintenance of effort requirements and provides benefits that meet the definition of “assistance”
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Apply the substituted TANF vehicle rules to all SNAP households in the State
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Apply any vehicle exclusions allowed by their TANF vehicle rules to the vehicles with the highest values
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          state_elected_tanf_vehicle_rule_substitution
+          and substituted_program_uses_tanf_or_maintenance_of_effort_funds
+          and substituted_program_benefits_meet_tanf_assistance_definition
+          and substituted_tanf_vehicle_rules_apply_to_all_snap_households
+          and state_applies_tanf_vehicle_exclusions_to_highest_value_vehicles
+
+  - name: non_excluded_vehicle_resource_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(f)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: using whichever set of rules produces the lower attribution of resources to the household
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Exclude any vehicle owned by any household in the State if it selects TANF vehicle rules that exclude all vehicles completely or contain no resource provisions at all
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if not resource_is_vehicle:
+            0
+          elif state_tanf_vehicle_substitution_validly_selected:
+            if (
+              selected_tanf_rules_exclude_all_vehicles_or_have_no_resource_provisions
+              or vehicle_excluded_under_substituted_tanf_rules
+            ):
+              0
+            else:
+              min(
+                federal_vehicle_resource_value,
+                max(0, vehicle_resource_value_under_substituted_tanf_rules)
+              )
+          else: federal_vehicle_resource_value

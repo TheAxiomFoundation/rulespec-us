@@ -2,8 +2,8 @@
 
 ## State
 
-Encoding the federal vehicle-valuation rules after completing the required
-source review and the resource-exclusion module.
+Validating the completed federal joint-resource, exclusion, vehicle, and
+transfer modules before narrowing the parent deferrals.
 
 ## Done
 
@@ -19,11 +19,15 @@ source review and the resource-exclusion module.
   partial-property valuation under (e)(16), and 30 complete companion cases.
 - Passed pinned deterministic validation, proof validation, and companion
   execution for the paragraph (e) module.
+- Added paragraph (f)'s fair-market-value and equity tests, vehicle-test
+  exemptions, valuation methodology safeguards, and optional TANF-rule
+  substitution, with 13 complete companion cases.
+- Passed pinned deterministic validation, proof validation, monetary-proof
+  validation, and companion execution for the paragraph (f) module.
 
 ## Next
 
-- Encode paragraph (f)'s fair-market-value, equity, and state-option vehicle
-  valuation rules and tests.
+- Complete pinned validation for paragraphs (d) and (h).
 - Remove the four satisfied top-level deferred-output entries.
 - Run repository validation, push the branch, and open the required draft PR.
 
