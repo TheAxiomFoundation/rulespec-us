@@ -2,8 +2,9 @@
 
 ## State
 
-Part 1 is implemented. Part 2 is active: build the targeted employer-aggregate
-oracle grid and assemble the five-criterion evidence.
+Both parts are implemented. The evidence package records 4/5 criteria holding;
+`executable` remains false because no published artifact and released-binary
+stranger path exists.
 
 ## Done
 
@@ -28,15 +29,29 @@ oracle grid and assemble the five-criterion evidence.
   itself resolves the audited `/a` and `/b` identifiers, while changing the
   module paths would unnecessarily invalidate their signed encoding
   manifests. Expanded only the subsection (b) deterministic boundary cases.
+- Built and registered the non-population `us-employer-medicare-grid` on the
+  dedicated axiom-oracles branch. It compares only PolicyEngine's explicit
+  aggregate employer-Medicare variable, records its one Person as
+  `is_legal_employer: false`, and passes 8/8 with zero mismatches or errors.
+  Oracle commit: `29bef862b7a12c4e3012e00ae88d0d2ed1543797`;
+  deterministic receipt SHA-256:
+  `d689f112b9c87573c33a66d125a83cc89ea6507a9f96690d5f55bc38ce347c42`.
+- Verified repository/source-side closure at the formal `/3111` root: 22
+  provisions encoded, one repealed subsection excluded, and zero pending.
+  Effective-liability composition remains explicitly deferred, so a composed
+  interpretation of `closed` would fail.
+- Compiled the pinned module twice with released engine tag v0.1.1 and obtained
+  identical artifact SHA-256
+  `4edcb5e31d4af139c6347a9e275bad92c4bf0c15fde91465617007b0236f4cbc`.
+  The golden `$100,000 -> $1,450` run and all eight fixtures pass exactly.
+- Wrote the five-criterion evidence package at
+  `us/payroll/y1-employer-medicare-evidence.md`; it keeps `executable: false`
+  and makes no certification claim.
 
 ## Next
 
-- Register and run a non-population PolicyEngine grid against the explicit
-  employer-aggregate variable; do not rely on the legacy Person-level mapping
-  or population receipt.
-- Compile and run the golden RuleSpec case on a released engine binary, while
-  keeping `executable` false unless a published artifact and stranger path
-  actually exist.
-- Assemble and validate the five-criterion employer Medicare evidence package.
-- Write the final report to `OUTPUT.md`, attempt the sprint output path, push,
-  and open a draft PR.
+- Write and commit the final report to `OUTPUT.md`.
+- Run final validations, attempt all three branch pushes, and open draft PRs
+  if the branches reach GitHub.
+- Leave maintainer follow-up for corpus signing/merge and publication of a
+  one-output employer-Medicare artifact.
