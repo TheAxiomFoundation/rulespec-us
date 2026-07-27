@@ -59,9 +59,21 @@
   former direct tiebreaker conclusions with statutory inputs, and added a
   support-disregard integration case. All five section 32 cases pass in the
   pinned runtime; module validation and proof validation pass.
+- Regenerated the provision-to-rules reverse index. Its six consistency tests
+  pass.
+- Ran the repository test suite: 72 tests pass and the sole failure is the
+  manifest-sync test for the two edited modules.
+- Confirmed `sign-applied-files --dry-run` selects exactly the section 152(c)
+  and section 32 module/companion pairs. Actual signing is unavailable in this
+  session: `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unset, the approved
+  `agent-secret` helper is locked, and the matching macOS Keychain item is
+  absent. No manifest was fabricated or altered. Consequently,
+  `guard-generated` reports those four changed RuleSpec files as lacking a
+  matching signed manifest.
 
 ## Next
 
-- Refresh authoritative manifests and the provision index.
-- Run focused and repository-wide validation, update this file, commit each
-  coherent step, push, and open the draft PR.
+- Have an authorized signer run `sign-applied-files` for the two changed
+  modules, then rerun `guard-generated` and the repository test suite.
+- Complete human review of the draft PR; do not merge while the signed
+  manifest gate remains unresolved.
