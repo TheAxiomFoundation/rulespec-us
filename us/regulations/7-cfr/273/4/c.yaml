@@ -22,23 +22,47 @@ module:
     alien gains U.S. citizenship, has worked or can receive credit for forty
     qualifying quarters, or the sponsor dies. The normal income calculation
     combines the sponsor's income with a spouse's income only when the spouse
-    executed an affidavit, subtracts the section 273.9(c) exclusions already
-    reflected in the resolved inputs, subtracts twenty percent of earned
-    income, and subtracts the SNAP gross-income limit for the sponsor reference
-    unit. Actual sponsor or spouse payments are added only to the extent they
-    exceed the paragraph (c)(2)(i) amount. Resources resolved under section
-    273.8 are reduced by $1,500. The resulting amounts are allocated across all
-    aliens sponsored by the same sponsor when the required information is
-    demonstrated.
+    executed an affidavit. The primary path uses section 273.9(b) income after
+    section 273.9(c) exclusions; when the State agency elects paragraph
+    (c)(2)(ii)'s alternate source, it instead uses gross income already
+    reported under another State assistance program's sponsored-alien rules.
+    Both paths subtract only twenty percent of earned income and the SNAP
+    gross-income limit for the sponsor reference unit. Actual sponsor or spouse
+    payments are added only to the extent they exceed the paragraph (c)(2)(i)
+    amount. Resources resolved under section 273.8 are reduced by $1,500. The
+    resulting amounts are allocated across all deeming shares associated with
+    the sponsor when the required information is provided, including shares
+    excluded for children under paragraphs (c)(3)(vi) and (c)(3)(vii).
+    Each evaluation represents one sponsor-affidavit unit; paragraph (c)
+    supplies no aggregation mechanics for multiple affidavit sponsors.
 
     The sponsor reference-unit size is distinct from the sponsored alien's
-    SNAP household size used for the indigence test. An accepted indigence
-    determination replaces normal deeming with the adjudicated amount actually
-    provided for a renewable twelve-month period. A qualifying battery or
-    extreme-cruelty determination prevents deeming for the first twelve
-    months; afterward, only a court- or USCIS-recognized batterer's income and
-    resources are excluded. Sponsor and spouse components therefore remain
-    separate until that source-person exclusion is applied.
+    SNAP household size used for the indigence test. That test uses the
+    household size, income, cash, and in-kind assistance recorded for the
+    indigence determination in the month of application; later-month changes
+    do not re-test an accepted determination during its twelve-month period.
+    An accepted indigence determination replaces normal deeming for a renewable
+    twelve-month period. Consistent with USDA's promulgating explanation,
+    normal SNAP budgeting then counts actual monthly cash support from the
+    sponsor and qualifying spouse as income, uses in-kind assistance only for
+    the indigence test, and deems no sponsor resources. A qualifying battery or
+    extreme-cruelty determination prevents deeming for the first twelve months;
+    afterward, only a court- or USCIS-recognized batterer's income and resources
+    are excluded. Sponsor and spouse components therefore remain separate until
+    that source-person exclusion is applied.
+
+    The imported FY 2026 income limits are the 48 States and District of
+    Columbia values applicable to the assigned Colorado closure slice. Alaska
+    and Hawaii require their region-specific parameter sources before this
+    module can be used for those jurisdictions.
+
+    When indigence overlaps a categorical exemption or the initial battery
+    exception, this encoding gives the complete exemption precedence over the
+    indigence substitution: paragraph (c)(2) deeming is then wholly
+    inapplicable, while any actual cash support remains part of normal SNAP
+    income composition outside this sponsor-deeming output. Paragraph (c)(3)
+    does not expressly state an overlap priority, so this is an interpretive
+    judgment.
 
     Paragraph (c)(2)(v) is internally imprecise when it refers to income and
     resources under paragraphs (c)(2)(i) and (c)(2)(iii), although resources
@@ -46,7 +70,10 @@ module:
     to the paragraph (c)(2)(i), (iii), and (iv) amounts, calculating the actual
     payment excess before allocation. Because negative income or resources
     cannot be available to a household, the post-reduction amounts are floored
-    at zero. No rounding is imposed because paragraph (c) supplies none.
+    at zero. No rounding is imposed because paragraph (c) supplies none. The
+    forty-quarter period-ending input and the parent alien-eligibility
+    forty-quarter fact represent the same legal finding and must be resolved
+    consistently by callers.
 imports:
   - us:regulations/7-cfr/273/4#snap_member_alien_status_eligible
   - us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_gross_income_limit_130_percent_fpl_48_states_dc_table
@@ -201,7 +228,7 @@ rules:
             import:
               target: us:regulations/7-cfr/273/4#snap_member_alien_status_eligible
               output: snap_member_alien_status_eligible
-              hash: sha256:ebeec06ee7b794450ab879677e6bf3e2221432b1c96cb4a482bfb5933e7975b5
+              hash: sha256:11cdbc80eb7e668f549ab026b679d6988de8009da75304e9b836fbcadf8c848c
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -268,6 +295,11 @@ rules:
               corpus_citation_path: us/regulation/7/273/4
               excerpt: does not exceed 130 percent of the poverty income guideline for the household's size
           - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: The State agency must determine the amount of income and other assistance provided in the month of application
+          - path: versions[0].formula
             kind: import
             import:
               target: us:policies/usda/snap/fy-2026-cola/income-eligibility-standards#snap_gross_income_limit_130_percent_fpl_48_states_dc_table
@@ -284,13 +316,13 @@ rules:
         formula: |-
           snap_gross_income_limit_130_percent_fpl_48_states_dc_table[
             min(
-              max(sponsored_alien_snap_household_size, 1),
+              max(sponsored_alien_household_size_used_for_indigence_determination, 1),
               snap_gross_income_limit_base_table_last_household_size
             )
           ]
           + (
             max(
-              sponsored_alien_snap_household_size
+              sponsored_alien_household_size_used_for_indigence_determination
               - snap_gross_income_limit_base_table_last_household_size,
               0
             )
@@ -311,13 +343,18 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/4
               excerpt: An indigent alien that the State agency has determined is unable to obtain food and shelter
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: The State agency must determine the amount of income and other assistance provided in the month of application
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           (
-            eligible_sponsored_alien_household_own_monthly_income
-            + monthly_cash_contributions_from_sponsor_and_others
-            + monthly_value_of_in_kind_assistance_from_sponsor_and_others
+            eligible_sponsored_alien_household_own_income_used_for_indigence_determination
+            + cash_contributions_from_sponsor_and_others_used_for_indigence_determination
+            + value_of_in_kind_assistance_from_sponsor_and_others_used_for_indigence_determination
           ) <= snap_sponsored_alien_indigence_threshold
 
   - name: snap_sponsored_alien_indigence_period_active
@@ -409,7 +446,7 @@ rules:
     dtype: Money
     period: Month
     unit: USD
-    source: 7 CFR 273.4(c)(2)(i), 7 CFR 273.4(c)(3)(v)
+    source: 7 CFR 273.4(c)(2), (c)(2)(i)-(ii), and (c)(3)(v)
     metadata:
       proof:
         atoms:
@@ -418,6 +455,16 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/4
               excerpt: the total monthly earned and unearned income, as defined in § 273.9(b) with the exclusions provided in § 273.9(c)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: the State agency may use that income amount for SNAP deeming purposes
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: the sponsor's spouse, if he or she has executed USCIS Form I-864 or I-864A
           - path: versions[0].formula
             kind: exception
             source:
@@ -431,7 +478,10 @@ rules:
                and sponsor_is_batterer:
               0
             else:
-              sponsor_monthly_earned_income_after_section_273_9_c_exclusions
+              if state_agency_elects_to_use_sponsor_gross_income_reported_under_other_state_assistance_program_sponsored_alien_rules:
+                sponsor_gross_earned_income_amount_from_other_state_assistance_program_report
+              else:
+                sponsor_monthly_earned_income_after_section_273_9_c_exclusions
           )
           + (
             if sponsor_spouse_executed_i_864_or_i_864a
@@ -439,7 +489,10 @@ rules:
                  snap_sponsored_alien_post_initial_battery_source_exclusion_applies
                  and sponsor_spouse_is_batterer
                ):
-              sponsor_spouse_monthly_earned_income_after_section_273_9_c_exclusions
+              if state_agency_elects_to_use_sponsor_gross_income_reported_under_other_state_assistance_program_sponsored_alien_rules:
+                sponsor_spouse_gross_earned_income_amount_from_other_state_assistance_program_report
+              else:
+                sponsor_spouse_monthly_earned_income_after_section_273_9_c_exclusions
             else:
               0
           )
@@ -450,7 +503,7 @@ rules:
     dtype: Money
     period: Month
     unit: USD
-    source: 7 CFR 273.4(c)(2)(i), 7 CFR 273.4(c)(3)(v)
+    source: 7 CFR 273.4(c)(2), (c)(2)(i)-(ii), and (c)(3)(v)
     metadata:
       proof:
         atoms:
@@ -459,6 +512,16 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/4
               excerpt: the total monthly earned and unearned income, as defined in § 273.9(b) with the exclusions provided in § 273.9(c)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: the State agency may use that income amount for SNAP deeming purposes
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: the sponsor's spouse, if he or she has executed USCIS Form I-864 or I-864A
           - path: versions[0].formula
             kind: exception
             source:
@@ -472,7 +535,10 @@ rules:
                and sponsor_is_batterer:
               0
             else:
-              sponsor_monthly_unearned_income_after_section_273_9_c_exclusions
+              if state_agency_elects_to_use_sponsor_gross_income_reported_under_other_state_assistance_program_sponsored_alien_rules:
+                sponsor_gross_unearned_income_amount_from_other_state_assistance_program_report
+              else:
+                sponsor_monthly_unearned_income_after_section_273_9_c_exclusions
           )
           + (
             if sponsor_spouse_executed_i_864_or_i_864a
@@ -480,7 +546,10 @@ rules:
                  snap_sponsored_alien_post_initial_battery_source_exclusion_applies
                  and sponsor_spouse_is_batterer
                ):
-              sponsor_spouse_monthly_unearned_income_after_section_273_9_c_exclusions
+              if state_agency_elects_to_use_sponsor_gross_income_reported_under_other_state_assistance_program_sponsored_alien_rules:
+                sponsor_spouse_gross_unearned_income_amount_from_other_state_assistance_program_report
+              else:
+                sponsor_spouse_monthly_unearned_income_after_section_273_9_c_exclusions
             else:
               0
           )
@@ -491,7 +560,7 @@ rules:
     dtype: Money
     period: Month
     unit: USD
-    source: 7 CFR 273.4(c)(2)(iv), 7 CFR 273.4(c)(3)(v)
+    source: 7 CFR 273.4(c)(2), (c)(2)(iv), and (c)(3)(v)
     metadata:
       proof:
         atoms:
@@ -500,6 +569,11 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/4
               excerpt: the total amount of the resources of the sponsor and sponsor's spouse as determined in accordance with § 273.8
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: the sponsor's spouse, if he or she has executed USCIS Form I-864 or I-864A
           - path: versions[0].formula
             kind: exception
             source:
@@ -603,7 +677,7 @@ rules:
     dtype: Money
     period: Month
     unit: USD
-    source: 7 CFR 273.4(c)(2)(i)
+    source: 7 CFR 273.4(c)(2)(i)-(ii)
     metadata:
       proof:
         atoms:
@@ -617,6 +691,11 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/4
               excerpt: reduced by
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/4
+              excerpt: must limit allowable reductions to the total gross income of the sponsor and the sponsor's spouse prior to attributing an income amount to the alien to amounts specified in paragraphs (c)(2)(i)(A) and (c)(2)(i)(B)
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -703,8 +782,11 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if sponsored_alien_demonstrated_sponsor_sponsors_other_aliens:
-            max(number_of_aliens_sponsored_by_same_sponsor_including_exempt_children, 1)
+          if sponsored_alien_provided_information_supporting_multiple_deeming_allocation_shares:
+            max(
+              number_of_deeming_allocation_shares_including_c_3_vi_and_vii_exempt_children,
+              1
+            )
           else:
             1
 
@@ -846,7 +928,10 @@ rules:
       - effective_from: '2025-10-01'
         formula: |-
           if snap_sponsored_alien_indigence_deeming_applies:
-            max(0, adjudicated_monthly_amount_actually_provided_to_indigent_sponsored_alien)
+            max(
+              0,
+              actual_monthly_cash_support_from_sponsor_and_qualifying_spouse_to_indigent_sponsored_alien
+            )
           else:
             if snap_sponsored_alien_full_deeming_applies:
               snap_sponsored_alien_allocated_standard_deemed_income
