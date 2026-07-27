@@ -32,6 +32,9 @@ PolicyEngine's amounts must not be copied into Axiom.
 - Reproduced the report's `ecps-35254` PolicyEngine benefit exactly under 1.752.2:
   $564.6453450520834/month. Version 1.767.3 gives the same value through this
   pipeline.
+- Neutralized both `tn_ff` and `tanf` in an exact 1.752.2 counterfactual:
+  PolicyEngine rises to $673.545369/month, only $6.545369 from Axiom and inside
+  the suite's $7 tolerance, so the classified mismatch disappears.
 - Found Tennessee Families First/TANF income in 31 of the 48 cases under both
   versions, including `ecps-35254`; PolicyEngine assigns that household
   $362.03/month of Families First and includes it as SNAP unearned income. All 31
