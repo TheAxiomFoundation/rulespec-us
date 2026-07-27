@@ -122,15 +122,12 @@
   `us/tax/eitc/u1-final-report.md`. The required copy to
   `_closure-sprint/out/u1-eitc-frontier.result.md` was attempted and rejected
   by the managed filesystem with `Operation not permitted`.
-- Successfully pushed the first five implementation commits through
-  `c55209692` to `origin/closure/eitc-2026`; the final report, citation, and
-  strict-classification commits require the final push after this ledger is
-  committed.
+- Successfully pushed the implementation, audit corrections, and canonical
+  final report to `origin/closure/eitc-2026`. No PR was opened.
 
 ## Next
 
-1. Push the final committed branch state.
-2. Have a process with `_closure-sprint/out` write access copy
+1. Have a process with `_closure-sprint/out` write access copy
    `us/tax/eitc/u1-final-report.md` to the requested result path.
-3. After the launch freeze and RuleSpec main merge, complete the external
+2. After the launch freeze and RuleSpec main merge, complete the external
    `axiom-oracles` registration steps in the staged handoff.

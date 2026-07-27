@@ -14,6 +14,9 @@ The no-regret launch path is complete:
 - the external registry/report contract is transfer-ready; and
 - no comparison report, PR, or upstream issue was created.
 
+All task commits were pushed to
+`origin/closure/eitc-2026`; no PR was opened.
+
 Canonical deliverables:
 
 - `us/tax/eitc/u1-frontier-classification.md`
