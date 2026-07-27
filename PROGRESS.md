@@ -30,10 +30,14 @@
   the pinned engine commit. The compiled artifact exposes 61 derived rules.
 - Added and engine-checked a hand-worked one-child golden case: $28,890 of
   earned income and AGI yields a $799 phaseout and a $3,628 credit.
+- Ran a 21-case synthetic, non-population Axiom/PolicyEngine diagnostic grid:
+  19 amounts matched and two published earned-income-amount boundaries
+  differed. The age rows require an extra unrooted Axiom flag and therefore
+  are not end-to-end evidence.
+- Kept the established oracle repository and every committed report and
+  numeric artifact untouched. A certifying grid did not land because the age
+  dataflow and stale section 32 fixture must be repaired first.
 
 ## Next
 
-- Document and, if it can be done honestly within the permitted repositories,
-  run a non-population diagnostic grid without changing oracle reports or
-  hiding the non-AGI bridges.
 - Validate, independently review, and write the final handoff report.
