@@ -79,7 +79,7 @@ regenerated.
 - The pinned engine compiled the composition to a version-2 artifact with 17
   derived rules; each of the three published output names is present exactly
   once.
-- The relevant repository layout and program-spec tests passed: six tests.
+- The relevant repository layout and program-spec tests passed: 12 tests.
 - The PolicyEngine mapping registry loaded and resolved all three exact program
   mappings to the intended variables.
 - `git diff --check`, YAML parsing, and forbidden-path review passed.
