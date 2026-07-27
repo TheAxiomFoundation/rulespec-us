@@ -156,7 +156,7 @@ Pinned toolchain:
 - `axiom-rules-engine`
   `ffd8213271947b0189a9dd61a055c1e0e78908a0`; and
 - corpus pin
-  `bf97f481864854bf7c99c5af8f7460818243997b`.
+  `db12795577c5809009168982cf8a72fb58440620`.
 
 Results:
 
@@ -207,12 +207,13 @@ No file under `programs/`, no toolchain pin, no CI workflow, no CODEOWNERS
 file, and no `oracle-coverage-pending.yaml` entry was changed.
 
 `closure/scretd` was pushed successfully through the implementation and main
-report commit `b9a091d30`. This final delivery-status update remains one local
-commit ahead because three subsequent push attempts could not resolve
-`github.com`. No draft PR was opened: `gh auth status` reports that the active
-`MaxGhenis` token is invalid. The GitHub connector was offered as a fallback
-but was not installed, and a signed-in browser fallback was not used without
-explicit approval.
+report commit `b9a091d30`. The final delivery-status update and a clean merge
+of the newly advanced `origin/main` remain local because subsequent push
+attempts could not resolve `github.com`; the local branch is now 0 commits
+behind that upstream ref. No draft PR was opened: `gh auth status` reports
+that the active `MaxGhenis` token is invalid. The GitHub connector was offered
+as a fallback but was not installed, and a signed-in browser fallback was not
+used without explicit approval.
 
 Remaining mechanical unblock:
 

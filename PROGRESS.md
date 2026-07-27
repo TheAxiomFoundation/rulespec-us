@@ -10,8 +10,9 @@ household-income judgment unconditionally, and the pinned diagnostic suite
 passes all 23 companion cases. The signed manifests still describe the prior
 files. The branch is pushed; draft-PR creation is blocked by the invalid
 GitHub CLI credential. The implementation and main report are upstream
-through `b9a091d30`; this final delivery-status update remains one local
-commit ahead because subsequent pushes could not resolve `github.com`.
+through `b9a091d30`. The final delivery-status commit and a clean merge of the
+newly advanced `origin/main` remain local because subsequent pushes could not
+resolve `github.com`.
 
 ## Done
 
@@ -80,6 +81,12 @@ commit ahead because subsequent pushes could not resolve `github.com`.
   explicit approval.
 - Retried the final push three times after recording delivery status; each
   attempt failed at DNS resolution. No remote state was guessed.
+- Detected that `origin/main` had advanced by 25 commits during the sprint.
+  Verified the merge was conflict-free, merged it without rebasing or
+  discarding work, and restored the branch to 0 commits behind the current
+  local upstream ref. The upstream merge changed the corpus pin to
+  `db12795577c5809009168982cf8a72fb58440620`; it did not overlap the SCRETD
+  files.
 
 ## Next
 
