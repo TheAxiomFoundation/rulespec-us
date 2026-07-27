@@ -4,8 +4,10 @@
 
 All eight household-concept modules and companion tests are implemented, the
 semantic-audit fixes are complete, all required local validation passes, and
-the pre-push coordination recheck found no overlapping 273.1 work. Push and PR
-creation are next.
+the pre-push coordination recheck found no overlapping 273.1 work. Remote
+publication is blocked: shell networking cannot resolve or connect to GitHub,
+and the connected GitHub API declined write operations. No remote branch or PR
+was created.
 
 ## Done
 
@@ -78,7 +80,19 @@ creation are next.
   remains at 516 branches, the four open PRs contain no
   `us/regulations/7-cfr/273/1` files, and searches for `273.1` and household
   work found no competing encoding.
+- Attempted the requested push with
+  `git push --set-upstream origin encode-273-1-household`; the workspace denied
+  GitHub DNS/network access. The local `gh` credential is also invalid.
+- Tried the connected GitHub API as the authorized fallback. Its read checks
+  confirmed that neither the branch nor local HEAD exists remotely, but its
+  branch/blob write calls returned `user cancelled MCP tool call`. No partial
+  GitHub state was created.
 
 ## Next
 
-- Push and open the unmerged PR referencing #1135.
+- From a network-enabled, authenticated session, run
+  `git push --set-upstream origin encode-273-1-household`.
+- Open an unmerged PR titled `Encode 7 CFR 273.1 household concept`, referencing
+  #1135 and noting the upstream-only relationship to #28. Alternatively,
+  explicitly approve connected-GitHub writes and accept reconstructed,
+  equivalent-content commits whose SHAs differ from the local commits.
