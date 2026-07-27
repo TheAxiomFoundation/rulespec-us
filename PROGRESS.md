@@ -7,11 +7,12 @@
 - Target PR commit: `262119256b47f68b5b5583f0efd76bd6ade7c5f1`
 - Base commit: `6b0773d3f7fa6719f208154f3e609e292ab7abe7` (`origin/main`)
 - Pinned corpus: `bf97b17baebfdf12601f7c23697524bf5adcdaed`
-- GitHub PR metadata confirms open PR #1137, branch `fed-parity/savers`, currently points to the target commit.
-- Shell `git ls-remote` verification is pending retry because the sandbox could not resolve `github.com`.
+- GitHub PR metadata checked at the beginning and end confirms open PR #1137, branch `fed-parity/savers`, remained at the target commit.
+- Shell `git ls-remote` verification was attempted twice and failed because the sandbox could not resolve `github.com`.
 - GitNexus graph indexing is unavailable because the sandbox denied access to `~/.gitnexus/registry.json`; generated cache artifacts were removed and the audit is using the raw diff, pinned validator, and reverse-index regeneration.
-- Manifest HMAC verification is unavailable because `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not present; applied-file hashes, ancestry, toolchain identity, and signature structure were independently checked.
+- Local manifest HMAC verification is unavailable because `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not present; exact-head CI's generated-manifest guard passes.
 - Verdict: `REQUEST-CHANGES`.
+- Review is complete; final evidence is in `WORKER-REPORT.md`.
 
 ## Done
 
@@ -32,8 +33,10 @@
 - Found a blocking semantic ledger defect: lines 3998–4006 still declare the three removed `pipeline_savers_credit_{10,20,50}_percent_agi_limit` IDs, while the renamed `pipeline_tier_{10,20,50}_applicable_ceiling_for_return_category` outputs are absent.
 - Confirmed the defect in exact-head GitHub Repository Checks run `30289991267`: YAML validation, 25 pipeline companion cases, 1 notice companion case, and 69 proof atoms pass, but full oracle coverage reports the three old declarations stale and the three new outputs unmapped.
 - Companion/mutation audit passed independently: restored exact-head suites pass 25 + 1 cases; changing tier-50 `<=` to `<` kills eight assertions across five cases; byte restoration returns the pipeline SHA-256 to `87a3bf8d…` and both suites pass again.
+- Exact pinned engine build and exact-engine companion rerun passed; repository guards passed 65 tests with one pre-existing manifest-census warning.
+- Verified every detached execution worktree is back at the exact target SHA and clean.
 
 ## Next
 
-- Finish the independent pinned-validator reproduction and verify all worktrees are clean.
-- Write and commit `WORKER-REPORT.md` with the final verdict and exact evidence.
+- PR author: replace the three stale ledger IDs with the three live `pipeline_tier_*` IDs, retain the 2,313 ceiling/entry count, and rerun full oracle coverage.
+- Reviewer: re-pin and recheck the new head after that fix.
