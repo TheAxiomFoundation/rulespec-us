@@ -4,8 +4,8 @@
 
 Assessment complete. The SNAP earned income deduction is not honestly
 certifiable as a provision-closed node tonight. Implementation stopped before
-adding a program or oracle artifact. Focused pinned validation is green; final
-publication is pending.
+adding a program or oracle artifact. Focused pinned validation is green.
+Publication is blocked by unavailable GitHub DNS/network access.
 
 ## Done
 
@@ -39,9 +39,13 @@ publication is pending.
 - Attempted the requested external output copy; the managed workspace denied
   writes outside this worktree, so the committed in-repository assessment is
   the canonical deliverable.
+- Attempted to push `closure/snap-earned-income-deduction`; Git failed with
+  `Could not resolve host: github.com`, so no remote branch or draft PR could
+  be created.
 
 ## Next
 
-- Commit this final validation and delivery checkpoint.
-- Push and open a draft PR if authentication and network access permit.
-- Record the publication result.
+- From a network-enabled environment, push
+  `closure/snap-earned-income-deduction` and open a draft PR.
+- Copy `s1-snap-eid-assessment.md` to the requested closure-sprint output path
+  from an environment permitted to write there.

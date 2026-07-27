@@ -345,5 +345,7 @@ quantities.
   `/Users/maxghenis/TheAxiomFoundation/_closure-sprint/out/s1-snap-eid-assessment.md`;
   the managed workspace denied writes outside the RuleSpec worktree. This
   committed file is the canonical report produced in the permitted workspace.
+- Attempted to push `closure/snap-earned-income-deduction`; Git could not
+  resolve `github.com`. No remote branch or draft PR was created.
 - Did not modify any existing statute or SNAP program specification, oracle
   report/value, toolchain file, CI file, or CODEOWNERS.
