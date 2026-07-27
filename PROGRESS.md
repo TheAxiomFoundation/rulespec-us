@@ -10,6 +10,7 @@
 - GitHub PR metadata confirms open PR #1137, branch `fed-parity/savers`, currently points to the target commit.
 - Shell `git ls-remote` verification is pending retry because the sandbox could not resolve `github.com`.
 - GitNexus graph indexing is unavailable because the sandbox denied access to `~/.gitnexus/registry.json`; generated cache artifacts were removed and the audit is using the raw diff, pinned validator, and reverse-index regeneration.
+- Manifest HMAC verification is unavailable because `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not present; applied-file hashes, ancestry, toolchain identity, and signature structure were independently checked.
 - Verdict: pending.
 
 ## Done
@@ -23,10 +24,14 @@
 - Confirmed the final PR diff is 8 files, 1,555 insertions, 1 deletion, and `git diff --check` is clean.
 - Confirmed the three selected tier outputs use the new `pipeline_tier_{50,20,10}_applicable_ceiling_for_return_category` names, distinct from the notice module's generic deferred surfaces.
 - Attempted the required GitNexus index workflow in an isolated graph worktree; recorded its sandbox failure and verified cleanup.
+- Legal audit passed: separate $2,000 individual caps, required/no-default §§911/931/933 add-backs, inclusive tiers, all §25B(c) screens, and explicit §25B(d)(2) deferral are present.
+- Notice audit passed: all nine 2026 selector values byte-match pinned pages 3–4; old 2025 values occur only inside verbatim “increased from” proof excerpts, with no `157,500` trap.
+- Proof audit passed at the exact corpus pin: pipeline 42 atoms and notice 27 atoms, zero issues; an independent 48-source-atom exact-string walk found zero failures.
+- Hygiene audit passed: manifests cover exactly the four content files at ancestor `c45bbf6…` with matching hashes; ledger is exactly +20 (2,293 → 2,313), with zero removals, altered old entries, duplicates, or foreign additions.
+- Reverse-index regeneration check passed: 4,238 provisions, 5,077 edges, and 4,485 modules; the semantic diff is the expected six provisions only.
 
 ## Next
 
 - Run full pinned validation and both companion suites.
 - Perform and restore the required tier-boundary mutation.
-- Audit legal fidelity, proof atoms, notice bytes, manifests, ledger, reverse index, and hygiene.
 - Write and commit `WORKER-REPORT.md` with the final verdict and exact evidence.
