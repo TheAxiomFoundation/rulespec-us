@@ -2,7 +2,7 @@
 
 ## State
 
-- The launch-eve EITC follow-up is in progress on branch
+- The launch-eve EITC follow-up is complete on branch
   `closure/eitc-2026`.
 - Prior work on this branch completed the assessment, standalone program, and
   21-case diagnostic comparison (19 exact, two boundary discrepancies).
@@ -105,15 +105,32 @@
 - An independent audit caught seven stale Rev. Proc. source labels. Corrected
   the live parameter module and the EITC handoff documents from section 3.06
   to the official section 4.06. This was a citation-metadata defect only; no
-  parameter or expected amount changed. The pinned 25-case companion remained
-  green after the correction.
+  parameter or expected amount changed. Refreshed the module's applied-file
+  manifest hash, and the pinned 25-case companion remained green.
 - The same strict audit rejected two initially overbroad administrative cuts:
   Form 8862 does not report the section 32(k)(2) prior-denial/information
   composite, and dependent/release fields do not report the complete section
   151-entitlement-or-section-152(e) conclusion. Both are now must-encode;
   the final split is 0 already computed, 11 declarable, and 23 must-encode.
+- Independent content, requirements, and suite-registration audits are clean
+  after the two classification corrections and the source-label repair.
+- Reran the full repository suite after the substantive work: 73 passed with
+  the single existing warning about 17 unmanifested modules. The pinned
+  section 32 companion independently passed 25/25 in both the main run and
+  suite audit.
+- Wrote the canonical final report to
+  `us/tax/eitc/u1-final-report.md`. The required copy to
+  `_closure-sprint/out/u1-eitc-frontier.result.md` was attempted and rejected
+  by the managed filesystem with `Operation not permitted`.
+- Successfully pushed the first five implementation commits through
+  `c55209692` to `origin/closure/eitc-2026`; the final report, citation, and
+  strict-classification commits require the final push after this ledger is
+  committed.
 
 ## Next
 
-1. Run scoped and repository checks, write the requested output report,
-   update this ledger, commit each coherent step, and push if DNS permits.
+1. Push the final committed branch state.
+2. Have a process with `_closure-sprint/out` write access copy
+   `us/tax/eitc/u1-final-report.md` to the requested result path.
+3. After the launch freeze and RuleSpec main merge, complete the external
+   `axiom-oracles` registration steps in the staged handoff.
