@@ -11,7 +11,7 @@
 - Shell `git ls-remote` verification is pending retry because the sandbox could not resolve `github.com`.
 - GitNexus graph indexing is unavailable because the sandbox denied access to `~/.gitnexus/registry.json`; generated cache artifacts were removed and the audit is using the raw diff, pinned validator, and reverse-index regeneration.
 - Manifest HMAC verification is unavailable because `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not present; applied-file hashes, ancestry, toolchain identity, and signature structure were independently checked.
-- Verdict: pending.
+- Verdict: `REQUEST-CHANGES`.
 
 ## Done
 
@@ -27,11 +27,13 @@
 - Legal audit passed: separate $2,000 individual caps, required/no-default §§911/931/933 add-backs, inclusive tiers, all §25B(c) screens, and explicit §25B(d)(2) deferral are present.
 - Notice audit passed: all nine 2026 selector values byte-match pinned pages 3–4; old 2025 values occur only inside verbatim “increased from” proof excerpts, with no `157,500` trap.
 - Proof audit passed at the exact corpus pin: pipeline 42 atoms and notice 27 atoms, zero issues; an independent 48-source-atom exact-string walk found zero failures.
-- Hygiene audit passed: manifests cover exactly the four content files at ancestor `c45bbf6…` with matching hashes; ledger is exactly +20 (2,293 → 2,313), with zero removals, altered old entries, duplicates, or foreign additions.
+- Manifest/history hygiene passed. The ledger is structurally exactly +20 (2,293 → 2,313), with zero removals, altered old entries, duplicates, or foreign-module additions.
 - Reverse-index regeneration check passed: 4,238 provisions, 5,077 edges, and 4,485 modules; the semantic diff is the expected six provisions only.
+- Found a blocking semantic ledger defect: lines 3998–4006 still declare the three removed `pipeline_savers_credit_{10,20,50}_percent_agi_limit` IDs, while the renamed `pipeline_tier_{10,20,50}_applicable_ceiling_for_return_category` outputs are absent.
+- Confirmed the defect in exact-head GitHub Repository Checks run `30289991267`: YAML validation, 25 pipeline companion cases, 1 notice companion case, and 69 proof atoms pass, but full oracle coverage reports the three old declarations stale and the three new outputs unmapped.
+- Companion/mutation audit passed independently: restored exact-head suites pass 25 + 1 cases; changing tier-50 `<=` to `<` kills eight assertions across five cases; byte restoration returns the pipeline SHA-256 to `87a3bf8d…` and both suites pass again.
 
 ## Next
 
-- Run full pinned validation and both companion suites.
-- Perform and restore the required tier-boundary mutation.
+- Finish the independent pinned-validator reproduction and verify all worktrees are clean.
 - Write and commit `WORKER-REPORT.md` with the final verdict and exact evidence.
