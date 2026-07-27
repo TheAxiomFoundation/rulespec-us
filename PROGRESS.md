@@ -3,10 +3,11 @@
 ## State
 
 Evidence assembly is in progress for the Alabama tax-year 2025 age-65
-retirement-income exemption. The corpus root resolves, but repository closure
-currently has one honest pending path because the sole section record contains
-substantive exemption categories that the RuleSpec module explicitly defers.
-No certification claim has been made.
+retirement-income exemption. The current honest verdict is 3 of 5: the rooted
+and exercised criteria hold, conformance is being registered, repository
+closure has one pending path, and a local released-tag engine probe cannot
+substitute for the missing published artifact. No certification claim has been
+made.
 
 ## Done
 
@@ -26,9 +27,20 @@ No certification claim has been made.
   $5,999, $6,000, and $6,001.
 - Passed all five direct companion cases with `axiom-encode test` using the
   released v0.1.1 engine source checkout.
+- Audited closure as one partially encoded, pending section path: the corpus
+  has no paragraph-level descendant for subsection (a)(13), while the sole
+  section body contains other substantive exemption categories explicitly
+  deferred by the module.
+- Compiled the module twice from a canonical `rulespec-us` checkout with the
+  clean v0.1.1 released-tag source build; both artifacts had SHA-256
+  `08b6ef3211ea3b3d305be899088b7573896e5838a02069b6eeda9128323d7301`.
+- Ran the compiled output for a tax-year-2025 age-65 taxpayer with $7,000 of
+  taxable retirement income; the engine returned $6,000 and traced
+  `40-18-19(a)`.
+- Confirmed that no Alabama income-tax program spec or published one-output
+  artifact exists. The executable criterion therefore does not hold.
 
 ## Next
 
 - Build and register a bounded case grid for tax year 2025.
-- Compile the one-output program and probe it with released engine v0.1.1.
 - Assemble and validate the five-criteria evidence package.
