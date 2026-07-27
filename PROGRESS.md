@@ -30,6 +30,9 @@ still produces a $7,500 deferral.
   formula. The June 26 corpus and compiled ILCS page both omit it.
 - Recorded the source comparison and exact current-law caveat in
   `bulk/us-il-scretd-current-law-review.md`.
+- Built the requested eight-section closure universe from exact inventory
+  `citation_path` rows using only the closed exclusion taxonomy. The honest
+  census remains 0 encoded / 5 excluded / 3 pending.
 
 ## Next
 
@@ -37,7 +40,6 @@ still produces a $7,500 deferral.
   definitions; cite landed records or declare precise `deferred_outputs`.
 - Apply the § 2 income gate through the signed encoder workflow and expand
   companion coverage to at least 15 cases.
-- Commit an eight-section closure ledger using only closed-taxonomy reasons.
 - Run the focused grid, manifest guards, companion tests, and repository
   validation; then write and commit the final report.
 - Push and open a draft PR if GitHub becomes reachable.
