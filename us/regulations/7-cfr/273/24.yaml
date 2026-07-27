@@ -1,14 +1,6 @@
 format: rulespec/v1
 module:
   deferred_outputs:
-  - output: us:regulations/7-cfr/273/24/g#state_agency_abawd_discretionary_exemption_allocation
-    blocked_by:
-    - us:regulations/7-cfr/273/24#state_agency_abawd_discretionary_exemption_context
-    reason: Paragraph (g) defines covered individuals and limits State agency discretionary
-      exemptions from the ABAWD time limit. This module encodes person-level work-requirement
-      and time-limit eligibility; State-level exemption allocation and nondiscrimination
-      administration are deferred until the State agency exemption-allocation workflow
-      is encoded.
   - output: us:regulations/7-cfr/273/24/j#snap_eligibility_subject_to_other_program_rules
     blocked_by:
     - us:regulations/7-cfr/273#snap_eligibility_under_other_program_rules
@@ -16,15 +8,16 @@ module:
       not independently make an individual eligible under other SNAP provisions. This
       module returns work-requirement eligibility only; full SNAP eligibility composition
       across all other program rules is deferred.
-  summary: '7 CFR 273.24 limits SNAP eligibility for able-bodied adults unless they
-
-    fulfill the ABAWD work requirement, qualify for an exception or waiver,
-
-    have not exceeded the countable-month limit, or have regained eligibility.
-
-    This module composes that time-limit rule with the general work
-
-    requirement in 7 CFR 273.7.'
+  summary: |-
+    7 CFR 273.24 limits SNAP eligibility for able-bodied adults unless they
+    fulfill the ABAWD work requirement, qualify for an exception, waiver, or
+    State discretionary exemption, have not exceeded the countable-month
+    limit, or have regained eligibility. Paragraph (g) permits a State agency
+    to provide a covered individual a discretionary exemption, limits the
+    fiscal-year average monthly exemptions in effect to 8 percent of FNS's
+    adjusted estimate of covered individuals, and prohibits discriminatory
+    administration. This module composes the time-limit rule with the general
+    work requirement in 7 CFR 273.7.
   source_verification:
     corpus_citation_path: us/regulation/7/273/24
 imports:
@@ -122,6 +115,21 @@ rules:
   versions:
   - effective_from: '2025-10-01'
     formula: '55'
+- name: snap_abawd_discretionary_exemption_allocation_rate
+  kind: parameter
+  dtype: Rate
+  source: 7 CFR 273.24(g)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "does not exceed 8 percent of the number of covered individuals in the State"
+  versions:
+  - effective_from: '2025-10-01'
+    formula: '0.08'
 - name: snap_member_abawd_exception_applies
   kind: derived
   entity: Person
@@ -164,15 +172,205 @@ rules:
           target: us:regulations/7-cfr/273/24#snap_member_abawd_exception_applies_scalar_limit_2
           output: snap_member_abawd_exception_applies_scalar_limit_2
           hash: sha256:local
+- name: state_agency_abawd_caseload
+  kind: derived
+  entity: StateAgency
+  dtype: Decimal
+  period: Year
+  source: 7 CFR 273.24(g)(1)(i)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "Caseload means the average monthly number of individuals receiving SNAP benefits during the 12-month period ending the preceding June 30."
+  versions:
+  - effective_from: '2025-10-01'
+    formula: state_agency_average_monthly_snap_recipient_count_during_twelve_months_ending_preceding_june_30
+- name: state_agency_abawd_discretionary_exemption_allocation
+  kind: derived
+  entity: StateAgency
+  dtype: Decimal
+  period: Year
+  source: 7 CFR 273.24(g)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "does not exceed 8 percent of the number of covered individuals in the State, as estimated by FNS"
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "The State agency's caseload"
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "FNS's estimate of changes in the proportion of SNAP recipients covered by waivers granted under paragraph (f) of this section"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:regulations/7-cfr/273/24#snap_abawd_discretionary_exemption_allocation_rate
+          output: snap_abawd_discretionary_exemption_allocation_rate
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-10-01'
+    formula: |-
+      fns_estimated_state_abawd_covered_individual_count_after_caseload_and_waiver_adjustments
+      * snap_abawd_discretionary_exemption_allocation_rate
+- name: state_agency_abawd_discretionary_exemptions_within_allocation
+  kind: derived
+  entity: StateAgency
+  dtype: Judgment
+  period: Year
+  source: 7 CFR 273.24(g)(3)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "the average monthly number of exemptions in effect during the fiscal year does not exceed 8 percent of the number of covered individuals in the State"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:regulations/7-cfr/273/24#state_agency_abawd_discretionary_exemption_allocation
+          output: state_agency_abawd_discretionary_exemption_allocation
+          hash: sha256:local
+  versions:
+  - effective_from: '2025-10-01'
+    formula: |-
+      state_agency_average_monthly_abawd_discretionary_exemptions_in_effect_during_fiscal_year
+      <= state_agency_abawd_discretionary_exemption_allocation
+- name: snap_member_abawd_covered_individual
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 7 CFR 273.24(g)(1)(ii)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "a SNAP recipient, or an applicant denied eligibility for benefits solely because he or she received SNAP benefits during the 3 months of eligibility provided under paragraph (b) of this section"
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "Is not exempt from the time limit under paragraph (c) of this section"
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "Does not reside in an area covered by a waiver granted under paragraph (f) of this section"
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "Is not fulfilling the work requirements as defined in paragraph (a)(1) of this section"
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "Is not receiving SNAP benefits under paragraph (e) of this section"
+  versions:
+  - effective_from: '2025-10-01'
+    formula: |-
+      (
+        member_receives_snap_benefits
+        or member_was_denied_snap_eligibility_solely_because_abawd_three_month_limit_reached
+      )
+      and not snap_member_abawd_exception_applies
+      and not member_covered_by_abawd_time_limit_waiver
+      and not snap_member_abawd_fulfilling_work_requirement
+      and not member_receives_snap_benefits_under_abawd_additional_three_month_eligibility
+- name: snap_member_abawd_discretionary_exemption_applies
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 7 CFR 273.24(g)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "a State agency may provide an exemption from the 3-month time limit of paragraph (b) of this section for covered individuals"
+  versions:
+  - effective_from: '2025-10-01'
+    formula: |-
+      member_assigned_abawd_discretionary_exemption_by_state_agency
+      and snap_member_abawd_covered_individual
+- name: snap_member_abawd_discretionary_exemption_counts_toward_state_allocation
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Month
+  source: 7 CFR 273.24(g)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "Exemptions do not count towards a State agency's allocation if they are provided to an individual who is otherwise exempt from the time limit during that month."
+  versions:
+  - effective_from: '2025-10-01'
+    formula: |-
+      member_assigned_abawd_discretionary_exemption_by_state_agency
+      and not member_otherwise_exempt_from_abawd_time_limit_during_month
+- name: state_agency_abawd_discretionary_exemption_nondiscrimination_complies
+  kind: derived
+  entity: StateAgency
+  dtype: Judgment
+  period: Year
+  source: 7 CFR 273.24(g)(4)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/regulation/7/273/24
+          excerpt: "State agencies must not discriminate against any covered individual for reasons of age, race, color, sex, disability, religious creed, national origin, or political beliefs."
+  versions:
+  - effective_from: '2025-10-01'
+    formula: |-
+      not (
+        state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_age
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_race
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_color
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_sex
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_disability
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_religious_creed
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_national_origin
+        or state_agency_abawd_discretionary_exemption_selection_discriminates_based_on_political_beliefs
+      )
 - name: snap_member_abawd_time_limit_inapplicable
   kind: derived
   entity: Person
   dtype: Judgment
   period: Month
-  source: 7 CFR 273.24(b)(1), 7 CFR 273.24(c), 7 CFR 273.24(f)
+  source: 7 CFR 273.24(b)(1), 7 CFR 273.24(c), 7 CFR 273.24(f), 7 CFR 273.24(g)(2)
   versions:
   - effective_from: '2025-10-01'
-    formula: snap_member_abawd_exception_applies or member_covered_by_abawd_time_limit_waiver
+    formula: |-
+      snap_member_abawd_exception_applies
+      or member_covered_by_abawd_time_limit_waiver
+      or snap_member_abawd_discretionary_exemption_applies
 - name: snap_member_abawd_countable_month_limit_exceeded
   kind: derived
   entity: Person
@@ -196,7 +394,7 @@ rules:
   entity: Person
   dtype: Judgment
   period: Month
-  source: 7 CFR 273.24(a)-(f)
+  source: 7 CFR 273.24(a)-(f), 7 CFR 273.24(g)(2)
   versions:
   - effective_from: '2025-10-01'
     formula: 'snap_member_abawd_time_limit_inapplicable

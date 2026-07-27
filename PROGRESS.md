@@ -2,9 +2,11 @@
 
 ## State
 
-Authoritative-text and repository-convention review is complete. The
-paragraph (g) implementation shape is settled; no RuleSpec implementation
-changes have been made yet.
+Paragraph (g) is encoded with person-level application and time-limit effects,
+the State fiscal-year allocation cap, allocation charging, and
+nondiscrimination. The module passes the pinned encoder validation pipeline,
+proof validation, and all 17 companion cases. Repository-wide checks and
+direct-downstream import-hash maintenance remain.
 
 ## Done
 
@@ -27,12 +29,36 @@ changes have been made yet.
   the allocation output will be decimal-valued.
 - Confirmed paragraph (h) carryover/adjustment mechanics and paragraph (i)
   reporting are outside this slice.
+- Removed the paragraph (g) deferred output while preserving the unrelated
+  paragraph (j) deferral.
+- Added the 8 percent parameter, the defined State caseload measure, the
+  decimal-valued FNS-adjusted State allocation, and the fiscal-year cap
+  compliance judgment.
+- Added the covered-individual predicate, State-assignment application
+  predicate, and the separate allocation-charge predicate for an exemption
+  provided to someone otherwise exempt that month.
+- Composed an applied discretionary exemption into the existing ABAWD
+  time-limit-inapplicable and time-limit-eligible results.
+- Added the paragraph (g)(4) State nondiscrimination judgment.
+- Added companion coverage for both covered-individual entry branches, every
+  exclusion, assigned and unassigned covered recipients, the resulting
+  time-limit effect, the otherwise-exempt allocation exception, the exact
+  8 percent boundary, and nondiscrimination.
+- Passed:
+  - pinned `axiom-encode` proof validation (24 atoms);
+  - pinned `axiom-encode` companion execution (17 cases);
+  - pinned encoder CI validation with this worktree supplied explicitly as
+    the policy root.
+- Identified a pinned CLI routing defect: because this worktree is not named
+  `rulespec-*`, the ordinary `validate` entry point resolves absolute legal
+  test inputs against a stale sibling checkout. The same pinned validation
+  pipeline passes when supplied this worktree as its policy root.
 
 ## Next
 
-- Add the paragraph (g) allocation, covered-person, application, time-limit,
-  allocation-charge, and nondiscrimination rules.
-- Extend the companion tests across the covered-individual branches and the
-  8 percent cap boundary.
-- Update only directly affected import metadata/tests if validation shows that
-  the changed federal output requires it.
+- Update the directly affected 7 CFR 273.11(c) proof import hash and rerun its
+  companion tests.
+- Run repository-wide pytest and reverse-index checks.
+- Refresh and sign the encoder apply manifest, then run the generated-file
+  guard.
+- Push the branch and open the required draft PR.
