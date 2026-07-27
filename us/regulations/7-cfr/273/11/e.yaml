@@ -1,0 +1,247 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/11
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/11/e/6/iv/B#snap_daa_post_fifteenth_departure_benefit_return
+      blocked_by:
+        - us:regulations/7-cfr/273/11/e#state_daa_post_fifteenth_departure_return_option
+      reason: >-
+        Paragraph (e)(6)(iv)(B) allows, but does not require, a State to set a
+        post-fifteenth-day return amount. This module encodes the federally
+        determinate full-return and pre-sixteenth half-allotment rules.
+  summary: |-
+    7 CFR 273.11(e) permits qualifying residents of public or private nonprofit
+    drug and alcohol treatment programs to apply for SNAP through a center and
+    requires an FNS-authorized or statutorily covered center before resident
+    certification. A resident is certified as a one-person household unless
+    children live with the resident. On departure, unspent benefits already
+    debited by the center are returned in full. If some benefits were spent and
+    the resident leaves before the sixteenth, the household must retain half
+    the monthly allotment, except when a semimonthly State has not posted the
+    second half.
+rules:
+  - name: snap_daa_departure_day_half_allotment_cutoff
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.11(e)(6)(iv)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If the household leaves prior to the 16th day of the month
+    versions:
+      - effective_from: '2008-10-01'
+        formula: '16'
+
+  - name: snap_daa_departure_half_allotment_rate
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.11(e)(6)(iv)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the center must ensure that the household has one-half of its
+                monthly benefit allotment remaining in its EBT account
+    versions:
+      - effective_from: '2008-10-01'
+        formula: '0.5'
+
+  - name: snap_daa_resident_special_application_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(e)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Narcotic addicts or alcoholics who regularly participate in
+                publicly operated or private non-profit drug addict or
+                alcoholic treatment and rehabilitation programs ... on a
+                resident basis may voluntarily apply for SNAP.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          resident_is_narcotic_addict_or_alcoholic
+          and resident_regularly_participates_in_daa_treatment
+          and (
+            daa_program_is_publicly_operated
+            or daa_program_is_private_nonprofit
+          )
+          and participation_is_on_resident_basis
+
+  - name: snap_daa_treatment_center_qualifies_for_resident_certification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(e)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the State agency must verify that the DAA treatment center is
+                authorized by FNS as a retailer ... or that it comes under part
+                B of title XIX of the Public Health Service Act
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          daa_center_fns_authorized_as_retailer
+          or daa_center_covered_by_part_b_title_xix_public_health_service_act
+
+  - name: snap_daa_resident_special_certification_conditions_satisfied
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(e)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Prior to certifying any residents for SNAP, the State agency
+                must verify that the DAA treatment center is authorized by FNS
+                as a retailer ... or that it comes under part B of title XIX
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_daa_resident_special_application_allowed
+          and snap_daa_treatment_center_qualifies_for_resident_certification
+
+  - name: snap_daa_resident_certification_household_size
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 7 CFR 273.11(e)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Residents must be certified as one-person households unless
+                their children are living with them, in which case their
+                children must be included in the household with the parent.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_daa_resident_special_certification_conditions_satisfied:
+            1 + max(0, daa_resident_children_living_with_parent_count)
+          else: 0
+
+  - name: snap_daa_unspent_benefits_returned_at_departure
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(e)(6)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If no benefits have been spent on behalf of the individual
+                household, the center must return the full value of any
+                benefits already debited from the household's current monthly
+                allotment
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if any_current_month_daa_benefits_spent_on_household_behalf:
+            0
+          else: max(0, current_month_benefits_already_debited_by_daa_center)
+
+  - name: snap_daa_pre_sixteenth_departure_benefits_returned
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(e)(6)(iv)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If the household leaves prior to the 16th day of the month, the
+                center must ensure that the household has one-half of its
+                monthly benefit allotment remaining in its EBT account unless
+                the State agency issues semi-monthly allotments and the second
+                half has not been posted yet.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if (
+            any_current_month_daa_benefits_spent_on_household_behalf
+            and daa_household_departure_day_of_month < snap_daa_departure_day_half_allotment_cutoff
+            and not (
+              state_issues_daa_allotments_semimonthly
+              and second_half_of_daa_allotment_not_posted_at_departure
+            )
+          ):
+            max(
+              0,
+              snap_daa_departure_half_allotment_rate
+              * daa_household_monthly_allotment
+              - household_ebt_balance_before_daa_center_return
+            )
+          else: 0
+
+  - name: snap_daa_departure_benefits_returned_to_household
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(e)(6)(iii)-(iv)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If no benefits have been spent ... return the full value ... If
+                the household leaves prior to the 16th day ... ensure that the
+                household has one-half of its monthly benefit allotment
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_daa_unspent_benefits_returned_at_departure
+          + snap_daa_pre_sixteenth_departure_benefits_returned
