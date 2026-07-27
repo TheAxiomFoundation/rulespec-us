@@ -2,12 +2,14 @@
 
 ## State
 
-Implementation and validation are complete and the branch is ready for draft
-review. All twenty top-level exclusions and their nested conditions are encoded
-and covered by the companion suite. The only outstanding repository gate is
-trusted provenance signing: the environment has no
-`AXIOM_ENCODE_APPLY_SIGNING_KEY`, so the three changed RuleSpec files cannot
-honestly receive the two required applied-file manifests here.
+Implementation and validation are complete. All twenty top-level exclusions
+and their nested conditions are encoded and covered by the companion suite.
+Remote handoff is blocked: shell GitHub access cannot resolve the host, and the
+connected GitHub branch-creation call was canceled before creating a branch.
+The other outstanding repository gate is trusted provenance signing: the
+environment has no `AXIOM_ENCODE_APPLY_SIGNING_KEY`, so the three changed
+RuleSpec files cannot honestly receive the two required applied-file manifests
+here.
 
 ## Done
 
@@ -85,11 +87,20 @@ honestly receive the two required applied-file manifests here.
 - Confirmed `guard-generated` identifies exactly the parent, child, and child
   companion as unsigned. A dry run would create two manifests covering those
   three files, but the required signing key is unavailable.
+- Attempted the required push and connected-GitHub fallback. The shell push
+  failed on sandbox DNS, and the connector write was canceled without creating
+  a remote branch or PR.
+- Attempted to write the required closure-sprint output file. The sandbox
+  rejected the out-of-worktree write, so the complete report is preserved in
+  the committed `FINAL_REPORT.md` beside this ledger.
 
 ## Next
 
-- Push the branch and open the required draft PR referencing
-  `rulespec-us#1135`.
+- From a GitHub-enabled environment, run
+  `git push -u origin closure/enc-273-9c` and open the required draft PR
+  referencing `rulespec-us#1135`.
+- Copy `FINAL_REPORT.md` to the requested closure-sprint output path when that
+  path is writable.
 - Have a trusted signer generate the two applied-file manifests, then rerun
   `guard-generated` and the full pytest suite.
 - Obtain human legal review; do not merge from this worktree.
