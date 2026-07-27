@@ -4,18 +4,29 @@ module:
     required: true
   source_verification:
     corpus_citation_paths:
-      - us/statute/26/25B
+      - us/statute/26/25B/a
+      - us/statute/26/25B/b
+      - us/statute/26/25B/c
+      - us/statute/26/25B/e
+      - us/guidance/irs/notice-2025-67/page-3
+      - us/guidance/irs/notice-2025-67/page-4
     upstream_source_check:
       status: official_parameter_source
       checked_paths:
-        - us/statute/26/25B
+        - us/statute/26/25B/a
+        - us/statute/26/25B/b
+        - us/statute/26/25B/c
+        - us/statute/26/25B/e
+        - us/guidance/irs/notice-2025-67/page-3
+        - us/guidance/irs/notice-2025-67/page-4
       rationale: |-
         Section 25B supplies the 50-, 20-, 10-, and zero-percent rates, the
         $2,000 contribution cap for each eligible individual, the eligibility
-        screens, and the inflation-adjustment method. IRS Notice 2025-67,
-        section 3.09, supplies the unencoded tax-year-2026 AGI tier limits.
-        This module accepts the three applicable filing-status limits as
-        runtime inputs and records every official value in its companion.
+        screens, the modified-AGI rule, and the inflation-adjustment method.
+        IRS Notice 2025-67 supplies the official tax-year-2026 AGI tier limits.
+        This module imports all nine grounded notice parameters and selects
+        among joint, head-of-household, and all-other limits from its declared
+        filing-status boundary.
   summary: |-
     Federal retirement savings contributions credit composition under
     26 USC 25B for tax year 2026, before the aggregate limitation under
@@ -33,10 +44,12 @@ module:
     and would not faithfully implement section 25B(c).
 
     Adjusted gross income plus sections 911, 931, and 933 excluded income is
-    computed locally, matching section 25B(e). Caller-supplied per-person
-    qualified retirement savings contributions are completed section 25B(d)
-    amounts after testing-period distributions and statutory exceptions. The
-    companion uses zero distributions, as required by the grid.
+    computed locally, matching section 25B(e). Each exclusion is a required,
+    explicit input with no default: a caller may supply zero only as the
+    affirmative fact that no amount was excluded under that section.
+    Caller-supplied per-person qualified retirement savings contributions are
+    completed section 25B(d) amounts after testing-period distributions and
+    statutory exceptions.
   deferred_outputs:
     - output: us:statutes/26/25B#savers_credit
       reason: |-
@@ -54,6 +67,15 @@ module:
         individual. This TaxUnit pipeline accepts each person's completed net
         section 25B(d) amount and does not treat missing distributions as zero.
 imports:
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_50_percent_agi_limit_joint
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_20_percent_agi_limit_joint
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_10_percent_agi_limit_joint
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_50_percent_agi_limit_head_of_household
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_20_percent_agi_limit_head_of_household
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_10_percent_agi_limit_head_of_household
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_50_percent_agi_limit_all_other
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_20_percent_agi_limit_all_other
+  - us:policies/irs/notice-2025-67/savers-credit#savers_credit_10_percent_agi_limit_all_other
   - us:statutes/26/25B#savers_credit_contribution_cap
   - us:statutes/26/25B#savers_credit_age_threshold
   - us:statutes/26/25B#savers_credit_high_rate
@@ -74,7 +96,7 @@ rules:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us/statute/26/25B
+              corpus_citation_path: us/statute/26/25B/e
               excerpt: "determined without regard to sections 911, 931, and 933"
     versions:
       - effective_from: '2026-01-01'
@@ -84,6 +106,157 @@ rules:
           + section_911_excluded_income
           + section_931_excluded_income
           + section_933_excluded_income
+
+  - name: pipeline_savers_credit_50_percent_agi_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IRS Notice 2025-67, applicable tax-year-2026 section 25B 50-percent AGI limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_50_percent_agi_limit_joint
+              output: savers_credit_50_percent_agi_limit_joint
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_50_percent_agi_limit_head_of_household
+              output: savers_credit_50_percent_agi_limit_head_of_household
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_50_percent_agi_limit_all_other
+              output: savers_credit_50_percent_agi_limit_all_other
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          match filing_status:
+              0 => savers_credit_50_percent_agi_limit_all_other
+              1 => savers_credit_50_percent_agi_limit_joint
+              2 => savers_credit_50_percent_agi_limit_all_other
+              3 => savers_credit_50_percent_agi_limit_head_of_household
+              4 => savers_credit_50_percent_agi_limit_all_other
+
+  - name: pipeline_savers_credit_20_percent_agi_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IRS Notice 2025-67, applicable tax-year-2026 section 25B 20-percent AGI limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_20_percent_agi_limit_joint
+              output: savers_credit_20_percent_agi_limit_joint
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_20_percent_agi_limit_head_of_household
+              output: savers_credit_20_percent_agi_limit_head_of_household
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_20_percent_agi_limit_all_other
+              output: savers_credit_20_percent_agi_limit_all_other
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          match filing_status:
+              0 => savers_credit_20_percent_agi_limit_all_other
+              1 => savers_credit_20_percent_agi_limit_joint
+              2 => savers_credit_20_percent_agi_limit_all_other
+              3 => savers_credit_20_percent_agi_limit_head_of_household
+              4 => savers_credit_20_percent_agi_limit_all_other
+
+  - name: pipeline_savers_credit_10_percent_agi_limit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: IRS Notice 2025-67, applicable tax-year-2026 section 25B 10-percent AGI limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_10_percent_agi_limit_joint
+              output: savers_credit_10_percent_agi_limit_joint
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_10_percent_agi_limit_head_of_household
+              output: savers_credit_10_percent_agi_limit_head_of_household
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/irs/notice-2025-67/savers-credit#savers_credit_10_percent_agi_limit_all_other
+              output: savers_credit_10_percent_agi_limit_all_other
+              hash: sha256:40436ffee4b5f13b030a892ddcdee4873adfb0c92e990fdffa37cb981e66a366
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          match filing_status:
+              0 => savers_credit_10_percent_agi_limit_all_other
+              1 => savers_credit_10_percent_agi_limit_joint
+              2 => savers_credit_10_percent_agi_limit_all_other
+              3 => savers_credit_10_percent_agi_limit_head_of_household
+              4 => savers_credit_10_percent_agi_limit_all_other
+
+  - name: pipeline_savers_credit_filing_status_is_enumerated
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Declared filing-status boundary mapped to the Notice 2025-67 return categories
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/notice-2025-67/page-3
+              excerpt: "for married taxpayers filing a joint return"
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/notice-2025-67/page-4
+              excerpt: "taxpayers filing as head of household"
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/notice-2025-67/page-4
+              excerpt: "for all other taxpayers"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          filing_status == 0
+          or filing_status == 1
+          or filing_status == 2
+          or filing_status == 3
+          or filing_status == 4
 
   - name: pipeline_savers_credit_applicable_percentage
     kind: derived
@@ -97,8 +270,41 @@ rules:
           - path: versions[0].formula
             kind: parameter_table
             source:
-              corpus_citation_path: us/statute/26/25B
-              excerpt: "The applicable percentage is"
+              corpus_citation_path: us/statute/26/25B/b
+              excerpt: "if the adjusted gross income of the taxpayer is not over $30,000, 50 percent"
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/notice-2025-67/page-3
+              excerpt: "for married taxpayers filing a joint return is increased from $47,500 to $48,500"
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/notice-2025-67/page-4
+              excerpt: "household is increased from $35,625 to $36,375"
+          - path: versions[0].formula
+            kind: parameter_table
+            source:
+              corpus_citation_path: us/guidance/irs/notice-2025-67/page-4
+              excerpt: "for all other taxpayers is increased from $23,750 to $24,250"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/savers_credit_pipeline#pipeline_savers_credit_50_percent_agi_limit
+              output: pipeline_savers_credit_50_percent_agi_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/savers_credit_pipeline#pipeline_savers_credit_20_percent_agi_limit
+              output: pipeline_savers_credit_20_percent_agi_limit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/savers_credit_pipeline#pipeline_savers_credit_10_percent_agi_limit
+              output: pipeline_savers_credit_10_percent_agi_limit
+              hash: sha256:local
           - path: versions[0].formula
             kind: import
             import:
@@ -128,15 +334,15 @@ rules:
         effective_to: '2026-12-31'
         formula: |-
           if pipeline_savers_credit_modified_adjusted_gross_income
-              <= savers_credit_first_threshold_2026:
+              <= pipeline_savers_credit_50_percent_agi_limit:
               savers_credit_high_rate
           else:
               if pipeline_savers_credit_modified_adjusted_gross_income
-                  <= savers_credit_second_threshold_2026:
+                  <= pipeline_savers_credit_20_percent_agi_limit:
                   savers_credit_middle_rate
               else:
                   if pipeline_savers_credit_modified_adjusted_gross_income
-                      <= savers_credit_third_threshold_2026:
+                      <= pipeline_savers_credit_10_percent_agi_limit:
                       savers_credit_low_rate
                   else:
                       savers_credit_zero_rate
@@ -153,8 +359,18 @@ rules:
           - path: versions[0].formula
             kind: predicate
             source:
-              corpus_citation_path: us/statute/26/25B
+              corpus_citation_path: us/statute/26/25B/c
               excerpt: "The term “eligible individual” means any individual if such individual has attained the age of 18"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B/c
+              excerpt: "any individual who is a student (as defined in section 152(f)(2))"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B/c
+              excerpt: "any individual with respect to whom a deduction under section 151 is allowed to another taxpayer"
           - path: versions[0].formula
             kind: import
             import:
@@ -181,8 +397,23 @@ rules:
           - path: versions[0].formula
             kind: predicate
             source:
-              corpus_citation_path: us/statute/26/25B
+              corpus_citation_path: us/statute/26/25B/b
               excerpt: "In the case of a joint return"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B/c
+              excerpt: "The term “eligible individual” means any individual if such individual has attained the age of 18"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B/c
+              excerpt: "any individual who is a student (as defined in section 152(f)(2))"
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/statute/26/25B/c
+              excerpt: "any individual with respect to whom a deduction under section 151 is allowed to another taxpayer"
           - path: versions[0].formula
             kind: import
             import:
@@ -211,7 +442,7 @@ rules:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us/statute/26/25B
+              corpus_citation_path: us/statute/26/25B/a
               excerpt: "do not exceed $2,000"
           - path: versions[0].formula
             kind: import
@@ -241,7 +472,7 @@ rules:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us/statute/26/25B
+              corpus_citation_path: us/statute/26/25B/a
               excerpt: "do not exceed $2,000"
           - path: versions[0].formula
             kind: import
@@ -271,34 +502,43 @@ rules:
           - path: versions[0].formula
             kind: formula
             source:
-              corpus_citation_path: us/statute/26/25B
+              corpus_citation_path: us/statute/26/25B/a
               excerpt: "an amount equal to the applicable percentage"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/savers_credit_pipeline#pipeline_savers_credit_filing_status_is_enumerated
+              output: pipeline_savers_credit_filing_status_is_enumerated
+              hash: sha256:local
     versions:
       - effective_from: '2026-01-01'
         effective_to: '2026-12-31'
         formula: |-
-          pipeline_savers_credit_applicable_percentage
-          * (
-              (
-                  if primary_savers_credit_eligible:
-                      primary_savers_credit_contributions_taken_into_account
-                  else:
-                      0
+          if pipeline_savers_credit_filing_status_is_enumerated:
+              pipeline_savers_credit_applicable_percentage
+              * (
+                  (
+                      if primary_savers_credit_eligible:
+                          primary_savers_credit_contributions_taken_into_account
+                      else:
+                          0
+                  )
+                  + (
+                      if spouse_savers_credit_eligible:
+                          spouse_savers_credit_contributions_taken_into_account
+                      else:
+                          0
+                  )
               )
-              + (
-                  if spouse_savers_credit_eligible:
-                      spouse_savers_credit_contributions_taken_into_account
-                  else:
-                      0
-              )
-          )
+          else:
+              0
 
 inputs:
   - name: filing_status
     entity: TaxUnit
     dtype: Integer
     period: Year
-    description: Filing-status code; 1 is married filing jointly and the other encoded status codes are nonjoint.
+    description: Filing-status code; 0 single, 1 joint, 2 married filing separately, 3 head of household, and 4 surviving spouse.
   - name: adjusted_gross_income
     entity: TaxUnit
     dtype: Money
@@ -323,24 +563,6 @@ inputs:
     period: Year
     unit: USD
     description: Income excluded under section 933 and added back under section 25B(e).
-  - name: savers_credit_first_threshold_2026
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Applicable 2026 upper limit for the 50-percent tier from IRS Notice 2025-67 section 3.09.
-  - name: savers_credit_second_threshold_2026
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Applicable 2026 upper limit for the 20-percent tier from IRS Notice 2025-67 section 3.09.
-  - name: savers_credit_third_threshold_2026
-    entity: TaxUnit
-    dtype: Money
-    period: Year
-    unit: USD
-    description: Applicable 2026 upper limit for the 10-percent tier from IRS Notice 2025-67 section 3.09.
   - name: primary_age_at_close_of_taxable_year
     entity: TaxUnit
     dtype: Integer

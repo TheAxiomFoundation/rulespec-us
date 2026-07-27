@@ -2,7 +2,7 @@
 
 ## State
 
-- In progress: Notice 2025-67 parameters implemented and validated; pipeline rebuild next.
+- In progress: corrected pipeline and full companion implemented and green; mutation/index/repository gates next.
 - Baseline: clean worktree at `6b0773d3f7fa6719f208154f3e609e292ab7abe7` (`origin/main`).
 - Constraints: local commits only; no push, GitHub writes, workflow/toolchain edits, or manifest signing.
 
@@ -19,9 +19,14 @@
 - Verified Notice 2025-67 rows 4-5 and section 25B rows 225, 230, 245, 914, and 919 directly in the pinned corpus.
 - Added a proof-required Notice 2025-67 parameter module containing all nine tax-year-2026 filing-status/tier limits and a companion value test.
 - Passed the module companion test, focused CI validation, proof validation, and zero-missing money-atom validation.
+- Replaced caller-supplied thresholds with nine notice imports and explicit joint/head-of-household/all-other selectors.
+- Preserved explicit, no-default §§911/931/933 add-back inputs and added a positive §911 threshold-crossing case.
+- Preserved separate primary/spouse $2,000 caps and added a both-spouses-over-cap case.
+- Expanded the pipeline companion to 25 cases, including every exact and one-dollar-over tier edge for single, joint, and head-of-household filers; MFS and surviving-spouse category checks; and eligibility screens.
+- Passed the 25-case companion, focused CI validation (using a temporary canonical checkout alias for this `wt-savers` worktree name), proof validation, and zero-missing money-atom validation.
 
 ## Next
 
-- Import the nine notice parameters into the saver-credit pipeline and select them by filing status.
-- Preserve the recovered fail-closed explicit §§911/931/933 inputs while adding positive add-back coverage.
-- Expand the companion across all inclusive tier edges, filing statuses, and separate spouse caps.
+- Flip one encoded tier boundary and record the expected companion failures, then restore and rerun green.
+- Regenerate/check the corpus-provision reverse index and run focused repository tests.
+- Inventory new output legal IDs, write `WORKER-REPORT.md`, and finalize the committed progress state.
