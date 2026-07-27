@@ -2,12 +2,13 @@
 
 ## State
 
-The semantic closure repair is implemented on `closure/scretd`, but authorized
-applied-file signing is blocked because the configured `agent-secret` store
-has no unlock password in this session and no signing environment variable is
-present. The repaired § 3 root consumes the § 2 household-income judgment
-unconditionally, and the pinned diagnostic suite passes all 23 companion
-cases. The signed manifests still describe the prior files.
+The income-gate semantic repair is implemented on `closure/scretd`, but
+authorized applied-file signing is blocked because the configured
+`agent-secret` store has no unlock password in this session and no signing
+environment variable is present. The repaired § 3 root consumes the § 2
+household-income judgment unconditionally, and the pinned diagnostic suite
+passes all 23 companion cases. The signed manifests still describe the prior
+files.
 
 ## Done
 
@@ -64,12 +65,15 @@ cases. The signed manifests still describe the prior files.
   `agent-secret` reports a missing unlock password.
 - Confirmed the expected unsigned state: `guard-generated` reports exactly the
   three protected changed files, and the focused 15-test repository suite is
-  14 passed / 1 failed solely on the two stale module-manifest hashes.
+  14 passed / 1 failed solely on two stale signed manifests covering those
+  three files.
+- Wrote the final repair report at
+  `bulk/us-il-scretd-fix-report.md` and marked the prior assessment explicitly
+  as the pre-repair baseline.
 
 ## Next
 
 - Produce and commit replacement signed manifests for §§ 2 and 3, then run
   `guard-generated` and the focused repository suite from a session with the
   authorized signing key. Do not forge or bypass an attestation.
-- Write and commit the final report.
 - Push and open a draft PR if GitHub becomes reachable.

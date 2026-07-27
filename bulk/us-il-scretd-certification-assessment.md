@@ -1,5 +1,10 @@
 # Illinois SCRETD certification assessment
 
+> **Baseline snapshot.** This document records the pre-repair state and is
+> retained as the evidence baseline. For the current branch outcome, see
+> `bulk/us-il-scretd-fix-report.md`; present-tense 4/5, 10-case, and file-hash
+> statements below describe the state at this assessment's commit.
+
 - Assessment date: 2026-07-27
 - Program: `us-il/scretd`, tax year 2026
 - Output: `il_scretd_deferral_amount`
