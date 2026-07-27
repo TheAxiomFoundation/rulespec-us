@@ -2,9 +2,9 @@
 
 ## State
 
-- In progress: encode the 7 CFR 273.5(d) side of the ineligible-student
-  income-and-resource cross-reference without implementing the separately
-  owned 7 CFR 273.11(d) treatment.
+- In progress: the 7 CFR 273.5(d) cross-reference is encoded without
+  duplicating the separately owned 7 CFR 273.11(d) treatment; local validation
+  remains.
 
 ## Done
 
@@ -15,12 +15,15 @@
   2026-07-09.
 - Confirmed that paragraph (d) itself directs the income and resources of an
   ineligible student to the treatment in 7 CFR 273.11(d).
+- Encoded paragraph (d) as a non-executable `cites` source relation to the
+  273.11(d) module.
+- Narrowed the existing paragraph-(d) deferral to the canonical
+  `snap_other_nonhousehold_member_treatment_applies` output in the separate
+  273.11(d) worker's committed interface.
 
 ## Next
 
-- Inspect repository conventions for encoded cross-references and deferred
-  downstream outputs.
-- Implement the minimal 273.5(d) cross-reference rule, narrow the existing
-  deferral to the separately owned 273.11(d) output, and add focused tests.
-- Run repository validation, update this progress record, commit each coherent
-  step, push the branch, open the required draft PR, and write the final report.
+- Run repository validation, including source-relation schema checks and the
+  existing companion tests.
+- Finalize this progress record, push the branch, open the required draft PR,
+  and write the final report.
