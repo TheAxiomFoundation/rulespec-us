@@ -2,10 +2,10 @@
 
 ## State
 
-Paragraph (j) is encoded and covered by focused fixtures. Paragraphs (f) and
-(g) are the active implementation step. The change remains additive so the
-existing composed work-requirement outputs and frozen program verdicts are not
-rewired.
+Paragraphs (f), (g), and (j) are encoded with focused fixtures. Core
+validation passes with the repository-pinned encoder and rules engine. The
+change remains additive so the existing composed work-requirement outputs and
+frozen program verdicts are not rewired.
 
 ## Done
 
@@ -38,14 +38,27 @@ rewired.
   strike dismissal, comparable replacement work, exclusions, reduced effort,
   minor variations, and good cause.
 - Parsed both YAML files and passed all nine repository-layout tests.
+- Removed the broad paragraph (f) and (g) deferrals.
+- Added a narrow paragraph (f)(7)(iv) deferral for the corpus's ambiguous
+  `§ 273.11(1)` cross-reference and the optional State election.
+- Encoded direct SNAP noncompliance, Title IV-A/unemployment-compensation
+  noncompliance, and paragraph (j) as shared sanction triggers.
+- Encoded first-, second-, and third-or-later occurrence schedules, including
+  the “later of” minimum-period/compliance rule and optional permanent
+  third-or-later sanctions.
+- Encoded optional whole-household sanctions, their 180-day cap, household
+  reestablishment conditions, and the remaining-period rule when the
+  disqualified member joins another household as head.
+- Encoded completed-period reentry, exemption-based reentry during a sanction,
+  and final-month application treatment.
+- Expanded fixture inputs explicitly after the pinned validator correctly
+  rejected overridden YAML merge keys.
+- Passed pinned `axiom-encode validate --skip-reviewers`,
+  `axiom-encode proof-validate`, and all 37 companion cases with the pinned
+  rules engine.
 
 ## Next
 
-- Remove the broad (f) and (g) deferrals while retaining (k), (m), and other
-  out-of-slice deferrals.
-- Add a narrow (f)(7)(iv) deferral for the ambiguous optional identical
-  Title IV-A sanction.
-- Encode and test disqualification triggers and periods, individual and
-  optional household effects, and reentry.
-- Validate, update this log, commit each coherent step, push, and open the
-  required draft PR.
+- Run the remaining repository checks and an independent fidelity review.
+- Address any findings in separate coherent commits.
+- Update this log with final validation, push, and open the required draft PR.
