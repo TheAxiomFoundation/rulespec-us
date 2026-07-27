@@ -37,6 +37,9 @@ direct-downstream import-hash maintenance remain.
 - Added the covered-individual predicate, State-assignment application
   predicate, and the separate allocation-charge predicate for an exemption
   provided to someone otherwise exempt that month.
+- Composed allocation charging from the legally effective exemption predicate,
+  so an attempted assignment to a non-covered person neither applies nor
+  consumes the State allocation.
 - Composed an applied discretionary exemption into the existing ABAWD
   time-limit-inapplicable and time-limit-eligible results.
 - Added the paragraph (g)(4) State nondiscrimination judgment.
@@ -45,7 +48,7 @@ direct-downstream import-hash maintenance remain.
   time-limit effect, the otherwise-exempt allocation exception, the exact
   8 percent boundary, and nondiscrimination.
 - Passed:
-  - pinned `axiom-encode` proof validation (24 atoms);
+  - pinned `axiom-encode` proof validation (25 atoms);
   - pinned `axiom-encode` companion execution (17 cases);
   - pinned encoder CI validation with this worktree supplied explicitly as
     the policy root.
