@@ -2,11 +2,10 @@
 
 ## State
 
-The citation and RuleSpec fixture gates pass. Released engine v0.1.1 also
-loads the canonical module and returns $156 for the $191 golden case. The
-strict `executable` criterion does not hold: that module compiles to 11
-derived outputs, not one, and its deterministic local artifact is unpublished.
-Oracle registration remains in progress.
+Evidence assembly is complete at 4 of 5 criteria. `provision_rooted`,
+`conformant`, `exercised`, and candidate citation-path `closed` hold.
+`executable` does not: the released-v0.1.1 local probe passes but has 11
+derived outputs and is unpublished. This is not a certification.
 
 ## Done
 
@@ -48,11 +47,24 @@ Oracle registration remains in progress.
 - Recorded the executable blockers without substituting a development engine
   or synthetic module: the artifact has 11 derived outputs, no one-output
   medical program exists, and the local artifact is unpublished.
+- Registered and committed the exact five-case oracle grid at
+  `axiom-oracles@929aa84e7db51ff071bb7515fedac7790c44a731`.
+  Its pinned PE-US 1.767.3 run matches 5/5 with zero mismatches and zero
+  errors; focused tests pass 26/26.
+- Promoted the exact oracle mapping to
+  `snap_excess_medical_expense_deduction` and disclosed the restricted
+  Household-to-SPMUnit, annual-to-monthly, eligibility, and source-version
+  boundaries.
+- Closed the candidate citation-path ledger at one encoded unique path, zero
+  excluded, and zero pending. Preserved the explicit caveat that this is not
+  semantic completeness of the monolithic 364.400 provision.
+- Wrote the complete five-criterion package at
+  `us-ma/snap/v1-medical-deduction-evidence.md`.
 
 ## Next
 
-- Inspect the real PolicyEngine variable body and register the five-case
-  boundary grid with zero unexplained mismatches.
-- Resolve the one-root/two-record closure ledger with zero pending paths.
-- Assemble the five-criterion narrative, validation receipt, and final sprint
-  report.
+- Publish a provenance-stamped one-output medical artifact and execute it on
+  an official released-v0.1.1 stranger path before any certification.
+- Obtain human review of the narrow candidate-path meaning of `closed`; use a
+  3-of-5 verdict if full-provision semantic closure is required.
+- Push the branches and open draft review PRs when GitHub DNS is available.
