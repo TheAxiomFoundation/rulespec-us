@@ -2,10 +2,12 @@
 
 ## State
 
-The direct employee Medicare node has Medicare-only OASDI-seam fixtures and a
-successful local artifact run on the released v0.1.1 source tag. The strict
-executable premise remains blocked on a published one-output artifact. No
-certification claim has been made.
+The five-criterion evidence assembly is complete at an honest 4 of 5. The
+Medicare-only PolicyEngine case grid matched 5 of 5 cases, the nine-path
+repository closure ledger has zero pending rows, and the released v0.1.1 source
+tag loads and evaluates the local artifact. The strict executable premise
+remains blocked on a published one-output artifact and official-binary stranger
+receipt. No certification claim has been made.
 
 ## Done
 
@@ -24,9 +26,22 @@ certification claim has been made.
   SHA-256 is `2a937800a7295db8220be9a8c087116b4caf532c50bd5f64cddc7a3d16dd5e41`.
 - Confirmed the sandbox cannot download the public engine asset, and the
   one-output artifact is not published; both limitations will be explicit.
+- Built and registered `us-employee-medicare-grid` in
+  `axiom-oracles@75782c6574e6219bfbc98ab679d6524ecccc0259`.
+- Ran the five PolicyEngine cases: 5 matches, 0 mismatches, 0 errors, with the
+  only raw residual below one ten-thousandth of a dollar and within the
+  declared one-cent tolerance.
+- Resolved the r1 `9/11` shape as nine unique paths from eleven raw inventory
+  records and produced a reviewed 9 encoded / 0 excluded / 0 pending ledger.
+- Assembled `us/payroll/v1-medicare-evidence.md`, including the exact candidate
+  entry shape, all five criterion sections, execution receipt, blockers, and
+  the hand-checkable $300,000 golden case.
+- Passed 15 repository layout/reverse-index tests, all 5 companion cases, YAML
+  parsing for every embedded evidence block, and `git diff --check`.
 
 ## Next
 
-- Finish and run the PolicyEngine case grid.
-- Finish the nine-row closure ledger.
-- Assemble and validate the five-criteria evidence document and golden case.
+- Apply any final adversarial-review corrections and commit the evidence.
+- Attempt both branch pushes and open draft PRs only if the network permits.
+- Write the final report to the sprint output channel; the sandbox reports the
+  pre-created external output file as non-writable.
