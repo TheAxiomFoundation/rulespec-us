@@ -1,0 +1,97 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9
+        - us:policies/usda/snap/fy-2026-cola/deductions
+      rationale: >-
+        The South Carolina SNAP manual states the operative household-size
+        standard deduction amounts for this state manual source unit. Federal
+        regulation context supplies the SNAP deduction framework, and USDA FY
+        2026 COLA context supplies matching 48-state standard deduction values;
+        this manual slice remains the requested local source for the encoded
+        state standard deduction table.
+  summary: |-
+    Section 12.2 Standard Deduction: each household is allowed a standard deduction that varies according to household size. Total income is reduced by the amount of the standard deduction. The standard deduction is $209 for household size 1-3, $223 for household size 4, $261 for household size 5, and $299 for household size 6 or more.
+rules:
+  - name: snap_standard_deduction_household_size_six_or_more_key
+    kind: parameter
+    dtype: Count
+    source: SNAP Manual section 12.2, standard deduction row label
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
+              excerpt: "$299 for household size of 6 or more"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          6
+
+  - name: snap_standard_deduction_table
+    kind: parameter
+    dtype: Money
+    unit: USD
+    indexed_by: household_size
+    source: SNAP Manual section 12.2, standard deduction by household size
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
+              excerpt: "$209 for household size of 1- 3 ... $299 for household size of 6 or more"
+              table:
+                header: standard deduction by household size
+                row_key: household_size
+                column_key: standard_deduction
+    versions:
+      - effective_from: '2025-10-01'
+        values:
+          1: 209
+          2: 209
+          3: 209
+          4: 223
+          5: 261
+          6: 299
+
+  - name: snap_standard_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Manual section 12.2, total income reduced by standard deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-sc/manual/dss/snap-policy-manual/page-159
+              excerpt: "Total income is reduced by the amount of the standard deduction."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/chapter-12/standard-deduction#snap_standard_deduction_table
+              output: snap_standard_deduction_table
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-sc:policies/dss/snap-policy-manual/chapter-12/standard-deduction#snap_standard_deduction_household_size_six_or_more_key
+              output: snap_standard_deduction_household_size_six_or_more_key
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_standard_deduction_table[min(household_size, snap_standard_deduction_household_size_six_or_more_key)]
