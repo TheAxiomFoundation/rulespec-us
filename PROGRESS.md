@@ -3,7 +3,8 @@
 ## State
 
 Implementation and source review are complete for the four modules assigned by
-the 2026-07-27 closure audit:
+the 2026-07-27 closure audit. Publication is blocked by the current
+environment:
 
 - `4.000.1`: encoded all three assigned definitions after confirming that
   Person and Household judgments are supported.
@@ -54,10 +55,15 @@ The certified program composition remains frozen and out of scope.
 - `guard-generated` remains blocked because the four existing signed apply
   manifests need refreshed hashes and this environment does not provide
   `AXIOM_ENCODE_APPLY_SIGNING_KEY`; no unsigned manifest was fabricated.
+- `git push -u origin closure/enc-co-stubs` cannot resolve `github.com`, and
+  the connected GitHub app cancelled branch-write attempts, so no draft PR was
+  falsely reported as created.
 
 ## Next
 
-- Push the committed branch and open the requested draft PR referencing
+- From a network-enabled or connector-authorized environment, push
+  `closure/enc-co-stubs` and open the requested draft PR titled
+  `Resolve or sharpen four CO SNAP deferred modules`, referencing
   rulespec-us#1135.
 - Refresh the four signed apply manifests from an approved signing environment,
   then rerun `guard-generated`.
