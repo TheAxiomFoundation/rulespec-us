@@ -5,8 +5,8 @@
 - Branch: `closure/w5-eitc-112-combat`
 - Checkout: `.git/codex-worktrees/w5-eitc-112-combat` (the requested sibling worktree path is outside the writable sandbox)
 - Scope: EITC frontier items 19–23, the 26 U.S.C. §112 combat-zone and missing-status month rules
-- Status: implementation, provenance refresh, and validation complete;
-  manifest signing is blocked only by the unavailable maintainer signing key
+- Status: complete locally; manifest signing, push, and draft PR are blocked
+  by unavailable maintainer credentials/network
 
 ## Done
 
@@ -48,9 +48,10 @@
 - Rebound the §112, §32(c)(2), §32, and §24(d) fixtures from the two former
   implicit frontier inputs to their new primitive facts, and refreshed the
   exact §112 import hashes in §32(c)(2) and §24(d).
-- Added 13 §112 cases covering every hospitalization conjunct, months 24/25,
-  January/February 1978, non-Vietnam service, the hospitalization exclusion,
-  and the unaffected direct-service branch.
+- The §112 companion now has 13 cases (up from 4), covering every
+  hospitalization conjunct, months 24/25, January/February 1978, non-Vietnam
+  service, the hospitalization exclusion, and the unaffected direct-service
+  branch.
 - Focused validation with pinned `axiom-encode` 0.2.1200:
   - `validate --skip-reviewers` passes for §112, §32(c)(2), and §24(d);
   - §112 proof validation passes with 20 atoms;
@@ -67,10 +68,18 @@
   - `guard-generated` consequently reports those same seven files.
 - Left all existing signed manifests untouched for a maintainer with the
   signing key to refresh.
+- Attempted to push `closure/w5-eitc-112-combat`; DNS resolution for
+  `github.com` failed, so no remote branch or draft PR could be created.
+- Attempted to write the requested closure-sprint output file; the sandbox
+  rejected the path because it is outside the writable workspace. Preserved
+  the complete handoff in committed `FINAL_REPORT.md`.
 
 ## Next
 
-1. Write and commit the final report.
-2. Copy the report to the requested closure-sprint output path if sandbox
-   permissions allow.
-3. Push and open the required draft PR if network access permits.
+1. With `AXIOM_ENCODE_APPLY_SIGNING_KEY`, run the official signer for the four
+   manifests covering the seven changed RuleSpec files.
+2. Rerun the repository suite and generated-change guard.
+3. Copy `FINAL_REPORT.md` to the requested closure-sprint output path.
+4. Push the branch and open the draft PR titled
+   `Encode §112 combat-zone month rules (EITC frontier)`, referencing
+   `rulespec-us#1135`.
