@@ -2,9 +2,10 @@
 
 ## State
 
-Paragraph (b) implementation and companion tests are complete. Proof and
-targeted validation pass. Repository validation is down to the expected reverse
-index refresh and the unavailable signing-key handoff.
+Paragraph (b) implementation and companion tests are complete. Targeted,
+proof, money-atom, and reverse-index validation pass. The sole remaining
+repository-suite failure is the unavailable signing-key handoff for the edited
+parent manifest.
 
 ## Done
 
@@ -45,12 +46,13 @@ index refresh and the unavailable signing-key handoff.
   and edited-parent signing-manifest test failed as expected.
 - Regenerated the reverse index (4,232 provisions, 5,069 edges, 4,484 modules);
   all eight reverse-index tests now pass.
+- Re-ran the full repository suite after the index refresh: 64 tests pass and
+  only the edited-parent signing-manifest assertion fails.
 - Confirmed signing dry-run requires manifests for the parent and new child;
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable in this environment.
 
 ## Next
 
-- Re-run the full repository suite and record the remaining signing-manifest
-  gate.
-- Commit validation artifacts, push the branch, and open the draft pull
-  request.
+- Audit the final diff, push the branch, and open the draft pull request.
+- Hand off generation of the two signed apply manifests to an environment with
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY`.
