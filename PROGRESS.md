@@ -63,8 +63,9 @@ durable in-repository report.
   correct N.J.A.C. trace.
 - Proved `executable` false: the repository section module has four derived
   outputs, composition does not prune them, the one-output slice is temporary
-  and unpublished, and no NJ WFNJ program artifact exists in the 222 locally
-  fetched artifact tags.
+  and unpublished, no NJ WFNJ program artifact exists in the 222 locally
+  fetched artifact tags, and an official cargo-dist binary could not be
+  anonymously downloaded and attested in the DNS-restricted sandbox.
 - Preserved the launch freeze: no population suite, `certified-nodes.yaml`,
   program/SNAP snapshot, toolchain, CI, CODEOWNERS, or coverage-manifest edit.
 - Completed independent fact, scope, schema, forbidden-path, YAML-fence,
@@ -77,7 +78,8 @@ durable in-repository report.
   not authorize the required refactor/toolchain expansion.
 - Land an authorized one-output program source, publish its
   provenance-stamped artifact, and run that artifact through released engine
-  v0.1.1 from a fresh stranger path.
+  v0.1.1 from a fresh stranger path using an independently downloaded and
+  attested official release asset.
 - Publish the RuleSpec and companion oracle branches when GitHub access and a
   writable oracle remote are available; then open a Draft PR referencing
   rulespec-us#1135.

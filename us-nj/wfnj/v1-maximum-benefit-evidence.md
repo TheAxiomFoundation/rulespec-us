@@ -400,10 +400,11 @@ broader interpretation only 3 of 5 criteria hold.
 
 **Verdict: does not hold.**
 
-The released-tag format and arithmetic probe passes, but the literal criterion
-requires a **published one-output artifact** executed with the **released
-binary** by a stranger. The only literal one-output artifact available here is
-a deterministic local artifact compiled from a temporary, unpublished slice.
+The local exact-release-source format and arithmetic probe passes, but the
+literal criterion requires a **published one-output artifact** executed with
+the **released binary** by a stranger. The only literal one-output artifact
+available here is a deterministic local artifact compiled from a temporary,
+unpublished slice.
 
 ### Why the repository module is not a one-output program
 
@@ -422,6 +423,11 @@ has SHA-256
 released v0.1.1 compiles it to a four-derived-output artifact with SHA-256
 `50f82f9027243c98c48449b487a4ea1636dd1d1c1fb193ad02f6b0ac42a4ad5c`.
 That broad artifact does not satisfy the requested one-output shape.
+The composer receipt names `rulespec-us@ecb057ef35ab` because composition ran
+from the branch's base tree. The target module blob there is the same
+`76598d1ce6d660b477d8e03a0fb1f5af881e8fe7` blob pinned at the
+implementation-and-fixture commit; commit `5b51301a` changes only the
+companion cases, not the arithmetic module.
 
 The probe therefore made a faithful temporary slice containing only the
 listed-size cap, Schedule II table, $66 continuation, and target derived rule.
@@ -546,6 +552,11 @@ hits for `tanf_maximum_benefit_payment_level`.
    cannot be substituted for a stranger-path publication receipt.
 3. There is no published NJ WFNJ artifact URL for a fresh consumer to pair
    with the released v0.1.1 engine.
+4. Fresh anonymous download and attestation of the official v0.1.1
+   cargo-dist asset could not be completed because GitHub DNS/API access was
+   unavailable. The fresh locked build from the exact released source tag is
+   not a development-engine substitute, but it is not equivalent to an
+   independently downloaded official binary asset.
 
 Until a provenance-stamped one-output artifact is published and a stranger
 using released v0.1.1 reproduces $1,093, `executable.holds` must remain false
