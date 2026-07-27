@@ -1,0 +1,143 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/8
+  summary: |-
+    7 CFR 273.8(d) attributes the full value of a resource jointly owned by
+    separate households to each household unless the applicant demonstrates
+    that the resource is inaccessible or that only a portion is accessible.
+    A resource is totally inaccessible when it cannot practically be
+    subdivided and access depends on a refusing joint owner. A separate rule
+    treats qualifying jointly owned resources as inaccessible to residents of
+    shelters for battered women and children. Ineligible aliens and
+    disqualified individuals residing with the household are treated as
+    household members for this attribution rule.
+rules:
+  - name: joint_owner_treated_as_household_member_for_resource_attribution
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: ineligible aliens or disqualified individuals residing with the household shall be considered household members
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_resides_with_household
+          and (
+            person_is_ineligible_alien
+            or person_is_disqualified_individual
+          )
+
+  - name: jointly_owned_resource_is_owned_by_separate_households
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Resources owned jointly by separate households
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: ineligible aliens or disqualified individuals residing with the household shall be considered household members
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          resource_has_joint_owner_outside_applicant_household
+          and not joint_owner_is_ineligible_alien_or_disqualified_individual_residing_with_household
+
+  - name: jointly_owned_resource_totally_inaccessible
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(d), 7 CFR 273.8(d)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: the resource cannot practically be subdivided and the household's access to the value of the resource is dependent on the agreement of a joint owner who refuses to comply
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: The resources are jointly owned by such persons and by members of their former household
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: access to the value of the resources is dependent on the agreement of a joint owner who still resides in the former household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          jointly_owned_resource_is_owned_by_separate_households
+          and (
+            (
+              resource_cannot_practically_be_subdivided
+              and household_access_depends_on_agreement_of_joint_owner_who_refuses
+            )
+            or (
+              resource_owner_resides_in_shelter_for_battered_women_and_children
+              and resource_jointly_owned_with_members_of_former_household
+              and shelter_resident_access_depends_on_agreement_of_joint_owner_still_in_former_household
+            )
+          )
+
+  - name: jointly_owned_resource_countable_amount
+    kind: derived
+    entity: Asset
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Resources owned jointly by separate households shall be considered available in their entirety to each household
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: If the household can demonstrate that it has access to only a portion of the resource, the value of that portion of the resource shall be counted
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: The resource shall be considered totally inaccessible to the household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if not jointly_owned_resource_is_owned_by_separate_households:
+            0
+          elif jointly_owned_resource_totally_inaccessible:
+            0
+          elif household_demonstrates_access_to_only_portion:
+            min(
+              jointly_owned_resource_total_value,
+              max(0, household_accessible_portion_value)
+            )
+          else: max(0, jointly_owned_resource_total_value)

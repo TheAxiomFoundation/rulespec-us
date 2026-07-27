@@ -1,0 +1,360 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/8
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/8/h#transfer_disqualification_start_after_fair_hearing
+      blocked_by:
+        - us:regulations/7-cfr/273/15#continued_benefits_and_fair_hearing_outcome_context
+      reason: >-
+        Paragraph (h)(3) says only that the ordinary post-notice effective date
+        does not apply when the household requests a fair hearing and continued
+        benefits. It does not specify the replacement effective date. That date
+        depends on the fair-hearing and continued-benefits workflow.
+  summary: |-
+    7 CFR 273.8(h) disqualifies a non-categorically-exempt household that
+    knowingly transfers resources to qualify or attempt to qualify for SNAP
+    during the three months before application or after eligibility. Transfers
+    that would not affect eligibility, occur at or near fair market value,
+    occur within the same household, or have another purpose do not affect
+    eligibility. The amount by which the transferred nonexempt resources plus
+    other countable resources exceed the applicable limit determines a
+    disqualification of 1, 3, 6, 9, or 12 months. Applicant disqualifications
+    begin in the application month; the ordinary participant start is the
+    first allotment after the adverse-action notice period.
+rules:
+  - name: transfer_resource_application_lookback_months
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.8(h)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: within the 3-month period immediately preceding the date of application
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '3'
+
+  - name: transfer_excess_resource_three_month_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.8(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: 250 to 999.99 | 3
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '250'
+
+  - name: transfer_excess_resource_six_month_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.8(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: 1,000 to 2999.99 | 6
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '1000'
+
+  - name: transfer_excess_resource_nine_month_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.8(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: 3,000 to 4,999.99 | 9
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '3000'
+
+  - name: transfer_excess_resource_twelve_month_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.8(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: 5,000 or more | 12
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '5000'
+
+  - name: transfer_resource_review_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(a), 7 CFR 273.8(h)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Households which are categorically eligible as defined in § 273.2(j)(2) or 273.2(j)(4) do not have to meet the resource limits or definitions in this section
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: resources which any household member (or ineligible alien or disqualified person whose resources are being considered available to the household) had transferred within the 3-month period immediately preceding the date of application
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: transferred knowingly after the household is determined eligible for benefits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not household_exempt_from_section_273_8_resource_rules
+          and resource_transfer_made_by_household_member_or_counted_ineligible_or_disqualified_person
+          and (
+            resource_transfer_occurred_within_three_months_immediately_before_application
+            or resource_transfer_occurred_after_household_determined_eligible
+          )
+
+  - name: transferred_resources_would_not_affect_eligibility
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(h)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: resources consisting of excluded personal property such as furniture or of money that, when added to other nonexempt household resources, totaled less at the time of the transfer than the allowable resource limits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          transferred_resource_was_excluded
+          or (
+            nonexempt_transferred_resource_amount
+            + other_countable_resources_at_time_of_transfer
+            <= allowable_resource_limit_at_time_of_transfer
+          )
+
+  - name: resource_transfer_exempt_from_disqualification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(h)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Resources which would not otherwise affect eligibility
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Resources which are sold or traded at, or near, fair market value
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Resources which are transferred between members of the same household
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Resources which are transferred for reasons other than qualifying or attempting to qualify for SNAP benefits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          transferred_resources_would_not_affect_eligibility
+          or transferred_resources_sold_or_traded_at_or_near_fair_market_value
+          or resources_transferred_between_members_of_same_household
+          or transfer_reason_other_than_qualifying_or_attempting_to_qualify_for_snap
+
+  - name: transfer_of_resources_ineligibility
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(h)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: transferred resources knowingly for the purpose of qualifying or attempting to qualify for SNAP benefits shall be disqualified
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Eligibility for the program will not be affected by the following transfers
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          transfer_resource_review_required
+          and resource_transferred_knowingly_to_qualify_or_attempt_to_qualify_for_snap
+          and not resource_transfer_exempt_from_disqualification
+
+  - name: transferred_resource_excess_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.8(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: the amount by which nonexempt transferred resources, when added to other countable resources, exceeds the allowable resource limits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if transfer_of_resources_ineligibility:
+            max(
+              0,
+              nonexempt_transferred_resource_amount
+              + other_countable_resources_at_time_of_transfer
+              - allowable_resource_limit_at_time_of_transfer
+            )
+          else: 0
+
+  - name: transfer_of_resources_disqualification_period_months
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 7 CFR 273.8(h)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Amount in excess of the resource limit | Period of disqualification (months)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/h#transfer_excess_resource_three_month_threshold
+              output: transfer_excess_resource_three_month_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/h#transfer_excess_resource_six_month_threshold
+              output: transfer_excess_resource_six_month_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/h#transfer_excess_resource_nine_month_threshold
+              output: transfer_excess_resource_nine_month_threshold
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/h#transfer_excess_resource_twelve_month_threshold
+              output: transfer_excess_resource_twelve_month_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if not transfer_of_resources_ineligibility:
+            0
+          elif transferred_resource_excess_amount < transfer_excess_resource_three_month_threshold:
+            1
+          elif transferred_resource_excess_amount < transfer_excess_resource_six_month_threshold:
+            3
+          elif transferred_resource_excess_amount < transfer_excess_resource_nine_month_threshold:
+            6
+          elif transferred_resource_excess_amount < transfer_excess_resource_twelve_month_threshold:
+            9
+          else: 12
+
+  - name: transfer_disqualification_begins_in_application_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(h)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: The period of disqualification shall begin in the month of application.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          transfer_of_resources_ineligibility
+          and household_is_applicant_when_transfer_disqualification_established
+
+  - name: transfer_disqualification_begins_after_adverse_action_period
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(h)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: made effective with the first allotment to be issued after the notice of adverse action period has expired
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: unless the household has requested a fair hearing and continued benefits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          transfer_of_resources_ineligibility
+          and household_is_participating_when_transfer_disqualification_established
+          and not (
+            household_requested_fair_hearing
+            and household_requested_continued_benefits
+          )
