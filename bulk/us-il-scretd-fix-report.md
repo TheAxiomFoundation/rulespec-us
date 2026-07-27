@@ -171,9 +171,10 @@ Results:
   and changed § 3 companion file.
 - `guard-generated`: expected failure on those 3 protected changed files
   because the replacement signatures could not be created.
-- Focused repository suite: 14 passed and 1 failed; the sole failure was
-  `test_encoded_modules_match_their_manifests` for two intentionally
-  fail-closed stale signed manifests covering three changed protected files.
+- Focused repository suite on the final merged head: 14 passed and 1 failed;
+  the sole failure was `test_encoded_modules_match_their_manifests` for two
+  intentionally fail-closed stale signed manifests covering three changed
+  protected files.
 
 The branch must not merge until an authorized lane signs the replacement
 manifests and both `guard-generated` and the 15-test repository suite are
@@ -208,12 +209,12 @@ file, and no `oracle-coverage-pending.yaml` entry was changed.
 
 `closure/scretd` was pushed successfully through the implementation and main
 report commit `b9a091d30`. The final delivery-status update and a clean merge
-of the newly advanced `origin/main` remain local because subsequent push
-attempts could not resolve `github.com`; the local branch is now 0 commits
-behind that upstream ref. No draft PR was opened: `gh auth status` reports
-that the active `MaxGhenis` token is invalid. The GitHub connector was offered
-as a fallback but was not installed, and a signed-in browser fallback was not
-used without explicit approval.
+of the newly advanced `origin/main` remain local because repeated subsequent
+push attempts could not resolve `github.com`; the local branch is now 0
+commits behind that upstream ref. No draft PR was opened: `gh auth status`
+reports that the active `MaxGhenis` token is invalid. The GitHub connector was
+offered as a fallback but was not installed, and a signed-in browser fallback
+was not used without explicit approval.
 
 Remaining mechanical unblock:
 

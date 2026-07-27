@@ -79,14 +79,20 @@ resolve `github.com`.
 - Verified that `gh` cannot create the requested draft PR because its active
   `MaxGhenis` credential is invalid. A browser fallback was not used without
   explicit approval.
-- Retried the final push three times after recording delivery status; each
-  attempt failed at DNS resolution. No remote state was guessed.
+- Retried the final push repeatedly after recording delivery status and again
+  after the upstream merge; every attempt failed at DNS resolution. No remote
+  state was guessed.
 - Detected that `origin/main` had advanced by 25 commits during the sprint.
   Verified the merge was conflict-free, merged it without rebasing or
   discarding work, and restored the branch to 0 commits behind the current
   local upstream ref. The upstream merge changed the corpus pin to
   `db12795577c5809009168982cf8a72fb58440620`; it did not overlap the SCRETD
   files.
+- Reran both pinned module validations, both proof validations, all 23
+  companion cases, the signing dry run, `guard-generated`, and the focused
+  15-test repository suite on the merged head. Results were unchanged:
+  semantic checks green; signing guard red; repository suite 14/15 with only
+  the stale-manifest assertion failing.
 
 ## Next
 
