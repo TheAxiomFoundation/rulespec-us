@@ -54,11 +54,15 @@ accounting items. Companion tests are being rebuilt for the final interfaces.
   (130 atoms), and compiles to 103 executable rules with the pinned engine.
 - Rebuilt the companion-test foundation from the live formulas: its neutral
   fixture assigns all 198 factual inputs and verifies all 95 derived outputs.
+- Added focused paragraph-(c)(1), (c)(2), and (c)(4)-(8) tests for vendor
+  subcategories, inclusion-layer caps, exact numeric boundaries, reimbursement
+  exceptions, student allocation, TANF discretion, donation isolation, and
+  overlap-once behavior; the pinned validator and all 30 current cases pass.
 
 ## Next
 
-- Add focused payment, education-case, donation-history, child-support, and
-  household boundary and composition cases atop the complete neutral fixture.
+- Add focused paragraph-(c)(3), (c)(9)-(20), donation-history, child-support,
+  and household composition cases.
 - Run pinned runtime/proof validation and repository-wide structural,
   coverage, reverse-index, and generated-artifact checks.
 - Record exact results, push the branch, and open the required draft PR.
