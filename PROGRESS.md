@@ -5,8 +5,8 @@
 - Branch: `closure/w5-eitc-112-combat`
 - Checkout: `.git/codex-worktrees/w5-eitc-112-combat` (the requested sibling worktree path is outside the writable sandbox)
 - Scope: EITC frontier items 19–23, the 26 U.S.C. §112 combat-zone and missing-status month rules
-- Status: implementation and focused validation complete; generated
-  provenance/index refresh in progress
+- Status: implementation, provenance refresh, and validation complete;
+  manifest signing is blocked only by the unavailable maintainer signing key
 
 ## Done
 
@@ -54,15 +54,23 @@
 - Focused validation with pinned `axiom-encode` 0.2.1200:
   - `validate --skip-reviewers` passes for §112, §32(c)(2), and §24(d);
   - §112 proof validation passes with 20 atoms;
-  - 21 cases across §112, §32(c)(2), and §24(d) pass.
-- Confirmed the four-case root §32 companion has the same four unrelated
-  stale-symbol failures on unmodified `origin/main`; this change does not
-  introduce them.
+  - all 25 cases across §112, §32(c)(2), §24(d), and root §32 pass.
+- Refreshed the stale root §32 companion inputs and output assertion to the
+  current §32(c)(2) interface; this removed four baseline fixture failures.
+- Regenerated and checked `.axiom/index/provisions_to_rules.json` (4,246
+  provisions, 5,085 edges, 4,486 modules).
+- Ran the repository suite: 64 tests pass; the sole failure is the signed
+  manifest drift check for the three intentionally changed modules.
+- Ran the official signing workflow:
+  - dry-run identifies four manifests covering seven changed RuleSpec files;
+  - signing cannot proceed because `AXIOM_ENCODE_APPLY_SIGNING_KEY` is absent;
+  - `guard-generated` consequently reports those same seven files.
+- Left all existing signed manifests untouched for a maintainer with the
+  signing key to refresh.
 
 ## Next
 
-1. Commit the validated module, companion fixtures, and proof-hash cascade.
-2. Refresh generated reverse-index/provenance artifacts.
-3. Run repository checks and record any signing-key limitation.
-4. Write the final report, push, and open the required draft PR if network
-   access permits.
+1. Write and commit the final report.
+2. Copy the report to the requested closure-sprint output path if sandbox
+   permissions allow.
+3. Push and open the required draft PR if network access permits.
