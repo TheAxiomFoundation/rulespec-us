@@ -2,10 +2,9 @@
 
 ## State
 
-All eight household-concept modules and companion tests are implemented. A
-final semantic audit identified and resolved three integration edges; the
-focused suites pass, and repository-wide validation will be repeated before
-push.
+All eight household-concept modules and companion tests are implemented, the
+semantic-audit fixes are complete, and all required local validation passes.
+Coordination recheck, push, and PR creation are next.
 
 ## Done
 
@@ -64,9 +63,17 @@ push.
   cannot be converted into optional boarder status.
 - Focused validation and proof validation pass for the tightened (b)(2) and
   (b)(3) modules; their 19 companion cases pass.
+- Regenerated and checked `.axiom/index/provisions_to_rules.json`: 4,233
+  provisions, 5,075 edges, and 4,490 modules.
+- Pinned `axiom-encode` validation and proof validation pass for all eight
+  modules; all 77 companion cases pass on the available local rules engine.
+- Repository tests pass: 65 passed with the expected non-failing warning for
+  25 unmanifested modules.
+- The optional all-program artifact smoke check could not serve as a gate:
+  the available engine is `aa1ff025906c`, not the pinned `ffd821327194`, and
+  the available composer rejected pre-existing AL program transformation
+  patterns. No toolchain or pin files were changed.
 
 ## Next
 
-- Regenerate the reverse index; run the pinned validator, proof validator,
-  companion tests, and repository tests.
 - Recheck coordination immediately before pushing, push, and open PR #1135.
