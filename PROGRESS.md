@@ -2,7 +2,7 @@
 
 ## State
 
-- Assessment complete on branch `closure/eitc-2026`.
+- Assessment and standalone program complete on branch `closure/eitc-2026`.
 - The checkout is clean and based on the locally cached `origin/main` at
   `f9fb41b99`; DNS prevented refreshing the remote on 2026-07-27.
 - No SNAP program or committed oracle artifact will be modified.
@@ -24,13 +24,16 @@
   69 citation paths at both the pinned and cached newer corpus revisions.
 - Reproduced the stale section 32 companion failures.
 - Wrote the assessment before making any program change.
+- Added `programs/us/tax/eitc/fy-2026.yaml` with the single output `eitc`,
+  statutory section 32 as its only scope root, and no transformations.
+- Composed the new spec with the pinned composer and compiled the result with
+  the pinned engine commit. The compiled artifact exposes 61 derived rules.
 
 ## Next
 
-- Add and compile a transformation-free standalone program whose sole output
-  is the provision-defined `eitc`.
 - Add a hand-checkable golden derivation without presenting it as a
   certificate.
-- Determine whether a permitted diagnostic case grid can be executed without
-  changing oracle reports or hiding the non-AGI bridges.
+- Document and, if it can be done honestly within the permitted repositories,
+  run a non-population diagnostic grid without changing oracle reports or
+  hiding the non-AGI bridges.
 - Validate, independently review, and write the final handoff report.
