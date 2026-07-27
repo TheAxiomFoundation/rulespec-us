@@ -1,0 +1,175 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+      - us-ks/statute/79-32-110
+      - us-ks/statute/79-32-110c
+      - us-ks/statute/79-32-116
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us-ks/statute/79-32-110
+        - us-ks/statute/79-32-110c
+        - us-ks/statute/79-32-116
+      rationale: |-
+        K.S.A. 79-32,110(a) imposes tax on Kansas taxable income and provides
+        the underlying individual schedules, 79-32,110c subjects those rates
+        to an annual rate-reduction determination, and 79-32,116 defines
+        Kansas taxable income. The Kansas Department of Revenue's official
+        2026 Form K-40ES, revised August 26, 2025, is the controlling current
+        parameter source because it publishes the schedules applicable for
+        tax year 2026 after the 2025 determination window.
+
+        This bounded composition accepts only completed-return Kansas taxable
+        income and the caller's determination that the joint schedule applies.
+        It does not construct Kansas taxable income, determine filing status,
+        or cover deductions, exemptions, special income classes, credits,
+        nonresident apportionment, estimated-payment mechanics, final return
+        ordering, final liability, or future annual rate adjustments.
+  summary: |-
+    Canonical bounded Kansas tax-year-2026 K-40ES schedule before credits. The
+    caller supplies one TaxUnit-level completed Kansas taxable-income amount
+    and whether the joint schedule applies. The module floors that completed
+    boundary at zero and applies the exact official K-40ES lower and upper
+    rates and bracket ceilings.
+
+    This is not a complete Kansas income-tax pipeline or a final-liability
+    calculation. It deliberately excludes every upstream taxable-income
+    construction step and every downstream credit, payment, apportionment,
+    return-ordering, and final-liability step.
+rules:
+  - name: ks_pit_2026_k40es_lower_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Kansas 2026 Form K-40ES, tax computation schedules, lower rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: table_cell
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              table:
+                header: "TAX COMPUTATION SCHEDULES"
+                row: "$0.00 through $46,000; $0.00 through $23,000"
+                column: "Enter on line 6"
+              excerpt: "5.2% of line 5"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.052'
+
+  - name: ks_pit_2026_k40es_upper_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: Kansas 2026 Form K-40ES, tax computation schedules, upper rate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: table_cell
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              table:
+                header: "TAX COMPUTATION SCHEDULES"
+                row: "Over $46,000; Over $23,000"
+                column: "Enter on line 6"
+              excerpt: "5.58% of excess over $46,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.0558'
+
+  - name: ks_pit_2026_k40es_joint_lower_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Kansas 2026 Form K-40ES, Schedule I joint lower-bracket ceiling
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$ 0.00 $46,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '46000'
+
+  - name: ks_pit_2026_k40es_other_lower_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Kansas 2026 Form K-40ES, Schedule II nonjoint lower-bracket ceiling
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$ 0.00 $23,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '23000'
+
+  - name: ks_pit_2026_k40es_taxable_income_boundary
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Kansas 2026 Form K-40ES line 5, supplied completed-return Kansas taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "5. Kansas taxable income (subtract line 4 from line 1)"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, ks_pit_2026_k40es_completed_taxable_income)
+
+  - name: ks_pit_2026_k40es_schedule_before_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Kansas 2026 Form K-40ES, individual tax computation schedules before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$46,000 ................................................. $2,392 plus 5.58% of excess over $46,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ks/guidance/department-of-revenue/forms/2026/k-40es/document-1
+              excerpt: "$23,000 ................................................. $1,196 plus 5.58% of excess over $23,000"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ks_pit_2026_k40es_married_joint_schedule_applies:
+            ks_pit_2026_k40es_lower_rate * min(ks_pit_2026_k40es_taxable_income_boundary, ks_pit_2026_k40es_joint_lower_bracket_ceiling)
+            + ks_pit_2026_k40es_upper_rate * max(0, ks_pit_2026_k40es_taxable_income_boundary - ks_pit_2026_k40es_joint_lower_bracket_ceiling)
+          else:
+            ks_pit_2026_k40es_lower_rate * min(ks_pit_2026_k40es_taxable_income_boundary, ks_pit_2026_k40es_other_lower_bracket_ceiling)
+            + ks_pit_2026_k40es_upper_rate * max(0, ks_pit_2026_k40es_taxable_income_boundary - ks_pit_2026_k40es_other_lower_bracket_ceiling)
