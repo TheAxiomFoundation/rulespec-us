@@ -76,10 +76,19 @@ direct-downstream import-hash maintenance remain.
   annual case-months, and accepted FNS's already-adjusted covered-individual
   estimate as an external fact because the regulation does not specify an
   executable FY 1996 quality-control/other-factor estimation method.
+- Passed the reverse-index check: 4,232 provisions, 5,068 edges, and 4,483
+  modules are current.
+- Repository pytest completed with 64 passing tests, one warning, and only the
+  expected manifest-drift failure for the two intentionally changed modules.
+- The generated-file guard likewise reports only the four changed RuleSpec
+  module/test files as awaiting matching signed manifests. Its dry run
+  confirms exactly two manifests are required: 7 CFR 273.24 and the directly
+  affected 7 CFR 273.11(c).
+- Confirmed the branch changes no file under `programs/` or any other
+  protected path.
 
 ## Next
 
-- Run repository-wide pytest and reverse-index checks.
 - Obtain access to the existing apply-signing key, refresh and sign the
   affected encoder apply manifests, then run the generated-file guard.
 - Push the branch and open the required draft PR.
