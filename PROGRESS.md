@@ -10,6 +10,8 @@
   integrate the existing paragraph (c) treatment with the new canonical
   disqualification outputs, and classify purely procedural paragraphs for
   follow-up.
+- Status: implementation, review, and local module validation are complete;
+  the branch is ready for its unmerged pull request.
 - Source: `us/regulation/7/273/11` in
   `_closure-sprint/data/cfr-273.jsonl` (source as of 2026-07-09).
 - Worktree was clean at task start.
@@ -46,8 +48,9 @@
   | (q) | Encode the child-support-arrears state option and exceptions; skip claim-collection procedure. |
   | (r) | Encode substantial-winnings disqualification and reentry conditions; skip reporting/action procedure. |
   | (s) | Encode qualifying-conviction, sentence/restriction, and conduct-date conditions. |
-- Implemented and committed companion-tested modules for paragraphs (a), (b),
-  (d)-(h), (j)-(k), and (m)-(s).
+- Implemented and committed companion-tested modules for paragraphs (a)-(h),
+  (j)-(k), and (m)-(s), including the pre-existing paragraph (c): 17 modules
+  and 17 companion test files.
 - Refreshed the provision reverse index after the initial implementation.
 - Completed an independent subsection-by-subsection review and committed fixes
   for paragraph (c)'s exclusion boundary, battered-shelter eligibility and
@@ -56,15 +59,31 @@
   limits, self-employment averaging/cost linkage, the paragraph (n)(5)
   deadline safeguard, and the paragraph (s) effective date.
 - The pinned `axiom-encode` 0.2.1200 validator, strict proof validator, and
-  rules-engine companion tests pass for each completed fix. Final aggregate
-  counts will be recorded after the remaining cross-module review changes are
-  stable.
+  rules-engine companion tests pass for all 17 modules:
+  - 17/17 module validations passed.
+  - Strict proof validation passed with 297 atoms and no missing atoms for the
+    one monetary obligation.
+  - All 151 companion cases passed.
+- Verified all four repository repair guards are no-ops for every module:
+  test-input assignments, imported test inputs, invalid test inputs, and proof
+  import hashes.
+- Regenerated the provision reverse index: 4,232 provisions, 5,084 edges, and
+  4,499 modules; regeneration produced no diff.
+- Ran `tests/test_repository_layout.py` and `tests/test_reverse_index.py`: all
+  15 tests passed.
+- Refreshed the generated oracle-pending ledger from 2,293 to 2,513 declared
+  outputs, covering all 220 newly visible outputs eligible for automatic sync.
+  The full ratchet now reports only 27 pre-existing Missouri legacy-manual
+  outputs; the same 27 are among 247 failures on `origin/main`, and the sync
+  tool intentionally does not add new legacy-manual declarations.
+- Verified the complete branch diff has no whitespace errors and changes only
+  the expected modules/tests, `PROGRESS.md`, provision index, and oracle-pending
+  ledger. No workflow, toolchain, pin, or `CODEOWNERS` file changed.
 
 ## Next
 
-- Finish the paragraph (b) mixed-enterprise method redesign, the paragraph (k)
-  executable effective-date gate, and paragraph (c) canonical-output
-  integration; then refresh paragraph (a)/(d) dependency inputs and hashes.
-- Regenerate the provision reverse index and oracle pending-coverage artifact,
-  run the complete local validation suite, and record final counts here.
-- Write the requested report, push, and open an unmerged PR referencing #1135.
+- Push `encode-273-11-remainder` and open the unmerged PR titled
+  `Encode 7 CFR 273.11 special-circumstances remainder`, referencing #1135.
+- Preserve the encoded-versus-procedural classification in the PR body for
+  future classification work.
+- Do not merge the PR.
