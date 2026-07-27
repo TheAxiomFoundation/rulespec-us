@@ -2,7 +2,8 @@
 
 ## State
 
-In progress on the four modules assigned by the 2026-07-27 closure audit:
+Implementation and source review are complete for the four modules assigned by
+the 2026-07-27 closure audit:
 
 - `4.000.1`: encoded all three assigned definitions after confirming that
   Person and Household judgments are supported.
@@ -48,8 +49,15 @@ The certified program composition remains frozen and out of scope.
   the paragraph's lead sentence.
 - Regenerated the deterministic provision-to-rule reverse index for the three
   modules that gained proof-atom provenance.
+- Aggregate pinned validation and proof validation pass for all four modules;
+  all 21 companion cases pass, and the reverse source index is current.
+- `guard-generated` remains blocked because the four existing signed apply
+  manifests need refreshed hashes and this environment does not provide
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY`; no unsigned manifest was fabricated.
 
 ## Next
 
-- Run aggregate repository validation, finalize this ledger, push, and open the
-  requested draft PR referencing rulespec-us#1135.
+- Push the committed branch and open the requested draft PR referencing
+  rulespec-us#1135.
+- Refresh the four signed apply manifests from an approved signing environment,
+  then rerun `guard-generated`.
