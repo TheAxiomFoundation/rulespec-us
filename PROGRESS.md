@@ -40,6 +40,31 @@
 - Replaced the unavailable graph query with direct symbol/import searches:
   no program or external RuleSpec module imports any changed public pipeline
   output.
+- Verified all 12 source-backed proof excerpts verbatim against retained corpus
+  text at the required commit; the statutory `3121(b)(2)` scrivener's error is
+  mentioned only as documentary context, never used as operative proof.
+- Independently recomputed the featured amount:
+  `150000 * 0.9235 = 138525`,
+  `max(0, 200000 - 100000) = 100000`, and
+  `(138525 - 100000) * 0.009 = 346.725`.
+- Proved the complete wage-leg rule node is byte-identical to the merge base,
+  as is the imported section 3101(b)(2) module.
+- Proved all 13 retained cases preserve their full inputs and wage-tax
+  expectations. Eight wage-only blocks are byte-identical; five positive-SE
+  blocks necessarily update SE expectations, and the former combined
+  fail-closed case is renamed while preserving its input and wage result.
+- Verified manifest structure, both applied-file hashes, ancestor ordering,
+  supersedes linkage, and pinned clean encoder provenance.
+- Regenerated/checked the reverse index: current at 4,233 provisions, 5,069
+  edges, and 4,483 modules. The manifest/index pytest set passed 9 tests; the
+  repository-layout set passed 9 tests.
+- Ran the required isolated mutation matrix. Removing wage reduction caused 30
+  failures across 10 cases; changing the joint threshold from 250,000 to
+  200,000 caused 7 failures across 3 cases; removing the threshold floor caused
+  19 failures across 8 cases.
+- Restored exact bytes after every mutation and obtained 19/19 target passes
+  each time. The broader target + direct wage/SE companion set passed 39/39,
+  and the mutation worktree finished clean at the exact PR head.
 
 ## Next
 
