@@ -2,7 +2,8 @@
 
 ## State
 
-- Assessment and standalone program complete on branch `closure/eitc-2026`.
+- Assessment, standalone program, diagnostic comparison, and final report are
+  complete on branch `closure/eitc-2026`.
 - The checkout is clean and based on the locally cached `origin/main` at
   `f9fb41b99`; DNS prevented refreshing the remote on 2026-07-27.
 - No SNAP program or committed oracle artifact will be modified.
@@ -38,7 +39,13 @@
 - Kept the established oracle repository and every committed report and
   numeric artifact untouched. A certifying grid did not land because the age
   dataflow and stale section 32 fixture must be repaired first.
+- Incorporated independent-review corrections to the conservative frontier
+  classification, runtime ancestry counts, closure wording, and golden case.
+- Ran the full repository test suite: 73 passed with one existing warning.
+- Wrote the final handoff report in the repository. The requested external
+  assessment path is not writable in this sandbox.
 
 ## Next
 
-- Validate, independently review, and write the final handoff report.
+- Push the final commits, open a draft PR if GitHub is reachable, and record
+  the publication result.
