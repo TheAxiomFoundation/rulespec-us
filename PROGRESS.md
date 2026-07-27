@@ -12,6 +12,7 @@
 - Required corpus commit: `db12795577c5809009168982cf8a72fb58440620`.
 - Exact-head execution checkout: `/private/tmp/pr1143-exec.8RO0dw/rulespec-us`.
 - Exact-corpus execution checkout: `/private/tmp/pr1143-corpus.q0fghk/axiom-corpus`.
+- Exact pinned-engine checkout: `/private/tmp/pr1143-engine.bqyvK3/axiom-rules-engine`.
 - Final report: `REVIEW.md`.
 
 ## Done
@@ -26,6 +27,19 @@
   `rulespec-us` leaf routing.
 - Created a clean detached local axiom-corpus clone at exactly
   `db12795577c5809009168982cf8a72fb58440620`.
+- Ran pinned-encoder `validate --skip-reviewers --json` against that exact
+  corpus checkout: `ci_pass=true`, `all_passed=true`, and `errors=[]`.
+- Ran pinned-encoder proof validation: all 17 atoms passed.
+- Built the repository-pinned rules engine at
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0` from a clean local clone.
+- Ran the exact-head companion with that pinned engine: 1 file and all 19
+  cases passed.
+- Attempted the GitNexus PR-review graph workflow. The repository was not
+  indexed; local analysis parsed it but could not register the graph because
+  the sandbox denied writing `/Users/maxghenis/.gitnexus/registry.json`.
+- Replaced the unavailable graph query with direct symbol/import searches:
+  no program or external RuleSpec module imports any changed public pipeline
+  output.
 
 ## Next
 
