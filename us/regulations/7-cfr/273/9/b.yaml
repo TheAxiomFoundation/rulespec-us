@@ -1,0 +1,848 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/9
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/9/b/1/ii#self_employment_income_after_costs_and_averaging
+      blocked_by:
+        - us:regulations/7-cfr/273/9/c#household_income_exclusion_composition
+        - us:regulations/7-cfr/273/11/a#self_employment_income_determination
+      reason: >-
+        Paragraph (b)(1)(ii) classifies self-employment and actively managed
+        rental income as earned income, while paragraph (c)(9) and 273.11(a)
+        determine allowable business costs, averaging, capital-gain treatment,
+        and farm-loss offsets. This module classifies the gross income payment and
+        consumes the resolved paragraph-(c) household exclusion composition; it
+        does not recreate those separately owned calculations.
+    - output: us:regulations/7-cfr/273/9/b/3#disqualified_member_earned_unearned_attribution_split
+      blocked_by:
+        - us:regulations/7-cfr/273/11/c/3#snap_ineligible_alien_income_and_expense_treatment
+      reason: >-
+        Paragraph (b)(3) preserves earned or unearned character when income is
+        attributed from an ineligible member. The existing 273.11(c) module
+        exposes combined full-count and prorated income but not a complete
+        earned/unearned split, and its ineligible-alien state-option branch
+        remains deferred. This module consumes the resolved combined attributed
+        amounts for household-income composition and defers the type split
+        needed for the earned-income deduction base.
+    - output: us:regulations/7-cfr/273/9/b/4#sponsored_alien_income_deeming_composition
+      blocked_by:
+        - us:regulations/7-cfr/273/4/c#sponsored_alien_household_income_and_resource_deeming
+      reason: >-
+        Paragraph (b)(4) delegates sponsor and sponsor-spouse deeming to
+        273.4(c)(2). This module consumes the completed deemed amount as
+        unearned income and does not reproduce the upstream exclusions,
+        earned-income reduction, sponsor-household reduction, or state
+        administration rules.
+    - output: us:regulations/7-cfr/273/9/b#earned_and_unearned_income_after_paragraph_c_exclusion_split
+      blocked_by:
+        - us:regulations/7-cfr/273/9/c#household_income_exclusion_composition
+      reason: >-
+        The paragraph-(c) exclusion layer exposes one household exclusion
+        composition rather than separate earned- and unearned-income exclusion
+        totals. Its household total can be subtracted once to determine
+        household income, including exclusions such as outgoing child support
+        that are not reductions of a particular included income item. A safe
+        earned/unearned post-exclusion split requires a shared staged contract
+        from paragraph (c) and is deferred rather than inferred.
+  summary: |-
+    7 CFR 273.9(b) defines household income as income from every source except
+    amounts excluded under paragraph (c). Paragraph (b)(1) classifies employee
+    wages, self-employment, qualifying training allowances, Title I domestic
+    volunteer payments, qualifying WIA on-the-job-training earnings, and
+    work-required educational assistance as earned-income sources. Paragraph
+    (b)(2) classifies assistance, benefits and compensation, direct support and
+    alimony, non-work-required educational assistance, other direct monetary
+    gains or benefits, and trust withdrawals or available dividends as
+    unearned-income sources; its list is nonexclusive.
+
+    Ordinary income is represented as household Payment records under a relation
+    contract aligned with paragraph (c). Earned-source treatment takes precedence
+    over the broad paragraph-(b)(2)(v) residual. If a payment is nevertheless
+    marked as both an earned source and a specific unearned source, the conflict
+    remains observable and the amount is counted once as unearned rather than
+    omitted. Paragraph (b)(5) non-inclusions are removed from the affected
+    payment before aggregation. Its net-received, same-source repayment, and
+    273.11(k) withholding amount inputs are nonoverlapping components. The
+    ordinary earned and unearned aggregates preserve their paragraph-(b)
+    classifications before exclusions.
+
+    Paragraph (b)(3) attributed income and paragraph (b)(4) sponsor-deemed
+    income enter through separate, already-excluded resolved components.
+    Payments represented by those components must not also appear in the aligned
+    paragraph-(b)/(c) relation scope. That scope contains ordinary incoming
+    payments plus standalone paragraph-(c) adjustment rows, such as outgoing
+    child support. The paragraph-(c) worker exposes one household exclusion
+    composition, so this module consumes the resolved portion not already
+    reflected in attributed or deemed income rather than encoding or
+    repartitioning exclusions. The required household-income composition adds
+    ordinary, attributed, and deemed income, then subtracts that remaining
+    paragraph-(c) composition once. The identically shaped relation in the
+    parallel paragraph-(c) module is an aligned staging contract; a direct
+    import can replace the resolved boundary after that module lands.
+rules:
+  - name: snap_income_payment_of_household
+    kind: data_relation
+    source: 7 CFR 273.9(b)
+    data_relation:
+      predicate: snap_income_payment_of_household
+      arity: 2
+      arguments:
+        - Household
+        - Payment
+
+  - name: rental_property_active_management_hours_per_week_threshold
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.9(b)(1)(ii), (b)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: actively engaged in the management of the property at least an average of 20 hours a week
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '20'
+
+  - name: wia_on_the_job_training_parental_control_age_threshold
+    kind: parameter
+    dtype: Integer
+    source: 7 CFR 273.9(b)(1)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: household members under 19 years of age who are under the parental control of another adult member
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '19'
+
+  - name: snap_income_payment_is_employee_wages_or_salaries_earned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: All wages and salaries of an employee.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: income_payment_is_employee_wage_or_salary
+
+  - name: snap_income_payment_is_self_employment_earned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: The gross income from a self-employment enterprise
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9/b#rental_property_active_management_hours_per_week_threshold
+              output: rental_property_active_management_hours_per_week_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          income_payment_is_nonrental_self_employment_gross_income
+          or income_payment_is_total_gain_from_sale_of_business_capital_goods_or_equipment
+          or (
+              income_payment_is_rental_property_income
+              and rental_property_active_management_average_hours_per_week
+                  >= rental_property_active_management_hours_per_week_threshold
+          )
+          or (
+              income_payment_is_payment_from_roomer_or_boarder
+              and not income_payment_is_foster_care_boarder_payment
+          )
+
+  - name: snap_income_payment_is_training_allowance_earned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Training allowances from vocational and rehabilitative programs recognized by Federal, State, or local governments
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          income_payment_is_training_allowance_from_government_recognized_vocational_or_rehabilitative_program
+
+  - name: snap_income_payment_is_title_i_domestic_volunteer_service_earned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments under Title I (VISTA, University Year for Action, etc.) of the Domestic Volunteer Service Act of 1973
+    versions:
+      - effective_from: '2025-10-01'
+        formula: income_payment_is_title_i_domestic_volunteer_service_act_payment
+
+  - name: snap_income_payment_is_wia_on_the_job_training_earned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earnings to individuals who are participating in on-the-job training programs under Title 1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9/b#wia_on_the_job_training_parental_control_age_threshold
+              output: wia_on_the_job_training_parental_control_age_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          income_payment_is_wia_title_i_on_the_job_training_earnings
+          and not (
+              income_recipient_age
+                  < wia_on_the_job_training_parental_control_age_threshold
+              and income_recipient_under_parental_control_of_another_adult_household_member
+          )
+
+  - name: snap_income_payment_is_work_required_educational_assistance_earned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Educational assistance which has a work requirement
+    versions:
+      - effective_from: '2025-10-01'
+        formula: income_payment_is_educational_assistance_with_work_requirement
+
+  - name: snap_income_payment_is_earned_income_source_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income shall include
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_income_payment_is_employee_wages_or_salaries_earned_income
+          or snap_income_payment_is_self_employment_earned_income_before_paragraph_c_exclusions
+          or snap_income_payment_is_training_allowance_earned_income_before_paragraph_c_exclusions
+          or snap_income_payment_is_title_i_domestic_volunteer_service_earned_income_before_paragraph_c_exclusions
+          or snap_income_payment_is_wia_on_the_job_training_earned_income
+          or snap_income_payment_is_work_required_educational_assistance_earned_income_before_paragraph_c_exclusions
+
+  - name: snap_income_payment_is_assistance_payment_unearned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Assistance payments from Federal or federally aided public assistance programs
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          income_payment_is_federal_or_federally_aided_public_assistance_payment
+          or income_payment_is_general_assistance_payment
+          or income_payment_is_other_need_based_assistance_payment
+          or income_payment_is_assistance_vendor_payment
+          or assistance_requires_actual_work_without_compensation_other_than_assistance_payment
+
+  - name: snap_income_payment_is_benefit_compensation_foster_care_or_rental_unearned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Annuities; pensions; retirement, veteran's, or disability benefits; worker's or unemployment compensation
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9/b#rental_property_active_management_hours_per_week_threshold
+              output: rental_property_active_management_hours_per_week_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          income_payment_is_annuity
+          or income_payment_is_pension_retirement_veterans_or_disability_benefit
+          or income_payment_is_workers_or_unemployment_compensation
+          or income_payment_is_old_age_survivors_or_social_security_benefit
+          or income_payment_is_strike_benefit
+          or income_payment_is_foster_care_payment_for_household_member
+          or (
+              income_payment_is_rental_property_income
+              and rental_property_active_management_average_hours_per_week
+                  < rental_property_active_management_hours_per_week_threshold
+          )
+
+  - name: snap_income_payment_is_direct_support_or_alimony_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Support or alimony payments made directly to the household from nonhousehold members.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: income_payment_is_support_or_alimony_paid_directly_by_nonhousehold_member
+
+  - name: snap_income_payment_is_nonwork_educational_assistance_unearned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Scholarships, educational grants, deferred payment loans for education, veteran's educational benefits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: income_payment_is_educational_assistance_without_work_requirement
+
+  - name: snap_income_payment_is_other_direct_money_gain_or_benefit_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: all other direct money payments from any source which can be construed to be a gain or benefit
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not snap_income_payment_is_earned_income_source_before_paragraph_c_exclusions
+          and (
+              income_payment_is_government_sponsored_program_payment
+              or income_payment_is_dividend_interest_or_royalty
+              or income_payment_is_other_direct_money_payment_construed_as_gain_or_benefit
+          )
+
+  - name: snap_income_payment_is_trust_withdrawal_or_available_dividend_unearned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Monies which are withdrawn or dividends which are or could be received by a household from trust funds
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          income_payment_is_withdrawal_from_excludable_trust_received_in_month
+          or income_payment_is_dividend_from_excludable_trust_available_in_month
+
+  - name: snap_income_payment_has_conflicting_earned_and_explicit_unearned_classification
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)-(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income shall include
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Unearned income shall include, but not be limited to
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_income_payment_is_earned_income_source_before_paragraph_c_exclusions
+          and (
+              snap_income_payment_is_assistance_payment_unearned_income_before_paragraph_c_exclusions
+              or snap_income_payment_is_benefit_compensation_foster_care_or_rental_unearned_income_before_paragraph_c_exclusions
+              or snap_income_payment_is_direct_support_or_alimony_unearned_income
+              or snap_income_payment_is_nonwork_educational_assistance_unearned_income_before_paragraph_c_exclusions
+              or snap_income_payment_is_other_direct_money_gain_or_benefit_unearned_income
+              or snap_income_payment_is_trust_withdrawal_or_available_dividend_unearned_income_before_paragraph_c_exclusions
+          )
+
+  - name: snap_income_payment_is_earned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income shall include
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_income_payment_is_earned_income_source_before_paragraph_c_exclusions
+          and not snap_income_payment_has_conflicting_earned_and_explicit_unearned_classification
+
+  - name: snap_income_payment_is_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Unearned income shall include, but not be limited to
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_income_payment_is_assistance_payment_unearned_income_before_paragraph_c_exclusions
+          or snap_income_payment_is_benefit_compensation_foster_care_or_rental_unearned_income_before_paragraph_c_exclusions
+          or snap_income_payment_is_direct_support_or_alimony_unearned_income
+          or snap_income_payment_is_nonwork_educational_assistance_unearned_income_before_paragraph_c_exclusions
+          or snap_income_payment_is_other_direct_money_gain_or_benefit_unearned_income
+          or snap_income_payment_is_trust_withdrawal_or_available_dividend_unearned_income_before_paragraph_c_exclusions
+
+  - name: snap_income_payment_amount_before_paragraph_b_non_inclusions
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(2)(ii), (b)(5)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: including any amounts deducted to repay claims for intentional program violations
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(0, income_payment_net_amount_received_or_available_after_separately_reported_withholdings_and_returns)
+          + max(0, income_payment_amount_withheld_or_returned_to_repay_prior_overpayment_from_same_source)
+          + max(0, income_payment_assistance_amount_withheld_under_section_273_11_k)
+
+  - name: snap_workers_or_unemployment_compensation_intentional_program_violation_claim_withholding_included
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: worker's or unemployment compensation including any amounts deducted to repay claims for intentional program violations
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if income_payment_is_workers_or_unemployment_compensation:
+              min(
+                  max(
+                      0,
+                      income_payment_amount_withheld_or_returned_to_repay_prior_overpayment_from_same_source
+                  ),
+                  max(
+                      0,
+                      income_payment_amount_withheld_to_repay_intentional_program_violation_claim_under_section_272_12
+                  )
+              )
+          else: 0
+
+  - name: snap_income_payment_prior_overpayment_repayment_non_inclusion
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(5)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: moneys withheld from an assistance payment, earned income, or other income source
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if repaid_prior_overpayment_was_excludable_under_paragraph_c:
+              0
+          else:
+              min(
+                  snap_income_payment_amount_before_paragraph_b_non_inclusions,
+                  max(
+                      0,
+                      income_payment_amount_withheld_or_returned_to_repay_prior_overpayment_from_same_source
+                      - snap_workers_or_unemployment_compensation_intentional_program_violation_claim_withholding_included
+                  )
+              )
+
+  - name: snap_income_payment_tanf_title_iv_d_child_support_transfer_non_inclusion
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(5)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Child support payments received by TANF recipients which must be transferred to the agency administering title IV-D
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          min(
+              max(
+                  0,
+                  snap_income_payment_amount_before_paragraph_b_non_inclusions
+                  - snap_income_payment_prior_overpayment_repayment_non_inclusion
+              ),
+              max(
+                  0,
+                  income_payment_child_support_amount_required_to_be_transferred_to_title_iv_d_for_tanf_eligibility
+              )
+          )
+
+  - name: snap_income_payment_amount_after_paragraph_b_non_inclusions
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Income shall not include the following
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              snap_income_payment_amount_before_paragraph_b_non_inclusions
+              - snap_income_payment_prior_overpayment_repayment_non_inclusion
+              - snap_income_payment_tanf_title_iv_d_child_support_transfer_non_inclusion
+          )
+
+  - name: snap_income_payment_earned_income_amount_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(1), (b)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income shall include
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_income_payment_is_earned_income:
+              snap_income_payment_amount_after_paragraph_b_non_inclusions
+          else: 0
+
+  - name: snap_income_payment_unearned_income_amount_before_paragraph_c_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(2), (b)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Unearned income shall include, but not be limited to
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_income_payment_is_unearned_income:
+              snap_income_payment_amount_after_paragraph_b_non_inclusions
+          else: 0
+
+  - name: snap_ordinary_earned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income shall include
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sum_where(
+              snap_income_payment_of_household,
+              snap_income_payment_earned_income_amount_before_paragraph_c_exclusions,
+              snap_income_payment_is_earned_income
+          )
+
+  - name: snap_ordinary_unearned_income_before_paragraph_c_exclusions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Unearned income shall include, but not be limited to
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sum_where(
+              snap_income_payment_of_household,
+              snap_income_payment_unearned_income_amount_before_paragraph_c_exclusions,
+              snap_income_payment_is_unearned_income
+          )
+
+  - name: snap_full_count_disqualified_member_attributed_income_after_paragraph_c_exclusions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: shall continue to be attributed in their entirety to the remaining household members
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              resolved_full_count_disqualified_member_attributed_income_after_paragraph_c_exclusions
+          )
+
+  - name: snap_prorated_ineligible_member_attributed_income_after_paragraph_c_exclusions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: shall continue to be counted as income, less a pro rata share for the individual
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              resolved_prorated_ineligible_member_attributed_income_after_paragraph_c_exclusions
+          )
+
+  - name: snap_sponsored_alien_deemed_unearned_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: the income of the sponsor and the sponsor's spouse must be deemed in accordance with § 273.4(c)(2)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: max(0, resolved_sponsored_alien_deemed_unearned_income)
+
+  - name: snap_income_before_unapplied_paragraph_c_exclusions
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)(1)-(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Household income shall mean all income from whatever source
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_ordinary_earned_income_before_paragraph_c_exclusions
+          + snap_ordinary_unearned_income_before_paragraph_c_exclusions
+          + snap_full_count_disqualified_member_attributed_income_after_paragraph_c_exclusions
+          + snap_prorated_ineligible_member_attributed_income_after_paragraph_c_exclusions
+          + snap_sponsored_alien_deemed_unearned_income
+
+  - name: household_income_inclusion_composition
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Household income shall mean all income from whatever source excluding only items specified in paragraph (c) of this section.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+              0,
+              snap_income_before_unapplied_paragraph_c_exclusions
+              - max(
+                  0,
+                  resolved_paragraph_c_exclusion_composition_not_already_reflected_in_attributed_or_deemed_income
+              )
+          )
