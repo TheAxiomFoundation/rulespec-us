@@ -7,7 +7,9 @@
 - GitHub metadata verification: complete (read-only connector)
 - PR base: `6b0773d3f7fa6719f208154f3e609e292ab7abe7`
 - Pinned corpus checkout: `bf97b17baebfdf12601f7c23697524bf5adcdaed`
-- Verdict: evidence complete; drafting final report
+- Verdict: `APPROVE`
+- Final report: `REVIEW.md`
+- Review status: complete
 
 ## Done
 
@@ -70,7 +72,8 @@
   page 165 SHA-256 is
   `072ff5be167fe30d2ae6e4c762281fa39a8974150bc3f5e91e65ecb7423dd30e`,
   and the detached execution worktree is clean.
+- Wrote the final evidence-backed report to `REVIEW.md`.
 
 ## Next
 
-- Record the evidence and final verdict in the review output file.
+- None; review complete.
