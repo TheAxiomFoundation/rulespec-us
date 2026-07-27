@@ -28,11 +28,11 @@
   statutory section 32 as its only scope root, and no transformations.
 - Composed the new spec with the pinned composer and compiled the result with
   the pinned engine commit. The compiled artifact exposes 61 derived rules.
+- Added and engine-checked a hand-worked one-child golden case: $28,890 of
+  earned income and AGI yields a $799 phaseout and a $3,628 credit.
 
 ## Next
 
-- Add a hand-checkable golden derivation without presenting it as a
-  certificate.
 - Document and, if it can be done honestly within the permitted repositories,
   run a non-population diagnostic grid without changing oracle reports or
   hiding the non-AGI bridges.
