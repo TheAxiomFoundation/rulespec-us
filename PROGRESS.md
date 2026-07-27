@@ -48,14 +48,19 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
   anticipated utility and nonutility expenses, medical-change timing, weekly
   and biweekly conversion, energy-assistance proration, and prospective
   child-support method selection.
+- Added paragraph (d)(4) judgments and five branch cases for voluntarily
+  reported medical-expense increases, the two exclusive State verification
+  timing choices, and decrease/ineligibility action before any required
+  verification deadline.
 - Required every averaging amount to be explicitly post-disallowance, composed
   conversion directly from paragraph (d)(1), froze one-time medical averaging
   divisors at the election month, and rejected overlapping State utility and
   expense-conversion methods.
-- Narrowed unresolved paragraph (d) work to cross-section medical-change
-  processing, the obsolete printed dependent-care age-two cap, SSI-linked
-  restored deductions, and optional child-support composition or retrospective
-  budgeting that depends on sections 273.9 or 273.21.
+- Narrowed unresolved paragraph (d) work to execution and notice mechanics for
+  the now-encoded medical-change deadlines, the obsolete printed
+  dependent-care age-two cap, SSI-linked restored deductions, and optional
+  child-support composition or retrospective budgeting that depends on
+  sections 273.9 or 273.21.
 - Confirmed the paragraph (d) child compiles as 25 rules, proof-validates 42
   atoms, and passes all 57 companion cases with the pinned encoder and engine.
 - Removed the satisfied paragraph (d) umbrella deferral from `273/10.yaml`
@@ -75,6 +80,8 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
   compiled as of 2026-07-09; and all 122 then-existing companion cases passed.
 - Confirmed the expanded paragraph (a) child validates, proof-validates 28
   atoms, compiles 71 rules, and passes all 15 companion cases.
+- Confirmed the expanded paragraph (d) child validates, proof-validates 48
+  atoms, compiles 31 rules, and passes all 62 companion cases.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction, retrospective budgeting and
   certification-period assignment; State income averaging methods; and

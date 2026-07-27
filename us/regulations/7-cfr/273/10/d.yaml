@@ -5,16 +5,16 @@ module:
   source_verification:
     corpus_citation_path: us/regulation/7/273/10
   deferred_outputs:
-    - output: us:regulations/7-cfr/273/10/d/4#snap_federal_medical_expense_change_verification_and_case_action_timing
+    - output: us:regulations/7-cfr/273/10/d/4#snap_federal_medical_expense_change_verification_execution_and_notice_workflow
       blocked_by:
         - us:regulations/7-cfr/273/2/f/8#snap_federal_medical_expense_change_verification
         - us:regulations/7-cfr/273/12/c#snap_federal_reported_change_case_action
       reason: >-
-        Paragraph (d)(4) specifies when a State agency verifies and acts on a
-        voluntarily reported medical-expense change. This module calculates the
-        verified and reasonably anticipated medical-expense amount, but defers
-        notice, verification-deadline, and adverse-case-action workflow until
-        the cross-referenced change-processing rules are encoded.
+        This module encodes paragraph (d)(4)'s increase/decrease branches and
+        whether verification is due before action, before the second normal
+        monthly allotment, or before recertification. Performing verification,
+        adjusting the allotment, and issuing any required notice remain in the
+        cross-referenced verification and change-processing workflows.
     - output: us:regulations/7-cfr/273/10/d/4#snap_federal_dependent_care_age_two_adjustment
       blocked_by:
         - us:regulations/7-cfr/273/9/d/4#snap_federal_current_dependent_care_deduction_parameters
@@ -68,7 +68,8 @@ module:
     For prospective child support, this module exposes method selection; the
     generic paragraph (d)(2)-(5) timing, anticipation, and conversion
     components remain separate pending composition with the section
-    273.9(d)(5) allowable-payment base. Cross-section medical-change workflow,
+    273.9(d)(5) allowable-payment base. Medical-change verification deadlines
+    are exposed as federal judgments; their cross-section execution workflow,
     the dependent-care age-two cap adjustment, SSI restoration, and end-to-end
     child-support composition remain narrowly deferred.
 rules:
@@ -764,6 +765,137 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: false
+
+  - name: snap_federal_voluntary_medical_expense_increase_requires_verification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If the household voluntarily reports a change in its medical expenses, the State agency shall verify the change in accordance with § 273.2(f)(8)(ii) if the change would increase the household's allotment.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_household_voluntarily_reports_medical_expense_change
+          and snap_federal_medical_expense_change_would_increase_household_allotment
+
+  - name: snap_federal_medical_increase_verification_timing_configuration_is_valid
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The State agency has the option of either requiring verification prior to acting on the change, or requiring the verification prior to the second normal monthly allotment after the change is reported.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+            snap_federal_state_requires_medical_increase_verification_before_acting
+            and not snap_federal_state_requires_medical_increase_verification_before_second_normal_monthly_allotment
+          )
+          or (
+            not snap_federal_state_requires_medical_increase_verification_before_acting
+            and snap_federal_state_requires_medical_increase_verification_before_second_normal_monthly_allotment
+          )
+
+  - name: snap_federal_medical_increase_verification_due_before_action
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: requiring verification prior to acting on the change
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_voluntary_medical_expense_increase_requires_verification
+          and snap_federal_medical_increase_verification_timing_configuration_is_valid
+          and snap_federal_state_requires_medical_increase_verification_before_acting
+
+  - name: snap_federal_medical_increase_verification_due_before_second_normal_monthly_allotment
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: requiring the verification prior to the second normal monthly allotment after the change is reported
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_voluntary_medical_expense_increase_requires_verification
+          and snap_federal_medical_increase_verification_timing_configuration_is_valid
+          and snap_federal_state_requires_medical_increase_verification_before_second_normal_monthly_allotment
+
+  - name: snap_federal_medical_decrease_or_ineligibility_change_acted_on_without_preverification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: In the case of a reported change that would decrease the household's allotment, or make the household ineligible, the State agency shall act on the change without requiring verification
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_household_voluntarily_reports_medical_expense_change
+          and (
+            snap_federal_medical_expense_change_would_decrease_household_allotment
+            or snap_federal_medical_expense_change_would_make_household_ineligible
+          )
+
+  - name: snap_federal_decreasing_medical_change_verification_due_before_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(d)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: verification which is required by § 273.2(f)(8) shall be obtained prior to the household's recertification.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_medical_decrease_or_ineligibility_change_acted_on_without_preverification
+          and snap_federal_medical_change_verification_is_required_under_section_273_2_f_8
 
   - name: snap_federal_expense_conversion_method_configuration_is_valid
     kind: derived
