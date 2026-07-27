@@ -2,13 +2,13 @@
 
 ## State
 
-Investigation is complete and the final report is in progress. No Tennessee encode
-change is justified: the actual report pipeline gives all 48 target cases a zero
-utility allowance under both PolicyEngine-US 1.752.2 and 1.767.3, and
-`ecps-35254` instead exposes an oracle-population bridge omission for
-PolicyEngine's endogenous Tennessee Families First/TANF income. The pinned corpus
-does not retain a current FY2026 Tennessee utility-allowance amount source, so
-PolicyEngine's amounts must not be copied into Axiom.
+Investigation and reporting are complete. No Tennessee encode change is justified:
+the actual report pipeline gives all 48 target cases a zero utility allowance under
+both PolicyEngine-US 1.752.2 and 1.767.3, and `ecps-35254` instead exposes an
+oracle-population bridge omission for PolicyEngine's endogenous Tennessee Families
+First/TANF income. The pinned corpus does not retain a current FY2026 Tennessee
+utility-allowance amount source, so PolicyEngine's amounts must not be copied into
+Axiom.
 
 ## Done
 
@@ -59,10 +59,14 @@ PolicyEngine's amounts must not be copied into Axiom.
   engine ref and has pre-existing local changes, so this is supporting rather than
   release-grade verification.
 - Made no encode changes, so no before/after mutation test was required or fabricated.
+- Finalized `WORKER-REPORT.md` with the complete residual table, exact-version
+  utility and counterfactual evidence, provision paths, no-change decision, draft
+  bridge issue, corpus-ingest prerequisite, and proposed dispositions.
 
 ## Next
 
-1. Complete and commit `WORKER-REPORT.md`.
-2. Include the FY2026 source-ingest prerequisite, bridge issue draft, and proposed
-   residual dispositions.
-3. Record final repository status and hand off the local commits.
+1. Ingest a dated, primary FY2026 Tennessee DHS utility chart or FNS SUA table.
+2. Resolve the `axiom-oracles` equal-input policy for endogenous TANF and regenerate
+   the suite under one declared PolicyEngine-US version.
+3. After source ingest, encode mutually exclusive SUA/BUA/telephone selection and
+   add source- and mutation-backed companion cases.
