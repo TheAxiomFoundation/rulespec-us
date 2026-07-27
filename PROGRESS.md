@@ -2,10 +2,11 @@
 
 ## State
 
-The citation gate and RuleSpec fixture gate pass. The companion fixture carries
-the exact five-case statutory boundary grid at $0, $35, $36, $190, and $191,
-and released engine v0.1.1 passes all 33 cases in the source module. Oracle
-registration and the one-output execution receipt remain in progress.
+The citation and RuleSpec fixture gates pass. Released engine v0.1.1 also
+loads the canonical module and returns $156 for the $191 golden case. The
+strict `executable` criterion does not hold: that module compiles to 11
+derived outputs, not one, and its deterministic local artifact is unpublished.
+Oracle registration remains in progress.
 
 ## Done
 
@@ -38,13 +39,20 @@ registration and the one-output execution receipt remain in progress.
   ran its companion through `axiom-encode test` with the clean released
   `axiom-rules-engine` v0.1.1 checkout. Receipt: one test file, 33 cases, one
   compiled program, zero failures.
+- Compiled the unchanged module twice with the clean v0.1.1 tagged source
+  checkout. Both format-2 artifacts had SHA-256
+  `840cb8ec694600ad478e5befaeb81c1d791791157510ffa57acf97fe845e7a5b`.
+- Ran the committed-node golden request for $191 monthly verified medical
+  expense through `run-compiled`; it exited zero and returned decimal USD
+  $156 with no fallback.
+- Recorded the executable blockers without substituting a development engine
+  or synthetic module: the artifact has 11 derived outputs, no one-output
+  medical program exists, and the local artifact is unpublished.
 
 ## Next
 
 - Inspect the real PolicyEngine variable body and register the five-case
   boundary grid with zero unexplained mismatches.
 - Resolve the one-root/two-record closure ledger with zero pending paths.
-- Compile and locally run the one-output module with released engine v0.1.1,
-  while preserving the unpublished-artifact blocker.
 - Assemble the five-criterion narrative, validation receipt, and final sprint
   report.
