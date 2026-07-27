@@ -6,7 +6,8 @@ Paragraphs (a), (c), and (d) are implemented in isolated child modules, their
 umbrella deferrals are removed from the parent, and all executable, proof,
 companion-test, reverse-index, regression, and scope gates pass. Delivery is
 ready except that the protected-artifact manifests cannot be refreshed without
-the unavailable signing key.
+the unavailable signing key, direct GitHub access is blocked by DNS, and the
+connected GitHub app rejected its write action.
 
 ## Done
 
@@ -100,6 +101,10 @@ the unavailable signing key.
   RuleSpec files. Actual signing cannot run because
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable, so `guard-generated`
   reports those same eight files.
+- Attempted to push `closure/enc-273-10-budget`; Git failed with
+  `Could not resolve host: github.com`. The connected GitHub app could read the
+  current upstream commit but rejected both blob and branch-creation writes, so
+  no remote branch or draft PR could be created from this environment.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction, retrospective budgeting and
   certification-period assignment; State income averaging methods; and
@@ -107,7 +112,9 @@ the unavailable signing key.
 
 ## Next
 
-- Push the branch and open the required draft PR, documenting the signing-key
-  blocker for the four generated manifests.
+- From a networked checkout, push `closure/enc-273-10-budget` and open the
+  required draft PR with title `Encode 7 CFR 273.10 proration, prospective
+  budgeting and expense timing`, referencing rulespec-us#1135 and documenting
+  the signing-key blocker.
 - Once an authorized signer is available, generate and commit the manifests,
   then rerun `guard-generated` and the manifest-sync pytest.
