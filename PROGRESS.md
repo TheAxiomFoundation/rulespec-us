@@ -2,7 +2,7 @@
 
 ## State
 
-- In progress: implementation and mutation proof complete; reverse-index/repository gates next.
+- In progress: implementation, mutation proof, reverse index, and focused repository gates complete; final report next.
 - Baseline: clean worktree at `6b0773d3f7fa6719f208154f3e609e292ab7abe7` (`origin/main`).
 - Constraints: local commits only; no push, GitHub writes, workflow/toolchain edits, or manifest signing.
 
@@ -25,8 +25,10 @@
 - Expanded the pipeline companion to 25 cases, including every exact and one-dollar-over tier edge for single, joint, and head-of-household filers; MFS and surviving-spouse category checks; and eligibility screens.
 - Passed the 25-case companion, focused CI validation (using a temporary canonical checkout alias for this `wt-savers` worktree name), proof validation, and zero-missing money-atom validation.
 - Mutation proof: changing the first comparison from `<=` to `<` produced 8 assertion failures across the exact 50-percent-limit cases (single, joint, head of household, MFS, and surviving spouse); restoring `<=` returned all 25 cases to green.
+- Regenerated `.axiom/index/provisions_to_rules.json` (4,238 provisions, 5,077 edges, 4,485 modules) and confirmed `--check` is current.
+- Passed 15 focused repository layout/reverse-index tests.
+- The literal `uv run --with pyyaml` command could not initialize its sandboxed home cache; a temporary cache then could not reach PyPI. The same generator and check passed with the installed axiom-encode Python/PyYAML environment.
 
 ## Next
 
-- Regenerate/check the corpus-provision reverse index and run focused repository tests.
 - Inventory new output legal IDs, write `WORKER-REPORT.md`, and finalize the committed progress state.
