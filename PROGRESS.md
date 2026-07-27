@@ -37,6 +37,10 @@ cases. The signed manifests still describe the prior files.
   census remains 0 encoded / 5 excluded / 3 pending.
 - Polled all 730 corpus inventories and 143,811 `.items[]` records by exact
   `citation_path`. None of the five parallel-ingest definitions has landed.
+- Repeated that poll at the dependency job's final commit
+  `5e074e9cc10035be60d2ff29e40bfa126cc0839a`. The ingest job safely generated
+  no legal artifacts because authentic ILGA bytes were unavailable, so all
+  five exact paths remain absent.
 - Declared the missing definition chains as typed `deferred_outputs` rather
   than hand-authoring or guessing them.
 - Imported `household_income_no_greater_than_maximum` into § 3 and made it an
