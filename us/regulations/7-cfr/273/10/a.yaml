@@ -1,0 +1,330 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/10
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/10/a/1/i#state_fiscal_month_accounting_period
+      blocked_by:
+        - us:regulations/7-cfr/273/10/a#state_fns_approved_fiscal_month_configuration
+      reason: >-
+        Paragraph (a)(1)(i) permits an FNS-approved standard or
+        household-specific fiscal accounting month instead of a calendar
+        month. Constructing that accounting period requires the State agency's
+        approved configuration; this module applies either proration method to
+        the supplied monthly evaluation period.
+    - output: us:regulations/7-cfr/273/10/a/2-4#recertification_and_certification_period_case_actions
+      blocked_by:
+        - us:regulations/7-cfr/273/10/a#certification_and_recertification_case_history
+        - us:regulations/7-cfr/273/14#recertification_processing_context
+        - us:regulations/7-cfr/273/21#retrospective_budgeting_context
+      reason: >-
+        Paragraphs (a)(2) through (a)(4) govern application reuse,
+        recertification case actions, and month-specific allotment changes
+        across a certification period. Those procedural actions require
+        certification history and the cross-referenced recertification and
+        retrospective-budgeting contexts. This module encodes the
+        paragraph (a)(1) month-of-application eligibility choice, federal
+        initial-month definition, and both proration methods.
+  summary: |-
+    7 CFR 273.10(a)(1) determines application-month eligibility from the
+    household's circumstances for the entire application accounting month,
+    except that a public-institution household applying jointly for SSI and
+    SNAP before release is evaluated for its release month. An initial month is
+    the first certified month after any period without certification, except
+    that a migrant or seasonal farmworker household must have a gap longer
+    than one month. Benefits run from the application date through month end,
+    or from the release date for the public-institution exception. A State
+    agency prorates either on a standard 30-day month, treating day 31 as day
+    30, or over the exact monthly period. The product is rounded down, and an
+    initial-month result below $10 is not issued. State fiscal-period
+    construction and the procedural rules in paragraphs (a)(2)-(4) remain
+    narrowly deferred.
+imports:
+  - us:regulations/7-cfr/273/10
+rules:
+  - name: snap_federal_household_eligible_for_application_accounting_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: A household's eligibility shall be determined for the month of application by considering the household's circumstances for the entire month of application.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Applicant households consisting of residents of a public institution who apply jointly for SSI and SNAP benefits prior to release from the public institution in accordance with § 273.11(i) will have their eligibility determined for the month in which the applicant household was released from the institution.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+            snap_federal_public_institution_joint_ssi_snap_application_before_release
+            and snap_federal_household_eligible_based_on_release_month_circumstances
+          )
+          or (
+            not snap_federal_public_institution_joint_ssi_snap_application_before_release
+            and snap_federal_household_eligible_based_on_entire_application_month_circumstances
+          )
+
+  - name: snap_federal_initial_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: the term “initial month” means the first month for which the household is certified for participation in SNAP following any period during which the household was not certified for participation
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: In the case of migrant and seasonal farmworker households, the term “initial month” means the first month for which the household is certified for participation in SNAP following any period of more than 1 month during which the household was not certified for participation.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+            snap_federal_migrant_or_seasonal_farmworker_household
+            and snap_federal_first_certified_month_after_more_than_one_month_not_certified
+          )
+          or (
+            not snap_federal_migrant_or_seasonal_farmworker_household
+            and snap_federal_first_certified_month_after_any_period_not_certified
+          )
+
+  - name: snap_federal_initial_month_proration_start_date
+    kind: derived
+    entity: Household
+    dtype: Date
+    period: Month
+    source: 7 CFR 273.10(a)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: the household shall receive benefits from the date of application to the end of the month unless the applicant household consists of residents of a public institution.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: the household shall receive benefits from the date of the household's release from the institution to the end of the month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_federal_public_institution_joint_ssi_snap_application_before_release:
+            snap_federal_public_institution_release_date
+          else:
+            snap_federal_application_date
+
+  - name: snap_federal_standard_initial_month_proration_days
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.10(a)(1)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The State agency shall use a standard 30-day calendar or fiscal month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+
+  - name: snap_federal_application_accounting_month_days
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 7 CFR 273.10(a)(1)(ii)(B), (a)(1)(iii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The State agency shall prorate benefits over the exact length of a particular calendar or fiscal month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          days_between(period_start, date_add_days(period_end, 1))
+
+  - name: snap_federal_initial_month_proration_days
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 7 CFR 273.10(a)(1)(iii)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: full month's benefits * (31 - date of application) / 30 = allotment
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: full month's benefits * (number of days in month + 1 - date of application) / number of days in month = allotment
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_federal_state_agency_uses_standard_30_day_initial_month_proration:
+            snap_federal_standard_initial_month_proration_days
+            + 1
+            - min(
+                snap_federal_standard_initial_month_proration_days,
+                days_between(
+                  period_start,
+                  snap_federal_initial_month_proration_start_date
+                ) + 1
+              )
+          else:
+            days_between(
+              snap_federal_initial_month_proration_start_date,
+              date_add_days(period_end, 1)
+            )
+
+  - name: snap_federal_initial_month_proration_denominator_days
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: 7 CFR 273.10(a)(1)(iii)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: full month's benefits * (31 - date of application) / 30 = allotment
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: full month's benefits * (number of days in month + 1 - date of application) / number of days in month = allotment
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_federal_state_agency_uses_standard_30_day_initial_month_proration:
+            snap_federal_standard_initial_month_proration_days
+          else:
+            snap_federal_application_accounting_month_days
+
+  - name: snap_federal_initial_month_proration_factor
+    kind: derived
+    entity: Household
+    dtype: Rate
+    period: Month
+    source: 7 CFR 273.10(a)(1)(iii)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: To determine the amount of the prorated allotment, the State agency shall use either the appropriate Food Stamp Allotment Proration Table provided by FNS or whichever of the following formulae is appropriate
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          min(
+            1,
+            max(
+              0,
+              snap_federal_initial_month_proration_days
+              / snap_federal_initial_month_proration_denominator_days
+            )
+          )
+
+  - name: snap_federal_initial_month_prorated_allotment_before_minimum_issuance
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(a)(1)(iii)(A)-(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: To determine the amount of the prorated allotment, the State agency shall use either the appropriate Food Stamp Allotment Proration Table provided by FNS or whichever of the following formulae is appropriate
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If after using the appropriate formula the result ends in 1 through 99 cents, the State agency shall round the product down to the nearest lower whole dollar.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            snap_federal_household_eligible_for_application_accounting_month
+            and snap_federal_initial_month
+          ):
+            min(
+              snap_calculated_monthly_allotment_before_minimums,
+              floor(
+                snap_calculated_monthly_allotment_before_minimums
+                * snap_federal_initial_month_proration_factor
+              )
+            )
+          else:
+            0
+
+  - name: snap_federal_initial_month_prorated_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(a)(1)(iii)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If the computation results in an allotment of less than $10, then no issuance shall be made for the initial month.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10#snap_initial_month_minimum_issuance
+              output: snap_initial_month_minimum_issuance
+              hash: sha256:f9b9f00101218d1d335aa9fff400f0578ae2dc314334693bae7e0dde51202dff
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            snap_federal_initial_month_prorated_allotment_before_minimum_issuance
+            < snap_initial_month_minimum_issuance
+          ):
+            0
+          else:
+            snap_federal_initial_month_prorated_allotment_before_minimum_issuance

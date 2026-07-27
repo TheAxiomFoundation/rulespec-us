@@ -2,7 +2,8 @@
 
 ## State
 
-Implementing and testing the isolated paragraph (a) child module.
+Paragraph (a) is implemented and tested. Implementing the isolated
+paragraphs (c) and (d) child modules next.
 
 ## Done
 
@@ -18,6 +19,14 @@ Implementing and testing the isolated paragraph (a) child module.
   state-plan composition inputs.
 - Added and passed a regression case proving the protected household still has
   net income of $226 and a monthly allotment of $478.
+- Added `273/10/a.yaml` and its companion tests for application-month
+  eligibility, the federal initial-month definition, both proration elections,
+  release-date treatment, rounding down, and the post-proration $10 issuance
+  threshold.
+- Removed the satisfied paragraph (a) umbrella deferral from `273/10.yaml`
+  without changing any paragraph (e) rule, formula, or ordering.
+- Narrowed the remaining paragraph (a) deferrals to State fiscal-period
+  configuration and certification/recertification case-action workflows.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction and recertification workflow; State income
   averaging methods; and cross-referenced medical/SSI/child-support case
@@ -25,7 +34,7 @@ Implementing and testing the isolated paragraph (a) child module.
 
 ## Next
 
-- Encode and test the paragraph (a), (c), and (d) child modules, removing each
+- Encode and test the paragraph (c) and (d) child modules, removing each
   satisfied umbrella deferral from the parent as its module lands.
 - Run repository validation, update this log, push the branch, and open the
   required draft PR.
