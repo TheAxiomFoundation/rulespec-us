@@ -14,19 +14,31 @@ module:
         month. Constructing that accounting period requires the State agency's
         approved configuration; this module applies either proration method to
         the supplied monthly evaluation period.
-    - output: us:regulations/7-cfr/273/10/a/2-4#recertification_and_certification_period_case_actions
+    - output: us:regulations/7-cfr/273/10/a/2#snap_federal_retrospectively_budgeted_recertification_benefit_level
       blocked_by:
-        - us:regulations/7-cfr/273/10/a#certification_and_recertification_case_history
-        - us:regulations/7-cfr/273/14#recertification_processing_context
-        - us:regulations/7-cfr/273/21#retrospective_budgeting_context
+        - us:regulations/7-cfr/273/21/f/2#snap_federal_retrospectively_budgeted_recertification_benefit_level
       reason: >-
-        Paragraphs (a)(2) through (a)(4) govern application reuse,
-        recertification case actions, and month-specific allotment changes
-        across a certification period. Those procedural actions require
-        certification history and the cross-referenced recertification and
-        retrospective-budgeting contexts. This module encodes the
-        paragraph (a)(1) month-of-application eligibility choice, federal
-        initial-month definition, and both proration methods.
+        Paragraph (a)(2) directs retrospectively budgeted recertifications to
+        section 273.21(f)(2). This module encodes the prospective
+        recertification branch; the alternative benefit-level calculation
+        remains in the cross-referenced retrospective-budgeting module.
+    - output: us:regulations/7-cfr/273/10/a/2#snap_federal_state_agency_error_recertification_break_remedy
+      blocked_by:
+        - us:regulations/7-cfr/273/14/e#snap_federal_delayed_recertification_remedy
+      reason: >-
+        When a State agency error causes a break after a timely
+        recertification application, paragraph (a)(2) directs the agency to
+        section 273.14(e). The late-application and initial-month effects are
+        encoded here; the agency-error remedy remains in that
+        cross-referenced procedure.
+    - output: us:regulations/7-cfr/273/10/a/4#snap_federal_certification_period_length_assignment
+      blocked_by:
+        - us:regulations/7-cfr/273/10/f#snap_federal_certification_period_determination
+      reason: >-
+        Paragraph (a)(4) requires the longest certification period over which
+        changes can reasonably be anticipated. This module encodes the
+        month-specific allotment-variation rule, while certification-period
+        assignment remains with paragraph (f).
   summary: |-
     7 CFR 273.10(a)(1) determines application-month eligibility from the
     household's circumstances for the entire application accounting month,
@@ -39,8 +51,14 @@ module:
     agency prorates either on a standard 30-day month, treating day 31 as day
     30, or over the exact monthly period. The product is rounded down, and an
     initial-month result below $10 is not issued. State fiscal-period
-    construction and the procedural rules in paragraphs (a)(2)-(4) remain
-    narrowly deferred.
+    construction remains deferred. For recertifications, prospective
+    eligibility and benefit levels use anticipated next-period circumstances;
+    late applications and timely first-month eligibility results determine
+    initial-month treatment. The same application can carry an
+    application-month denial into a timely subsequent-month determination,
+    and allotments vary for anticipated changes unless the household elects
+    income or expense averaging. Retrospective budgeting, the agency-error
+    remedy, and certification-period assignment remain narrowly deferred.
 imports:
   - us:regulations/7-cfr/273/10
 rules:
@@ -328,3 +346,211 @@ rules:
             0
           else:
             snap_federal_initial_month_prorated_allotment_before_minimum_issuance
+
+  - name: snap_federal_household_eligible_for_recertification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Eligibility for recertification shall be determined based on circumstances anticipated for the certification period starting the month following the expiration of the current certification period.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_current_application_is_for_recertification
+          and snap_federal_household_eligible_based_on_circumstances_anticipated_for_next_certification_period
+
+  - name: snap_federal_prospectively_budgeted_recertification_benefit_level
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The level of benefits for recertifications shall be based on the same anticipated circumstances, except for retrospectively budgeted households
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            snap_federal_current_application_is_for_recertification
+            and not snap_federal_household_is_retrospectively_budgeted
+            and snap_federal_household_eligible_for_recertification
+          ):
+            max(
+              0,
+              snap_federal_recertification_benefit_level_based_on_same_anticipated_circumstances
+            )
+          else:
+            0
+
+  - name: snap_federal_post_expiration_recertification_is_initial_application
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: If a household, other than a migrant or seasonal farmworker household, submits an application after the household's certification period has expired, that application shall be considered an initial application
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_current_application_is_for_recertification
+          and snap_federal_recertification_application_submitted_after_certification_period_expired
+          and not snap_federal_migrant_or_seasonal_farmworker_household
+
+  - name: snap_federal_post_expiration_recertification_prorated_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: benefits for that month shall be prorated in accordance with paragraph (a)(1)(ii) of this section
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/10/a#snap_federal_initial_month_prorated_allotment
+              output: snap_federal_initial_month_prorated_allotment
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if snap_federal_post_expiration_recertification_is_initial_application:
+            snap_federal_initial_month_prorated_allotment
+          else:
+            0
+
+  - name: snap_federal_timely_recertification_subsequent_participation_is_initial_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: if the household submits an application for recertification prior to the end of its certification period but is found ineligible for the first month following the end of the certification period, then the first month of any subsequent participation shall be considered an initial month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_recertification_application_submitted_before_certification_period_end
+          and snap_federal_household_ineligible_for_first_month_following_certification_period
+          and snap_federal_current_month_is_first_month_of_subsequent_participation
+
+  - name: snap_federal_timely_recertification_following_month_is_not_initial_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: if the household submits an application for recertification prior to the end of its certification period and is found eligible for the first month following the end of the certification period, then that month shall not be an initial month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_recertification_application_submitted_before_certification_period_end
+          and snap_federal_household_eligible_for_first_month_following_certification_period
+
+  - name: snap_federal_application_month_benefit_entitlement_despite_subsequent_month_ineligibility
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The household shall be entitled to benefits for the month of application even if the processing of its application results in the benefits being issued in the subsequent month.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_household_eligible_for_month_of_application
+          and snap_federal_household_ineligible_for_subsequent_month_due_to_anticipated_changes
+
+  - name: snap_federal_same_application_covers_subsequent_month_eligibility_determination
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The same application shall be used for the denial for the month of application and the determination of eligibility for subsequent months, within the timeliness standards in § 273.2.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_household_ineligible_for_month_of_application
+          and snap_federal_household_eligible_for_subsequent_month_due_to_anticipated_changes
+          and snap_federal_subsequent_month_determination_within_section_273_2_timeliness_standards
+
+  - name: snap_federal_allotment_varies_for_anticipated_changes
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.10(a)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: The household's allotment shall vary month to month within the certification period to reflect changes anticipated at the time of certification
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: unless the household elects the averaging techniques in paragraphs (c)(3) and (d)(3) of this section.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_federal_month_specific_change_was_anticipated_at_certification
+          and not snap_federal_household_elects_income_averaging_under_paragraph_c_3
+          and not snap_federal_household_elects_expense_averaging_under_paragraph_d_3

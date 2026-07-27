@@ -26,8 +26,13 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
   threshold.
 - Removed the satisfied paragraph (a) umbrella deferral from `273/10.yaml`
   without changing any paragraph (e) rule, formula, or ordering.
+- Added direct paragraph (a)(2)-(4) rules and tests for prospective
+  recertification, late and timely recertification initial-month treatment,
+  reuse of an application across anticipated eligibility changes, and
+  month-specific allotment variation.
 - Narrowed the remaining paragraph (a) deferrals to State fiscal-period
-  configuration and certification/recertification case-action workflows.
+  configuration, retrospective recertification budgeting, the
+  cross-referenced agency-error remedy, and certification-period assignment.
 - Added `273/10/c.yaml` and its companion tests for reasonable-certainty
   budgeting, historical income indicators, receipt-month timing, weekly and
   biweekly conversion, lump sums, held wages, pay-cycle normalization, and
@@ -64,14 +69,16 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
 - Regenerated and checked the reverse citation index; the paragraph (a), (c),
   and (d) modules now appear as module- and proof-level dependents of the
   section 273.10 corpus provision.
-- Ran the pinned encoder against the parent and all three child modules:
-  validation passed; proof validation passed for 134 atoms; the money-proof
-  gate found zero missing atoms; all modules compiled as of 2026-07-09 (52,
-  62, 33, and 25 rules respectively); and all 122 companion cases passed.
+- Ran the pinned encoder against the parent and all three child modules before
+  the final scope tightening: validation passed; proof validation passed for
+  134 atoms; the money-proof gate found zero missing atoms; all modules
+  compiled as of 2026-07-09; and all 122 then-existing companion cases passed.
+- Confirmed the expanded paragraph (a) child validates, proof-validates 28
+  atoms, compiles 71 rules, and passes all 15 companion cases.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
-  accounting-period construction and recertification workflow; State income
-  averaging methods; and cross-referenced medical/SSI/child-support case
-  actions.
+  accounting-period construction, retrospective budgeting and
+  certification-period assignment; State income averaging methods; and
+  cross-referenced medical/SSI/child-support case actions.
 
 ## Next
 
