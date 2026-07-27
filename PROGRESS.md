@@ -4,7 +4,7 @@
 
 - Branch: `closure/w1-eitc-152-residency`, based on `origin/main`.
 - Scope: EITC frontier items 4, 8, and 9.
-- Status: abode-fraction encoding complete; parental tiebreak encoding is next.
+- Status: all three assigned outputs are encoded; broader validation is next.
 - Worktree note: the mandated external path was rejected by the filesystem sandbox, so this branch is isolated at `.git/codex-worktrees/w1-eitc-152-residency`.
 - Corpus pin inspected: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
 
@@ -41,16 +41,28 @@
 - Added the new § 152(c) proof import to § 32, cascaded § 152 module hashes,
   refreshed authoritative manifests, and regenerated the provision index.
 - Validation at this checkpoint:
-  - § 152(c) companion: 14/14 passed.
-  - § 152(c) proof validation: 16 atoms passed.
+  - § 152(c) companion: 24/24 passed.
+  - § 152(c) proof validation: 18 atoms passed.
   - § 32 proof validation: 43 atoms passed.
   - Manifest and reverse-index tests: 9 passed.
   - The untouched baseline and this branch both expose the same pre-existing
     § 32 companion resolution failures for § 32(c)(2).
+- Encoded both § 152(c)(4)(B) outputs as pairwise comparisons of the two
+  claiming parents' supplied residence-day counts. Invalid day counts fail
+  closed; the longest-period comparison is strict.
+- Encoded the equal-residence branch using supplied filed parental AGIs and a
+  strict greater-than comparison. Negative AGIs retain numeric ordering and
+  an exact AGI tie produces no unique winner.
+- Added ten focused parental cases, including both positive downstream
+  tiebreak paths, unequal residence despite higher AGI, equal/lower/tied AGI,
+  negative AGIs, and invalid residence counts.
+- Kept the parent facts scalar because the current companion runner cannot
+  attach a child-to-parent relation inside § 32's tax-unit-to-child relation;
+  the scalar pair is also faithful to paragraph (B)'s “both parents” scope.
 
 ## Next
 
-- Encode both § 152(c)(4)(B) parental comparisons with strict residence and
-  AGI tie behavior.
-- Update every affected companion fixture, run focused and broader
-  validation, then push and open the requested draft PR if network permits.
+- Run the available module validators and the relevant repository regression
+  checks, then inspect the complete diff for scope and provenance.
+- Write the final report, push, and open the requested draft PR if network
+  access permits.
