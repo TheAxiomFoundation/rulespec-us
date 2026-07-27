@@ -7,7 +7,7 @@
 - GitHub metadata verification: complete (read-only connector)
 - PR base: `6b0773d3f7fa6719f208154f3e609e292ab7abe7`
 - Pinned corpus checkout: `bf97b17baebfdf12601f7c23697524bf5adcdaed`
-- Verdict: pending independent behavior, inertness, integrity, and mutation checks
+- Verdict: pending companion, validation, and mutation checks
 
 ## Done
 
@@ -41,10 +41,24 @@
   execution worktree at the same exact head under a canonical `rulespec-us` basename
   passes all 14 page-159 companion cases with both the prescribed local engine binary
   and an isolated build of the pinned engine ref.
+- Added 14 independent adversarial cases spanning disagreement across MUA, BUA,
+  actual-cost, and telephone paths; agreement controls; actual-cost households both
+  entitled and not entitled to MUA/BUA; the removed rent exclusion; and page-163
+  current-year, billing, future-season, and separate-from-rent edges.
+- Added two explicit precedence compositions with the page-159/page-369 root import
+  lists reversed. The complete independent suite passes 16/16 with both the prescribed
+  local engine and the isolated pinned-engine build; both compositions preserve page
+  369's local `$33`, page 159's current `$27`, and the federal target at `$27`.
+- Proved that the precedence result is structural rather than filesystem iteration:
+  both reversed-import compositions have identical evaluation-order SHA-256
+  `ff39a74512fe10dac885a5675f68981c6d11570ef3acffe47edc25afe4d1981f`;
+  after normalizing only array serialization order, their complete artifact SHA-256
+  is `fb57bb8116d835330dd58ce9c7be81797946d690dd51f369d3e29623cd6151c2`.
+  The federal target definition itself is byte-identical and points to page 159's
+  current telephone allowance formula in both artifacts.
 
 ## Next
 
-- Write independent adversarial review cases.
-- Verify precedence determinism, inertness, selected-output closure, and integrity surfaces.
 - Run companions and both required fail-then-restore mutations.
+- Run strict validation for all three changed modules.
 - Record the evidence and final verdict in the review output file.
