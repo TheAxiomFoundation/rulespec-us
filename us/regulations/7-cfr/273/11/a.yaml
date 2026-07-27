@@ -1,0 +1,554 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/11
+  summary: |-
+    7 CFR 273.11(a) determines monthly self-employment income by averaging
+    income over the period it is intended to cover, substituting anticipated
+    earnings when prior averaging no longer reflects a substantially changed
+    business, and projecting enterprises in operation for less than one year
+    from their operating period. Gross self-employment income and the full
+    Federal-tax-method capital gain are reduced by allowable production costs
+    and divided by the averaging months. Qualifying farm losses are prorated,
+    offset first against other self-employment income, and then against earned
+    and unearned income after the earned income deduction. A State may offer
+    eligible households uneven benefit-level proration, but the income assigned
+    to a month may not exceed the applicable monthly income standard.
+rules:
+  - name: snap_self_employment_uses_anticipated_earnings
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If the averaged amount does not accurately reflect the
+                household's actual circumstances because the household has
+                experienced a substantial increase or decrease in business,
+                the State agency must calculate the self-employment income on
+                the basis of anticipated, not prior, earnings.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If a household's self-employment enterprise has been in
+                existence for less than a year, the income from that
+                self-employment enterprise must be averaged over the period of
+                time the business has been in operation and the monthly amount
+                projected for the coming year.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          (
+            averaged_self_employment_income_does_not_accurately_reflect_actual_circumstances
+            and self_employment_business_experienced_substantial_increase_or_decrease
+          )
+          or self_employment_enterprise_in_operation_less_than_one_year
+
+  - name: snap_self_employment_averaging_months
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: 7 CFR 273.11(a)(1)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Self-employment income must be averaged over the period the
+                income is intended to cover.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the income from that self-employment enterprise must be
+                averaged over the period of time the business has been in
+                operation
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if self_employment_enterprise_in_operation_less_than_one_year:
+            self_employment_enterprise_months_in_operation
+          else: self_employment_income_intended_coverage_months
+
+  - name: snap_gross_self_employment_income_for_averaging_period
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(1)(i), (a)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the State agency must add all gross self-employment income
+                (either actual or anticipated, as provided in paragraph
+                (a)(1)(i) of this section)
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_self_employment_uses_anticipated_earnings:
+            anticipated_gross_self_employment_income_excluding_capital_gains_for_period
+          else: actual_gross_self_employment_income_excluding_capital_gains_for_period
+
+  - name: snap_farm_cost_annualization_option_available
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                households subject to monthly reporting and retrospective
+                budgeting who derive their self-employment income from a
+                farming operation and who incur irregular expenses to produce
+                such income have the option to annualize the allowable costs
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          household_subject_to_monthly_reporting
+          and household_subject_to_retrospective_budgeting
+          and self_employment_income_is_from_farming_operation
+          and farming_operation_has_irregular_production_expenses
+          and farm_self_employment_income_is_annualized
+
+  - name: snap_farm_allowable_costs_for_averaging_period
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                have the option to annualize the allowable costs of producing
+                self-employment income from farming when the self-employment
+                farm income is annualized
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_farm_cost_annualization_option_available and household_elects_farm_cost_annualization:
+            annualized_allowable_farm_costs
+          else: nonannualized_allowable_farm_costs
+
+  - name: snap_self_employment_capital_gain_for_averaging_period
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Even if only 50 percent of the proceeds from the sale of
+                capital goods or equipment is taxed for Federal income tax
+                purposes, the State agency must count the full amount of the
+                capital gain as income for SNAP purposes.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                the State agency must count the amount of capital gains the
+                household anticipates receiving during the months over which
+                the income is being averaged
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_self_employment_uses_anticipated_earnings:
+            anticipated_full_capital_gain_calculated_under_federal_tax_method
+          else: actual_full_capital_gain_calculated_under_federal_tax_method
+
+  - name: snap_net_self_employment_income_for_averaging_period
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                add all gross self-employment income ... and capital gains ...
+                exclude the costs of producing the self-employment income
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          snap_gross_self_employment_income_for_averaging_period
+          + snap_self_employment_capital_gain_for_averaging_period
+          - allowable_self_employment_costs_for_averaging_period
+
+  - name: snap_monthly_net_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                divide the remaining amount of self-employment income by the
+                number of months over which the income will be averaged. This
+                amount is the monthly net self-employment income.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_self_employment_averaging_months > 0:
+            snap_net_self_employment_income_for_averaging_period
+            / snap_self_employment_averaging_months
+          else: 0
+
+  - name: snap_positive_monthly_net_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(i)-(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                The monthly net self-employment income must be added to any
+                other earned income received by the household
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If the cost of producing self-employment income exceeds the
+                income derived from self-employment as a farmer, such losses
+                must be prorated
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(0, snap_monthly_net_self_employment_income)
+
+  - name: snap_total_monthly_earned_income_including_self_employment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                The monthly net self-employment income must be added to any
+                other earned income received by the household to determine
+                total monthly earned income.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          other_monthly_earned_income
+          + snap_positive_monthly_net_self_employment_income
+
+  - name: snap_self_employed_farmer_annual_gross_proceeds_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                a self-employed farmer who receives or anticipates receiving
+                annual gross proceeds of $1,000 or more from the farming
+                enterprise
+    versions:
+      - effective_from: '2008-10-01'
+        formula: '1000'
+
+  - name: snap_qualifying_self_employed_farmer
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                a self-employed farmer who receives or anticipates receiving
+                annual gross proceeds of $1,000 or more from the farming
+                enterprise
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          household_has_self_employed_farmer
+          and annual_gross_farm_proceeds_received_or_anticipated
+              >= snap_self_employed_farmer_annual_gross_proceeds_threshold
+
+  - name: snap_prorated_monthly_farm_self_employment_loss
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If the cost of producing self-employment income exceeds the
+                income derived from self-employment as a farmer ... such
+                losses must be prorated in accordance with paragraph (a)(1)
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_qualifying_self_employed_farmer:
+            max(0, 0 - monthly_net_farm_self_employment_income)
+          else: 0
+
+  - name: snap_farm_loss_offset_against_other_self_employment_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Offset farm self-employment losses first against other
+                self-employment income.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          min(
+            snap_prorated_monthly_farm_self_employment_loss,
+            other_positive_self_employment_income
+          )
+
+  - name: snap_other_self_employment_income_after_farm_loss_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Offset farm self-employment losses first against other
+                self-employment income.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(
+            0,
+            other_positive_self_employment_income
+            - snap_prorated_monthly_farm_self_employment_loss
+          )
+
+  - name: snap_remaining_farm_loss_after_other_self_employment_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)(A)-(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Offset any remaining farm self-employment losses against the
+                total amount of earned and unearned income after the earned
+                income deduction has been applied.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(
+            0,
+            snap_prorated_monthly_farm_self_employment_loss
+            - other_positive_self_employment_income
+          )
+
+  - name: snap_farm_loss_offset_against_post_earned_income_deduction_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Offset any remaining farm self-employment losses against the
+                total amount of earned and unearned income after the earned
+                income deduction has been applied.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          min(
+            snap_remaining_farm_loss_after_other_self_employment_offset,
+            max(0, earned_and_unearned_income_after_earned_income_deduction)
+          )
+
+  - name: snap_countable_income_after_farm_loss_offset
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                Offset any remaining farm self-employment losses against the
+                total amount of earned and unearned income after the earned
+                income deduction has been applied.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          max(
+            0,
+            earned_and_unearned_income_after_earned_income_deduction
+            - snap_remaining_farm_loss_after_other_self_employment_offset
+          )
+
+  - name: snap_uneven_self_employment_proration_option_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.11(a)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If a State agency determines that a household is eligible
+                based on its monthly net income, the State may elect to offer
+                the household an option
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          household_eligible_based_on_monthly_net_income
+          and state_offers_uneven_self_employment_income_proration_option
+          and household_elects_uneven_self_employment_income_proration
+
+  - name: snap_net_income_used_for_self_employment_benefit_level
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.11(a)(2)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/11
+              excerpt: >-
+                If income is prorated, the net income assigned in any month
+                cannot exceed the maximum monthly income eligibility standards
+                for the household's size.
+    versions:
+      - effective_from: '2008-10-01'
+        formula: |-
+          if snap_uneven_self_employment_proration_option_applies:
+            min(
+              state_calculated_unevenly_prorated_net_income_for_month,
+              applicable_maximum_monthly_income_standard_for_household_size
+            )
+          else: net_income_used_to_determine_eligibility
