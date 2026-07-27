@@ -2,10 +2,11 @@
 
 ## State
 
-Assessment written. The program is provision-rooted, but it is not currently
-certifiable: its signed executable root omits the statutory household-income
-qualification, corpus closure is incomplete, no live case-grid receipt exists,
-and no published compiled artifact has been exercised.
+Assessment complete and committed. The program is provision-rooted, but it is
+not currently certifiable: its signed executable root omits the statutory
+household-income qualification, corpus closure is incomplete, no live
+case-grid receipt exists, and no published compiled artifact has been
+exercised.
 
 ## Done
 
@@ -56,8 +57,16 @@ and no published compiled artifact has been exercised.
   `bulk/us-il-scretd-certification-assessment.md`.
 - Passed the focused non-population repository suite: 15 tests across program
   specs, repository layout, and signed encoding manifests.
+- Rebased cleanly onto current `origin/main`.
+- Attempted to copy the assessment to the requested closure-sprint output
+  path; the session filesystem policy rejected the write with
+  `Operation not permitted`.
+- Attempted to push `closure/scretd`; network DNS resolution for GitHub failed,
+  so no remote branch or draft PR was created.
 
 ## Next
 
-- Copy the committed assessment to the requested closure-sprint output path.
-- Push and open only a draft PR if network access permits.
+- From a session with access to the closure-sprint output directory, copy
+  `bulk/us-il-scretd-certification-assessment.md` to
+  `_closure-sprint/out/i1-scretd-assessment.md`.
+- Push `closure/scretd` and open a draft PR when GitHub is reachable.
