@@ -11,6 +11,8 @@
 - PR-only files: ten expected files (six page YAML/test files, three manifests, one reverse index).
 - Exact-head execution checkout: `.git/review-worktrees/pr-1139-bec5142-exec/rulespec-us` (detached at the pinned head; canonical basename required by the rules engine).
 - Verdict: `REQUEST-CHANGES`.
+- Final report: `REVIEW.md`.
+- Review status: complete.
 
 ## Done
 
@@ -45,7 +47,8 @@
 - Proved current inertness: no program imports page 159, no federal module imports an SC output, no module outside these pages consumes a changed output, and the only active SC program scopes legacy page 163/page 165 without using them in either selected output's dependency closure.
 - Composed the SC program at base and head: emitted roots are byte-identical with SHA-256 `a660a49b575dcce18a688309b385fb4bcb158c320a451181f9fa0e6c9273777b`.
 - Compiled base and head and traversed the selected `snap_eligible`/`snap_benefit` closure: both closures contain the same 77 items with no additions, removals, or changed semantics. The head adds/changes dormant utility judgments only.
+- Wrote the final evidence-backed report to `REVIEW.md`.
 
 ## Next
 
-- Write and commit the final report to `REVIEW.md`.
+- None; review complete.
