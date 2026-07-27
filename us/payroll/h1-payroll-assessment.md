@@ -247,7 +247,7 @@ unavailable even though the local program runs. [R10]
 ## Reproduction command for the counts
 
 The count used this shape at each named corpus commit; it intentionally searches
-all statute inventories and never filters by ingest filename:
+all US inventories and never filters by ingest filename:
 
 ```sh
 git ls-tree -r --name-only <ref> -- data/corpus/inventory/us \
