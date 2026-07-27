@@ -4,10 +4,12 @@
 
 - Branch: `closure/enc-273-4c`
 - Slice: 7 CFR 273.4(c), sponsored-alien income and resource deeming.
-- Status: implementation and focused validation complete; draft PR handoff is
-  next.
+- Status: implementation and validation complete; remote publication is
+  blocked by the execution environment.
 - Known blocker: signed apply manifests cannot be generated locally because
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable.
+- Publication blocker: shell Git cannot resolve `github.com`, and the connected
+  GitHub writer canceled branch creation before making any remote change.
 
 ## Done
 
@@ -62,10 +64,16 @@
 - Confirmed by signing dry run that two signed manifests must cover the parent,
   child, and companion files. Actual signing fails because the required key is
   unavailable; hand-editing signed metadata was not attempted.
+- Attempted `git push -u origin closure/enc-273-4c`; it failed before
+  authentication because this sandbox cannot resolve `github.com`.
+- Attempted to publish through the connected GitHub integration; its write was
+  canceled before the remote branch or any Git object was created. No draft PR
+  exists yet.
 
 ## Next
 
-- Push `closure/enc-273-4c` and open the required draft PR with title
+- From a network-enabled environment, push `closure/enc-273-4c` and open the
+  required draft PR with title
   `Encode 7 CFR 273.4(c) sponsored-alien deeming`, referencing
   `rulespec-us#1135`.
 - Have a signing-key holder rerun `sign-applied-files` without `--dry-run`,
