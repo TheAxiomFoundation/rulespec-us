@@ -10,14 +10,19 @@ module:
     amount once per payment, so overlapping legal routes (for example, an E&T
     reimbursement under both paragraphs (c)(5) and (c)(14)) do not double-count.
     A caller must split a payment into separate relation rows when distinct
-    portions have different legal purposes. Paragraph (c)(3)(ii)(A)'s printed
-    “20 CFR 1087uu” reference is treated as the standalone Federal student-aid
-    route described by that subparagraph; the ordinary education route requires
-    qualifying enrollment and allowable educational use. The explicit State
-    choices are the Medicaid-aligned education exclusion in (c)(3)(v), the
-    alternative child-support deduction election in (c)(17), complementary
-    assistance in (c)(18), and TANF/Medicaid-aligned income in (c)(19).
-    A qualifying school-clothing allowance under (c)(5)(i)(E) is mandatory
+    portions have different legal purposes and must not reuse an expense amount
+    across rows. Educational-expense allocations must apply allowable expenses
+    to unearned educational income before earned educational income and must
+    coordinate dependent-care expenses with paragraph (c)(5)(i)(C).
+    Paragraph (c)(3)(ii)(A)'s printed “20 CFR 1087uu” reference is treated as
+    the standalone Federal student-aid route described by that subparagraph;
+    the ordinary education route requires qualifying enrollment and allowable
+    educational use. The explicit State-plan choices are the Medicaid-aligned
+    education exclusion in (c)(3)(v), the alternative child-support deduction
+    election in (c)(17), complementary assistance in (c)(18), and
+    TANF/Medicaid-aligned income in (c)(19). Paragraph (c)(8) also permits State
+    treatment of a qualifying TANF diversion payment as a nonrecurring lump
+    sum. A qualifying school-clothing allowance under (c)(5)(i)(E) is mandatory
     exclusion treatment, not a SNAP State option.
 rules:
   - name: snap_income_payment_of_household
@@ -358,6 +363,10 @@ rules:
           and ga_vendor_payment_is_for_housing
           and ga_vendor_payment_is_emergency_or_special_assistance
           and ga_vendor_payment_is_over_and_above_or_not_normally_part_of_ga_grant
+          and (
+            not ga_vendor_payment_exclusion_is_unclear
+            or fns_regional_office_determined_ga_vendor_payment_excluded
+          )
 
   - name: snap_ga_housing_vendor_no_direct_cash_state_exclusion_applies
     kind: derived
@@ -495,7 +504,14 @@ rules:
               excerpt: If a person or organization makes a payment to a third party on behalf of a household using funds that are not owed to the household, the payment shall be excluded
     versions:
       - effective_from: '2025-10-01'
-        formula: payment_made_to_third_party_on_household_behalf and payment_uses_funds_not_owed_or_otherwise_payable_to_household
+        formula: |-
+          (
+            payment_made_to_third_party_on_household_behalf
+            and payment_uses_funds_not_owed_or_otherwise_payable_to_household
+          )
+          or employer_pays_rent_or_provides_housing_in_addition_to_regular_wages
+          or support_payment_is_required_directly_to_third_party_in_addition_to_household_support
+          or voluntary_support_payment_above_binding_amount_is_paid_to_third_party
 
   - name: snap_noncash_or_vendor_payment_income_exclusion
     kind: derived
@@ -587,6 +603,31 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: Awarded to a household member enrolled at a
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Recognized institution of post-secondary education
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: School for the handicapped
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Vocational education program
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Vocational or technical school
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Program that provides for obtaining a secondary school diploma or the equivalent
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -610,6 +651,46 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: Used for or identified (earmarked) by the institution, school, program, or other grantor for the following allowable expenses
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Tuition
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Mandatory school fees
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Books
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Supplies
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Transportation
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Miscellaneous personal expenses, other than normal living expenses
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Dependent care
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Origination fees and insurance premiums on educational loans
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -636,13 +717,61 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: Exclusions based on use pursuant to paragraph (c)(3)(ii)(C) must be incurred or anticipated for the period the educational income is intended to cover
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Exclusions based on use shall be subtracted from unearned educational income to the extent possible
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: educational loans on which payment is deferred
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           payment_is_educational_assistance
+          and (
+            not payment_is_educational_loan
+            or (
+              educational_loan_repayment_is_deferred
+              and loan_repayment_must_begin_days_after_receipt
+                  > snap_non_deferred_loan_repayment_start_limit_days
+            )
+          )
           and snap_educational_assistance_qualifying_enrollment_applies
           and snap_educational_assistance_allowable_expense_applies
           and educational_expense_incurred_or_anticipated_for_assistance_period
+          and educational_expense_allocation_observes_unearned_before_earned_order
+
+  - name: snap_educational_assistance_allocated_allowable_expense_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(3)(ii)(C)(1)-(8), (c)(3)(ii)(C)(10), (c)(3)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Exclusions based on use shall be subtracted from unearned educational income to the extent possible
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Amounts excluded for dependent care costs shall not also be excluded under the general exclusion provisions
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+            0,
+            educational_non_dependent_care_allowable_expense_amount_allocated_to_payment_after_required_unearned_first_allocation
+            + educational_dependent_care_expense_amount_allocated_to_payment_after_required_unearned_first_allocation_and_not_excluded_under_paragraph_c_5
+          )
 
   - name: snap_state_medicaid_education_option_exclusion_applies
     kind: derived
@@ -692,7 +821,7 @@ rules:
                 income_payment_amount
               else: 0,
               if snap_ordinary_educational_assistance_exclusion_applies:
-                educational_assistance_amount_used_or_earmarked_for_allowable_expenses
+                snap_educational_assistance_allocated_allowable_expense_amount
               else: 0,
               if snap_state_medicaid_education_option_exclusion_applies:
                 educational_assistance_amount_excluded_under_state_medicaid_rules
@@ -744,7 +873,12 @@ rules:
               excerpt: job- or training-related expenses such as travel, per diem, uniforms, and transportation to and from the job or training site
     versions:
       - effective_from: '2025-10-01'
-        formula: payment_is_job_training_or_migrant_travel_reimbursement and reimbursement_paid_over_and_above_basic_wages
+        formula: |-
+          (
+            payment_is_job_or_training_expense_reimbursement
+            and reimbursement_paid_over_and_above_basic_wages
+          )
+          or payment_is_migrant_worker_travel_expense_reimbursement
 
   - name: snap_volunteer_expense_reimbursement_exclusion_applies
     kind: derived
@@ -780,7 +914,12 @@ rules:
               excerpt: Medical or dependent care reimbursements
     versions:
       - effective_from: '2025-10-01'
-        formula: payment_is_medical_or_dependent_care_reimbursement
+        formula: |-
+          payment_is_medical_or_dependent_care_reimbursement
+          and (
+            not payment_is_dependent_care_reimbursement
+            or dependent_care_reimbursement_expense_not_already_excluded_under_paragraph_c_3
+          )
 
   - name: snap_title_xx_services_reimbursement_exclusion_applies
     kind: derived
@@ -857,7 +996,10 @@ rules:
       - effective_from: '2025-10-01'
         formula: |-
           payment_is_reimbursement
-          and reimbursement_is_for_identified_expense
+          and (
+            reimbursement_is_for_identified_expense
+            or reimbursement_is_flat_or_multiple_expense_allowance_with_identified_nonliving_purpose
+          )
           and reimbursement_used_for_intended_purpose
           and not reimbursement_covers_normal_household_living_expense
 
@@ -932,8 +1074,10 @@ rules:
             if nonhousehold_beneficiary_payment_portion_is_identifiable:
               min(
                 income_payment_amount,
-                identifiable_nonhousehold_beneficiary_payment_amount,
-                amount_actually_used_for_nonhousehold_beneficiary
+                min(
+                  identifiable_nonhousehold_beneficiary_payment_amount,
+                  amount_actually_used_for_nonhousehold_beneficiary
+                )
               )
             else:
               if total_intended_beneficiary_count > 0:
@@ -960,7 +1104,7 @@ rules:
             kind: formula
             source:
               corpus_citation_path: us/regulation/7/273/9
-              excerpt: The earned income of any household member who is under age 18, who is an elementary or secondary school student, and who lives with a natural, adoptive, or stepparent or under the parental control of a household member other than a parent
+              excerpt: any household member who is under age 18
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -969,11 +1113,12 @@ rules:
             and income_recipient_age < snap_student_earned_income_age_limit
             and (
               income_recipient_attends_elementary_or_secondary_school
-              or income_recipient_attends_district_recognized_ged_classes
+              or income_recipient_attends_district_recognized_operated_or_supervised_ged_classes
               or income_recipient_attends_district_recognized_or_supervised_home_school
               or (
                 income_recipient_on_temporary_semester_or_vacation_break
                 and income_recipient_enrollment_will_resume_after_break
+                and income_recipient_was_in_qualifying_elementary_secondary_ged_or_home_school_enrollment_before_break
               )
             )
             and income_recipient_lives_with_parent_or_under_household_member_parental_control
@@ -1009,11 +1154,18 @@ rules:
       - effective_from: '2025-10-01'
         formula: |-
           if (
-            payment_is_nonrecurring_lump_sum
-            or (
-              payment_is_tanf_diversion_payment
-              and tanf_diversion_payment_is_nonrecurrent_short_term_benefit_not_defined_as_assistance
-              and state_treats_qualifying_tanf_diversion_payment_as_nonrecurring_lump_sum
+            not (
+              payment_is_cash_donation_based_on_need
+              and payment_received_on_or_after_february_1_1988
+              and payment_from_private_nonprofit_charitable_organization
+            )
+            and (
+              payment_is_nonrecurring_lump_sum
+              or (
+                payment_is_tanf_diversion_payment
+                and tanf_diversion_payment_is_nonrecurrent_short_term_benefit_not_defined_as_assistance
+                and state_treats_qualifying_tanf_diversion_payment_as_nonrecurring_lump_sum
+              )
             )
           ): income_payment_amount else: 0
 
@@ -1107,6 +1259,16 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: Any payment to volunteers under Title II (RSVP, Foster Grandparents and others) of the Domestic Volunteer Services Act of 1973
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments under title I of that Act
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: for the length of their volunteer contract in effect at the time of conversion
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -1115,7 +1277,10 @@ rules:
             payment_is_domestic_volunteer_service_act_title_i_volunteer_payment
             and (
               volunteer_received_snap_or_public_assistance_when_joining_title_i_program
-              or volunteer_had_legacy_title_i_exclusion_at_food_and_nutrition_act_conversion
+              or (
+                volunteer_had_legacy_title_i_exclusion_at_food_and_nutrition_act_conversion
+                and volunteer_legacy_title_i_contract_in_effect_at_conversion_remains_in_effect_for_payment
+              )
             )
           )
 
@@ -1309,10 +1474,18 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: A one-time payment or allowance applied for on an as-needed basis and made under a Federal or State law for the costs of weatherization or emergency repair or replacement
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: A down-payment followed by a final payment upon completion of the work will be considered a one-time payment
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          payment_is_one_time_as_needed_assistance_under_federal_or_state_law
+          (
+            payment_is_one_time_as_needed_assistance_under_federal_or_state_law
+            or payment_is_down_or_final_installment_of_single_one_time_weatherization_or_emergency_repair_allowance
+          )
           and (
             payment_is_for_weatherization
             or payment_is_for_emergency_repair_or_replacement_of_unsafe_or_inoperative_heating_or_cooling_device
@@ -1415,6 +1588,11 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: Any payment made to an E&T participant under § 273.7(d)(3) for costs that are reasonably necessary and directly related to participation in the E&T program
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: the value of any dependent care services provided for or arranged under § 273.7(d)(3)(i) would be excluded
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -1471,10 +1649,6 @@ rules:
           if (
             income_recipient_receives_ssi
             and income_is_necessary_for_fulfillment_of_approved_pass
-            and (
-              income_spent_in_accordance_with_approved_pass
-              or income_deposited_in_pass_savings_account_for_future_use
-            )
           ): min(income_payment_amount, income_amount_necessary_for_approved_pass) else: 0
 
   - name: snap_outgoing_child_support_exclusion_amount
@@ -1498,7 +1672,10 @@ rules:
           if (
             payment_is_legally_obligated_child_support_paid_by_household_member
             and child_support_paid_to_or_for_nonhousehold_member
-            and not state_elects_child_support_deduction_instead_of_income_exclusion
+            and not (
+              state_elects_child_support_deduction_instead_of_income_exclusion
+              and state_plan_specifies_child_support_deduction_election
+            )
           ): income_payment_amount else: 0
 
   - name: snap_state_complementary_assistance_option_exclusion_amount
@@ -1762,6 +1939,21 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/9
               excerpt: Income received by a member of the United States Armed Forces under Chapter 5 of Title 37 of the United States Code
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Received in addition to the service member's basic pay
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Received as a result of the service member's deployment to or service in an area designated as a combat zone
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Not received by the service member prior to the service member's deployment to or service in a Federally-designated combat zone
     versions:
       - effective_from: '2025-10-01'
         formula: |-
