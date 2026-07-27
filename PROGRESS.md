@@ -4,7 +4,7 @@
 
 - Branch: `closure/w1-eitc-152-residency`, based on `origin/main`.
 - Scope: EITC frontier items 4, 8, and 9.
-- Status: statutory and dependency discovery complete; implementation design is in progress.
+- Status: abode-fraction encoding complete; parental tiebreak encoding is next.
 - Worktree note: the mandated external path was rejected by the filesystem sandbox, so this branch is isolated at `.git/codex-worktrees/w1-eitc-152-residency`.
 - Corpus pin inspected: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
 
@@ -32,13 +32,24 @@
 - Identified non-statutory day-count details: the retained statutory bodies do
   not themselves define temporary-absence or birth/death normalization, while
   current IRS Publication 501 and Form 8862 instructions do.
+- Encoded `individual_principal_place_of_abode_with_taxpayer_fraction` from a
+  validated administrative abode-day count and taxable-year day count. Invalid
+  negative, over-year, or zero-denominator inputs fail closed.
+- Replaced the former fraction leaf in the § 152(c) and § 32 fixtures and added
+  eight focused cases covering ordinary-year and leap-year half boundaries,
+  full-year normalization, and invalid counts.
+- Added the new § 152(c) proof import to § 32, cascaded § 152 module hashes,
+  refreshed authoritative manifests, and regenerated the provision index.
+- Validation at this checkpoint:
+  - § 152(c) companion: 14/14 passed.
+  - § 152(c) proof validation: 16 atoms passed.
+  - § 32 proof validation: 43 atoms passed.
+  - Manifest and reverse-index tests: 9 passed.
+  - The untouched baseline and this branch both expose the same pre-existing
+    § 32 companion resolution failures for § 32(c)(2).
 
 ## Next
 
-- Finalize the narrowest RuleSpec input surface without relying on unsupported
-  nested relation traversal.
-- Encode the abode fraction and its strict half-year boundaries, including
-  ordinary/leap-year, temporary-absence, and birth/death cases.
 - Encode both § 152(c)(4)(B) parental comparisons with strict residence and
   AGI tie behavior.
 - Update every affected companion fixture, run focused and broader
