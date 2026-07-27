@@ -38,9 +38,13 @@
 - Regenerated/checked the reverse index: it is current at 4,233 provisions, 5,069 edges, and 4,484 modules; its PR diff is only the expected nine-line page-159 citation mapping.
 - Ran the manifest and reverse-index hygiene tests with an available repository-compatible pytest environment: 9 passed. The pinned encoder environment lacks pytest and the system wrapper has a broken interpreter path; this was an environment limitation, not a test failure.
 - Reviewed page 163 and 165 against their earlier encode: the PR composes previously disconnected page-164 prerequisites/exclusions, adds verification and precedence, and replaces coarse local MUA/BUA inputs with authoritative outputs. The retained agreement/non-proration judgments remain disconnected; page 165 also adds the unsupported rent bar noted above.
+- Verified the page-159 mapping to the federal standard, limited, and individual hooks. Exhaustive boolean analysis found no overlap among its conditional MUA, BUA, and telephone values; the federal sum therefore carries at most one of those three values, and full fixed amounts preserve non-proration.
+- Found a separate activation hazard: already-scoped page 369 sets the same federal individual hook to an unconditional stale `$33`. The pinned engine resolves duplicate `sets` relations in import/scope order; normal sorted activation of page 159 leaves page 369 later, so the stale setter would overwrite the new conditional `$27` and stack `$33` onto MUA/BUA or no-utility cases.
+- Treated omission of page 159 from the program spec as deliberate and not a defect. Actual verified utility dollars also correctly remain outside the three standard-allowance hooks and must stay in the separate shelter-cost term when activation is designed.
+- Proved current inertness: no program imports page 159, no federal module imports an SC output, no module outside these pages consumes a changed output, and the only active SC program scopes legacy page 163/page 165 without using them in either selected output's dependency closure.
+- Composed the SC program at base and head: emitted roots are byte-identical with SHA-256 `a660a49b575dcce18a688309b385fb4bcb158c320a451181f9fa0e6c9273777b`.
+- Compiled base and head and traversed the selected `snap_eligible`/`snap_benefit` closure: both closures contain the same 77 items with no additions, removals, or changed semantics. The head adds/changes dormant utility judgments only.
 
 ## Next
 
-- Review federal utility-hook structural compatibility and current-scope inertness.
-- Verify current-scope behavior neutrality for existing suites.
 - Write and commit the final report to `REVIEW.md`.
