@@ -6,9 +6,9 @@
 - The checkout is clean and based on the locally cached `origin/main` at
   `f9fb41b99`; DNS prevented refreshing the remote on 2026-07-27.
 - No SNAP program or committed oracle artifact will be modified.
-- The current EITC graph is not honestly certifiable: 23 of its 64 scalar
-  frontier occurrences are derived legal quantities, and no reviewed
-  69-citation-path content ledger exists.
+- The current EITC graph is not honestly certifiable: 34 of its 64 scalar
+  frontier inputs are derived or legally preclassified quantities, and no
+  reviewed 69-citation-path content ledger exists.
 
 ## Done
 
@@ -28,8 +28,9 @@
   statutory section 32 as its only scope root, and no transformations.
 - Composed the new spec with the pinned composer and compiled the result with
   the pinned engine commit. The compiled artifact exposes 61 derived rules.
-- Added and engine-checked a hand-worked one-child golden case: $28,890 of
-  earned income and AGI yields a $799 phaseout and a $3,628 credit.
+- Added an Axiom- and PolicyEngine-checked two-child golden case: $28,890 of
+  earned income and AGI yields a $1,053 phaseout and a $6,263 credit, with no
+  rounding ambiguity.
 - Ran a 21-case synthetic, non-population Axiom/PolicyEngine diagnostic grid:
   19 amounts matched and two published earned-income-amount boundaries
   differed. The age rows require an extra unrooted Axiom flag and therefore

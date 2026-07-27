@@ -9,9 +9,9 @@ The output itself is defined by section 32, and its reached executable rules
 are generally grounded in section 32, section 152(c), section 7703(a), section
 112, or the official 2026 IRS revenue procedure. But its final dataflow has
 **65 module-qualified frontier leaves**: 64 scalar inputs and one structural
-relation. Of the scalar inputs, **23 are derived legal quantities** that still
-need encoding or an explicit evidence-free bridge. Only 41 are
-observed/preclassified facts.
+relation. Under the conservative classification used below, **34 are derived
+or legally preclassified quantities** that still need encoding or an explicit
+evidence-free bridge. Only 30 are raw or directly recorded facts.
 
 The decisive example is childless age eligibility. Section 32's module
 defines `eitc_childless_age_eligible` from a person's `age`, but the final
@@ -29,24 +29,25 @@ Two further blockers reinforce the answer:
   a removed wage input and removed
   `self_employment_earned_income_component` output, so both fail before
   checking the credit; and
-- a citation-path closure claim has a 69-path minimum universe, but exact
-  committed encoding evidence reaches only 6 paths by the union of proof-index
-  and file-path joins. No reviewed 69-row content ledger exists.
+- a citation-path closure claim has a 69-path minimum universe, but only six
+  paths mechanically join to exact proof-index or file-path evidence. That is
+  not a content-level encoded count, which remains unknown without a reviewed
+  69-row ledger.
 
 ## Exhaustive declared frontier
 
-`O` means an observed or preclassified fact available from a return,
+`O` means a raw or directly recorded fact available from a return,
 administrative record, vital record, service record, or direct factual report.
-`D` means a comparison, aggregation, or legal conclusion that the current
-subgraph does not compute and that must be encoded for a general certificate.
-The distinction follows the closure scout's rule: a legal classification or
-an amount produced by another tax provision is derived even when a caller can
-supply it.
+`D` means an aggregation, comparison, statutory classification, or legal
+conclusion that the current subgraph does not compute and that must be encoded
+for a general certificate. For example, residence dates are facts, but a
+more-than-half-year test is derived; enrollment is a fact, but “student” under
+section 152(f)(2) is a statutory classification.
 
-There are **64 module-qualified scalar occurrences** below. The engine exposes
-63 unique scalar names because it flattens the section 32 TaxUnit
-`filing_status` and section 152(c) Person `filing_status` to one runtime
-symbol. They remain separate legal/entity occurrences in the frontier census.
+There are **64 distinct module-qualified scalar input IDs** below. The section
+32 TaxUnit `filing_status` and section 152(c) Person `filing_status` share an
+unqualified spelling, but remain separate legal/entity inputs in the compiled
+runtime contract.
 
 ### 26 USC 32: 22 scalar inputs plus one relation
 
@@ -54,11 +55,11 @@ symbol. They remain separate legal/entity occurrences in the frontier census.
 |---|---|---|
 | D | `adjusted_gross_income` | Section 62 assembled total; section 32 does not import its computation. |
 | D | `childless_taxpayer_or_spouse_age_eligible_for_eitc` | Aggregates the age predicate across the taxpayer/spouse; the encoded Person predicate is disconnected from the final credit. |
-| O | `childless_taxpayer_principal_place_of_abode_in_united_states_more_than_half_year` | Residence-duration fact. |
+| D | `childless_taxpayer_principal_place_of_abode_in_united_states_more_than_half_year` | Applies the statutory more-than-half-year threshold to residence facts. |
 | D | `eitc_disallowance_period_applies` | Section 32(k)(1) multi-year fraud or reckless-disregard consequence. |
 | D | `eitc_relevant_investment_income` | Section 32(i)(2) assembled disqualified-income total; only its threshold test is encoded. |
 | O | `filing_status` | Filed-return status. |
-| O | `individual_principal_place_of_abode_with_taxpayer_fraction` | Residence-duration fact for the candidate child. |
+| D | `individual_principal_place_of_abode_with_taxpayer_fraction` | Assembles residence dates or durations into a fraction. |
 | D | `prior_deficiency_denial_without_required_eligibility_information` | Section 32(k)(2) procedural and legal conclusion. |
 | D | `qualifying_child_marital_status_requires_section_151_entitlement` | Section 32(c)(3)(B) exception gate, not merely marital status. |
 | O | `qualifying_child_name_age_and_tin_included_on_return` | Return-field presence. |
@@ -71,9 +72,9 @@ symbol. They remain separate legal/entity occurrences in the frontier census.
 | D | `taxpayer_entitled_to_section_151_deduction_for_child_or_would_be_but_for_section_152_e` | Sections 151 and 152(e) entitlement conclusion. |
 | O | `taxpayer_includes_required_social_security_number_on_return` | Return and SSN fact. |
 | D | `taxpayer_is_dependent_for_section_151_to_another_taxpayer` | Sections 151/152 legal conclusion. |
-| O | `taxpayer_is_nonresident_alien_for_any_portion_of_year` | Immigration/residence-status fact. |
+| D | `taxpayer_is_nonresident_alien_for_any_portion_of_year` | Tax-law residence classification over the taxable year. |
 | D | `taxpayer_is_qualifying_child_of_another_taxpayer` | Requires applying section 152(c) for another taxpayer. |
-| O | `taxpayer_treated_as_resident_by_section_6013_g_or_h_election` | Return election fact. |
+| D | `taxpayer_treated_as_resident_by_section_6013_g_or_h_election` | Legal consequence of a section 6013(g) or (h) election, not merely election-field presence. |
 | O | `relation.qualifying_child_of_tax_unit` | Structural filing-unit membership relation; it has no formula or rule-level source. |
 
 ### 26 USC 152(c): 17 scalar inputs
@@ -85,12 +86,12 @@ symbol. They remain separate legal/entity occurrences in the frontier census.
 | O | `filing_status` | Candidate child's filed-return status. |
 | O | `individual_age_at_close_of_calendar_year` | Age fact. |
 | O | `individual_is_child_of_taxpayer_or_descendant_of_such_child` | Family relationship fact. |
-| O | `individual_is_permanently_and_totally_disabled` | Preclassified medical/administrative status. |
+| D | `individual_is_permanently_and_totally_disabled` | Statutory classification defined outside section 152(c), not a raw diagnosis. |
 | O | `individual_is_sibling_stepsibling_or_descendant_of_such_relative` | Family relationship fact. |
-| O | `individual_is_student` | Enrollment/status fact. |
+| D | `individual_is_student` | Section 152(f)(2) classification assembled from enrollment facts. |
 | D | `individual_is_younger_than_taxpayer` | Comparison of two ages rather than either observed age. |
 | D | `individual_may_be_claimed_as_qualifying_child_by_two_or_more_taxpayers` | Requires applying the qualifying-child test across taxpayers. |
-| O | `no_parent_of_individual_is_a_claiming_taxpayer` | Filed-claim fact. |
+| D | `no_parent_of_individual_is_a_claiming_taxpayer` | Cross-parent aggregation of filed-claim facts. |
 | O | `parents_filing_status` | Parents' filed-return status. |
 | D | `parents_of_individual_may_claim_individual_but_no_parent_claims` | Parent eligibility plus claim-choice composite. |
 | O | `return_filed_only_for_claim_of_refund` | Return-purpose fact. |
@@ -116,17 +117,17 @@ symbol. They remain separate legal/entity occurrences in the frontier census.
 |---|---|---|
 | O | `active_service_compensation_as_commissioned_officer_excluding_pensions_and_retirement_pay` | Military pay-record amount. |
 | O | `active_service_compensation_as_enlisted_member_excluding_pensions_and_retirement_pay` | Military pay-record amount. |
-| O | `armed_forces_member_in_missing_status_during_vietnam_conflict_as_result_of_conflict` | Official service-status fact. |
+| D | `armed_forces_member_in_missing_status_during_vietnam_conflict_as_result_of_conflict` | Combines status, statutory conflict dates, and causation. |
 | O | `armed_forces_missing_status_active_service_compensation` | Military pay-record amount. |
-| O | `civilian_employee_in_missing_status_during_vietnam_conflict_as_result_of_conflict` | Official employment-status fact. |
+| D | `civilian_employee_in_missing_status_during_vietnam_conflict_as_result_of_conflict` | Combines status, statutory conflict dates, and causation. |
 | O | `civilian_employee_missing_status_active_service_compensation` | Government pay-record amount. |
 | O | `commissioned_officer_in_armed_forces_excluding_commissioned_warrant_officer` | Rank/status fact. |
-| O | `hospitalized_resulting_from_combat_zone_wounds_disease_or_injury` | Service/medical-record fact. |
+| D | `hospitalized_resulting_from_combat_zone_wounds_disease_or_injury` | Causal and statutory classification assembled from service and medical facts. |
 | D | `maximum_enlisted_amount_for_commissioned_officer_months` | Section 112(c)(5)/Title 37 pay-component sum. |
 | O | `member_below_grade_of_commissioned_officer_in_armed_forces` | Rank/status fact. |
 | D | `months_beginning_after_combatant_activities_termination` | Date arithmetic from a legally designated termination date. |
 | O | `officially_absent_from_post_of_duty_without_authority` | Official service-status fact. |
-| O | `served_in_combat_zone_during_month` | Service-location/date fact. |
+| D | `served_in_combat_zone_during_month` | Applies the section 112(c) combat-zone designation and month boundary to service-location facts. |
 | D | `vietnam_combat_zone_hospitalization_month_after_january_1978` | Statutory date-boundary comparison. |
 
 ### 26 USC 7703(a): four scalar inputs
@@ -138,15 +139,20 @@ symbol. They remain separate legal/entity occurrences in the frontier census.
 | O | `taxpayer_married_at_close_of_taxable_year` | Marital-status fact. |
 | O | `taxpayer_married_at_time_of_spouse_death` | Marital-status/vital-record fact. |
 
-The count is therefore **23 derived scalar occurrences + 41 observed scalar
-occurrences + one observed relation = 65 module-qualified leaves**. Even if
-AGI is accepted as the task's explicit bridged dimension bearing no evidence,
-22 other derived scalar occurrences remain.
+The conservative count is therefore **34 derived or legally preclassified
+scalar inputs + 30 raw or directly recorded scalar inputs + one structural
+relation = 65 module-qualified leaves**. Even if AGI is accepted as the task's
+explicit bridged dimension bearing no evidence, 33 other derived inputs
+remain. Some administrative systems may store a derived status directly, but
+that does not make its legal derivation part of this provision graph.
 
 ## Dependency and provision-rootedness judgment
 
-The reached formula ancestry contains 39 RuleSpec rules: 30 derived rules,
-eight parameters, and the structural relation. Its genuine source roots are:
+The compiled final-output ancestry contains 39 executable RuleSpec nodes: 28
+derived rules, 10 parameters, and the structural relation. In the authored
+RuleSpec kinds the split is 27 derived rules, 11 parameters, and the relation:
+the formula-valued `abode_fraction_threshold` parameter lowers to a compiled
+derived node. Its genuine source roots are:
 
 1. **26 USC 32** for the credit, rates, eligibility, earned-income definition,
    and inflation-adjustment delegation;
@@ -262,7 +268,8 @@ input and `self_employment_earned_income_component` output as unknown.
 Do not certify this EITC graph today. A transformation-free standalone program
 can still expose the provision-defined `eitc` output over the declared
 frontier, and a bridged synthetic grid can still diagnose its arithmetic.
-Neither artifact cures the 23 derived leaves or creates childless-age evidence.
+Neither artifact cures the 34 derived or legally preclassified inputs or
+creates childless-age evidence.
 
 The shortest honest repair path is:
 
