@@ -5,7 +5,7 @@
 - Worktree: `x1-wa-tanf-standard`
 - Branch: `x1-wa-tanf-standard`
 - Base: cached `origin/main` at `ecb057ef35ab47fb055213b42459c42ae63485ef`
-- Status: RuleSpec implementation
+- Status: PolicyEngine named-variable conformance grid
 - Network note: the initial `git fetch origin main` failed because `github.com`
   could not be resolved.
 
@@ -27,12 +27,19 @@
   ten-or-more boundary.
 - Passed all 12 companion cases with `axiom-encode test` and released engine
   v0.1.1 through a canonical `rulespec-us` path.
+- Passed the repository layout, encoding-manifest, and reverse-index suites
+  (18 tests).
+- Composed a transient one-output payment-standard program, compiled it with
+  released engine v0.1.1, and ran the size-11 golden case to $1,662/month.
+  The program was deliberately not committed under the closure-sprint freeze.
 
 ## Next
 
-- Add and compile the narrow one-output Washington TANF payment-standard
-  program.
 - Build, register, and run the smallest honest PolicyEngine case grid.
-- Assemble and validate the five-criteria evidence package.
+- Reproduce and hash the local v0.1.1 compile/run receipt from a pinned clean
+  RuleSpec tree.
+- Assemble and validate the five-criteria evidence package, with executable
+  left false unless a published artifact and official-binary stranger path
+  can actually be proved.
 - Write the final report, commit each coherent step, and attempt to push and
   open a draft PR.
