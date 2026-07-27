@@ -2,11 +2,10 @@
 
 ## State
 
-Evidence assembly has started from cached `origin/main` at
-`ecb057ef35ab47fb055213b42459c42ae63485ef` in the required
-`x3-ma-snap-medical` worktree and branch. No criterion has been claimed yet.
-The first gating task is citation-path resolution for every corpus inventory
-record under `us-ma/regulation/106-cmr/364/400/block-1`.
+The citation gate passes: `provision_rooted` holds for
+`us-ma/regulation/106-cmr/364/400/block-1`. Exactly two raw corpus inventory
+records use that path, and each has a citation-keyed provision record with the
+same authoritative body. Evidence assembly may continue.
 
 ## Done
 
@@ -19,12 +18,25 @@ record under `us-ma/regulation/106-cmr/364/400/block-1`.
   `origin/main`.
 - Attempted to refresh `origin/main`; shell network access could not resolve
   `github.com`, so the cached remote-tracking commit is the recorded base.
+- Audited `axiom-corpus@db12795577c5809009168982cf8a72fb58440620` by citation
+  path. The legacy inventory occurrence is at
+  `data/corpus/inventory/us-ma/regulation/2026-05-28.json:5090`; the current
+  union occurrence is at
+  `data/corpus/inventory/us-ma/regulation/2026-07-24-ma-dta-regulations-snap-current-union.json:5438`.
+- Resolved those occurrences to line 223 of their corresponding provision
+  JSONL files. Both bodies have SHA-256
+  `9e3d69d1db9913eb137b451dd7abcca074c3f7f7fa6b8eb8af8513e69cc69ecb`
+  and contain the $35, $155, and $190 medical-deduction table.
+- Confirmed the candidate is not one of j1's three malformed Massachusetts
+  paths, which are `364/360/block-1`, `365/030/block-1`, and
+  `366/140/block-1`.
 
 ## Next
 
-- Inspect the RuleSpec module, companion tests, authoritative corpus inventory
-  records, and each citation-keyed provision body.
-- Stop with `provision_rooted: fails` if any required citation path does not
-  resolve.
-- If provision rooting holds, assemble the case grid, closure ledger,
-  released-engine local receipt, evidence narrative, and final sprint report.
+- Inspect the real PolicyEngine variable body and register a five-case boundary
+  grid with zero unexplained mismatches.
+- Resolve the one-root/two-record closure ledger with zero pending paths.
+- Compile and locally run the one-output module with released engine v0.1.1,
+  while preserving the unpublished-artifact blocker.
+- Assemble the five-criterion narrative, validation receipt, and final sprint
+  report.
