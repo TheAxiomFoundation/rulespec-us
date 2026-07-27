@@ -2,9 +2,10 @@
 
 ## State
 
-The citation gate passes, and the companion fixture now carries the exact
-five-case statutory boundary grid at $0, $35, $36, $190, and $191. Oracle
-registration and released-engine evidence remain in progress.
+The citation gate and RuleSpec fixture gate pass. The companion fixture carries
+the exact five-case statutory boundary grid at $0, $35, $36, $190, and $191,
+and released engine v0.1.1 passes all 33 cases in the source module. Oracle
+registration and the one-output execution receipt remain in progress.
 
 ## Done
 
@@ -32,6 +33,11 @@ registration and released-engine evidence remain in progress.
 - Replaced the broader four-case medical sample with a five-case January 2026
   boundary grid at $0, $35, $36, $190, and $191. Each case assigns the only
   RuleSpec input fact used by the medical-deduction output.
+- Exported committed RuleSpec tree
+  `87220d7d776b9a330b91bae3c42e929adf4ab35a` to a canonical stranger path and
+  ran its companion through `axiom-encode test` with the clean released
+  `axiom-rules-engine` v0.1.1 checkout. Receipt: one test file, 33 cases, one
+  compiled program, zero failures.
 
 ## Next
 
