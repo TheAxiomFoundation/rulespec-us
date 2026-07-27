@@ -346,6 +346,12 @@ Built:
 - this committed assessment; and
 - the committed `PROGRESS.md` handoff ledger.
 
+The branch `closure/savers-credit-25b` was pushed successfully to
+`origin`. Draft PR creation was attempted with `gh pr create --draft`, but
+`api.github.com` was unreachable. The browser fallback had no available
+browser session, so no PR was created; the published branch is ready for a
+human to open as a draft.
+
 The requested copy to
 `~/TheAxiomFoundation/_closure-sprint/out/t1-savers-assessment.md` was
 attempted, but the managed filesystem rejected the write with
