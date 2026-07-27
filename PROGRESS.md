@@ -37,12 +37,14 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
   budgeting, historical income indicators, receipt-month timing, weekly and
   biweekly conversion, lump sums, held wages, pay-cycle normalization, and
   contract, self-employment, and educational-income averaging.
+- Rejected contradictory simultaneous weekly and biweekly income-frequency
+  configurations instead of silently selecting the weekly branch.
 - Removed the satisfied paragraph (c) umbrella deferral from `273/10.yaml`
   while leaving the paragraph (e) rules unchanged.
 - Narrowed the remaining paragraph (c) deferrals to the cross-referenced
   change-reporting and self-employment procedures and the State-selected
   statewide averaging method.
-- Added `273/10/d.yaml` and 57 companion cases for disallowed and reimbursed
+- Added `273/10/d.yaml` and companion cases for disallowed and reimbursed
   expenses, billed/due timing, arrearages and nonduplication, fluctuating and
   less-than-monthly averaging, one-time and 24-month medical elections,
   anticipated utility and nonutility expenses, medical-change timing, weekly
@@ -55,14 +57,12 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
 - Required every averaging amount to be explicitly post-disallowance, composed
   conversion directly from paragraph (d)(1), froze one-time medical averaging
   divisors at the election month, and rejected overlapping State utility and
-  expense-conversion methods.
+  expense-conversion methods and contradictory weekly/biweekly frequencies.
 - Narrowed unresolved paragraph (d) work to execution and notice mechanics for
   the now-encoded medical-change deadlines, the obsolete printed
   dependent-care age-two cap, SSI-linked restored deductions, and optional
   child-support composition or retrospective budgeting that depends on
   sections 273.9 or 273.21.
-- Confirmed the paragraph (d) child compiles as 25 rules, proof-validates 42
-  atoms, and passes all 57 companion cases with the pinned encoder and engine.
 - Removed the satisfied paragraph (d) umbrella deferral from `273/10.yaml`
   without changing any paragraph (e) rule, formula, or ordering.
 - Added non-executable parent provenance records that point paragraphs (a),
@@ -81,7 +81,7 @@ RuleSpec suite passes. Running repository and protected-artifact gates next.
 - Confirmed the expanded paragraph (a) child validates, proof-validates 28
   atoms, compiles 71 rules, and passes all 15 companion cases.
 - Confirmed the expanded paragraph (d) child validates, proof-validates 48
-  atoms, compiles 31 rules, and passes all 62 companion cases.
+  atoms, compiles 31 rules, and passes all 63 companion cases.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction, retrospective budgeting and
   certification-period assignment; State income averaging methods; and
