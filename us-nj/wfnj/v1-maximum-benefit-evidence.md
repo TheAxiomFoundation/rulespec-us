@@ -44,16 +44,16 @@ placeholder and `criteria.executable.holds` is false.
       evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:64
     conformant:
       holds: true
-      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:158
+      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:161
     exercised:
       holds: true
-      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:270
+      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:285
     closed:
       holds: true
-      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:328
+      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:346
     executable:
       holds: false
-      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:381; local load and value pass, unpublished artifact blocks stranger path
+      evidence: us-nj/wfnj/v1-maximum-benefit-evidence.md:399; local load and value pass, unpublished artifact blocks stranger path
 ```
 
 The RuleSpec pin is the implementation-and-fixture commit, not this narrative
@@ -114,11 +114,14 @@ eight amounts, and says “More than 8 Add $ 66 for each additional person.”
 Thus the module's formal root resolves by citation path and its numeric
 premises resolve in the body, without relying on a filename.
 
-The module versions begin `2023-07-10`. The official linked PDF's regulatory
-history supports that version date, but the flattened JSONL record stops after
-the table and does not retain the history text. This package therefore makes a
-current January 2026 arithmetic claim, not a historical-period completeness
-claim.
+The module versions begin `2023-07-10`. New Jersey's official
+[notice of administrative changes](https://www.nj.gov/humanservices/providers/rulefees/ruleadop/ruleadoptfiles/NOAC%2010_90%20%2855%20N.J.R.%201738%28a%29%29.pdf)
+states that effective date and prints the changed Schedule II values. A
+[newer official manual through June 16, 2025](https://nj.gov/humanservices/notices/documents/rules-and-regulations/NJAC%2010_90%20WORK%20FIRST%20NEW%20JERSEY%20PROGRAM.PDF)
+reproduces the same values and history. The flattened corpus JSONL record
+stops after the table and does not retain that history text. This package
+therefore makes a current January 2026 arithmetic claim, not a
+historical-period completeness claim.
 
 Reproduction:
 
@@ -159,7 +162,7 @@ done | sort
 
 **Verdict: holds.**
 
-The registered non-population case grid is committed in the companion
+The registered non-population case grid is committed locally in the companion
 `axiom-oracles` repository at
 `e9fc5ca0f623a97b2fceae561bbf24aefe77dd85` (tree
 `73928393e147a50ce1fa1ecfca9b4e76cb086c9d`):
@@ -177,6 +180,11 @@ This is a ten-case statutory schedule grid, not a population suite. It pins
 `06fef82924e2b29c0b5e8afd79341ae3baabfa2c`. The execution stack is Python
 3.13, `policyengine==4.18.9`, `policyengine-us==1.767.3`, and
 `policyengine-core==3.30.3`.
+
+The oracle commit is local-only. Its configured local origin rejected the
+sandboxed push, and GitHub DNS was unavailable for publication. This does not
+change the conformance result, but it is not represented as an upstream
+oracle commit.
 
 ### PolicyEngine variable-body review
 
@@ -222,6 +230,7 @@ The comparison is like-for-like at the maximum-payment-level boundary:
 Exact registered run:
 
 ```sh
+cd /Users/maxghenis/TheAxiomFoundation/rulespec-us/.git/codex-worktrees/x2-nj-wfnj-max-axiom-oracles
 UV_OFFLINE=1 \
 UV_CACHE_DIR=/private/tmp/x2-nj-wfnj-max-uv-cache \
 PYTHONPATH=/Users/maxghenis/TheAxiomFoundation/rulespec-us/.git/codex-worktrees/x2-nj-wfnj-max-axiom-oracles \
@@ -263,9 +272,15 @@ match_rate_percent: 100
 ```
 
 The last two counts derive from the empty `mismatches` list. Focused registry
-and runner tests passed `43 passed`; Ruff check passed the touched Python
-surfaces, and the two new Python files pass Ruff format check. No generated
-report, dashboard, manifest, or population result is committed.
+and runner tests at final companion HEAD
+`e9fc5ca0f623a97b2fceae561bbf24aefe77dd85` passed `43 passed`; Ruff check
+passed the touched Python surfaces, and the two new Python files pass Ruff
+format check. No generated report, dashboard, manifest, or population result
+is committed.
+
+The registered comparison consumes the exact one-input companion values; it
+does not silently invoke a development engine. Section 3 records the separate
+repository-pinned engine run that established those values.
 
 ## 3. `exercised`
 
@@ -293,9 +308,9 @@ Every bridged or constant dimension is declared:
 | additional-person amount | **Constant and verified:** $66 per person above eight. |
 | time | **Constant:** January 2026, a month in the current version. No historical schedule claim is made. |
 | state | **Constant:** New Jersey. |
-| people and ages | **Scaffolding:** size 1 uses one age-10 member; sizes 2-10 use one age-40 head plus age-10 members, keeping every profile in a dependent-child family context. Ages do not enter `nj_wfnj_payment_levels`. |
+| people and ages | **Scaffolding:** size 1 uses one age-10 member; sizes 2-10 use one age-40 head plus age-10 members. Ages do not enter `nj_wfnj_payment_levels`, and this scaffold does not itself establish legal caretaker/family eligibility. |
 | memberships | **Scaffolding:** the same people are placed in one SPM unit, household, tax unit, and family so entity realization is explicit. |
-| dependent-child status | **Scope boundary:** the source describes families with dependent children and the profiles stay in that context, but neither compared payment-level formula adjudicates categorical eligibility. |
+| dependent-child status | **Scope boundary:** the source describes families with dependent children and every profile includes a child, but neither compared payment-level formula establishes caretaker relationships or adjudicates categorical eligibility. |
 | Schedule I and income/resources | **Outside scope:** no initial-income threshold, countable income, resource rule, or eligibility predicate is compared. |
 | reporting, FPL, and agency action | **Outside scope:** the six-month reporting exception, 130 percent FPL rule, and duty to act on a reported change are not inputs to this numeric node. |
 | final WFNJ benefit and take-up | **Outside scope:** `nj_wfnj`, income subtraction, eligibility gates, and behavioral take-up are not substituted for the named intermediate variable. |
@@ -323,7 +338,10 @@ PYTHONPATH=/private/tmp/x2-nj-toolchain/axiom-encode/src:/private/tmp/x2-nj-wfnj
 
 Result: `RuleSpec companion tests passed: 1 file(s), 14 case(s)`. The total is
 the ten candidate cases plus four pre-existing broad-section cases. Repository
-layout tests also passed `9 passed`.
+layout tests also passed `9 passed`. An invocation rooted directly under
+`.git/codex-worktrees` reported unknown executable outputs because of
+tool-discovery path handling; the documented extracted-tree invocation uses
+the same verified blobs and passes. No in-place worktree pass is claimed.
 
 ## 4. `closed`
 
@@ -410,6 +428,9 @@ listed-size cap, Schedule II table, $66 continuation, and target derived rule.
 The temporary source has SHA-256
 `5e736e1c97efaa9b3d5ce21d9ee6fd3df4f6c93bf0198ef1ad8b2d7449aa537d`.
 It is not committed RuleSpec source and is not publishable evidence by itself.
+The compile path below deliberately mirrors the repository path inside the
+temporary tree, but that file is the 91-line slice identified by this hash,
+not the original 245-line four-output module.
 
 ### Local released-v0.1.1 probe
 
