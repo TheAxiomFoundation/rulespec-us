@@ -65,6 +65,8 @@ pools, quarterly history, or non-income accounting items.
 - Confirmed every one of the 95 derived outputs has both a neutral assertion
   and at least one positive assertion; all cases and the pinned CI validator
   pass with all 198 factual inputs explicitly assigned per applicable case.
+- Regenerated the repository reverse index; it now records the paragraph-(c)
+  module's authoritative corpus and proof-atom dependency and passes `--check`.
 
 ## Next
 
