@@ -61,6 +61,9 @@ pass. Running repository-level provenance and regression gates next.
 - Confirmed the integrated parent validates, proof-validates 24 atoms, compiles
   52 executable/imported rules, and passes all six companion cases, including
   the protected $226 net-income and $478 allotment benchmark.
+- Regenerated and checked the reverse citation index; the paragraph (a), (c),
+  and (d) modules now appear as module- and proof-level dependents of the
+  section 273.10 corpus provision.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction and recertification workflow; State income
   averaging methods; and cross-referenced medical/SSI/child-support case
@@ -68,7 +71,6 @@ pass. Running repository-level provenance and regression gates next.
 
 ## Next
 
-- Regenerate the reverse citation index and run repository-level provenance,
-  regression, and protected-artifact gates.
+- Run repository-level provenance, regression, and protected-artifact gates.
 - Update this log with final gate results, push the branch, and open the required
   draft PR.
