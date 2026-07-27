@@ -7,7 +7,7 @@
 - Reviewed PR head: `995fff6104a19a89843934e3832cd097c308af1d`.
 - Base: `origin/main` at `6b0773d3f7fa6719f208154f3e609e292ab7abe7`.
 - Pinned corpus: `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
-- Status: all review dimensions complete; final request-changes report drafting in progress.
+- Status: complete; verdict is `REQUEST-CHANGES`.
 
 ## Done
 
@@ -38,7 +38,8 @@
 - Confirmed the pinned validator detects the same deferred-surface defect in all three selected 50%, 20%, and 10% AGI-limit outputs; the CLI reports the first and exits 1.
 - Independently passed the 26-case suite on exact PR bytes using an offline build of pinned rules engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
 - Confirmed remote generated-manifest guard succeeds at the target head, while local HMAC verification remains unavailable without the signing key.
+- Wrote the final evidence-backed verdict to `WORKER-REPORT.md`, including both merge-blocking findings, all passing dimensions, and every sandbox/environment limitation.
 
 ## Next
 
-- Write and commit the final verdict to `WORKER-REPORT.md`.
+- None. The PR must remove the two forbidden root artifacts and resolve all three pinned-validator deferred-surface errors before merge.
