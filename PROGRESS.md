@@ -121,11 +121,15 @@
   out-of-scope categorical-input projection would directly explain the 69
   categorical-only cases (MA 27, SC 42), offer an alternate path for 15 more,
   and leave MA `ecps-3128` for a separate projection/gate disposition.
+- Re-ran the exact required companion command after rollback:
+  - `us/regulations/7-cfr/273/9.test.yaml`: 4/4 passed.
+  - `us/regulations/7-cfr/273/10.test.yaml`: 5/5 passed.
+  - Representative downstream
+    `us-ca/policies/cdss/snap/fy-2026-benefit-calculation.test.yaml`: 6/6
+    passed.
 
 ## Next
 
-1. Re-run the unchanged federal companion suites and the representative
-   downstream suite after the rollback.
-2. Write and commit `WORKER-REPORT.md`, including a zero federal-clearance
+1. Write and commit `WORKER-REPORT.md`, including a zero federal-clearance
    estimate, the out-of-scope projection dispositions, exact law paths, and the
    PolicyEngine issue draft.
