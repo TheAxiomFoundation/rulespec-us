@@ -2,8 +2,8 @@
 
 ## State
 
-Premise verified. The program is provision-rooted, but it is not currently
-certifiable: its executable root omits the statutory household-income
+Assessment written. The program is provision-rooted, but it is not currently
+certifiable: its signed executable root omits the statutory household-income
 qualification, corpus closure is incomplete, no live case-grid receipt exists,
 and no published compiled artifact has been exercised.
 
@@ -43,12 +43,21 @@ and no published compiled artifact has been exercised.
 - Composed and compiled the program locally. The local engine version differs
   from the repository's pinned engine, so this is diagnostic evidence rather
   than an executable-verdict receipt.
+- Repeated focused validation in isolated checkouts at the repository's pinned
+  axiom-encode and axiom-rules-engine commits. The current 2 companion files /
+  10 cases pass and the composed program has 15 rules.
+- Tested the proposed income edge and five-case grid in an isolated checkout:
+  without the edge, only the $77,001 case fails; with the edge, all 15
+  § 2 + § 3 cases pass.
+- Did not commit the semantic repair because the protected § 3 module and test
+  are bound by a signed apply manifest. An authorized signed encoder apply is
+  required; manual changes would be unshippable.
+- Wrote the complete assessment and golden case to
+  `bulk/us-il-scretd-certification-assessment.md`.
+- Passed the focused non-population repository suite: 15 tests across program
+  specs, repository layout, and signed encoding manifests.
 
 ## Next
 
-- Record the closure ledger and five-case grid contract in repository
-  assessment evidence without claiming a false comparable bridge.
-- Write the hand-checkable golden case and explicit defect statement.
-- Run safe repository checks (never a population-backed oracle suite).
-- Write the requested external assessment, commit the final evidence, push,
-  and open only a draft PR if network access permits.
+- Copy the committed assessment to the requested closure-sprint output path.
+- Push and open only a draft PR if network access permits.
