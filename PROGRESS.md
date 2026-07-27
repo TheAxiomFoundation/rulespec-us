@@ -36,10 +36,11 @@ exclusion, vehicle, and transfer modules.
 - Passed pinned deterministic validation, proof validation, and companion
   execution for all four new modules: 7 paragraph (d), 38 paragraph (e), 17
   paragraph (f), and 10 paragraph (h) cases.
+- Regenerated and verified the provision-to-rule reverse index; the 7 CFR
+  273.8 provision now points to all four new modules.
 
 ## Next
 
-- Regenerate and check the provision-to-rule reverse index.
 - Run monetary-proof and repository-wide test suites.
 - Generate signed encoding manifests if a signing key becomes available.
 - Push the branch and open the required draft PR.
