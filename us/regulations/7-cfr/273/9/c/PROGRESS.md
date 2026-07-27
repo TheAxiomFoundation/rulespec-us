@@ -2,11 +2,12 @@
 
 ## State
 
-Validation in progress. All twenty top-level exclusions and their nested
-conditions are encoded and covered by the companion suite. The exclusion layer
-separates ordinary payment rows from the education, charitable-donation,
-self-employment-cost, and outgoing-child-support aggregates that require shared
-pools, quarterly history, or non-income accounting items.
+Implementation and validation are complete and the branch is ready for draft
+review. All twenty top-level exclusions and their nested conditions are encoded
+and covered by the companion suite. The only outstanding repository gate is
+trusted provenance signing: the environment has no
+`AXIOM_ENCODE_APPLY_SIGNING_KEY`, so the three changed RuleSpec files cannot
+honestly receive the two required applied-file manifests here.
 
 ## Done
 
@@ -70,9 +71,25 @@ pools, quarterly history, or non-income accounting items.
 - Replaced the removed parent deferral with a non-executable paragraph-(c)
   delegation to this child module; parent and child now pass pinned validation
   together while paragraph (b)'s deferral remains unchanged.
+- Re-ran the pinned checks on commit `85af3f6e7`: parent and child validation
+  pass, proof validation passes with 130 child atoms, all 73 companion cases
+  pass, the child compiles to 103 executable rules, and both monetary
+  obligations have proof atoms.
+- Confirmed the reverse index is current (4,232 provisions, 5,069 edges, 4,484
+  modules), `git diff --check` passes, and no protected path changed.
+- Confirmed all 99 paragraph-(c) oracle outputs are
+  `known_not_comparable`, with no unmapped or pending-classification output.
+- Ran the full repository pytest suite: 64 tests pass and the sole failure is
+  the expected stale applied-file manifest for the edited parent module; the
+  existing warning reports 18 unmanifested modules.
+- Confirmed `guard-generated` identifies exactly the parent, child, and child
+  companion as unsigned. A dry run would create two manifests covering those
+  three files, but the required signing key is unavailable.
 
 ## Next
 
-- Run pinned runtime/proof validation and repository-wide structural,
-  coverage, reverse-index, and generated-artifact checks.
-- Record exact results, push the branch, and open the required draft PR.
+- Push the branch and open the required draft PR referencing
+  `rulespec-us#1135`.
+- Have a trusted signer generate the two applied-file manifests, then rerun
+  `guard-generated` and the full pytest suite.
+- Obtain human legal review; do not merge from this worktree.
