@@ -2,9 +2,9 @@
 
 ## State
 
-Paragraphs (a), (c), and (d) are implemented in isolated child modules and
-pass pinned compile, proof, validation, and companion-test checks. Integrating
-paragraph (d) into the parent deferral inventory next.
+Paragraphs (a), (c), and (d) are implemented in isolated child modules, their
+umbrella deferrals are removed from the parent, and all pinned module checks
+pass. Running repository-level provenance and regression gates next.
 
 ## Done
 
@@ -53,6 +53,14 @@ paragraph (d) into the parent deferral inventory next.
   budgeting that depends on sections 273.9 or 273.21.
 - Confirmed the paragraph (d) child compiles as 25 rules, proof-validates 42
   atoms, and passes all 57 companion cases with the pinned encoder and engine.
+- Removed the satisfied paragraph (d) umbrella deferral from `273/10.yaml`
+  without changing any paragraph (e) rule, formula, or ordering.
+- Added non-executable parent provenance records that point paragraphs (a),
+  (c), and (d) to representative outputs in their child modules without
+  introducing a circular import.
+- Confirmed the integrated parent validates, proof-validates 24 atoms, compiles
+  52 executable/imported rules, and passes all six companion cases, including
+  the protected $226 net-income and $478 allotment benchmark.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction and recertification workflow; State income
   averaging methods; and cross-referenced medical/SSI/child-support case
@@ -60,7 +68,7 @@ paragraph (d) into the parent deferral inventory next.
 
 ## Next
 
-- Remove the satisfied paragraph (d) umbrella deferral from the parent and
-  regenerate the reverse citation index.
-- Run repository validation, update this log, push the branch, and open the
-  required draft PR.
+- Regenerate the reverse citation index and run repository-level provenance,
+  regression, and protected-artifact gates.
+- Update this log with final gate results, push the branch, and open the required
+  draft PR.
