@@ -54,9 +54,12 @@
   - `us/regulation/7/273/10`, paragraph (e)(2)(ii)(C), sets the non-initial
     one-/two-person minimum at 8 percent of the one-person maximum, rounded to
     the nearest whole dollar.
-- Reproduced the 85 strict report rows against the pinned Populace rows with
-  PolicyEngine-US 1.767.3. The July 6 reports identify PolicyEngine-US 1.752.2,
-  so they are stale relative to the requested version:
+- Calculated the 85 strict report row IDs directly on the pinned Populace H5
+  with PolicyEngine-US 1.767.3. This is a source-data diagnostic, not yet the
+  report-pipeline reproduction: the oracle first reduces the H5 rows to Case
+  facts and then rebuilds a PolicyEngine situation. The July 6 reports identify
+  PolicyEngine-US 1.752.2, so they are also stale relative to the requested
+  version:
 
   | Current 1.767.3 disposition | AL | MA | NC | SC | TN | Total |
   | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -73,31 +76,30 @@
   `0.08 * $298 = $23.84` without the regulation's nearest-dollar rounding.
   The report adapter further annual-averages a January request, producing
   `$23.973597208658855`. Axiom's encoded `$24` floor is correct.
-- Selected one federal correction supported by paragraph (a): include regular
-  categorical eligibility in the federal income-eligibility result. No medical
-  rule was changed: the federal calculation already subtracts qualifying
-  expenses above $35, while expense classification is expressly deferred to an
-  upstream determination. Replacing that classification with a household-age
-  check would incorrectly allow expenses incurred only by a nonqualifying
-  spouse or dependent.
-- Added the categorical bypass to `273/9.yaml` by importing the existing
-  `273/2/j` regular-categorical result. The companion case sets both ordinary
-  income tests to fail and proves that regular categorical eligibility still
-  satisfies the composed income gate.
-- Captured before-fix mutation evidence: the new companion failed twice because
-  `snap_regular_categorically_eligible` was not an executable output and its
-  PA/SSI factual input did not resolve in the compiled 273.9 graph.
-- Ran the required companion commands after the change:
-  - `273/9.test.yaml`: 5 cases passed.
-  - `273/10.test.yaml`: 5 cases passed.
+- Tested a federal categorical wiring change supported by paragraph (a). Its
+  new companion initially failed because the existing `273/2/j` regular-
+  categorical result was absent from the executable 273.9 graph, then all five
+  273.9 cases passed after the import and formula change.
+- Rejected that change after downstream mutation testing exposed a material
+  regression: importing `273/2/j` made eight new categorical factual inputs
+  mandatory for every 273.9 consumer. The California SNAP companion then
+  failed 4 of 6 cases on missing PA/SSI inputs. State companion edits are out
+  of scope and zero-defaulting legal eligibility facts inside the encode would
+  be incorrect, so the federal encode and companion were restored unchanged.
+- Confirmed no medical rule should change: the federal calculation already
+  subtracts qualifying expenses above $35, while expense classification is
+  expressly deferred to an upstream determination. Replacing that
+  classification with a household-age check would incorrectly allow expenses
+  incurred only by a nonqualifying spouse or dependent. The generic Populace
+  projector does not map `snap_total_medical_expenses`, so it defaults that
+  factual amount to zero outside the legal encode.
 
 ## Next
 
 1. Finish the Case-to-PolicyEngine 1.767.3 rerun and distinguish direct-H5
    results from report-pipeline results.
-2. Review the composed input projection to determine how many categorical
-   cases this federal graph correction can clear without a separate oracle
-   mapping change.
-3. Write and commit `WORKER-REPORT.md`, including the stale-case dispositions,
-   conservative clearance estimate, exact law paths, and PolicyEngine issue
-   draft.
+2. Re-run the unchanged federal companion suites and the representative
+   downstream suite after the rollback.
+3. Write and commit `WORKER-REPORT.md`, including a zero federal-clearance
+   estimate, the out-of-scope projection dispositions, exact law paths, and the
+   PolicyEngine issue draft.
