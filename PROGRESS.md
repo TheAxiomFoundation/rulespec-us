@@ -2,7 +2,7 @@
 
 ## State
 
-- In progress: implementation, mutation proof, reverse index, and focused repository gates complete; final report next.
+- Complete: the defensive correctness and completeness audit, implementation, mutation proof, reverse index, focused gates, and final report are committed locally.
 - Baseline: clean worktree at `6b0773d3f7fa6719f208154f3e609e292ab7abe7` (`origin/main`).
 - Constraints: local commits only; no push, GitHub writes, workflow/toolchain edits, or manifest signing.
 
@@ -26,11 +26,14 @@
 - Passed the 25-case companion, focused CI validation (using a temporary canonical checkout alias for this `wt-savers` worktree name), proof validation, and zero-missing money-atom validation.
 - Mutation proof: changing the first comparison from `<=` to `<` produced 8 assertion failures across the exact 50-percent-limit cases (single, joint, head of household, MFS, and surviving spouse); restoring `<=` returned all 25 cases to green.
 - Regenerated `.axiom/index/provisions_to_rules.json` (4,238 provisions, 5,077 edges, 4,485 modules) and confirmed `--check` is current.
-- Passed 15 focused repository layout/reverse-index tests.
+- Passed 15 focused repository layout/reverse-index tests; the final post-hardening rerun completed in 398.97 seconds.
 - The literal `uv run --with pyyaml` command could not initialize its sandboxed home cache; a temporary cache then could not reach PyPI. The same generator and check passed with the installed axiom-encode Python/PyYAML environment.
-- Ran a pinned-corpus citation-resolution audit over both modules. It caught and corrected one Notice excerpt that crossed the page-3/page-4 boundary; after correction, all 6 unique citation paths resolve and all 45 source proof excerpts are verbatim in their cited rows.
+- Ran a pinned-corpus citation-resolution audit over both modules. It caught and corrected one Notice excerpt that crossed the page-3/page-4 boundary; after correction, all 6 unique citation paths resolve and all 48 source proof excerpts are verbatim in their cited rows.
 - Re-passed the 25-case companion, proof/money-atom checks, and focused CI validation after the citation correction.
+- Strengthened the applicable-percentage proof atoms to cite the 50%, 20%, 10%, and zero statutory clauses explicitly; final proof validation passes with 27 Notice atoms, 42 pipeline atoms, and 0 of 9 money obligations missing.
+- Confirmed all 20 new output legal IDs are unmapped and documented the required main-lane pending sync and PolicyEngine divergence disposition.
+- Wrote `WORKER-REPORT.md` with recovery hashes, pinned-corpus evidence, mutation evidence, gate results, and oracle disposition.
 
 ## Next
 
-- Inventory new output legal IDs, write `WORKER-REPORT.md`, and finalize the committed progress state.
+- Main lane: sync the documented 20 oracle-pending legal IDs and apply the recorded PolicyEngine divergence disposition. No further worker-lane work remains.
