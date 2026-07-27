@@ -6,8 +6,8 @@ Date: 2026-07-27
 
 **Do not certify or ship this node tonight.**
 
-The arithmetic is shallow, but its base is not. Both direct inputs to the
-existing RuleSpec calculation are derived legal quantities:
+The arithmetic is shallow, but its base is not. Both non-parameter inputs to
+the existing RuleSpec base formula are derived legal quantities:
 `snap_countable_earned_income` is an income inclusion, exclusion,
 self-employment, and member-attribution composition, and
 `work_supplementation_earned_income` requires a qualifying-program and
@@ -33,8 +33,10 @@ closure failure this assessment was asked to detect.
 
 ## Evidence and pins
 
-- RuleSpec worktree base: `c2bcf2bc06246973fb8429811e2a5d00fc2bdc78`
-  (assessment branch has later progress/report commits).
+- RuleSpec branch fork:
+  `f9fb41b9933111ce108cc04d5a603cfdb7f1b940`.
+- `origin/main` observed during the final audit:
+  `c2bcf2bc06246973fb8429811e2a5d00fc2bdc78`.
 - PolicyEngine US: `715373c90b0014561977a1b161f2f4c75bb45c33`.
 - RuleSpec-pinned axiom-corpus:
   `bf97b17baebfdf12601f7c23697524bf5adcdaed`.
@@ -47,13 +49,17 @@ pinned corpus commit before filtering by citation path:
 - 689 inventory files;
 - 142,879 raw inventory records;
 - 124,463 distinct citation paths;
-- 66 raw matches for the declared roots below;
-- 33 distinct matching citation paths, each present in exactly two inventory
-  records.
+- 66 raw matches for the initial 33-path direct formula-and-exception filter,
+  with each distinct path present in exactly two inventory records.
 
 This was a delimiter-safe citation-path search
 (`path == root` or `path` beginning with `root + "/"`), not a filename or
-ingest-version search.
+ingest-version search. Final dependency review expanded the declared,
+corpus-resolving lower-bound universe to 81 distinct citation paths, counted
+below. That number deliberately does not pretend to be full transitive
+closure: required cross-references absent from the corpus and open-ended
+Federal and State policy branches cannot truthfully be counted as resolved
+inventory paths.
 
 ## True dependency tree
 
@@ -86,20 +92,22 @@ classification, **[P]** provision-set parameter.
     │   ├── [D] exclusions under 7 USC 2014(d) / 7 CFR 273.9(c)
     │   │   ├── [O] source amounts and source-record circumstances
     │   │   └── [D] each statutory/regulatory exclusion classification
-    │   ├── [D] household/member income-counted share
+    │   └── [D] household/member income-counted share
     │   │   ├── [O] residence, relationship, food-purchase/preparation,
     │   │   │   age, disability, school, immigration, work, and waiver facts
     │   │   └── [D] household membership, student eligibility,
     │   │       immigration eligibility, work-rule/ABAWD status, and proration
-    │   └── [D, MISSING] child-support earnings addback required by
-    │       7 CFR 273.9(d)(2)
+    ├── [D, MISSING] child-support earnings addback required specifically
+    │   for this deduction by 7 CFR 273.9(d)(2)
+    │   ├── [O] earnings and legally obligated child-support payment records
+    │   └── [D] amount excluded under 7 CFR 273.9(c)(17)
     └── [D] work_supplementation_earned_income — NOT OBSERVED
-        ├── [O] wage amount
-        ├── [O] amount funded by or attributable to public assistance
+        ├── [O] wage, payment, and public-assistance funding-source records
         ├── [O] employer, prior-employment, participant, and program facts
+        ├── [D] amount attributable to public assistance
         └── [D] qualifying §2025(b) program, State election,
-            Secretary/FNS approval, household participation, and subsidized
-            wage portion
+            Secretary/FNS approval, household participation, and resulting
+            subsidized wage portion
 ```
 
 Observed facts can terminate individual leaves; they cannot replace the
@@ -137,6 +145,7 @@ snap_earned_income_deduction
 - The unconditional top-level output omits §2014(e)(2)(C), while
   `e/2/B.yaml` expressly defers the deduction output because that exception is
   unavailable.
+- The top-level output also omits the child-support earnings addback.
 
 The result is syntactically executable only after callers supply already
 derived legal answers.
@@ -156,10 +165,16 @@ Item 3 is absent from the existing statute formula. Paragraphs (b), (c), and
 (d)(2) all resolve inside the section-level corpus record
 `us/regulation/7/273/9`; the corpus does not expose separate paragraph records.
 
-7 CFR 273.10(e)(1)(i)(B) supplies the applied net-income calculation and
-whole-dollar procedure. The existing `273/10.yaml` has a separate
-`snap_earned_income_deduction_for_net_income` rule, but it accepts resolved
-gross monthly earned income and does not close the upstream base.
+7 CFR 273.10(e)(1)(i)(B) supplies the applied net-income calculation.
+Paragraph (e)(1)(ii) makes the handling of cents depend on a State election,
+including an option to use the rounding procedures used for TANF. The existing
+`273/10.yaml` has a separate
+`snap_earned_income_deduction_for_net_income` rule that unconditionally uses
+`floor(...)`. It accepts resolved gross monthly earned income and does not
+encode the State rounding election. This is downstream context for applying
+the deduction in the net-income calculation, not a direct dependency of the
+isolated, unrounded §2014(e)(2) output assessed here; it nonetheless means the
+separate applied helper is not a universal closure substitute.
 
 7 CFR 273.18(c)(1)(ii)(B) directly implements the overissuance exception: it
 withholds the deduction from the untimely unreported portion when that failure
@@ -207,33 +222,46 @@ PolicyEngine returns $200 because it sees all $1,000 as `snap_earned_income`.
 
 ## Citation-path closure
 
-The declared formula-and-exception lower-bound roots are:
+The declared corpus-resolving lower-bound roots are:
 
+- `us/statute/7/2012/m`;
+- `us/statute/7/2014/b`;
 - `us/statute/7/2014/e/2`;
 - `us/statute/7/2014/d`;
+- `us/statute/7/2015/d`, `/e`, `/f`, and `/o`;
 - `us/statute/7/2025/b`;
-- `us/regulation/7/273/9`;
-- `us/regulation/7/273/10`;
-- `us/regulation/7/273/11`;
-- `us/regulation/7/273/12`; and
-- `us/regulation/7/273/18`.
+- `us/statute/8/1612`; and
+- `us/regulation/7/273/1`, `/4`, `/5`, `/7`, `/9`, `/10`, `/11`, `/12`,
+  `/18`, and `/24`.
 
 | Root | Distinct paths | Encoded | Excludable | Pending |
 |---|---:|---:|---:|---:|
+| 7 USC 2012(m), root plus (1)-(5) | 6 | 1 | 0 | 5 |
+| 7 USC 2014(b) | 1 | 0 | 1 | 0 |
 | 7 USC 2014(e)(2) | 1 | 0 | 0 | 1 |
 | 7 USC 2014(d), root plus (1)-(19) | 20 | 1 | 0 | 19 |
+| 7 USC 2015(d), (e), (f), and (o) subtrees | 26 | 10 | 0 | 16 |
 | 7 USC 2025(b), root plus (1)-(6) | 7 | 0 | 2 | 5 |
-| 7 CFR 273.9, .10, .11, .12, .18 | 5 | 0 | 0 | 5 |
-| **Total** | **33** | **1** | **2** | **30** |
+| 8 USC 1612 subtree | 10 | 1 | 0 | 9 |
+| 7 CFR 273.1, .4, .5, .7, .9-.12, .18, and .24 | 10 | 0 | 0 | 10 |
+| **Resolving lower-bound total** | **81** | **13** | **3** | **65** |
 
-The one encoded path is `us/statute/7/2014/d/7`, the student-child earnings
-exclusion. Paragraph 2014(d)(2) has partial RuleSpec rules but remains pending:
-the current monthly `min(amount, $30)` formula does not close the statute's
-quarterly condition. The two excludable §2025(b) paths are paragraph (5)'s
-program-transition plan and paragraph (6)'s worker-displacement safeguard;
-they do not calculate this deduction.
+These are provision-content dispositions, not a claim that the encoded
+provisions are connected into a closed deduction tree. The 13 encoded paths
+are `us/statute/7/2012/m/4`, `us/statute/7/2014/d/7`,
+`us/statute/7/2015/d/2`, the `us/statute/7/2015/e` root and its eight
+paragraph paths, and `us/statute/8/1612/b/2/G`.
+Paragraph 2014(d)(2) has partial RuleSpec rules but remains pending: the
+current monthly `min(amount, $30)` formula does not close the statute's
+quarterly condition. The other 7 USC 2015 paths do not close the full
+membership and member-income attribution branch. The three excludable paths
+are 7 USC 2014(b), which states an administrative standards authority rather
+than a household computation despite PolicyEngine citing it for
+`snap_unit_size`, and §2025(b)(5)-(6)'s program-transition plan and
+worker-displacement safeguard.
 
-All 33 paths resolve in the pinned corpus. Resolution is sometimes coarser
+All 81 paths in this declared lower bound resolve in the pinned corpus.
+Resolution is sometimes coarser
 than the legal citation:
 
 - 7 USC 2014(e)(2)(B) and (C) resolve within
@@ -242,12 +270,15 @@ than the legal citation:
   records such as `us/regulation/7/273/9/d/2` or
   `us/regulation/7/273/11/a`.
 
-This 33-path count is a conservative lower bound, not full transitive closure.
-Section 2014(d)(10)'s open-ended other-Federal-law exclusions, State option
-authorities, household/member attribution, and State self-employment methods
-open additional roots. The PolicyEngine graph also reaches 7 CFR 273.1, .4,
-.5, .7, and .24. Exact paths for 20 USC 1087uu and 34 CFR part 675, reached by
-the work-study rules, do not resolve in the scanned federal inventories.
+This 81-path count is still a conservative resolving lower bound, not full
+transitive closure. Section 2014(d)(10)'s open-ended
+other-Federal-law exclusions, immigration rules, State option authorities,
+State TANF procedures, and State self-employment methods open additional
+roots. Exact paths for 20 USC 1087uu and 34 CFR part 675, reached by the
+work-study rules, do not resolve in the scanned federal inventories. Because
+some required nodes do not resolve and other branches are open-ended, no
+honest finite full-closure count can be reported from this corpus. That is
+itself an end-to-end provision-rootedness failure.
 
 ## Program, grid, and golden-case disposition
 
@@ -302,5 +333,17 @@ quantities.
 
 - Added and maintained `PROGRESS.md`.
 - Added this committed assessment.
+- Validated and proof-validated both existing 7 USC 2014(e)(2) modules with
+  `axiom-encode` at the repository-pinned commit
+  `3869d66d009f52258be35901edbef370e65a399c`.
+- Ran the existing companion tests with `axiom-rules-engine` at the
+  repository-pinned commit
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0`: two top-level cases and one
+  paragraph-(B) case passed.
+- Ran no population-backed suite.
+- Attempted to place this report at
+  `/Users/maxghenis/TheAxiomFoundation/_closure-sprint/out/s1-snap-eid-assessment.md`;
+  the managed workspace denied writes outside the RuleSpec worktree. This
+  committed file is the canonical report produced in the permitted workspace.
 - Did not modify any existing statute or SNAP program specification, oracle
   report/value, toolchain file, CI file, or CODEOWNERS.
