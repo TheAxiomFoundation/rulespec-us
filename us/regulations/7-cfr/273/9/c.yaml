@@ -1,0 +1,1859 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/9
+  summary: |-
+    7 CFR 273.9(c) is a closed list of income exclusions. This module classifies
+    atomic income payments under each enumerated exclusion and sums the excluded
+    amount once per payment, so overlapping legal routes (for example, an E&T
+    reimbursement under both paragraphs (c)(5) and (c)(14)) do not double-count.
+    A caller must split a payment into separate relation rows when distinct
+    portions have different legal purposes. Paragraph (c)(3)(ii)(A)'s printed
+    “20 CFR 1087uu” reference is treated as the standalone Federal student-aid
+    route described by that subparagraph; the ordinary education route requires
+    qualifying enrollment and allowable educational use. The explicit State
+    choices are the Medicaid-aligned education exclusion in (c)(3)(v), the
+    alternative child-support deduction election in (c)(17), complementary
+    assistance in (c)(18), and TANF/Medicaid-aligned income in (c)(19).
+    A qualifying school-clothing allowance under (c)(5)(i)(E) is mandatory
+    exclusion treatment, not a SNAP State option.
+rules:
+  - name: snap_income_payment_of_household
+    kind: data_relation
+    data_relation:
+      predicate: snap_income_payment_of_household
+      arity: 2
+      arguments:
+        - Household
+        - Payment
+
+  - name: snap_irregular_income_quarter_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.9(c)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "but not in excess of $30 in a quarter"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '30'
+
+  - name: snap_non_deferred_loan_repayment_start_limit_days
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.9(c)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: repayment must begin within 60 days after receipt
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '60'
+
+  - name: snap_student_earned_income_age_limit
+    kind: parameter
+    dtype: Integer
+    source: 7 CFR 273.9(c)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: under age 18
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '18'
+
+  - name: snap_charitable_donation_quarter_limit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 7 CFR 273.9(c)(12)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: "not to exceed $300 in a Federal fiscal year quarter"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '300'
+
+  - name: snap_in_kind_benefit_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any gain or benefit which is not in the form of money payable directly to the household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_in_kind_benefit_not_money_payable_directly_to_household
+
+  - name: snap_pa_vendor_medical_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Medical assistance
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_public_assistance_vendor_payment and pa_vendor_payment_is_medical_assistance
+
+  - name: snap_pa_vendor_child_care_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Child care assistance
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_public_assistance_vendor_payment and pa_vendor_payment_is_child_care_assistance
+
+  - name: snap_pa_vendor_energy_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Energy assistance as defined in paragraph (c)(11)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_public_assistance_vendor_payment and snap_energy_assistance_exclusion_amount > 0
+
+  - name: snap_pa_vendor_migrant_emergency_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Emergency assistance (including, but not limited to housing and transportation payments) for migrant or seasonal farmworker households while they are in the job stream
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_public_assistance_vendor_payment
+          and pa_vendor_payment_is_emergency_assistance
+          and recipient_household_is_migrant_or_seasonal_farmworker_in_job_stream
+
+  - name: snap_pa_vendor_housing_authority_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Housing assistance payments made through a State or local housing authority
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_public_assistance_vendor_payment and pa_vendor_payment_is_housing_assistance_through_state_or_local_housing_authority
+
+  - name: snap_pa_vendor_emergency_special_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: the assistance must be provided over and above the normal PA grant or payment, or cannot normally be provided as part of such grant or payment
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_public_assistance_vendor_payment
+          and pa_vendor_payment_is_emergency_or_special_assistance
+          and pa_vendor_payment_is_over_and_above_or_not_normally_part_of_pa_grant
+          and (
+            not pa_vendor_payment_exclusion_is_unclear
+            or fns_regional_office_determined_pa_vendor_payment_excluded
+          )
+
+  - name: snap_pa_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: PA vendor payments are counted as income unless they are made for
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_pa_vendor_medical_assistance_exclusion_applies
+          or snap_pa_vendor_child_care_assistance_exclusion_applies
+          or snap_pa_vendor_energy_assistance_exclusion_applies
+          or snap_pa_vendor_migrant_emergency_assistance_exclusion_applies
+          or snap_pa_vendor_housing_authority_assistance_exclusion_applies
+          or snap_pa_vendor_emergency_special_assistance_exclusion_applies
+
+  - name: snap_ga_nonhousing_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Vendor payments made under a State or local GA program or a comparable basic assistance program are excluded from income except for some vendor payments for housing
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_general_assistance_or_comparable_vendor_payment and not ga_vendor_payment_is_for_housing
+
+  - name: snap_ga_housing_vendor_energy_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Energy assistance (as defined in paragraph (c)(11)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_general_assistance_or_comparable_vendor_payment
+          and ga_vendor_payment_is_for_housing
+          and snap_energy_assistance_exclusion_amount > 0
+
+  - name: snap_ga_housing_vendor_housing_authority_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Housing assistance from a State or local housing authority
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_general_assistance_or_comparable_vendor_payment
+          and ga_vendor_payment_is_for_housing
+          and ga_vendor_payment_is_housing_assistance_from_state_or_local_housing_authority
+
+  - name: snap_ga_housing_vendor_migrant_emergency_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Emergency assistance for migrant or seasonal farmworker households while they are in the job stream
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_general_assistance_or_comparable_vendor_payment
+          and ga_vendor_payment_is_for_housing
+          and ga_vendor_payment_is_emergency_assistance
+          and recipient_household_is_migrant_or_seasonal_farmworker_in_job_stream
+
+  - name: snap_ga_housing_vendor_emergency_special_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Emergency or special payments (as defined in paragraph (c)(1)(i)(F)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_general_assistance_or_comparable_vendor_payment
+          and ga_vendor_payment_is_for_housing
+          and ga_vendor_payment_is_emergency_or_special_assistance
+          and ga_vendor_payment_is_over_and_above_or_not_normally_part_of_ga_grant
+
+  - name: snap_ga_housing_vendor_no_direct_cash_state_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Assistance provided under a program in a State in which no GA payments may be made directly to the household in the form of cash
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_general_assistance_or_comparable_vendor_payment
+          and ga_vendor_payment_is_for_housing
+          and state_ga_program_prohibits_direct_cash_payments_to_household
+
+  - name: snap_ga_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: A housing vendor payment is counted as income unless the payment is for
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_ga_nonhousing_vendor_payment_exclusion_applies
+          or snap_ga_housing_vendor_energy_assistance_exclusion_applies
+          or snap_ga_housing_vendor_housing_authority_exclusion_applies
+          or snap_ga_housing_vendor_migrant_emergency_exclusion_applies
+          or snap_ga_housing_vendor_emergency_special_exclusion_applies
+          or snap_ga_housing_vendor_no_direct_cash_state_exclusion_applies
+
+  - name: snap_hud_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Rent or mortgage payments made to landlords or mortgagees by HUD are excluded
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_hud_rent_or_mortgage_vendor_payment
+
+  - name: snap_educational_assistance_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Educational assistance provided to a third party on behalf of the household for living expenses shall be treated the same as educational assistance payable directly to the household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_educational_assistance_vendor_payment and snap_educational_assistance_exclusion_amount > 0
+
+  - name: snap_reimbursement_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Reimbursements made in the form of vendor payments are excluded on the same basis as reimbursements paid directly to the household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_reimbursement_vendor_payment and snap_reimbursement_exclusion_amount > 0
+
+  - name: snap_demonstration_vendor_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: converted in whole or in part to a direct cash payment under a federally authorized demonstration project or waiver
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_would_normally_be_excluded_in_kind_or_vendor_payment
+          and payment_converted_to_direct_cash
+          and payment_conversion_under_federally_authorized_demonstration_or_waiver
+
+  - name: snap_other_third_party_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(1)(vii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: If a person or organization makes a payment to a third party on behalf of a household using funds that are not owed to the household, the payment shall be excluded
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_made_to_third_party_on_household_behalf and payment_uses_funds_not_owed_or_otherwise_payable_to_household
+
+  - name: snap_noncash_or_vendor_payment_income_exclusion
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments made to a third party on behalf of the household are included or excluded as income as follows
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          max(
+            if (
+              snap_in_kind_benefit_exclusion_applies
+              or snap_pa_vendor_payment_exclusion_applies
+              or snap_ga_vendor_payment_exclusion_applies
+              or snap_hud_vendor_payment_exclusion_applies
+              or snap_demonstration_vendor_payment_exclusion_applies
+              or snap_other_third_party_payment_exclusion_applies
+            ): income_payment_amount else: 0,
+            if snap_educational_assistance_vendor_payment_exclusion_applies:
+              snap_educational_assistance_exclusion_amount
+            else: 0,
+            if snap_reimbursement_vendor_payment_exclusion_applies:
+              snap_reimbursement_exclusion_amount
+            else: 0
+          )
+
+  - name: snap_irregular_income_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any income in the certification period which is received too infrequently or irregularly to be reasonably anticipated, but not in excess of $30 in a quarter
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_received_too_infrequently_or_irregularly_to_be_reasonably_anticipated
+            and irregular_income_amount_in_quarter <= snap_irregular_income_quarter_limit
+          ): income_payment_amount else: 0
+
+  - name: snap_section_1087uu_or_bia_education_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(3)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Received under 20 CFR 1087uu
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_educational_assistance and educational_assistance_received_under_section_1087uu_or_bia_student_assistance_program
+
+  - name: snap_educational_assistance_qualifying_enrollment_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(3)(ii)(B)(1)-(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Awarded to a household member enrolled at a
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          educational_assistance_recipient_enrolled_in_recognized_postsecondary_institution
+          or educational_assistance_recipient_enrolled_in_school_for_handicapped
+          or educational_assistance_recipient_enrolled_in_vocational_education_program
+          or educational_assistance_recipient_enrolled_in_vocational_or_technical_school
+          or educational_assistance_recipient_enrolled_in_secondary_diploma_or_equivalent_program
+
+  - name: snap_educational_assistance_allowable_expense_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(3)(ii)(C)(1)-(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Used for or identified (earmarked) by the institution, school, program, or other grantor for the following allowable expenses
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          educational_assistance_used_or_earmarked_for_tuition
+          or educational_assistance_used_or_earmarked_for_mandatory_fees_equipment_materials_or_supplies
+          or educational_assistance_used_or_earmarked_for_books
+          or educational_assistance_used_or_earmarked_for_supplies
+          or educational_assistance_used_or_earmarked_for_transportation
+          or educational_assistance_used_or_earmarked_for_incidental_nonliving_personal_expenses
+          or educational_assistance_used_or_earmarked_for_dependent_care
+          or educational_assistance_used_or_earmarked_for_loan_origination_fees_or_insurance
+
+  - name: snap_ordinary_educational_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(3)(i)-(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Exclusions based on use pursuant to paragraph (c)(3)(ii)(C) must be incurred or anticipated for the period the educational income is intended to cover
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_educational_assistance
+          and snap_educational_assistance_qualifying_enrollment_applies
+          and snap_educational_assistance_allowable_expense_applies
+          and educational_expense_incurred_or_anticipated_for_assistance_period
+
+  - name: snap_state_medicaid_education_option_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(3)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: At its option, the State agency may exclude any educational assistance that must be excluded under its State Medicaid rules
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_educational_assistance
+          and educational_assistance_not_already_excluded_under_paragraph_c_3_i_through_iv
+          and state_elects_medicaid_aligned_educational_assistance_exclusion
+          and state_plan_specifies_medicaid_aligned_education_option_and_description
+          and educational_assistance_must_be_excluded_under_state_medicaid_rules
+
+  - name: snap_educational_assistance_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: An individual's total educational income exclusions granted under the provisions of paragraph (c)(3)(i) through (c)(3)(iii) of this section cannot exceed that individual's total educational income
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          min(
+            income_payment_amount,
+            max(
+              if snap_section_1087uu_or_bia_education_exclusion_applies:
+                income_payment_amount
+              else: 0,
+              if snap_ordinary_educational_assistance_exclusion_applies:
+                educational_assistance_amount_used_or_earmarked_for_allowable_expenses
+              else: 0,
+              if snap_state_medicaid_education_option_exclusion_applies:
+                educational_assistance_amount_excluded_under_state_medicaid_rules
+              else: 0
+            )
+          )
+
+  - name: snap_loan_income_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(4)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: All loans, including loans from private individuals as well as commercial institutions, other than educational loans on which repayment is deferred
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_loan
+            and (
+              not payment_is_educational_loan
+              or not educational_loan_repayment_is_deferred
+              or loan_repayment_must_begin_days_after_receipt
+                 <= snap_non_deferred_loan_repayment_start_limit_days
+            )
+          ): income_payment_amount else: 0
+
+  - name: snap_job_or_training_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)(i)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: job- or training-related expenses such as travel, per diem, uniforms, and transportation to and from the job or training site
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_job_training_or_migrant_travel_reimbursement and reimbursement_paid_over_and_above_basic_wages
+
+  - name: snap_volunteer_expense_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)(i)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Reimbursements for out-of-pocket expenses of volunteers incurred in the course of their work
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_volunteer_out_of_pocket_expense_reimbursement
+
+  - name: snap_medical_dependent_care_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)(i)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Medical or dependent care reimbursements
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_medical_or_dependent_care_reimbursement
+
+  - name: snap_title_xx_services_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)(i)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Reimbursements received by households to pay for services provided by Title XX of the Social Security Act
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_title_xx_services_reimbursement
+
+  - name: snap_school_clothing_allowance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)(i)(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any allowance a State agency provides no more frequently than annually for children's clothes when the children enter or return to school or daycare
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_state_school_or_daycare_clothing_allowance
+          and school_clothing_allowance_provided_no_more_frequently_than_annually
+          and not state_reduces_monthly_tanf_payment_in_school_clothing_allowance_month
+
+  - name: snap_et_education_component_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)(i)(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: expenses necessary for participation in an education component under the E&T program
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_section_273_7_d_3_et_education_component_expense_reimbursement
+
+  - name: snap_general_reimbursement_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: these payments must be provided specifically for an identified expense, other than normal living expenses, and used for the purpose intended
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_reimbursement
+          and reimbursement_is_for_identified_expense
+          and reimbursement_used_for_intended_purpose
+          and not reimbursement_covers_normal_household_living_expense
+
+  - name: snap_reimbursement_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(5)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Reimbursements for past or future expenses, to the extent they do not exceed actual expenses, and do not represent a gain or benefit to the household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            (
+              payment_is_title_iv_a_benefit_adjustment_for_work_or_child_care_expense
+              and not payment_is_post_1988_title_iv_a_employment_education_training_reimbursement
+            )
+            or payment_is_educational_assistance_for_room_and_board
+          ):
+            0
+          else:
+            max(
+              if snap_school_clothing_allowance_exclusion_applies:
+                income_payment_amount
+              else: 0,
+              if (
+                snap_general_reimbursement_exclusion_applies
+                or snap_job_or_training_reimbursement_exclusion_applies
+                or snap_volunteer_expense_reimbursement_exclusion_applies
+                or snap_medical_dependent_care_reimbursement_exclusion_applies
+                or snap_title_xx_services_reimbursement_exclusion_applies
+                or snap_et_education_component_reimbursement_exclusion_applies
+              ):
+                if reimbursement_provider_or_household_indicates_amount_exceeds_actual_expense:
+                  min(income_payment_amount, actual_identified_nonliving_expense_amount)
+                else:
+                  income_payment_amount
+              else: 0
+            )
+
+  - name: snap_third_party_beneficiary_care_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(6)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Moneys received and used for the care and maintenance of a third-party beneficiary who is not a household member
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_intended_for_care_and_maintenance_of_nonhousehold_beneficiary
+            and payment_used_for_care_and_maintenance_of_nonhousehold_beneficiary
+          ):
+            if nonhousehold_beneficiary_payment_portion_is_identifiable:
+              min(
+                income_payment_amount,
+                identifiable_nonhousehold_beneficiary_payment_amount,
+                amount_actually_used_for_nonhousehold_beneficiary
+              )
+            else:
+              if total_intended_beneficiary_count > 0:
+                min(
+                  income_payment_amount
+                  * nonhousehold_intended_beneficiary_count
+                  / total_intended_beneficiary_count,
+                  amount_actually_used_for_nonhousehold_beneficiary
+                )
+              else: 0
+          else: 0
+
+  - name: snap_student_child_earned_income_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: The earned income of any household member who is under age 18, who is an elementary or secondary school student, and who lives with a natural, adoptive, or stepparent or under the parental control of a household member other than a parent
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_earned_income
+            and income_recipient_age < snap_student_earned_income_age_limit
+            and (
+              income_recipient_attends_elementary_or_secondary_school
+              or income_recipient_attends_district_recognized_ged_classes
+              or income_recipient_attends_district_recognized_or_supervised_home_school
+              or (
+                income_recipient_on_temporary_semester_or_vacation_break
+                and income_recipient_enrollment_will_resume_after_break
+              )
+            )
+            and income_recipient_lives_with_parent_or_under_household_member_parental_control
+          ):
+            if recipient_earnings_differentiable_from_other_household_members:
+              income_payment_amount
+            else:
+              if household_members_sharing_undifferentiated_earnings_count > 0:
+                min(
+                  income_payment_amount,
+                  undifferentiated_household_earnings_amount
+                  / household_members_sharing_undifferentiated_earnings_count
+                )
+              else: 0
+          else: 0
+
+  - name: snap_nonrecurring_lump_sum_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Money received in the form of a nonrecurring lump-sum payment
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_nonrecurring_lump_sum
+            or (
+              payment_is_tanf_diversion_payment
+              and tanf_diversion_payment_is_nonrecurrent_short_term_benefit_not_defined_as_assistance
+              and state_treats_qualifying_tanf_diversion_payment_as_nonrecurring_lump_sum
+            )
+          ): income_payment_amount else: 0
+
+  - name: snap_nonrecurring_lump_sum_counted_as_resource
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: These payments shall be counted as resources in the month received, in accordance with § 273.8(c) unless specifically excluded from consideration as a resource by other Federal laws
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_nonrecurring_lump_sum_exclusion_amount > 0 and not payment_specifically_excluded_as_resource_by_other_federal_law
+
+  - name: snap_self_employment_production_cost_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(9)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: The cost of producing self-employment income
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if payment_is_self_employment_income:
+            min(income_payment_amount, self_employment_production_cost_allocated_to_payment)
+          else: 0
+
+  - name: snap_uniform_relocation_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Reimbursements from the Uniform Relocation Assistance and Real Property Acquisition Policy Act of 1970
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_uniform_relocation_assistance_reimbursement
+
+  - name: snap_alaska_native_claims_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments received under the Alaska Native Claims Settlement Act
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_received_under_alaska_native_claims_settlement_act
+
+  - name: snap_domestic_volunteer_service_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any payment to volunteers under Title II (RSVP, Foster Grandparents and others) of the Domestic Volunteer Services Act of 1973
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_domestic_volunteer_service_act_title_ii_volunteer_payment
+          or (
+            payment_is_domestic_volunteer_service_act_title_i_volunteer_payment
+            and (
+              volunteer_received_snap_or_public_assistance_when_joining_title_i_program
+              or volunteer_had_legacy_title_i_exclusion_at_food_and_nutrition_act_conversion
+            )
+          )
+
+  - name: snap_submarginal_tribal_land_income_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Income derived from certain submarginal land of the United States which is held in trust for certain Indian tribes
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_income_from_qualifying_submarginal_us_land_held_in_trust_for_indian_tribe
+
+  - name: snap_workforce_investment_act_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Allowances, earnings, or payments (including reimbursements) to individuals participating in programs under the Workforce Investment Act of 1998
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_workforce_investment_act_participant_payment and not workforce_payment_included_under_paragraph_b_1_v
+
+  - name: snap_grand_river_band_fund_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Income derived from the disposition of funds to the Grand River Band of Ottawa Indians
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_income_from_grand_river_band_fund_disposition
+
+  - name: snap_pre_1980_earned_income_tax_credit_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(vii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income tax credits received as a result of Pub. L. 95-600, the Revenue Act of 1978 which are received before January 1, 1980
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_revenue_act_1978_eitc_received_before_1980
+
+  - name: snap_yakima_or_mescalero_claims_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(viii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments by the Indian Claims Commission to the Confederated Tribes and Bands of the Yakima Indian Nation or the Apache Tribe of the Mescalero Reservation
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_yakima_or_mescalero_indian_claims_commission_payment
+
+  - name: snap_maine_indian_claims_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(ix)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments to the Passamaquoddy Tribe and the Penobscot Nation or any of their members received pursuant to the Maine Indian Claims Settlement Act of 1980
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_passamaquoddy_or_penobscot_maine_indian_claims_settlement_payment
+
+  - name: snap_navajo_hopi_relocation_payment_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(10)(x)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Payments of relocation assistance to members of the Navajo and Hopi Tribes under Pub. L. 93-531
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_navajo_or_hopi_relocation_assistance
+
+  - name: snap_other_federal_statute_income_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(10)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any income that is specifically excluded by any other Federal statute from consideration as income for the purpose of determining eligibility for SNAP
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            income_specifically_excluded_for_snap_by_other_federal_statute
+            or snap_uniform_relocation_payment_exclusion_applies
+            or snap_alaska_native_claims_payment_exclusion_applies
+            or snap_domestic_volunteer_service_payment_exclusion_applies
+            or snap_submarginal_tribal_land_income_exclusion_applies
+            or snap_workforce_investment_act_payment_exclusion_applies
+            or snap_grand_river_band_fund_payment_exclusion_applies
+            or snap_pre_1980_earned_income_tax_credit_exclusion_applies
+            or snap_yakima_or_mescalero_claims_payment_exclusion_applies
+            or snap_maine_indian_claims_payment_exclusion_applies
+            or snap_navajo_hopi_relocation_payment_exclusion_applies
+          ): income_payment_amount else: 0
+
+  - name: snap_federal_energy_assistance_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(11)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any payments or allowances made for the purpose of providing energy assistance under any Federal law other than part A of Title IV of the Social Security Act
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_energy_assistance_under_federal_law and not payment_is_energy_assistance_under_social_security_act_title_iv_a
+
+  - name: snap_weatherization_or_emergency_energy_repair_exclusion_applies
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(11)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: A one-time payment or allowance applied for on an as-needed basis and made under a Federal or State law for the costs of weatherization or emergency repair or replacement
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_is_one_time_as_needed_assistance_under_federal_or_state_law
+          and (
+            payment_is_for_weatherization
+            or payment_is_for_emergency_repair_or_replacement_of_unsafe_or_inoperative_heating_or_cooling_device
+          )
+
+  - name: snap_energy_assistance_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(11)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Energy assistance as follows
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            snap_federal_energy_assistance_exclusion_applies
+            or snap_weatherization_or_emergency_energy_repair_exclusion_applies
+          ): income_payment_amount else: 0
+
+  - name: snap_charitable_cash_donation_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(12)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Cash donations based on need received on or after February 1, 1988 from one or more private nonprofit charitable organizations, but not to exceed $300 in a Federal fiscal year quarter
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_cash_donation_based_on_need
+            and payment_received_on_or_after_february_1_1988
+            and payment_from_private_nonprofit_charitable_organization
+          ):
+            min(
+              income_payment_amount,
+              max(
+                0,
+                snap_charitable_donation_quarter_limit
+                - charitable_donations_previously_excluded_in_federal_fiscal_quarter
+              )
+            )
+          else: 0
+
+  - name: snap_earned_income_tax_credit_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(13)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Earned income tax credit payments received either as a lump sum or payments under section 3507 of the Internal Revenue Code of 1986
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_earned_income_tax_credit
+            and (
+              payment_received_as_lump_sum
+              or payment_received_as_advance_eitc_in_paycheck_or_tax_reduction
+            )
+          ): income_payment_amount else: 0
+
+  - name: snap_et_participant_payment_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(14)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Any payment made to an E&T participant under § 273.7(d)(3) for costs that are reasonably necessary and directly related to participation in the E&T program
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            (
+              payment_made_to_et_participant_under_section_273_7_d_3
+              and payment_for_cost_reasonably_necessary_and_directly_related_to_et_participation
+              and not payment_for_meals_away_from_home
+            )
+            or value_is_dependent_care_service_provided_or_arranged_under_section_273_7_d_3_i
+          ): income_payment_amount else: 0
+
+  - name: snap_foster_care_boarder_payment_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(15)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Governmental foster care payments received by households with foster care individuals who are considered to be boarders
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_governmental_foster_care_payment
+            and foster_care_individual_is_considered_boarder_under_snap_household_rules
+          ): income_payment_amount else: 0
+
+  - name: snap_pass_income_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(16)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Income of an SSI recipient necessary for the fulfillment of a plan for achieving self-support (PASS) which has been approved
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            income_recipient_receives_ssi
+            and income_is_necessary_for_fulfillment_of_approved_pass
+            and (
+              income_spent_in_accordance_with_approved_pass
+              or income_deposited_in_pass_savings_account_for_future_use
+            )
+          ): min(income_payment_amount, income_amount_necessary_for_approved_pass) else: 0
+
+  - name: snap_outgoing_child_support_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(17)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Legally obligated child support payments paid by a household member to or for a nonhousehold member, including payments made to a third party on behalf of the nonhousehold member (vendor payments) and amounts paid toward child support arrearages
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_legally_obligated_child_support_paid_by_household_member
+            and child_support_paid_to_or_for_nonhousehold_member
+            and not state_elects_child_support_deduction_instead_of_income_exclusion
+          ): income_payment_amount else: 0
+
+  - name: snap_state_complementary_assistance_option_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(18)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: At the State agency's option, any State complementary assistance program payments excluded for the purpose of determining eligibility under section 1931 of the SSA
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            state_elects_complementary_assistance_income_exclusion
+            and state_plan_specifies_complementary_assistance_option_and_payment_description
+            and payment_is_state_complementary_assistance_program_payment
+            and payment_excluded_for_section_1931_medical_assistance_eligibility
+          ): income_payment_amount else: 0
+
+  - name: snap_state_aligned_wage_salary_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Wages or salaries
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_wage_or_salary
+
+  - name: snap_state_aligned_self_employment_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Gross income from a self-employment enterprise
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_gross_self_employment_income
+
+  - name: snap_state_aligned_social_security_act_benefit_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Benefits under Title I, II, IV, X, XIV or XVI of the SSA
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_title_i_ii_iv_x_xiv_or_xvi_social_security_act_benefit
+
+  - name: snap_state_aligned_regular_government_payment_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(iv)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Regular payments from a government source
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_regular_government_source_payment_or_government_funded_intermediary_payment
+
+  - name: snap_state_aligned_workers_compensation_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(v)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Worker's compensation
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_workers_compensation
+
+  - name: snap_state_aligned_incoming_support_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Child support payments, support or alimony payments made to the household from a nonhousehold member
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_incoming_child_support_support_or_alimony_from_nonhousehold_member
+
+  - name: snap_state_aligned_retirement_payment_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(vii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Annuities, pensions, retirement benefits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_annuity_pension_or_retirement_benefit
+
+  - name: snap_state_aligned_disability_survivor_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(viii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Disability benefits or old age or survivor benefits
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_disability_old_age_or_survivor_benefit
+
+  - name: snap_state_aligned_excludable_trust_payment_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(ix)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Monies withdrawn or dividends received by a household from trust funds considered to be excludable resources under § 273.8(e)(8)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: payment_is_withdrawal_or_dividend_from_excludable_trust_resource
+
+  - name: snap_state_aligned_income_exclusion_prohibited
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)(19)(i)-(ix)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: The State agency shall not exclude
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_state_aligned_wage_salary_exclusion_prohibited
+          or snap_state_aligned_self_employment_exclusion_prohibited
+          or snap_state_aligned_social_security_act_benefit_exclusion_prohibited
+          or snap_state_aligned_regular_government_payment_exclusion_prohibited
+          or snap_state_aligned_workers_compensation_exclusion_prohibited
+          or snap_state_aligned_incoming_support_exclusion_prohibited
+          or snap_state_aligned_retirement_payment_exclusion_prohibited
+          or snap_state_aligned_disability_survivor_exclusion_prohibited
+          or snap_state_aligned_excludable_trust_payment_exclusion_prohibited
+
+  - name: snap_state_tanf_medicaid_aligned_option_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(19)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: At the State agency's option, any types of income that the State agency excludes when determining eligibility or benefits for TANF cash assistance
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            state_elects_tanf_or_medicaid_aligned_income_exclusion
+            and state_plan_specifies_aligned_income_option_and_description
+            and payment_type_excluded_for_tanf_cash_or_section_1931_medical_assistance
+            and state_source_program_evaluates_financial_circumstances_of_adults
+            and not state_source_program_grandfathered_under_ssa_section_404_a_2
+            and not snap_state_aligned_income_exclusion_prohibited
+          ):
+            min(
+              income_payment_amount,
+              income_amount_excluded_for_tanf_or_medicaid_purposes
+            )
+          else: 0
+
+  - name: snap_combat_zone_pay_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)(20)(i)-(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Income received by a member of the United States Armed Forces under Chapter 5 of Title 37 of the United States Code
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if (
+            payment_is_us_armed_forces_title_37_chapter_5_income
+            and payment_received_in_addition_to_service_member_basic_pay
+            and payment_received_due_to_deployment_or_service_in_federally_designated_combat_zone
+            and payment_not_received_before_combat_zone_deployment_or_service
+          ): income_payment_amount else: 0
+
+  - name: snap_income_payment_exclusion_amount
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Only the following items shall be excluded from household income and no other income shall be excluded
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          min(
+            income_payment_amount,
+            max(
+              snap_noncash_or_vendor_payment_income_exclusion,
+              snap_irregular_income_exclusion_amount,
+              snap_educational_assistance_exclusion_amount,
+              snap_loan_income_exclusion_amount,
+              snap_reimbursement_exclusion_amount,
+              snap_third_party_beneficiary_care_exclusion_amount,
+              snap_student_child_earned_income_exclusion_amount,
+              snap_nonrecurring_lump_sum_exclusion_amount,
+              snap_self_employment_production_cost_exclusion_amount,
+              snap_other_federal_statute_income_exclusion_amount,
+              snap_energy_assistance_exclusion_amount,
+              snap_charitable_cash_donation_exclusion_amount,
+              snap_earned_income_tax_credit_exclusion_amount,
+              snap_et_participant_payment_exclusion_amount,
+              snap_foster_care_boarder_payment_exclusion_amount,
+              snap_pass_income_exclusion_amount,
+              snap_outgoing_child_support_exclusion_amount,
+              snap_state_complementary_assistance_option_exclusion_amount,
+              snap_state_tanf_medicaid_aligned_option_exclusion_amount,
+              snap_combat_zone_pay_exclusion_amount
+            )
+          )
+
+  - name: snap_income_payment_excluded
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.9(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Only the following items shall be excluded from household income
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_income_payment_exclusion_amount > 0
+
+  - name: household_income_exclusion_composition
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.9(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/9
+              excerpt: Only the following items shall be excluded from household income and no other income shall be excluded
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          sum_where(
+            snap_income_payment_of_household,
+            snap_income_payment_exclusion_amount,
+            snap_income_payment_excluded
+          )
