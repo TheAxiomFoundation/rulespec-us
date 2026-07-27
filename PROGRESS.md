@@ -2,14 +2,23 @@
 
 ## State
 
-- Assessment, standalone program, diagnostic comparison, and final report are
-  complete on branch `closure/eitc-2026`.
+- The launch-eve EITC follow-up is in progress on branch
+  `closure/eitc-2026`.
+- Prior work on this branch completed the assessment, standalone program, and
+  21-case diagnostic comparison (19 exact, two boundary discrepancies).
 - The checkout is clean and based on the locally cached `origin/main` at
-  `f9fb41b99`; DNS prevented refreshing the remote on 2026-07-27.
+  `f9fb41b99`; it is 25 cached-main commits behind and eight commits ahead.
+  DNS again prevented refreshing either remote ref on 2026-07-27. The user
+  explicitly required preserving this branch/worktree, so it will not be
+  rebased or moved.
 - No SNAP program or committed oracle artifact will be modified.
 - The current EITC graph is not honestly certifiable: 34 of its 64 scalar
   frontier inputs are derived or legally preclassified quantities, and no
   reviewed 69-citation-path content ledger exists.
+- This follow-up will classify those 34 items into in-graph, administratively
+  declarable, or must-encode buckets; repair the stale section 32 fixture;
+  adjudicate the two diagnostic boundaries; and prepare case-grid suite
+  registration without generating or committing a comparison report.
 
 ## Done
 
@@ -47,9 +56,23 @@
 - Pushed the committed branch to `origin/closure/eitc-2026`.
 - GitHub's API hostname remained unreachable and no signed-in browser was
   available, so a draft PR could not be opened from this environment.
+- Re-read the closure-sprint preamble, repository instructions, and the
+  PolicyEngine, PolicyEngine-US, and model-development guidance for this
+  follow-up.
+- Confirmed the worktree is clean and already on the required branch.
+- Attempted the required pre-edit fetch; it failed because `github.com` could
+  not be resolved.
 
 ## Next
 
-- Open a draft PR from the pushed branch when GitHub API access is available,
-  then review the assessment and program without treating either as a
-  certificate.
+1. Enumerate and evidence all 34 derived frontier items in
+   `us/tax/eitc/u1-frontier-classification.md`.
+2. Mechanically rename the two stale section 32 fixture fields and run every
+   companion case on the pinned toolchain.
+3. Reproduce the two boundary amounts from section 32 and Rev. Proc. 2025-32,
+   decide table rounding versus an encoding defect, and draft any unfiled
+   upstream issue text.
+4. Mirror the `us-additional-medicare-grid` registration contract and stage
+   the EITC case-grid suite without generating a committed report.
+5. Run scoped and repository checks, write the requested output report,
+   update this ledger, commit each coherent step, and push if DNS permits.
