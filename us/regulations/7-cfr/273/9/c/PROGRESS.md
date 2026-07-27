@@ -2,10 +2,11 @@
 
 ## State
 
-In progress. The authoritative paragraph (c) text and RuleSpec composition
-conventions have been inventoried. The implementation will classify individual
-income payments and sum each excluded payment once, preventing overlap among
-the regulation's alternative exclusion routes.
+In progress. All twenty top-level exclusions and their nested conditions are
+encoded. The exclusion layer now separates ordinary payment rows from the
+education, charitable-donation, self-employment-cost, and outgoing-child-
+support aggregates that require shared pools, quarterly history, or non-income
+accounting items. Companion tests are being rebuilt for the final interfaces.
 
 ## Done
 
@@ -22,13 +23,30 @@ the regulation's alternative exclusion routes.
   (c)(5)(i)(E) is not an optional SNAP treatment.
 - Confirmed the exclusion output must remain independent of the separately
   owned paragraph (b) inclusion layer.
-- Chose payment-level classification plus a household relation aggregate to
-  avoid double-counting payments that qualify under multiple exclusions.
+- Encoded every paragraph (c)(1)-(20) route with paragraph-specific sources and
+  proof atoms.
+- Removed only the assigned paragraph-(c) deferral from the shared parent; the
+  paragraph-(b) deferral remains untouched.
+- Added payment-level maximum composition so overlapping legal routes on one
+  atomic payment are counted once.
+- Added an individual/assistance-period education relation that applies
+  expenses to unearned aid before earned aid and caps exclusions at the
+  individual's educational income.
+- Added a Federal-fiscal-quarter donation-history relation that applies the
+  $300 cap across all current-month donations.
+- Moved outgoing child support to its own relation and moved paragraph-(c)(9)
+  production costs to a household boundary, avoiding false incoming-payment
+  caps.
+- Recorded the unresolved § 273.11(a) production-cost determination as a
+  narrow deferred output instead of recreating another worker's source.
+- Corrected the PASS, VISTA contract, student-break, migrant-travel, State-plan
+  election, dependent-care coordination, partial demonstration, and partial
+  combat-pay branches identified during independent legal review.
 
 ## Next
 
-- Encode every paragraph (c) exclusion with exact citations and proof atoms.
-- Add payment-level and aggregate companion tests that assign every input fact.
-- Remove only the paragraph (c) deferred-output block from the parent module.
-- Run repository validation, update this ledger, commit each coherent step,
-  push the branch, and open the required draft PR.
+- Rebuild payment, education-case, donation-history, child-support, and
+  household companion tests with every input fact assigned.
+- Run pinned runtime/proof validation and repository-wide structural,
+  coverage, reverse-index, and generated-artifact checks.
+- Record exact results, push the branch, and open the required draft PR.
