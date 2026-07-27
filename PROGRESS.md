@@ -10,10 +10,10 @@
 - A fresh fetch was attempted on 2026-07-27 but the sandbox could not resolve
   `github.com`; all work therefore uses the pinned local checkout and corpus.
 - The required census, retained-text audit, and exact PolicyEngine-US 1.767.3
-  report-path trace are complete. None of the three proposed federal rules is
-  missing or causally explains the residuals. The federal encodes are restored
-  unchanged after rejecting a composition-breaking candidate patch; final
-  reporting and verification remain.
+  report-path trace are complete. None of the tested federal formula
+  hypotheses warrants a change or causally explains the residuals. The federal
+  encodes are restored unchanged after rejecting a composition-breaking
+  candidate patch. Final reporting and verification are complete.
 
 ## Done
 
@@ -41,14 +41,15 @@
   eligibility causation.
 - Confirmed that the current federal encodes, including at the reports'
   rulespec commit, already contain the elderly/disabled gross-test exemption
-  and the one-/two-person minimum-benefit floor. The remaining code seam under
-  investigation is the externally supplied medical-deduction entitlement flag.
+  and the one-/two-person minimum-benefit floor. Flagged the externally
+  supplied medical-deduction entitlement input for testing; the later
+  adapter-path counterfactual ruled it out as a class-level eligibility cause.
 - Rechecked the retained 7 CFR Part 273 XML after the toolchain pin advanced
   from `f7fe8471c415908b26cfac1e199e92d1580c8ff3` to
   `bf97b17baebfdf12601f7c23697524bf5adcdaed`; the pinned Part 273 source has
   the same SHA-256 (`92d5f3baba66e0f7f8ba2a2887a2a664166fcc0deb275b1b143a7ca23a4114a6`).
 - Verified the controlling retained text:
-  - `us/regulation/7/273/9`, paragraph (a), requires only the net test for an
+  - `us/regulation/7/273/9/a` requires only the net test for an
     elderly/disabled household and exempts a categorically eligible household
     from both tests.
   - `us/regulation/7/273/9/d/3` allows medical expenses over $35 incurred by an
@@ -117,19 +118,26 @@
   incurred only by a nonqualifying spouse or dependent. The generic Populace
   projector does not map `snap_total_medical_expenses`, so it defaults that
   factual amount to zero outside the legal encode.
-- Classified the federal clearance estimate as zero in every state. A correct
-  out-of-scope categorical-input projection would directly explain the 69
-  categorical-only cases (MA 27, SC 42), offer an alternate path for 15 more,
-  and leave MA `ecps-3128` for a separate projection/gate disposition.
+- Classified the federal clearance estimate as zero in every state. The 69
+  categorical-only cases (MA 27, SC 42) are candidates for an out-of-scope
+  categorical-input projection disposition, 15 more have both paths, and MA
+  `ecps-3128` requires a separate projection/gate disposition. State-law fact
+  validation is still needed before calling the 69 confirmed bridge artifacts.
 - Re-ran the exact required companion command after rollback:
   - `us/regulations/7-cfr/273/9.test.yaml`: 4/4 passed.
   - `us/regulations/7-cfr/273/10.test.yaml`: 5/5 passed.
   - Representative downstream
     `us-ca/policies/cdss/snap/fy-2026-benefit-calculation.test.yaml`: 6/6
     passed.
+- Wrote `WORKER-REPORT.md` with the class census and IDs, retained-law audit,
+  hypothesis findings, exact PolicyEngine adapter trace, zero federal-clearance
+  estimate, rejected-mutation evidence, upstream issue drafts, proposed suite
+  dispositions, and tool-failure disclosure.
 
 ## Next
 
-1. Write and commit `WORKER-REPORT.md`, including a zero federal-clearance
-   estimate, the out-of-scope projection dispositions, exact law paths, and the
-   PolicyEngine issue draft.
+1. Main lane: decide whether to add bridge dispositions for the 69
+   categorical-only cases and separately trace the 15 overlap cases plus MA
+   `ecps-3128`.
+2. Upstream maintainers: consider the PolicyEngine minimum-rounding and
+   axiom-oracles requested-month issue drafts in `WORKER-REPORT.md`.
