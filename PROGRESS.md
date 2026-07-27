@@ -62,17 +62,23 @@
 - Confirmed the worktree is clean and already on the required branch.
 - Attempted the required pre-edit fetch; it failed because `github.com` could
   not be resolved.
+- Repaired both stale section 32 amount cases by mapping the former
+  section 32(c)(2) input names to the live six-input surface, supplying zero
+  net self-employment earnings, removing obsolete SECA-chain facts, and
+  dropping the removed self-employment intermediate assertion. All existing
+  EITC amount expectations are unchanged.
+- Ran all four `us/statutes/26/32.test.yaml` cases with pinned
+  `axiom-encode` 0.2.1200 source and the pinned rules-engine binary at
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0`: four passed, zero failures.
 
 ## Next
 
 1. Enumerate and evidence all 34 derived frontier items in
    `us/tax/eitc/u1-frontier-classification.md`.
-2. Mechanically rename the two stale section 32 fixture fields and run every
-   companion case on the pinned toolchain.
-3. Reproduce the two boundary amounts from section 32 and Rev. Proc. 2025-32,
+2. Reproduce the two boundary amounts from section 32 and Rev. Proc. 2025-32,
    decide table rounding versus an encoding defect, and draft any unfiled
    upstream issue text.
-4. Mirror the `us-additional-medicare-grid` registration contract and stage
+3. Mirror the `us-additional-medicare-grid` registration contract and stage
    the EITC case-grid suite without generating a committed report.
-5. Run scoped and repository checks, write the requested output report,
+4. Run scoped and repository checks, write the requested output report,
    update this ledger, commit each coherent step, and push if DNS permits.
