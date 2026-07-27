@@ -2,10 +2,11 @@
 
 ## State
 
-Closure repair is in progress on `closure/scretd`. The highest-priority defect
-is the missing § 2 household-income gate in the signed § 3 output root. The
-current five-case diagnostic grid is 4/5 because household income of $77,001
-still produces a $7,500 deferral.
+The semantic closure repair is implemented on `closure/scretd` and is awaiting
+authorized applied-file signatures. The repaired § 3 root consumes the § 2
+household-income judgment unconditionally, and the pinned diagnostic suite
+passes all 23 companion cases. The signed manifests still describe the prior
+files until the authorized signing step is completed.
 
 ## Done
 
@@ -33,13 +34,29 @@ still produces a $7,500 deferral.
 - Built the requested eight-section closure universe from exact inventory
   `citation_path` rows using only the closed exclusion taxonomy. The honest
   census remains 0 encoded / 5 excluded / 3 pending.
+- Polled all 730 corpus inventories and 143,811 `.items[]` records by exact
+  `citation_path`. None of the five parallel-ingest definitions has landed.
+- Declared the missing definition chains as typed `deferred_outputs` rather
+  than hand-authoring or guessing them.
+- Imported `household_income_no_greater_than_maximum` into § 3 and made it an
+  unconditional application gate, including when assessment-freeze
+  eligibility substitutes for the age or three-year-residency application
+  items.
+- Expanded the companion suite from 10 to 23 cases. The additions cover the
+  exact five-case grid, income below/at/above $77,000, the $5,000/$7,500 cap
+  version break, the 6%/3% interest break, the 80% equity boundary, age
+  failure, and three-year-residency failure.
+- Passed deterministic YAML parsing, § 2 validation, both proof validations,
+  and all 23 pinned-engine companion cases. The five-case grid moved
+  diagnostically from 4/5 to 5/5; the $77,001 case now returns $0.
 
 ## Next
 
-- Poll corpus inventories by exact `citation_path` for all five outgoing
-  definitions; cite landed records or declare precise `deferred_outputs`.
-- Apply the § 2 income gate through the signed encoder workflow and expand
-  companion coverage to at least 15 cases.
-- Run the focused grid, manifest guards, companion tests, and repository
-  validation; then write and commit the final report.
+- Commit the semantic repair so the authorized signing command can bind the
+  exact applied-file hashes.
+- Produce and commit replacement signed manifests for §§ 2 and 3, then run
+  `guard-generated` and the focused repository suite. If the configured
+  secret store remains locked, report that blocker rather than forge or
+  bypass an attestation.
+- Write and commit the final report.
 - Push and open a draft PR if GitHub becomes reachable.
