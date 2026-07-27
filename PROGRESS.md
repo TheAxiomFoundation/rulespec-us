@@ -2,8 +2,8 @@
 
 ## State
 
-Validating the completed federal joint-resource, exclusion, vehicle, and
-transfer modules before narrowing the parent deferrals.
+Running repository-wide validation for the completed federal joint-resource,
+exclusion, vehicle, and transfer modules.
 
 ## Done
 
@@ -22,14 +22,27 @@ transfer modules before narrowing the parent deferrals.
 - Added paragraph (f)'s fair-market-value and equity tests, vehicle-test
   exemptions, valuation methodology safeguards, and optional TANF-rule
   substitution, with 13 complete companion cases.
-- Passed pinned deterministic validation, proof validation, monetary-proof
-  validation, and companion execution for the paragraph (f) module.
+- Corrected paragraph (e)(8)'s partial trust-income exclusion and paragraph
+  (e)(18)'s alternative relatively-great-selling-cost branch; added the
+  explicit documentation, verification, and State-standard duties.
+- Added a household relation check for paragraph (f)(2)(ii)'s one-vehicle-per-
+  adult cap and narrow deferrals for per-vehicle selection and TANF
+  highest-value ranking that current RuleSpec cannot derive.
+- Added paragraph (h)(1)'s application inquiry and paragraph (h)(3)'s denial,
+  adverse-action, content, and first-allotment notice outputs.
+- Replaced the four now-satisfied paragraph (d), (e), (f), and (h) deferrals
+  in the top-level section module with narrower household-composition and
+  dated-timeline deferrals.
+- Passed pinned deterministic validation, proof validation, and companion
+  execution for all four new modules: 7 paragraph (d), 38 paragraph (e), 17
+  paragraph (f), and 10 paragraph (h) cases.
 
 ## Next
 
-- Complete pinned validation for paragraphs (d) and (h).
-- Remove the four satisfied top-level deferred-output entries.
-- Run repository validation, push the branch, and open the required draft PR.
+- Regenerate and check the provision-to-rule reverse index.
+- Run monetary-proof and repository-wide test suites.
+- Generate signed encoding manifests if a signing key becomes available.
+- Push the branch and open the required draft PR.
 
 ## Concerns
 
@@ -40,3 +53,10 @@ transfer modules before narrowing the parent deferrals.
 - Paragraph (h)(3) does not state the replacement disqualification start date
   when a participant requests a fair hearing and continued benefits; the new
   paragraph (h) module narrows this to an explicit deferred output.
+- Paragraph (f) does not specify which vehicles receive the one-per-adult
+  exemption, and current RuleSpec cannot rank related vehicles for paragraph
+  (f)(4)(iv)'s highest-value TANF allocation; both unresolved collection-level
+  outputs are explicitly deferred.
+- Signed encoding manifests require `AXIOM_ENCODE_APPLY_SIGNING_KEY`, which is
+  not present in this environment. The manual-exception issue reference does
+  not bypass signature generation.

@@ -4,6 +4,32 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us/regulation/7/273/8
+  deferred_outputs:
+    - output: us:regulations/7-cfr/273/8/f#vehicle_selected_within_one_licensed_vehicle_per_adult_allocation
+      blocked_by:
+        - us:regulations/7-cfr/273/8/f#household_vehicle_adult_assignment_context
+      reason: >-
+        Paragraph (f)(2)(ii) allows one licensed vehicle per adult counted
+        person but does not specify which vehicles are selected when there are
+        more vehicles than adults. This module validates the household cap and
+        consumes the resolved per-vehicle selection.
+    - output: us:regulations/7-cfr/273/8/f#vehicle_excluded_under_substituted_tanf_rules_after_highest_value_allocation
+      blocked_by:
+        - us:regulations/7-cfr/273/8/f#household_vehicle_value_ranking_context
+      reason: >-
+        Paragraph (f)(4)(iv) requires TANF vehicle exclusions to be assigned to
+        the highest-valued vehicles. Current RuleSpec related-entity operations
+        can count and sum vehicles but cannot rank them, so this module consumes
+        the resolved post-ranking exclusion result.
+    - output: us:regulations/7-cfr/273/8/f#corrected_vehicle_resource_value_after_paragraph_f_3_procedure_violation
+      blocked_by:
+        - us:regulations/7-cfr/273/15#vehicle_value_fair_hearing_remedy_context
+      reason: >-
+        Paragraph (f)(3) requires a compliant State valuation methodology and
+        an opportunity to obtain reliable verification, but it does not state
+        the replacement value or remedy when either procedural duty is
+        violated. This module exposes compliance separately from the computed
+        value.
   summary: |-
     7 CFR 273.8(f) values vehicles not excluded under paragraph (e). For each
     nonexcluded licensed vehicle, the fair-market-value test counts the amount
@@ -14,10 +40,31 @@ module:
     activity. When both tests produce countable amounts, only the greater
     amount counts. A qualifying statewide TANF vehicle-rule substitution may
     produce a lower per-vehicle attribution while preserving either regime's
-    exclusions.
+    exclusions. The module validates the one-per-adult household cap; it
+    consumes resolved per-vehicle adult selections and TANF highest-value
+    allocations because the federal text supplies no adult-selection rule and
+    current RuleSpec cannot rank related vehicles.
 imports:
   - us:regulations/7-cfr/273/8/e
 rules:
+  - name: vehicle_of_household
+    kind: data_relation
+    data_relation:
+      predicate: vehicle_of_household
+      arity: 2
+      arguments:
+        - Asset
+        - Household
+
+  - name: member_of_household
+    kind: data_relation
+    data_relation:
+      predicate: member_of_household
+      arity: 2
+      arguments:
+        - Person
+        - Household
+
   - name: licensed_vehicle_fair_market_value_threshold
     kind: parameter
     dtype: Money
@@ -48,11 +95,17 @@ rules:
             kind: condition
             source:
               corpus_citation_path: us/regulation/7/273/8
+              excerpt: State agencies will be responsible for establishing methodologies for determining the fair market value of vehicles
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
               excerpt: must not increase the basic value of a vehicle by adding the value of low mileage or other factors such as optional equipment or special apparatus for the handicapped
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          not state_agency_increased_basic_value_for_low_mileage
+          state_agency_established_vehicle_fair_market_value_methodology
+          and not state_agency_increased_basic_value_for_low_mileage
           and not state_agency_increased_basic_value_for_optional_equipment
           and not state_agency_increased_basic_value_for_disability_apparatus
 
@@ -75,6 +128,33 @@ rules:
         formula: |-
           not household_claims_state_vehicle_value_inaccurate
           or household_was_given_opportunity_to_verify_vehicle_value
+
+  - name: vehicle_resource_valuation_procedure_complies
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(3)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/f#vehicle_fair_market_value_methodology_complies
+              output: vehicle_fair_market_value_methodology_complies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/8/f#vehicle_value_verification_opportunity_requirement_satisfied
+              output: vehicle_value_verification_opportunity_requirement_satisfied
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          vehicle_fair_market_value_methodology_complies
+          and vehicle_value_verification_opportunity_requirement_satisfied
 
   - name: vehicle_fair_market_value_for_resource_test
     kind: derived
@@ -126,7 +206,7 @@ rules:
             import:
               target: us:regulations/7-cfr/273/8/e#vehicle_excluded_under_paragraph_e_3
               output: vehicle_excluded_under_paragraph_e_3
-              hash: sha256:8fb30e6f83cf809aef16aafec0ad03ce074c15252e7d144935e6006468148e45
+              hash: sha256:c9ee3f335d645ac4ee085fb1ced838487b424d1d9057f9ce3a9a9e4905337db8
           - path: versions[0].formula
             kind: import
             import:
@@ -177,15 +257,12 @@ rules:
             import:
               target: us:regulations/7-cfr/273/8/e#vehicle_excluded_under_paragraph_e_3
               output: vehicle_excluded_under_paragraph_e_3
-              hash: sha256:8fb30e6f83cf809aef16aafec0ad03ce074c15252e7d144935e6006468148e45
+              hash: sha256:c9ee3f335d645ac4ee085fb1ced838487b424d1d9057f9ce3a9a9e4905337db8
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           vehicle_excluded_under_paragraph_e_3
-          or (
-            vehicle_is_licensed
-            and vehicle_selected_as_one_equity_exempt_vehicle_for_adult_counted_person
-          )
+          or vehicle_selected_for_adult_equity_exemption
           or (
             vehicle_driven_by_counted_person_under_age_18
             and (
@@ -197,6 +274,69 @@ rules:
                 and vehicle_customarily_used_to_commute_to_employment
               )
             )
+          )
+
+  - name: vehicle_selected_for_adult_equity_exemption
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: One licensed vehicle per adult household member
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          vehicle_is_licensed
+          and vehicle_selected_within_one_licensed_vehicle_per_adult_allocation
+
+  - name: person_is_adult_counted_for_vehicle_equity_exemption
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: adult household member (or an ineligible alien or disqualified household member whose resources are being considered available to household)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: person_is_adult_household_member_or_counted_ineligible_or_disqualified_person
+
+  - name: adult_vehicle_equity_exemption_allocation_within_household_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(f)(2)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: One licensed vehicle per adult household member
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          count_where(
+            vehicle_of_household,
+            vehicle_selected_for_adult_equity_exemption
+          ) <= count_where(
+            member_of_household,
+            person_is_adult_counted_for_vehicle_equity_exemption
           )
 
   - name: vehicle_equity_value
@@ -279,7 +419,7 @@ rules:
             import:
               target: us:regulations/7-cfr/273/8/e#resource_full_exclusion_applies
               output: resource_full_exclusion_applies
-              hash: sha256:8fb30e6f83cf809aef16aafec0ad03ce074c15252e7d144935e6006468148e45
+              hash: sha256:c9ee3f335d645ac4ee085fb1ced838487b424d1d9057f9ce3a9a9e4905337db8
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -313,6 +453,11 @@ rules:
             kind: condition
             source:
               corpus_citation_path: us/regulation/7/273/8
+              excerpt: where doing so results in a lower attribution of resources to the household
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
               excerpt: Apply any vehicle exclusions allowed by their TANF vehicle rules to the vehicles with the highest values
     versions:
       - effective_from: '2025-10-01'
@@ -321,7 +466,8 @@ rules:
           and substituted_program_uses_tanf_or_maintenance_of_effort_funds
           and substituted_program_benefits_meet_tanf_assistance_definition
           and substituted_tanf_vehicle_rules_apply_to_all_snap_households
-          and state_applies_tanf_vehicle_exclusions_to_highest_value_vehicles
+          and substituted_tanf_vehicle_rules_result_in_lower_attribution_to_household
+          and state_tanf_vehicle_exclusion_allocation_uses_highest_values
 
   - name: non_excluded_vehicle_resource_value
     kind: derived
@@ -351,7 +497,7 @@ rules:
           elif state_tanf_vehicle_substitution_validly_selected:
             if (
               selected_tanf_rules_exclude_all_vehicles_or_have_no_resource_provisions
-              or vehicle_excluded_under_substituted_tanf_rules
+              or vehicle_excluded_under_substituted_tanf_rules_after_highest_value_allocation
             ):
               0
             else:

@@ -12,8 +12,11 @@ module:
     qualifying trusts; certain government, tax-credit, and energy-assistance
     payments; resources of SSI or public-assistance recipients; and a bounded
     State option for TANF or section 1931 exclusions. Most qualifying resources
-    are excluded in full. Paragraph (e)(16) excludes only the portion of
-    property directly related to maintaining or using a qualifying vehicle.
+    are excluded in full. Trust income is excluded only to the extent
+    unavailable, and paragraph (e)(16) excludes only the portion of property
+    directly related to maintaining or using a qualifying vehicle. The module
+    also exposes the federal procedural safeguards for fuel-or-water vehicles,
+    property-sale verification, and unsellable-resource standards.
 rules:
   - name: farm_self_employment_resource_exclusion_months
     kind: parameter
@@ -299,6 +302,82 @@ rules:
             )
           )
 
+  - name: fuel_or_water_vehicle_exclusion_documentation_may_be_required
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(3)(i)(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: If the basis for exclusion of the vehicle is questionable, the State agency may require documentation
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          resource_is_vehicle
+          and (
+            vehicle_is_licensed
+            or (
+              vehicle_driven_by_tribal_member_on_reservation
+              and reservation_does_not_require_tribal_vehicle_license
+            )
+          )
+          and vehicle_necessary_to_carry_heating_fuel_or_water_for_home_use
+          and transported_fuel_or_water_is_anticipated_primary_household_source
+          and fuel_or_water_vehicle_exclusion_basis_questionable
+
+  - name: fuel_or_water_vehicle_exclusion_procedure_complies
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(3)(i)(F)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: must receive this resource exclusion without having to meet any additional tests
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: must not be required to furnish documentation
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: unless the exclusion of the vehicle is questionable
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not (
+            resource_is_vehicle
+            and (
+              vehicle_is_licensed
+              or (
+                vehicle_driven_by_tribal_member_on_reservation
+                and reservation_does_not_require_tribal_vehicle_license
+              )
+            )
+            and vehicle_necessary_to_carry_heating_fuel_or_water_for_home_use
+            and transported_fuel_or_water_is_anticipated_primary_household_source
+          )
+          or (
+            not state_agency_imposed_additional_tests_for_fuel_or_water_vehicle_exclusion
+            and (
+              not state_agency_required_documentation_for_fuel_or_water_vehicle_exclusion
+              or fuel_or_water_vehicle_exclusion_basis_questionable
+            )
+          )
+
   - name: resource_excluded_under_paragraph_e_4
     kind: derived
     entity: Asset
@@ -409,6 +488,11 @@ rules:
             kind: condition
             source:
               corpus_citation_path: us/regulation/7/273/8
+              excerpt: Any funds in a trust or transferred to a trust, and the income produced by that trust to the extent it is not available to the household
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
               excerpt: The trust arrangement is not likely to cease during the certification period and no household member has the power to revoke
           - path: versions[0].formula
             kind: condition
@@ -419,7 +503,7 @@ rules:
             kind: condition
             source:
               corpus_citation_path: us/regulation/7/273/8
-              excerpt: Trust investments made on behalf of the trust do not directly involve or assist any business or corporation under the control
+              excerpt: Trust investments made on behalf of the trust do not directly involve or assist any business or corporation under the control, direction, or influence
           - path: versions[0].formula
             kind: condition
             source:
@@ -433,14 +517,18 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          resource_is_trust
+          (
+            resource_is_trust
+            or resource_is_funds_in_or_transferred_to_trust
+            or resource_is_income_produced_by_trust
+          )
           and trust_arrangement_not_likely_to_cease_during_certification_period
           and no_household_member_can_revoke_trust_or_change_beneficiary
           and (
             trustee_is_court_or_independent_institution_corporation_or_organization
             or trustee_is_court_appointed_individual_with_court_imposed_use_limitations
           )
-          and trust_investments_do_not_assist_household_controlled_business
+          and trust_investments_do_not_assist_business_under_household_control_direction_or_influence
           and (
             (
               trust_established_from_household_funds
@@ -468,14 +556,90 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/8
               excerpt: irrevocable trust funds, security deposits on rental property or utilities, property in probate, and real property which the household is making a good faith effort to sell at a reasonable price
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: and which has not been sold
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           resource_cash_value_otherwise_inaccessible_to_household
           or resource_is_security_deposit_on_rental_property_or_utilities
           or resource_is_property_in_probate
-          or real_property_subject_to_good_faith_sale_effort_at_reasonable_price
-          or qualifying_trust_resource_inaccessible
+          or (
+            real_property_subject_to_good_faith_sale_effort_at_reasonable_price
+            and real_property_has_not_been_sold
+          )
+          or (
+            qualifying_trust_resource_inaccessible
+            and (
+              not resource_is_income_produced_by_trust
+              or trust_income_unavailable_amount >= resource_value
+            )
+          )
+
+  - name: trust_income_partially_excluded_under_paragraph_e_8
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: income produced by that trust to the extent it is not available to the household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          qualifying_trust_resource_inaccessible
+          and resource_is_income_produced_by_trust
+          and trust_income_unavailable_amount > 0
+          and trust_income_unavailable_amount < resource_value
+
+  - name: real_property_sale_exclusion_verification_may_be_requested
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: The State agency may verify that the property is for sale and that the household has not declined a reasonable offer
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          real_property_subject_to_good_faith_sale_effort_at_reasonable_price
+          and real_property_has_not_been_sold
+
+  - name: real_property_sale_exclusion_verification_method_complies
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(8)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Verification may be obtained through a collateral contact or documentation
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not state_agency_verified_real_property_sale_exclusion
+          or state_agency_used_collateral_contact_or_permitted_documentation_for_property_sale_verification
 
   - name: resource_excluded_under_paragraph_e_9
     kind: derived
@@ -546,7 +710,7 @@ rules:
             kind: condition
             source:
               corpus_citation_path: us/regulation/7/273/8
-              excerpt: A Federal earned income tax credit received either as a lump sum or as payments under section 3507 of the Internal Revenue Code for the month of receipt and the following month
+              excerpt: for the month of receipt and the following month for the individual and that individual's spouse
           - path: versions[0].formula
             kind: condition
             source:
@@ -568,6 +732,7 @@ rules:
         formula: |-
           (
             resource_is_federal_earned_income_tax_credit
+            and federal_eitc_resource_belongs_to_recipient_or_recipient_spouse
             and eitc_month_number_since_receipt_including_receipt_month <= 2
           )
           or (
@@ -693,6 +858,11 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/8
               excerpt: Individuals entitled to Medicaid benefits only are not considered recipients of SSI or PA
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: State agency must determine whether the individual or the household benefits from the assistance provided
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -703,8 +873,82 @@ rules:
             or resource_owner_ssi_or_pa_authorized_but_not_received
             or resource_owner_ssi_or_pa_suspended_or_recouped
             or resource_owner_ssi_or_pa_not_paid_because_below_minimum
-            or resource_owner_receives_qualifying_non_cash_or_in_kind_public_assistance
+            or (
+              resource_owner_receives_non_cash_or_in_kind_services_from_specified_public_assistance_program
+              and state_agency_determined_non_cash_or_in_kind_assistance_benefits_individual_or_household
+            )
           )
+
+  - name: non_cash_public_assistance_benefit_determination_required
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(17)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: State agency must determine whether the individual or the household benefits from the assistance provided
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          resource_owned_by_household_member
+          and resource_owner_receives_non_cash_or_in_kind_services_from_specified_public_assistance_program
+
+  - name: non_cash_public_assistance_benefit_determination_requirement_satisfied
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(17)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: State agency must determine whether the individual or the household benefits from the assistance provided
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not non_cash_public_assistance_benefit_determination_required
+          or state_agency_made_required_non_cash_assistance_benefit_determination
+
+  - name: state_agency_paragraph_e_18_standards_comply
+    kind: derived
+    entity: StateAgency
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(18)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: must develop clear and uniform standards for identifying kinds of resources
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: after estimating costs of sale or disposition, and taking into account the ownership interest of the household
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: Any significant amount of funds” means funds amounting to more than $1,500
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          state_agency_developed_clear_and_uniform_unsellable_resource_standards
+          and state_agency_significant_return_standard_uses_required_definition
+          and state_agency_any_significant_funds_standard_uses_required_definition
 
   - name: resource_excluded_under_paragraph_e_18
     kind: derived
@@ -741,9 +985,49 @@ rules:
         formula: |-
           not resource_is_vehicle
           and not resource_is_stock_bond_or_negotiable_financial_instrument
-          and resource_unable_to_sell_for_significant_return_because_interest_slight_or_costs_great
-          and estimated_return_after_sale_costs_and_household_ownership_interest
-              <= resource_significant_return_threshold
+          and (
+            estimated_return_after_sale_costs_and_household_ownership_interest
+                <= resource_significant_return_threshold
+            or resource_cost_of_selling_household_interest_relatively_great
+          )
+
+  - name: paragraph_e_18_resource_value_verification_may_be_required
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(18)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: may require verification of the value of a resource to be excluded if the information provided by the household is questionable
+    versions:
+      - effective_from: '2025-10-01'
+        formula: household_resource_value_information_is_questionable
+
+  - name: paragraph_e_19_resource_is_readily_available
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.8(e)(19)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: The term “readily available” applies to resources that the owner can simply withdraw from a financial institution
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          resource_is_financial_account_or_instrument_subject_to_paragraph_e_19
+          and resource_owner_can_simply_withdraw_from_financial_institution
 
   - name: state_paragraph_e_19_resource_option_validly_selected
     kind: derived
@@ -811,7 +1095,7 @@ rules:
             resource_is_individual_development_account_deposit
             or (
               not resource_is_cash_on_hand
-              and not resource_is_readily_available_financial_account_or_instrument
+              and not paragraph_e_19_resource_is_readily_available
               and (
                 not resource_is_licensed_vehicle
                 or licensed_vehicle_excluded_under_food_and_nutrition_act_section_5_g_2_c_or_d
@@ -905,6 +1189,7 @@ rules:
       - effective_from: '2025-10-01'
         formula: |-
           resource_full_exclusion_applies
+          or trust_income_partially_excluded_under_paragraph_e_8
           or resource_excluded_under_paragraph_e_16
 
   - name: excluded_resource_amount
@@ -927,10 +1212,23 @@ rules:
             source:
               corpus_citation_path: us/regulation/7/273/8
               excerpt: Only that portion of real property determined necessary for maintenance or use is excludable
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/8
+              excerpt: income produced by that trust to the extent it is not available to the household
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          if resource_full_exclusion_applies:
+          if (
+            qualifying_trust_resource_inaccessible
+            and resource_is_income_produced_by_trust
+          ):
+            min(
+              max(0, resource_value),
+              max(0, trust_income_unavailable_amount)
+            )
+          elif resource_full_exclusion_applies:
             max(0, resource_value)
           elif resource_excluded_under_paragraph_e_16:
             min(
