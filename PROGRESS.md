@@ -3,8 +3,8 @@
 ## State
 
 Paragraphs (a), (c), and (d) are implemented in isolated child modules, their
-umbrella deferrals are removed from the parent, and all pinned module checks
-pass. Running repository-level provenance and regression gates next.
+umbrella deferrals are removed from the parent, and the complete pinned
+RuleSpec suite passes. Running repository and protected-artifact gates next.
 
 ## Done
 
@@ -64,6 +64,10 @@ pass. Running repository-level provenance and regression gates next.
 - Regenerated and checked the reverse citation index; the paragraph (a), (c),
   and (d) modules now appear as module- and proof-level dependents of the
   section 273.10 corpus provision.
+- Ran the pinned encoder against the parent and all three child modules:
+  validation passed; proof validation passed for 134 atoms; the money-proof
+  gate found zero missing atoms; all modules compiled as of 2026-07-09 (52,
+  62, 33, and 25 rules respectively); and all 122 companion cases passed.
 - Identified narrow, judgment-heavy matters that must remain deferred: fiscal
   accounting-period construction and recertification workflow; State income
   averaging methods; and cross-referenced medical/SSI/child-support case
@@ -71,6 +75,6 @@ pass. Running repository-level provenance and regression gates next.
 
 ## Next
 
-- Run repository-level provenance, regression, and protected-artifact gates.
+- Run repository-level regression and protected-artifact gates.
 - Update this log with final gate results, push the branch, and open the required
   draft PR.
