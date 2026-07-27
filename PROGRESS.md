@@ -77,12 +77,19 @@
 - Verified that cached PolicyEngine-US `upstream/main@61cc1e633` still uses
   `min_(maximum, earnings * phase_in_rate)`, drafted a no-tolerance-widening
   comparison disposition and upstream issue, and did not file it.
+- Classified all 34 derived frontier leaves with one row each: zero are
+  already computed in the final graph, 13 are exact IRS/SSA/military
+  administrative boundary facts, and 21 require encoding. Exact form fields,
+  operative corpus citation paths, and honest effort estimates are recorded
+  in `us/tax/eitc/u1-frontier-classification.md`.
+- Cross-checked all 34 rows against the 28 reached derived rules and against
+  semantic near-matches in sections 22, 61, 62, 1402, 1411, 151, and 7703.
+  None qualifies as an imported producer. In particular, the Person age rule
+  remains disconnected from the TaxUnit age conclusion.
 
 ## Next
 
-1. Enumerate and evidence all 34 derived frontier items in
-   `us/tax/eitc/u1-frontier-classification.md`.
-2. Mirror the `us-additional-medicare-grid` registration contract and stage
+1. Mirror the `us-additional-medicare-grid` registration contract and stage
    the EITC case-grid suite without generating a committed report.
-3. Run scoped and repository checks, write the requested output report,
+2. Run scoped and repository checks, write the requested output report,
    update this ledger, commit each coherent step, and push if DNS permits.
