@@ -58,6 +58,8 @@ The certified program composition remains frozen and out of scope.
 - `git push -u origin closure/enc-co-stubs` cannot resolve `github.com`, and
   the connected GitHub app cancelled branch-write attempts, so no draft PR was
   falsely reported as created.
+- The required closure-sprint output path is outside the sandbox's writable
+  roots; the complete report is preserved in tracked `FINAL_REPORT.md`.
 
 ## Next
 
