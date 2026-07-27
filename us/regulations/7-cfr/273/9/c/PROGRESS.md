@@ -67,6 +67,9 @@ pools, quarterly history, or non-income accounting items.
   pass with all 198 factual inputs explicitly assigned per applicable case.
 - Regenerated the repository reverse index; it now records the paragraph-(c)
   module's authoritative corpus and proof-atom dependency and passes `--check`.
+- Replaced the removed parent deferral with a non-executable paragraph-(c)
+  delegation to this child module; parent and child now pass pinned validation
+  together while paragraph (b)'s deferral remains unchanged.
 
 ## Next
 
