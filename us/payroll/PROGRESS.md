@@ -2,12 +2,13 @@
 
 ## State
 
-Assessment, the narrow supported-domain program slice, the golden case, and
-the mapping-only oracle entries are complete. Independent reviews found no
-arithmetic or forbidden-scope defect; their reporting and comparability
-findings have been resolved. This remains a build toward a certificate, not a
-certificate claim: corpus-pin drift and computed conformance, exercise,
-closure, and execution evidence remain unresolved.
+All authorized local work is complete: assessment, narrow supported-domain
+program, golden case, mapping-only oracle entries, pinned validation,
+independent review, and final report. This remains a build toward a
+certificate, not a certificate claim: corpus-pin drift and computed
+conformance, exercise, closure, and execution evidence remain unresolved.
+External delivery is blocked by the sandbox, and GitHub publication is blocked
+by DNS.
 
 ## Done
 
@@ -52,12 +53,20 @@ closure, and execution evidence remain unresolved.
 - Confirmed the composed artifact retains the legacy uncapped statute output
   internally; downstream evidence must bind the three exact program output
   IDs rather than treating every derived artifact rule as public.
+- Completed two independent reviews and follow-up verification; both are clean
+  after the assessment-count and mapping-contract corrections.
+- Attempted to copy the assessment to
+  `_closure-sprint/out/h1-payroll-assessment.md`; the sandbox returned
+  `Operation not permitted`.
+- Attempted to fetch and push both repository branches; both failed because
+  `github.com` could not be resolved, so no draft PR could be opened.
+- Wrote `h1-payroll-final-report.md` as the durable in-repository handoff.
 
 ## Next
 
-1. Commit the final report, attempt delivery to the closure-sprint output file,
-   and record the sandbox result.
-2. Push both branches and open one draft PR per repository if network access
-   permits.
-3. Defer bridge discovery/execution support, comparison evidence, the
+1. Copy the committed assessment and final report into the closure-sprint
+   output directory from a process with write access.
+2. Push `closure/payroll-3101` and `payroll/employee-fica-mappings`, then open
+   one draft PR per repository when GitHub DNS access returns.
+3. Address deferred bridge discovery/execution support, comparison evidence, the
    143-path closure ledger, and public executable evidence to post-freeze work.
