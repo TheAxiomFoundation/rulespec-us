@@ -36,24 +36,32 @@
   `count_where`, and filtered derived relations; it has no maximum
   aggregator, so strict maxima will be encoded as the absence of an equal-
   or-higher competing row.
-- Identified downstream integration work: replace the six former conclusion
-  inputs in both companions, refresh section 32's five import proof hashes,
-  refresh authoritative manifests, and regenerate the provision index.
+- Identified downstream integration work: replace the former conclusion
+  inputs in both companions, preserve section 32's statutory disregard of
+  the section 152(c)(1)(D) support test, refresh import proof hashes and
+  authoritative manifests, and regenerate the provision index.
 - Encoded all six assigned outputs in `us/statutes/26/152/c.yaml`.
 - Added a complete other-taxpayer relation with row-local qualifying-child,
   parent, actual-claim, and copied-AGI facts. Strict maxima are implemented by
   rejecting any equal-or-higher competing row.
 - Added a private support-omitted claimant surface so section 32 can apply its
   paragraph-(1)(D) disregard without changing generic section 152 results.
-- Added 16 companion cases covering the assigned statutory boundaries plus
-  fail-closed relation completeness and existing section 152(c) behavior.
-- Confirmed the section 152(c) companion passes all 16 cases in the pinned
+- Added 20 companion cases covering the assigned statutory boundaries,
+  disabled-child and strict-age edges, eligible nonclaimants, ineligible
+  claimants and parents, AGI ties, fail-closed relation completeness, and
+  existing section 152(c) behavior.
+- Confirmed the section 152(c) companion passes all 20 cases in the pinned
   runtime; module validation and proof validation pass.
+- Integrated the tiebreaker into section 32 through private, support-omitted
+  eligibility rules, matching section 32(c)(3)(A)'s express disregard of
+  section 152(c)(1)(D).
+- Repaired section 32's stale earned-income companion inputs, replaced the
+  former direct tiebreaker conclusions with statutory inputs, and added a
+  support-disregard integration case. All five section 32 cases pass in the
+  pinned runtime; module validation and proof validation pass.
 
 ## Next
 
-- Add the section 32 support-disregarded tiebreaker composition and repair its
-  companion inputs.
-- Refresh proof hashes, manifests, and the provision index.
-- Run focused and repository validation, update this file, commit each
+- Refresh authoritative manifests and the provision index.
+- Run focused and repository-wide validation, update this file, commit each
   coherent step, push, and open the draft PR.
