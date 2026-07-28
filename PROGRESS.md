@@ -93,11 +93,13 @@
   MCE atoms and 9 composition atoms with zero issues.
 - Re-composed and compiled the California FY 2026 SNAP program after the
   member-scope correction; the exact pinned engine emits 328 derived outputs.
+- Regenerated the reverse provision index: 4,250 provisions, 5,092 edges, and
+  4,487 modules. The follow-up `--check` passes; the diff contains only the
+  expected retained BBCE authority links to the two changed California modules.
 
 ## Next
 
-- Run reverse-index regeneration and changed-file
-  oracle-pending/mapping audits.
+- Run changed-file oracle-pending/mapping audits.
 - Verify the final diff against the available `origin/main`, rewrite the
   intentionally untracked worker report with the six oracle walkthroughs, and
   record the final committed head.
