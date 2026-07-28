@@ -2,8 +2,9 @@
 
 ## State
 
-Defensive correctness and completeness audit in progress. The new pinned
-source gate and pre-extraction behavior baseline are green.
+Defensive correctness and completeness audit in progress. The §63(c)(6)
+extraction is implemented and behaviorally green; final §67(h), repository,
+index, and oracle-chain checks remain.
 
 - Branch: `fed-parity/atomic-63c6-67h`
 - Required base: local `origin/main` at `c13cdf7dd`, including merged PR #1173
@@ -28,14 +29,23 @@ source gate and pre-extraction behavior baseline are green.
   new pin.
 - Ran the exact pinned encoder/engine companion pair before extraction:
   `63/c.test.yaml` passed 1 file / 6 cases / 0 failures.
+- Added the exact-source `63/c/6.yaml` module and a five-case companion
+  covering the eligible baseline and all four statutory disqualifier classes.
+- Removed the local §63(c)(6) rule from `63/c.yaml`, imported the new output,
+  and rewired only the extracted inputs/output in the six legacy fixtures.
+- Proved behavior preservation: the same six named legacy cases pass 6/6
+  before and 6/6 after extraction; the focused companion passes 5/5.
+- Proved focused mutation sensitivity: disabling the nonresident-alien branch
+  makes exactly that case fail (`holds` expected, `not_holds` actual);
+  restoration passes all 11 combined cases.
+- Ran pinned `validate --skip-reviewers` at the exact new corpus pin on both
+  changed §63 modules: both passed with zero errors.
 
 ## Next
 
-1. Extract §63(c)(6), add its focused companion, and prove behavior
-   preservation.
-2. Re-verify §67(h), all pinned gates, mutation evidence, reverse index, and
+1. Re-verify §67(h), all pinned gates, mutation evidence, reverse index, and
    focused repository tests.
-3. Audit both new legal IDs through the four-repository oracle chain and
+2. Audit both new legal IDs through the four-repository oracle chain and
    verify any PolicyEngine-US 1.767.3 candidate names.
-4. Enforce the final changed-file boundary and write the untracked final
+3. Enforce the final changed-file boundary and write the untracked final
    `WORKER-REPORT.md`.
