@@ -1,0 +1,115 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-mi/statute/206.51/1
+      - us-mi/statute/206.30/2
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-mi/statute/206.51/1
+        - us-mi/statute/206.30/2
+      rationale: |-
+        This pipeline computes the Michigan section 206.51 individual income-tax
+        liability for the ordinary resident wage-earner slice: the flat tax on
+        Michigan taxable income (Michigan adjusted gross income less the section
+        206.30 personal exemptions). MCL 206.51(1) imposes a single flat rate on
+        the taxable income of every person other than a corporation, and section
+        206.30(2) allows a personal exemption per exemption claimed that section
+        206.30(7) adjusts each year for inflation (the base $3,700 exemption
+        raised by an additional $600 for 2022 and later years, then indexed), so
+        the operative 2026 flat rate (4.25 per cent) and the operative 2026
+        personal exemption ($5,950 per exemption) are the current values
+        PolicyEngine applies. To reach a liability comparable to PolicyEngine
+        mi_income_tax to the cent, every amount this pipeline needs is a declared
+        caller-supplied input: the 4.25-per-cent rate and the section 206.30
+        personal exemptions supplied as the AGI-to-taxable-income subtraction.
+        Michigan imposes the flat rate from the first dollar of taxable income and
+        allows no per-exemption tax credit for these cases, so the supplied
+        bracket floor, bracket base, and nonrefundable credit are zero. The
+        pipeline adds no numeric literals of its own; it wires the flat-rate
+        mechanics only, in the same supplied-schedule form as the Arizona and
+        Kentucky flat pilots.
+  summary: |-
+    Composed Michigan individual income-tax liability pipeline for the oracle
+    slice at the 2026 tax year. It exposes a TaxUnit-level path from a supplied
+    Michigan adjusted gross income into the section 206.51 flat tax on Michigan
+    taxable income (Michigan AGI less the supplied section 206.30 personal
+    exemptions), so an end-to-end comparison against PolicyEngine
+    (mi_income_tax_before_non_refundable_credits) and TAXSIM (siitax) does not
+    require the caller to supply the bracket application. Michigan levies a single
+    flat rate under MCL 206.51(1), so the schedule is wired in the general
+    bracket-base-plus-marginal form with the supplied bracket floor and base tax
+    set to zero and the supplied marginal rate carrying the flat rate; that
+    reproduces the statutory flat tax while keeping the same shape as the
+    progressive pilots. It deliberately models only the ordinary resident wage
+    earner and excludes the section 206.30 retirement/senior subtractions, the
+    homestead property-tax credit, the home heating credit, and the refundable
+    section 206.272 earned income credit, all of which are zero for the childless
+    wage-earner grid, so mi_income_tax_before_non_refundable_credits equals the
+    final mi_income_tax here. Michigan AGI, filing status, the personal
+    exemptions, the flat rate, and the credit are supplied inputs; the department
+    indexes the personal exemption each year, so this 2026 pipeline is compared
+    against PolicyEngine at 2026 and against TAXSIM's latest 2024 law year with
+    the personal-exemption indexation vintage dispositioned.
+rules:
+  - name: mi_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 206.51 and 206.30, Michigan taxable income after the supplied personal exemptions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+              excerpt: "a personal exemption of $3,700.00 multiplied by the number of personal and dependency exemptions shall be subtracted"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, mi_pit_pilot_adjusted_gross_income - mi_pit_pilot_supplied_personal_exemptions)
+  - name: mi_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 206.51, flat tax as the supplied bracket base plus the supplied marginal rate on income above the supplied bracket floor
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: "the tax imposed ... upon the taxable income of every person other than a corporation"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          mi_pit_pilot_supplied_bracket_base
+          + mi_pit_pilot_supplied_marginal_rate * max(0, mi_pit_pilot_taxable_income - mi_pit_pilot_supplied_bracket_floor)
+  - name: mi_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 206.51 flat tax less the supplied nonrefundable credit, floored at zero
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: "the tax imposed ... upon the taxable income of every person other than a corporation"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          max(0, mi_pit_pilot_schedule_tax - mi_pit_pilot_supplied_nonrefundable_credit)

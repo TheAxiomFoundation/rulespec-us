@@ -1,0 +1,116 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-mi/statute/206.30/10
+  summary: |-
+    For 2023, 2024, and 2025 tax years, certain taxpayers may elect a retirement or pension benefits deduction limited to 25%, 50%, or 75% of the subsection (1)(f)(iv) maximum. For 2026 and later tax years, subsection (1)(f)(i) and (ii) amounts combined are capped at the subsection (1)(f)(iv) maximum. Joint and qualifying surviving-spouse applications use the date of birth of the older spouse.
+rules:
+  - name: subsection_10_phase_in_deduction_percentage
+    kind: parameter
+    dtype: Rate
+    source: MCL 206.30(10)(a)-(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "For the 2023 tax year ... not to exceed 25%"
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "For the 2024 tax year ... not to exceed 50%"
+          - path: versions[2].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "For the 2025 tax year ... not to exceed 75%"
+          - path: versions[3].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "subject to the same maximum amounts allowed under subsection (1)(f)(iv)"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.25
+      - effective_from: '2024-01-01'
+        formula: |-
+          0.50
+      - effective_from: '2025-01-01'
+        formula: |-
+          0.75
+      - effective_from: '2026-01-01'
+        formula: |-
+          1
+  - name: subsection_10_full_subsection_1_f_treatment_indicator
+    kind: parameter
+    dtype: Integer
+    source: MCL 206.30(10)(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "For the 2026 tax year and each tax year after 2026"
+          - path: versions[1].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "For the 2026 tax year and each tax year after 2026"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          0
+      - effective_from: '2026-01-01'
+        formula: |-
+          1
+  - name: retirement_or_pension_benefits_deduction_under_subsection_10
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: MCL 206.30(10)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "a taxpayer may elect to deduct retirement or pension benefits"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "not to exceed 25% ... 50% ... 75% of the maximum amount ... under subsection (1)(f)(iv)"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "amounts deductible under subsection (1)(f)(i) and (ii) combined are subject to the same maximum amounts allowed under subsection (1)(f)(iv)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.30/10
+              excerpt: "applied based on the date of birth of the older spouse"
+    versions:
+      - effective_from: '2023-01-01'
+        formula: |-
+          if taxpayer_elects_subsection_10_retirement_or_pension_benefits_deduction:
+            if subsection_10_full_subsection_1_f_treatment_indicator == 1:
+              max(0, retirement_or_pension_benefits_deduction_as_provided_under_subsection_1_f - amounts_deductible_under_subsection_1_f_i_and_ii_combined) + min(max(0, amounts_deductible_under_subsection_1_f_i_and_ii_combined), max(0, maximum_retirement_or_pension_benefits_deduction_under_subsection_1_f_iv))
+            else:
+              if applicable_subsection_10_birth_cohort_person_is_in_phase_in_cohort:
+                min(max(0, retirement_or_pension_benefits), subsection_10_phase_in_deduction_percentage * max(0, maximum_retirement_or_pension_benefits_deduction_under_subsection_1_f_iv))
+              else:
+                0
+          else:
+            0

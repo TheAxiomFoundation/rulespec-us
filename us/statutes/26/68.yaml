@@ -1,0 +1,146 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/26/68
+  summary: For an individual, itemized deductions otherwise allowable are reduced
+    by 2/37 of the lesser of the deductions or the excess of taxable income, increased
+    by those deductions, over the dollar amount at which the 37 percent rate bracket
+    under section 1 begins. Section 68 applies after any other limitation on itemized
+    deductions.
+imports:
+- us:statutes/26/68/b#section_68_applied_after_other_itemized_deduction_limitations
+- us:policies/irs/rev-proc-2025-32/income-tax-brackets#income_tax_bracket_6_threshold
+rules:
+- name: itemized_deduction_reduction_numerator
+  kind: parameter
+  dtype: Integer
+  source: 26 USC 68(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: reduced by 2 / 37
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '2'
+- name: itemized_deduction_reduction_denominator
+  kind: parameter
+  dtype: Integer
+  source: 26 USC 68(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: reduced by 2 / 37
+  versions:
+  - effective_from: '1990-01-01'
+    formula: '37'
+- name: section_68_reduction_applies_to_individual
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: 26 USC 68(a)-(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: In the case of an individual
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:statutes/26/68/b#section_68_applied_after_other_itemized_deduction_limitations
+          output: section_68_applied_after_other_itemized_deduction_limitations
+          hash: sha256:b414ea74c35ae01658716b730dec1427c8db0e9ae0b7e0be3f4c8f08a8ec5906
+  versions:
+  - effective_from: '2026-01-01'
+    formula: 'taxpayer_is_individual
+
+      and section_68_applied_after_other_itemized_deduction_limitations'
+- name: itemized_deduction_reduction_base
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 68(a)(1)-(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: "lesser of\u2014 (1) such amount of itemized deductions, or (2)\
+            \ so much of the taxable income ... as exceeds the dollar amount at which\
+            \ the 37 percent rate bracket under section 1 begins"
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us:policies/irs/rev-proc-2025-32/income-tax-brackets#income_tax_bracket_6_threshold
+          output: income_tax_bracket_6_threshold
+          hash: sha256:71d48be45e0ef2301d016959a784d2f27cb18c8e2a1c79c941f096790199e1c2
+  versions:
+  - effective_from: '2026-01-01'
+    formula: 'if section_68_reduction_applies_to_individual: min( itemized_deductions_otherwise_allowable_after_other_limitations,
+      max( 0, taxable_income_determined_without_section_68 + itemized_deductions_otherwise_allowable_after_other_limitations
+      - income_tax_bracket_6_threshold ) ) else: 0'
+- name: itemized_deduction_reduction_under_section_68
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 68(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: shall be reduced by 2 / 37 of the lesser of
+  versions:
+  - effective_from: '2026-01-01'
+    formula: 'itemized_deduction_reduction_base
+
+      * itemized_deduction_reduction_numerator
+
+      / itemized_deduction_reduction_denominator'
+- name: itemized_deductions_allowed_after_section_68
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 26 USC 68(a)-(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: the amount of the itemized deductions otherwise allowable ... shall
+            be reduced
+      - path: versions[0].formula
+        kind: ordering
+        source:
+          corpus_citation_path: us/statute/26/68
+          excerpt: applied after the application of any other limitation on the allowance
+            of any itemized deduction
+  versions:
+  - effective_from: '2026-01-01'
+    formula: "max(\n    0,\n    itemized_deductions_otherwise_allowable_after_other_limitations\n\
+      \    - itemized_deduction_reduction_under_section_68\n)"

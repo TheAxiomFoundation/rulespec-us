@@ -1,0 +1,280 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-wv/statute/11-21-23
+  summary: |-
+    For tax years beginning on or after January 1, 2012, a low income homeowner living in his or her homestead in this state is allowed a refundable credit equal to the amount by which West Virginia real property taxes paid, minus the section twenty-one credit, exceeds four percent of gross household income. The section defines gross household income, coordinates this credit with section twenty-one, disqualifies current-year federal AMT payers, caps the credit at $1,000, bars credits for homesteads owned in whole or part by a person who is not low income, and defines low income as federal adjusted gross income not more than three hundred percent of the federal poverty guideline.
+rules:
+  - name: gross_household_income_percentage_threshold
+    kind: parameter
+    dtype: Rate
+    source: 11-21-23(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "exceeds four percent of the taxpayer's gross household income"
+    versions:
+      - effective_from: '2012-01-01'
+        formula: |-
+          0.04
+
+  - name: minimum_refundable_credit_refund
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11-21-23(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "may not be refunded if less than $10"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: maximum_refundable_credit
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 11-21-23(f)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "in excess of $1,000"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1000
+
+  - name: section_23_low_income_federal_poverty_guideline_multiplier
+    kind: parameter
+    dtype: Rate
+    source: 11-21-23(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "three hundred percent or less of the federal poverty guideline"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          3
+
+  - name: gross_household_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 11-21-23(d)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          federal_adjusted_gross_income
+          + west_virginia_modifications_increasing_federal_adjusted_gross_income
+          + federal_tax_exempt_interest_reported_on_federal_return
+          + workers_compensation_and_loss_of_earnings_insurance
+          + nontaxable_social_security_benefits
+
+  - name: low_income_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Year
+    source: 11-21-23(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "A \"low income person\" means a person whose federal adjusted gross income for the tax year meets the definition of \"low income\""
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#section_23_low_income_federal_poverty_guideline_multiplier
+              output: section_23_low_income_federal_poverty_guideline_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          federal_adjusted_gross_income <= section_23_low_income_federal_poverty_guideline_multiplier * federal_poverty_guideline_for_family_unit_residing_in_homestead
+
+  - name: low_income_homeowner
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 11-21-23(h)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "\"Low income\" means federal adjusted gross income for the tax year that is three hundred percent or less of the federal poverty guideline"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#section_23_low_income_federal_poverty_guideline_multiplier
+              output: section_23_low_income_federal_poverty_guideline_multiplier
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          federal_adjusted_gross_income <= section_23_low_income_federal_poverty_guideline_multiplier * federal_poverty_guideline_for_family_unit_residing_in_homestead
+
+  - name: refundable_homestead_property_tax_credit_preliminary
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 11-21-23(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "real property taxes paid for the tax year, minus the amount of credit authorized in section twenty-one of this article, exceeds four percent"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#gross_household_income
+              output: gross_household_income
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#gross_household_income_percentage_threshold
+              output: gross_household_income_percentage_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2012-01-01'
+        formula: |-
+          max(0, west_virginia_real_property_taxes_paid_for_tax_year - credit_authorized_under_section_twenty_one - (gross_household_income_percentage_threshold * gross_household_income))
+
+  - name: refundable_homestead_property_tax_credit_allowed
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 11-21-23(e)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#low_income_homeowner
+              output: low_income_homeowner
+              hash: sha256:local
+    versions:
+      - effective_from: '2012-01-01'
+        formula: |-
+          homeowner_lives_in_homestead_in_this_state
+          and low_income_homeowner
+          and homestead_owned_only_by_low_income_persons
+          and claim_for_refund_filed_within_twelve_months_after_real_property_taxes_paid
+          and not required_to_pay_federal_alternative_minimum_income_tax_current_tax_year
+
+  - name: refundable_homestead_property_tax_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 11-21-23(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#refundable_homestead_property_tax_credit_preliminary
+              output: refundable_homestead_property_tax_credit_preliminary
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#refundable_homestead_property_tax_credit_allowed
+              output: refundable_homestead_property_tax_credit_allowed
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#maximum_refundable_credit
+              output: maximum_refundable_credit
+              hash: sha256:local
+    versions:
+      - effective_from: '2012-01-01'
+        formula: |-
+          if refundable_homestead_property_tax_credit_allowed: min(refundable_homestead_property_tax_credit_preliminary, maximum_refundable_credit) else: 0
+
+  - name: refundable_homestead_property_tax_credit_refund_amount
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 11-21-23(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-wv/statute/11-21-23
+              excerpt: "may not be refunded if less than $10"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#refundable_homestead_property_tax_credit
+              output: refundable_homestead_property_tax_credit
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-wv:statutes/11-21-23#minimum_refundable_credit_refund
+              output: minimum_refundable_credit_refund
+              hash: sha256:local
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if max(0, refundable_homestead_property_tax_credit - taxes_imposed_by_this_article) < minimum_refundable_credit_refund: 0 else: max(0, refundable_homestead_property_tax_credit - taxes_imposed_by_this_article)
