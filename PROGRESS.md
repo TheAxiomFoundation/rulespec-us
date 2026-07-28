@@ -11,8 +11,8 @@
   `b94b84627`; this is the exact pin change reported merged upstream.
 - Status: active defensive correctness and completeness audit; the
   authority-backed MCE gate is integrated into the California FY 2026
-  composition and program. Final validation, mutation, index, and oracle
-  mapping audits are next.
+  composition and program. Canonical validation, mutation, and program
+  compilation are green; reverse-index and oracle-mapping audits are next.
 - Repository corpus pin:
   `8af592162231e9de748ba6b98792b426ad4fe8b7`.
 
@@ -42,11 +42,12 @@
 - Reused the canonical federal alien, student, and section 273.7 work
   predicates; added new facts only for cash-out SSI and nonexempt institution
   exclusions that the federal composition does not expose.
-- Added 29 isolated companion cases covering 130/165/199/200/201% FPL,
+- Added 32 isolated companion cases covering 130/165/199/200/201% FPL,
   exact large-household amounts, the seven effective California exclusion
   switches, conviction-alone drug-felony treatment, and all five member
-  exclusions, plus a same-person adversary that prevents different household
-  members from splitting generic and categorical member eligibility.
+  exclusions, plus same-person adversaries that prevent different household
+  members from splitting generic/categorical eligibility or the serious-crime
+  conviction and sentence-noncompliance predicates.
 - Built the exact pinned rules engine offline after the source archive lacked a
   binary. The isolated pinned companion passes 29/29 cases.
 - Added MCE to the California-only income/resource gate without changing the
@@ -61,7 +62,7 @@
 - Added six composed fixtures for resource waiver, net waiver with a $97
   computed benefit, E/D above-200 pass and resource-fail paths, and separate
   MCE/traditional-CE zero denials. The pinned composition companion passes
-  12/12; together the two changed companions pass 41/41.
+  12/12; together the two changed companions pass 44/44.
 - Scoped 7 CFR 273.2(j) and the California MCE module only into the California
   FY 2026 SNAP program. The pinned composer and engine compile that program to
   328 derived outputs; the resulting `snap_eligible` expression is the intended
@@ -74,11 +75,29 @@
   net-waiver, and MCE zero-benefit cases. Traditional CE, E/D, and ordinary
   routes stayed green. The exact source was restored (`git diff --exit-code`)
   and the composition companion returned to 12/12 passing.
+- Added the required higher-authority checks for the retained CDSS
+  implementation letters.
+- Moved all member-triggered paragraph-(vii) bars to `Person` scope and
+  aggregates them through the MCE household relation; only the whole-household
+  workfare bar remains a direct household fact. This both matches source scope
+  and prevents split-witness false positives.
+- Removed the unreachable current-law effective drug-felony intermediate:
+  California's WIC 18901.3 opt-out is applied directly to the retained federal
+  pre-opt-out member gate.
+- Expanded companion YAML aliases mechanically so the strict duplicate-key
+  loader sees one unambiguous input value per fixture.
+- Exact pinned `validate --skip-reviewers` passes both changed modules with
+  `ci_pass=true`, `all_passed=true`, and zero errors from an isolated
+  canonical-directory copy.
+- Exact pinned companion execution passes 44/44; proof validation passes 28
+  MCE atoms and 9 composition atoms with zero issues.
+- Re-composed and compiled the California FY 2026 SNAP program after the
+  member-scope correction; the exact pinned engine emits 328 derived outputs.
 
 ## Next
 
-- Run pinned `validate --skip-reviewers`, reverse-index regeneration, and
-  changed-file oracle-pending/mapping audits.
+- Run reverse-index regeneration and changed-file
+  oracle-pending/mapping audits.
 - Verify the final diff against the available `origin/main`, rewrite the
   intentionally untracked worker report with the six oracle walkthroughs, and
   record the final committed head.
