@@ -3,9 +3,12 @@
 ## State
 
 - Branch: `fed-parity/ca-bbce`
-- Base: `origin/main` at `f06d6dbbdb4ba376e991020c13d1656d3839e1ec`
-- Status: blocked on a pinned-corpus ingest prerequisite; no policy rule has been encoded.
-- Pinned corpus: `db12795577c5809009168982cf8a72fb58440620`.
+- Base merge: `origin/main` at `c13cdf7dd7004659096641444f4795683689e96b`.
+- Status: active defensive correctness and completeness audit; encoding not yet started.
+- Repository pin after the merge: `10142cb0f07403c2de4599c76bec01e96640fda9`.
+- Required California-authority corpus commit: `8af592162231e9de748ba6b98792b426ad4fe8b7`
+  (available locally, but pin PR #1175 is not in `origin/main`; validation will use
+  an isolated local checkout at this commit).
 
 ## Done
 
@@ -18,10 +21,17 @@
 - Reviewed all 243 issue-linked oracle residuals at `axiom-oracles` commit `5a747cac` and documented six representative gross-only, net-only, and combined-failure cases.
 - Confirmed that none of the 138 unique eligibility cases fails the resource test, so later asset-waiver coverage must use a synthetic companion.
 - Wrote the source audit, case walk-throughs, skipped-gate rationale, and pending/mapping implications to the intentionally untracked `WORKER-REPORT.md`.
+- Reopened the source gate after axiom-corpus#552 supplied the pinned California
+  authority.
+- Merged the current `origin/main`; confirmed pin PR #1175 has not landed yet and
+  confirmed the required corpus commit exists in the local corpus object store.
 
 ## Next
 
-- Ingest an official California source establishing the PUB 275/MCE categorical trigger and current exclusions (for example, the June 30, 2014 CDSS MCE letter, ACL 14-56/15-42, or current WIC § 18901.5), then update the corpus pin.
-- Re-run source verification after the new authority is retained.
-- Only then implement the BBCE overlay, add the required boundary/waiver/exclusion and mutation tests, and run the pinned companion, validation, and reverse-index gates.
-- Re-run the 243 oracle residuals after merge in the main lane and classify any new output mappings before the changed-file gate.
+- Verify every required retained excerpt and legal ID at corpus commit `8af592162`.
+- Implement the fail-closed California BBCE overlay without changing the federal
+  composition or narrowing non-BBCE California paths.
+- Add boundary, waiver, exclusion, elderly/disabled, zero-benefit, and mutation
+  companions.
+- Run the local-pinned companion, validation, reverse-index, and pending/mapping
+  audits; then finalize the six-case walkthrough report.
