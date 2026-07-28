@@ -2,12 +2,13 @@
 
 ## State
 
-Chunk 1 implementation is in progress on
+Chunk 1 worker implementation is complete on
 `fed-parity/chunk1-salt-itemized`. Both legal compose modules and companions
 are complete, and the reverse-index and pending-coverage union are complete.
-Final combined gates, diff audit, and worker report remain. The branch starts
-from the requested main/Atomic lineage and now includes the updated
-`origin/main` at `af6c57d61` and updated Atomic PR 0 through `b8ba5dbe7`.
+The combined gates and diff audit pass, and the required untracked
+`WORKER-REPORT.md` is present. The branch starts from the requested
+main/Atomic lineage and now includes the updated `origin/main` at `af6c57d61`
+and updated Atomic PR 0 through `b8ba5dbe7`.
 
 - Scope: SALT and itemized-taxable-income-deduction compose modules,
   companions, reverse index, and pending oracle coverage.
@@ -52,9 +53,18 @@ from the requested main/Atomic lineage and now includes the updated
 - Incorporated the updated Atomic PR 0 tip after its remote-tracking branch
   advanced during this run; retained this committed progress record while
   accepting its section 6012 repair and re-signed prerequisite manifests.
+- Re-ran the exact combined pinned companion command after the updated merge:
+  both files and all 53 cases pass.
+- Re-ran pinned validation against the final `8af592...` corpus artifact:
+  both modules have `ci_pass=true`, `all_passed=true`, and zero errors.
+- Confirmed the chunk-only diff is exactly the seven intended files and has
+  no workflow, toolchain, CODEOWNERS, compose-manifest, or foreign-ledger
+  changes.
+- Wrote untracked `WORKER-REPORT.md` with the required case walkthroughs,
+  gate evidence, sandbox/environment disclosures, and exact seven-entry
+  axiom-oracles mapping proposal verified against PolicyEngine-US 1.767.3.
 
 ## Next
 
-1. Run the combined pinned companion and validation gates; fix all new
-   findings.
-2. Audit the merge-base diff and write untracked `WORKER-REPORT.md`.
+1. Main lane: generate and sign the two compose manifests last.
+2. Axiom-oracles lane: add the seven mappings listed in `WORKER-REPORT.md`.
