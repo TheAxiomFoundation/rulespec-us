@@ -9,10 +9,9 @@
 - Pin merge: locally retained #1175 head
   `6f17fe22f437fe29886d2ed053d360ce231a87e6`, merged as
   `b94b84627`; this is the exact pin change reported merged upstream.
-- Status: active defensive correctness and completeness audit; the
-  authority-backed MCE gate is integrated into the California FY 2026
-  composition and program. Canonical validation, mutation, and program
-  compilation are green; reverse-index and oracle-mapping audits are next.
+- Status: implementation and defensive correctness/completeness audit are
+  complete. All locally runnable gates are green; the untracked worker report
+  and final handoff are next.
 - Repository corpus pin:
   `8af592162231e9de748ba6b98792b426ad4fe8b7`.
 
@@ -49,7 +48,8 @@
   members from splitting generic/categorical eligibility or the serious-crime
   conviction and sentence-noncompliance predicates.
 - Built the exact pinned rules engine offline after the source archive lacked a
-  binary. The isolated pinned companion passes 29/29 cases.
+  binary. The isolated pinned companion passed 32/32 cases after the final
+  source-scope correction.
 - Added MCE to the California-only income/resource gate without changing the
   federal composition or the existing traditional categorical and standard
   California branches.
@@ -96,10 +96,30 @@
 - Regenerated the reverse provision index: 4,250 provisions, 5,092 edges, and
   4,487 modules. The follow-up `--check` passes; the diff contains only the
   expected retained BBCE authority links to the two changed California modules.
+- Replayed the disabled-BBCE-branch mutation against the final tree: 7
+  assertions failed across exactly the resource-waiver (3), net-waiver (3),
+  and MCE zero-benefit (1) fixtures. Restoring the branch returned the
+  composition companion to 12/12, and `git diff --exit-code` confirms the
+  mutation is absent.
+- Re-ran repository layout and program-spec tests: 12/12 pass.
+- Audited oracle coverage against axiom-oracles `origin/main`: the 17 new
+  executable IDs all have positive companion assertions but are classified
+  only by the broad `us-ca:` P4 fallback. The general pending ratchet therefore
+  reports zero undeclared/stale entries, while the changed-file exact-mapping
+  contract still requires an accompanying axiom-oracles PR with 1
+  `parameter_value`, 1 `direct_variable`, and 15 exact
+  `not_comparable` rows.
+- Verified every proposed bridge candidate in PolicyEngine-US 1.767.3 source.
+  Its California BBCE gross factor is 2 and asset limit is infinite, but both
+  net-test applicability parameters are `true`; it has no PUB 275 or member-bar
+  facts, so those surfaces are not legally comparable.
+- Audited the final diff against both the locally available `origin/main` and
+  the retained #1175 pin head. Only the upstream corpus pin, committed ledger
+  and reverse index, California program/module/test files are present; no
+  federal RuleSpec file or foreign path changed.
 
 ## Next
 
-- Run changed-file oracle-pending/mapping audits.
-- Verify the final diff against the available `origin/main`, rewrite the
-  intentionally untracked worker report with the six oracle walkthroughs, and
-  record the final committed head.
+- Rewrite the intentionally untracked `WORKER-REPORT.md` with the final head,
+  six conditional oracle walkthroughs, gate evidence, sandbox disclosures, and
+  exact 17-row bridge mapping handoff.
