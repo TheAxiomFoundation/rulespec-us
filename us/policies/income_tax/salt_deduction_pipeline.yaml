@@ -1,0 +1,384 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/164
+      - us/statute/26/911
+      - us/statute/26/931
+      - us/statute/26/933
+      - us/statute/26/2
+      - us/statute/26/7703
+    upstream_source_check:
+      status: composed_from_grounded_modules
+      checked_paths:
+        - us/statute/26/164
+        - us/statute/26/911
+        - us/statute/26/931
+        - us/statute/26/933
+        - us/statute/26/2
+        - us/statute/26/7703
+      rationale: |-
+        Section 164 supplies the imported 2026 cap, MAGI threshold, phaseout
+        rate, floor, and married-separate fraction. Sections 911, 931, and 933
+        supply the imported exclusion amounts added back to adjusted gross
+        income. Sections 2 and 7703 anchor the caller-resolved filing-status
+        boundary. This composition locally performs only the section
+        164(b)(6)-(7) status selection, phaseout, and lesser-of arithmetic.
+  summary: |-
+    Fail-closed federal individual state-and-local-tax deduction composition
+    for tax year 2026 under 26 USC 164.
+
+    The three supplied tax amounts are completed personal deductions: the
+    income-or-sales-tax amount already reflects the section 164(b)(5)
+    election; the personal-property amount is an annual ad valorem tax; and
+    the real-property amount is already assigned to this taxpayer. The caller
+    attests that business and section 212 taxes, acquisition-capitalized
+    taxes, refunded amounts, and nondeductible taxes are absent.
+
+    The imported section 911 amount is Person-level, so this module aggregates
+    it through the explicit `salt_section_911_individual_of_tax_unit`
+    relation. The caller attests that the relation contains every individual
+    whose section 911 exclusion belongs to the TaxUnit. Sections 931 and 933
+    already expose TaxUnit amounts.
+
+    Filing status uses the federal pipeline convention: 0 single, 1 joint,
+    2 married filing separately, 3 head of household, and 4 surviving spouse.
+    Any other status, negative completed tax amount, false boundary
+    attestation, or incomplete section 911 relation makes the verified-domain
+    judgment fail and every local amount return zero. No PolicyEngine
+    simulation-only adjusted-gross-income ceiling is part of this legal
+    formula.
+imports:
+  - us:statutes/26/164#applicable_limitation_amount_for_taxable_year_beginning_in_calendar_year_2026
+  - us:statutes/26/164#modified_adjusted_gross_income_phaseout_rate
+  - us:statutes/26/164#modified_adjusted_gross_income_threshold_for_taxable_year_beginning_in_calendar_year_2026
+  - us:statutes/26/164#applicable_limitation_amount_phaseout_floor
+  - us:statutes/26/164#married_separate_applicable_limitation_fraction
+  - us:statutes/26/911/a#section_911_amount_excluded_from_gross_income
+  - us:statutes/26/931#amount_excluded_from_gross_income_under_section_931
+  - us:statutes/26/933#income_excluded_from_gross_income_under_section_933
+rules:
+  - name: salt_section_911_individual_of_tax_unit
+    kind: data_relation
+    data_relation:
+      predicate: salt_section_911_individual_of_tax_unit
+      arity: 2
+      arguments:
+        - TaxUnit
+        - Person
+
+  - name: salt_deduction_pipeline_verified_domain_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 164(a), (b)(5)-(7), and (c), fail-closed completed-personal-tax boundary
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "State and local, and foreign, real property taxes."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "State and local personal property taxes."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "State and local, and foreign, income, war profits, and excess profits taxes."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "which are paid or accrued in carrying on a trade or business or an activity described in section 212"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "paid or accrued by the taxpayer in connection with an acquisition or disposition of property shall be treated as part of the cost of the acquired property or, in the case of a disposition, as a reduction in the amount realized on the disposition"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "No deduction shall be allowed for the following taxes"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "half the applicable limitation amount in the case of a married individual filing a separate return"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          (
+            filing_status == 0
+            or filing_status == 1
+            or filing_status == 2
+            or filing_status == 3
+            or filing_status == 4
+          )
+          and state_and_local_sales_or_income_tax >= 0
+          and state_and_local_personal_property_tax >= 0
+          and real_estate_taxes >= 0
+          and completed_personal_tax_amounts_exclude_business_and_section_212_taxes
+          and completed_personal_tax_amounts_exclude_acquisition_capitalized_taxes
+          and completed_personal_tax_amounts_are_net_of_refunds
+          and completed_personal_tax_amounts_exclude_nondeductible_taxes
+          and section_911_exclusion_relation_includes_every_tax_unit_individual
+
+  - name: federal_section_911_exclusion_for_salt_magi
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 164(b)(7)(B)(iv), TaxUnit aggregate of imported section 911 exclusions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/911/a#section_911_amount_excluded_from_gross_income
+              output: section_911_amount_excluded_from_gross_income
+              hash: sha256:b128d251a0f74fc46a27e516e864e53c8d25442f5b419c7bb3bb4b607542d725
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/salt_deduction_pipeline#salt_deduction_pipeline_verified_domain_applies
+              output: salt_deduction_pipeline_verified_domain_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "increased by any amount excluded from gross income under section 911, 931, or 933"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if salt_deduction_pipeline_verified_domain_applies:
+            sum_where(
+              salt_section_911_individual_of_tax_unit,
+              section_911_amount_excluded_from_gross_income,
+              individual_is_qualified_individual
+            )
+          else:
+            0
+
+  - name: federal_salt_deduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 164(a), (b)(5)-(7), guarded 2026 personal SALT deduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/164#applicable_limitation_amount_for_taxable_year_beginning_in_calendar_year_2026
+              output: applicable_limitation_amount_for_taxable_year_beginning_in_calendar_year_2026
+              hash: sha256:b2117d82bb081394e0656beecce4ced901a1f3035c9039291da61c599dbd5dc3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/164#modified_adjusted_gross_income_phaseout_rate
+              output: modified_adjusted_gross_income_phaseout_rate
+              hash: sha256:b2117d82bb081394e0656beecce4ced901a1f3035c9039291da61c599dbd5dc3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/164#modified_adjusted_gross_income_threshold_for_taxable_year_beginning_in_calendar_year_2026
+              output: modified_adjusted_gross_income_threshold_for_taxable_year_beginning_in_calendar_year_2026
+              hash: sha256:b2117d82bb081394e0656beecce4ced901a1f3035c9039291da61c599dbd5dc3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/164#applicable_limitation_amount_phaseout_floor
+              output: applicable_limitation_amount_phaseout_floor
+              hash: sha256:b2117d82bb081394e0656beecce4ced901a1f3035c9039291da61c599dbd5dc3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/164#married_separate_applicable_limitation_fraction
+              output: married_separate_applicable_limitation_fraction
+              hash: sha256:b2117d82bb081394e0656beecce4ced901a1f3035c9039291da61c599dbd5dc3
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/salt_deduction_pipeline#federal_section_911_exclusion_for_salt_magi
+              output: federal_section_911_exclusion_for_salt_magi
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/931#amount_excluded_from_gross_income_under_section_931
+              output: amount_excluded_from_gross_income_under_section_931
+              hash: sha256:1fa430ea6a413cdaea822ffd05121d78a82954e52929f5a8e48a80c85249c295
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/933#income_excluded_from_gross_income_under_section_933
+              output: income_excluded_from_gross_income_under_section_933
+              hash: sha256:e9b939801362efae757d1886823555c38a5f4ea828538308fe531f3619adc72f
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/salt_deduction_pipeline#salt_deduction_pipeline_verified_domain_applies
+              output: salt_deduction_pipeline_verified_domain_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "the aggregate amount of taxes taken into account under paragraphs (1), (2), and (3) of subsection (a) and paragraph (5) of this subsection"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "modified adjusted gross income means adjusted gross income increased by any amount excluded from gross income under section 911, 931, or 933"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "the applicable limitation amount shall be reduced by 30 percent of the excess (if any) of the taxpayer’s modified adjusted gross income over the threshold amount (half the threshold amount in the case of a married individual filing a separate return)"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "shall not result in the applicable limitation amount being less than $10,000"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "shall not exceed the applicable limitation amount"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if salt_deduction_pipeline_verified_domain_applies:
+            if filing_status == 2:
+              min(
+                max(
+                  0,
+                  state_and_local_sales_or_income_tax
+                  + state_and_local_personal_property_tax
+                  + real_estate_taxes
+                ),
+                max(
+                  applicable_limitation_amount_phaseout_floor
+                  * married_separate_applicable_limitation_fraction,
+                  max(
+                    0,
+                    (
+                      applicable_limitation_amount_for_taxable_year_beginning_in_calendar_year_2026
+                      * married_separate_applicable_limitation_fraction
+                    )
+                    - modified_adjusted_gross_income_phaseout_rate
+                    * max(
+                      0,
+                      adjusted_gross_income
+                      + federal_section_911_exclusion_for_salt_magi
+                      + amount_excluded_from_gross_income_under_section_931
+                      + income_excluded_from_gross_income_under_section_933
+                      - (
+                        modified_adjusted_gross_income_threshold_for_taxable_year_beginning_in_calendar_year_2026
+                        * married_separate_applicable_limitation_fraction
+                      )
+                    )
+                  )
+                )
+              )
+            else:
+              min(
+                max(
+                  0,
+                  state_and_local_sales_or_income_tax
+                  + state_and_local_personal_property_tax
+                  + real_estate_taxes
+                ),
+                max(
+                  applicable_limitation_amount_phaseout_floor,
+                  max(
+                    0,
+                    applicable_limitation_amount_for_taxable_year_beginning_in_calendar_year_2026
+                    - modified_adjusted_gross_income_phaseout_rate
+                    * max(
+                      0,
+                      adjusted_gross_income
+                      + federal_section_911_exclusion_for_salt_magi
+                      + amount_excluded_from_gross_income_under_section_931
+                      + income_excluded_from_gross_income_under_section_933
+                      - modified_adjusted_gross_income_threshold_for_taxable_year_beginning_in_calendar_year_2026
+                    )
+                  )
+                )
+              )
+          else:
+            0
+inputs:
+  - name: filing_status
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    description: Resolved federal filing-status code; 0 single, 1 joint, 2 married filing separately, 3 head of household, 4 surviving spouse.
+  - name: state_and_local_sales_or_income_tax
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed deductible personal state/local income-or-elected-general-sales-tax amount under section 164(a)(3) and (b)(5).
+  - name: state_and_local_personal_property_tax
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed annual ad valorem state/local personal-property tax under section 164(a)(2), (b)(1), and (b)(2).
+  - name: real_estate_taxes
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed deductible personal state/local real-property tax assigned to this taxpayer.
+  - name: adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed-return adjusted gross income before the section 164(b)(7)(B)(iv) addbacks.
+  - name: completed_personal_tax_amounts_exclude_business_and_section_212_taxes
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Holds only when the three completed personal-tax amounts exclude taxes paid or accrued in a trade or business or section 212 activity.
+  - name: completed_personal_tax_amounts_exclude_acquisition_capitalized_taxes
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Holds only when acquisition/disposition taxes capitalized into basis or amount realized are excluded.
+  - name: completed_personal_tax_amounts_are_net_of_refunds
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Holds only when refunded or reimbursed tax amounts are absent from the completed paid-or-accrued amounts.
+  - name: completed_personal_tax_amounts_exclude_nondeductible_taxes
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Holds only when taxes denied by section 164(c) or another applicable denial are excluded.
+  - name: section_911_exclusion_relation_includes_every_tax_unit_individual
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Holds only when salt_section_911_individual_of_tax_unit contains every Person whose imported section 911 exclusion belongs to this TaxUnit.
