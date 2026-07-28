@@ -8,8 +8,8 @@
 - GitHub-verified PR base: `af6c57d618acff5cb268d345653ea3e4cf64feb6`.
 - Head branch: `fed-parity/atomic-63c6-67h`.
 - Pinned corpus: `8af592162231e9de748ba6b98792b426ad4fe8b7`.
-- Status: final report in progress.
-- Provisional verdict: `REQUEST-CHANGES` for three integration blockers.
+- Status: complete.
+- Final verdict: `REQUEST-CHANGES` for three integration blockers.
 
 ## Done
 
@@ -84,9 +84,10 @@
   verification lacked the signing key (remote generated-guard passes). Initial
   noncanonical oracle/mutation paths were rejected and rerun successfully in
   canonical layouts.
+- Wrote the complete evidence, legacy-manifest adjudication, remedies, and
+  sandbox disclosures to `WORKER-REPORT.md`.
 
 ## Next
 
-- Write and commit the final verdict in `WORKER-REPORT.md`.
-- Recheck the review branch status and report both remediation requirements and
-  sandbox limitations to the user.
+- Await a corrected PR head containing the three required remediation groups,
+  then re-run the targeted review delta.
