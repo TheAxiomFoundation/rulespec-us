@@ -3,12 +3,16 @@
 ## State
 
 - Branch: `fed-parity/ca-bbce`
-- Base merge: `origin/main` at `c13cdf7dd7004659096641444f4795683689e96b`.
-- Status: active defensive correctness and completeness audit; encoding not yet started.
-- Repository pin after the merge: `10142cb0f07403c2de4599c76bec01e96640fda9`.
-- Required California-authority corpus commit: `8af592162231e9de748ba6b98792b426ad4fe8b7`
-  (available locally, but pin PR #1175 is not in `origin/main`; validation will use
-  an isolated local checkout at this commit).
+- Base merge: local `origin/main` at
+  `c13cdf7dda5948e7a86ff0c317872f93743a2084`; the sandbox cannot resolve
+  GitHub to refresh the remote-tracking ref.
+- Pin merge: locally retained #1175 head
+  `6f17fe22f437fe29886d2ed053d360ce231a87e6`, merged as
+  `b94b84627`; this is the exact pin change reported merged upstream.
+- Status: active defensive correctness and completeness audit; authority
+  verification and encoding are next.
+- Repository corpus pin:
+  `8af592162231e9de748ba6b98792b426ad4fe8b7`.
 
 ## Done
 
@@ -23,8 +27,11 @@
 - Wrote the source audit, case walk-throughs, skipped-gate rationale, and pending/mapping implications to the intentionally untracked `WORKER-REPORT.md`.
 - Reopened the source gate after axiom-corpus#552 supplied the pinned California
   authority.
-- Merged the current `origin/main`; confirmed pin PR #1175 has not landed yet and
-  confirmed the required corpus commit exists in the local corpus object store.
+- Confirmed the existing branch already contains the locally available
+  `origin/main`.
+- Attempted to refresh `origin/main`; recorded the sandbox DNS failure.
+- Merged the locally retained #1175 head and verified the required corpus pin
+  directly in `.axiom/toolchain.toml`.
 
 ## Next
 
