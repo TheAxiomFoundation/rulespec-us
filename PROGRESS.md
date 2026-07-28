@@ -3,10 +3,10 @@
 ## State
 
 Chunk 1 implementation is in progress on
-`fed-parity/chunk1-salt-itemized`. The SALT compose and companion are complete;
-the itemized compose and companion are being implemented. The branch starts
-from local `origin/main` at `c13cdf7dd` and includes Atomic PR 0 by
-fast-forward merge through `3f933cd93`.
+`fed-parity/chunk1-salt-itemized`. Both legal compose modules and companions
+are complete; reverse-index and pending-coverage maintenance is next. The
+branch starts from local `origin/main` at `c13cdf7dd` and includes Atomic PR 0
+by fast-forward merge through `3f933cd93`.
 
 - Scope: SALT and itemized-taxable-income-deduction compose modules,
   companions, reverse index, and pending oracle coverage.
@@ -30,12 +30,22 @@ fast-forward merge through `3f933cd93`.
 - Passed the pinned SALT companion runner (25/25) and standalone
   `validate --skip-reviewers`; audited the merged SALT import surface with no
   duplicate rule or relation names.
+- Added the bounded six-component itemized aggregate, importing the SALT
+  final, section 67(h) judgment, and section 68 final/reduction without
+  duplicating section 68 arithmetic.
+- Added all 17 itemized grid cases, including the now-adoptable positive
+  casualty case, plus 11 fail-closed and relation-orientation diagnostics.
+- Passed the pinned itemized companion runner (28/28) and standalone
+  `validate --skip-reviewers` with the pinned corpus artifact; audited the
+  full transitive import closure with zero duplicate rule names and one
+  uniquely named `(TaxUnit, Person)` relation.
+- Recorded that the ambient corpus checkout is stale and lacks section 165;
+  validation against the repository-pinned corpus commit has zero findings.
 
 ## Next
 
-1. Finish the itemized compose and companion, importing §67(h) and §68.
+1. Regenerate the reverse index and splice only this chunk's seven pending
+   mappings.
 2. Run the combined pinned companion and validation gates; fix all new
    findings.
-3. Regenerate the reverse index and splice only this chunk's seven pending
-   mappings.
-4. Audit the merge-base diff and write untracked `WORKER-REPORT.md`.
+3. Audit the merge-base diff and write untracked `WORKER-REPORT.md`.
