@@ -67,7 +67,7 @@
   FY 2026 SNAP program. The pinned composer and engine compile that program to
   328 derived outputs; the resulting `snap_eligible` expression is the intended
   residency/member/income-resource/zero-denial conjunction.
-- Explicit proof validation passes the MCE module (29 atoms) and composition
+- Explicit proof validation passes the MCE module (28 atoms) and composition
   module (9 atoms) with zero issues.
 - Repository layout and program-spec tests pass 12/12.
 - Mutation evidence is complete: forcing only the MCE eligibility branch false
