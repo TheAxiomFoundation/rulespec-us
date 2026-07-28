@@ -9,8 +9,9 @@
 - Pin merge: locally retained #1175 head
   `6f17fe22f437fe29886d2ed053d360ce231a87e6`, merged as
   `b94b84627`; this is the exact pin change reported merged upstream.
-- Status: active defensive correctness and completeness audit; authority
-  verification and encoding are next.
+- Status: active defensive correctness and completeness audit; the isolated
+  authority-backed MCE gate is encoded and its companion is green. California
+  composition integration is next.
 - Repository corpus pin:
   `8af592162231e9de748ba6b98792b426ad4fe8b7`.
 
@@ -32,13 +33,27 @@
 - Attempted to refresh `origin/main`; recorded the sandbox DNS failure.
 - Merged the locally retained #1175 head and verified the required corpus pin
   directly in `.axiom/toolchain.toml`.
+- Verified the operative WIC, ACL, ACIN, and retained 7 CFR excerpts at corpus
+  commit `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Added a California-only MCE module with an inclusive 200% FPL screen, the PUB
+  275 service trigger, all paragraph-(vii) household gates, WIC 18901.3's
+  complete drug-felony opt-out, and all five paragraph-(ix) person exclusions.
+- Reused the canonical federal alien, student, and section 273.7 work
+  predicates; added new facts only for cash-out SSI and nonexempt institution
+  exclusions that the federal composition does not expose.
+- Added 28 isolated companion cases covering 130/165/199/200/201% FPL,
+  exact large-household amounts, the seven effective California exclusion
+  switches, conviction-alone drug-felony treatment, and all five member
+  exclusions.
+- Built the exact pinned rules engine offline after the source archive lacked a
+  binary. The pinned companion passes 28/28 cases, explicit proof validation
+  passes 27 atoms with zero issues, and `git diff --check` passes.
 
 ## Next
 
-- Verify every required retained excerpt and legal ID at corpus commit `8af592162`.
-- Implement the fail-closed California BBCE overlay without changing the federal
-  composition or narrowing non-BBCE California paths.
-- Add boundary, waiver, exclusion, elderly/disabled, zero-benefit, and mutation
-  companions.
+- Integrate MCE into the California composition and FY 2026 program without
+  changing the federal composition or narrowing non-BBCE California paths.
+- Add resource-waiver, net-waiver-with-benefit-computation,
+  elderly/disabled-route, zero-benefit, and mutation companions.
 - Run the local-pinned companion, validation, reverse-index, and pending/mapping
   audits; then finalize the six-case walkthrough report.
