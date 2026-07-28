@@ -63,12 +63,14 @@ new outputs also require external axiom-oracles classifications.
   `not_comparable` registry entry because only branch (A) has the nearby
   verified `separate_filer_itemizes` variable and branches (B)-(D) have no
   one-to-one PolicyEngine surface.
+- Completed the final changed-file audit: the branch contains only the eight
+  intended index/progress/§63/§67 paths, so no foreign path required restore.
+- Replaced the prior attempt's report with the completed untracked
+  `WORKER-REPORT.md`.
 
 ## Next
 
-1. Enforce the final changed-file boundary and write the untracked final
-   `WORKER-REPORT.md`.
-2. Main lane: apply the ordinary-provenance exception and sign/regenerate the
+1. Main lane: apply the ordinary-provenance exception and sign/regenerate the
    three module/companion manifest sets without changing attested content.
-3. Four-repo oracle lane: land both exact classifications, then advance the
+2. Four-repo oracle lane: land both exact classifications, then advance the
    axiom-encode and org-workflow pins before this RuleSpec PR is merged.
