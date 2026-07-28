@@ -2,9 +2,10 @@
 
 ## State
 
-Defensive correctness and completeness audit in progress. The §63(c)(6)
-extraction is implemented and behaviorally green; final §67(h), repository,
-index, and oracle-chain checks remain.
+Defensive correctness and completeness audit complete for the worker lane.
+Content, proof, companion, and index gates are green. The only local failures
+are the expected unsigned-provenance gates reserved for the main lane; both
+new outputs also require external axiom-oracles classifications.
 
 - Branch: `fed-parity/atomic-63c6-67h`
 - Required base: local `origin/main` at `c13cdf7dd`, including merged PR #1173
@@ -48,11 +49,26 @@ index, and oracle-chain checks remain.
 - Regenerated the reverse index twice with the available encoder environment;
   it is byte-stable at 4,246 provisions / 5,085 edges / 4,488 modules and adds
   only the five §63(c)(6) parent/A-D entries for the new module.
+- Final pinned companion run: 3 files / 12 cases / 0 failures.
+- Final pinned `validate --skip-reviewers`: all three changed modules pass
+  with zero errors; proof validation checks 24 + 6 + 1 atoms with zero issues.
+- Focused repository tests: 17 passed, 1 expected unsigned-provenance failure
+  because the changed legacy `63/c.yaml` no longer matches its old manifest.
+- `guard-generated` reports exactly the expected six unsigned paths (main and
+  companion for §63(c), §63(c)(6), and §67(h)); no signing was attempted.
+- Audited the strict changed-file oracle chain: pending classification is
+  rejected. §67(h) needs a real `parameter_value` bridge to verified
+  PolicyEngine-US 1.767.3 parameter
+  `gov.irs.deductions.itemized.misc.applies`; §63(c)(6) needs a P4
+  `not_comparable` registry entry because only branch (A) has the nearby
+  verified `separate_filer_itemizes` variable and branches (B)-(D) have no
+  one-to-one PolicyEngine surface.
 
 ## Next
 
-1. Run the remaining proof, provenance, and focused repository gates.
-2. Finish auditing both new legal IDs through the four-repository oracle chain and
-   verify any PolicyEngine-US 1.767.3 candidate names.
-3. Enforce the final changed-file boundary and write the untracked final
+1. Enforce the final changed-file boundary and write the untracked final
    `WORKER-REPORT.md`.
+2. Main lane: apply the ordinary-provenance exception and sign/regenerate the
+   three module/companion manifest sets without changing attested content.
+3. Four-repo oracle lane: land both exact classifications, then advance the
+   axiom-encode and org-workflow pins before this RuleSpec PR is merged.
