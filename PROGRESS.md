@@ -45,11 +45,13 @@ index, and oracle-chain checks remain.
 - Repeated the §67(h) mutation: changing `false` to `true` produces the exact
   expected failure (`not_holds` expected, `holds` actual); restoration is
   byte-clean and passes 1/1.
+- Regenerated the reverse index twice with the available encoder environment;
+  it is byte-stable at 4,246 provisions / 5,085 edges / 4,488 modules and adds
+  only the five §63(c)(6) parent/A-D entries for the new module.
 
 ## Next
 
-1. Run the remaining proof, reverse-index, provenance, and focused repository
-   gates.
+1. Run the remaining proof, provenance, and focused repository gates.
 2. Finish auditing both new legal IDs through the four-repository oracle chain and
    verify any PolicyEngine-US 1.767.3 candidate names.
 3. Enforce the final changed-file boundary and write the untracked final
