@@ -69,10 +69,14 @@
 - Explicit proof validation passes the MCE module (29 atoms) and composition
   module (9 atoms) with zero issues.
 - Repository layout and program-spec tests pass 12/12.
+- Mutation evidence is complete: forcing only the MCE eligibility branch false
+  produced seven assertions failing across exactly the resource-waiver,
+  net-waiver, and MCE zero-benefit cases. Traditional CE, E/D, and ordinary
+  routes stayed green. The exact source was restored (`git diff --exit-code`)
+  and the composition companion returned to 12/12 passing.
 
 ## Next
 
-- Run the disabled-gate mutation and restore the exact source.
 - Run pinned `validate --skip-reviewers`, reverse-index regeneration, and
   changed-file oracle-pending/mapping audits.
 - Verify the final diff against the available `origin/main`, rewrite the
