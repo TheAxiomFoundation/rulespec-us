@@ -40,12 +40,17 @@ index, and oracle-chain checks remain.
   restoration passes all 11 combined cases.
 - Ran pinned `validate --skip-reviewers` at the exact new corpus pin on both
   changed §63 modules: both passed with zero errors.
+- Re-verified §67(h) at the new pin: its proof excerpt resolves, pinned
+  validation passes with zero errors, and its companion passes 1/1.
+- Repeated the §67(h) mutation: changing `false` to `true` produces the exact
+  expected failure (`not_holds` expected, `holds` actual); restoration is
+  byte-clean and passes 1/1.
 
 ## Next
 
-1. Re-verify §67(h), all pinned gates, mutation evidence, reverse index, and
-   focused repository tests.
-2. Audit both new legal IDs through the four-repository oracle chain and
+1. Run the remaining proof, reverse-index, provenance, and focused repository
+   gates.
+2. Finish auditing both new legal IDs through the four-repository oracle chain and
    verify any PolicyEngine-US 1.767.3 candidate names.
 3. Enforce the final changed-file boundary and write the untracked final
    `WORKER-REPORT.md`.
