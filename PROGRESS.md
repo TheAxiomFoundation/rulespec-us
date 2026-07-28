@@ -10,8 +10,8 @@
   `6f17fe22f437fe29886d2ed053d360ce231a87e6`, merged as
   `b94b84627`; this is the exact pin change reported merged upstream.
 - Status: implementation and defensive correctness/completeness audit are
-  complete. All locally runnable gates are green; the untracked worker report
-  and final handoff are next.
+  complete. All locally runnable gates are green and the intentionally
+  untracked worker report is written; final handoff is next.
 - Repository corpus pin:
   `8af592162231e9de748ba6b98792b426ad4fe8b7`.
 
@@ -117,9 +117,11 @@
   the retained #1175 pin head. Only the upstream corpus pin, committed ledger
   and reverse index, California program/module/test files are present; no
   federal RuleSpec file or foreign path changed.
+- Replaced the source-gate-era `WORKER-REPORT.md` with the final untracked
+  authority, implementation, validation, mutation, six-case, sandbox, and
+  17-row oracle-bridge handoff.
 
 ## Next
 
-- Rewrite the intentionally untracked `WORKER-REPORT.md` with the final head,
-  six conditional oracle walkthroughs, gate evidence, sandbox disclosures, and
-  exact 17-row bridge mapping handoff.
+- Return the final handoff. The main lane must coordinate the exact
+  axiom-oracles mapping PR, then sign and publish as appropriate.
