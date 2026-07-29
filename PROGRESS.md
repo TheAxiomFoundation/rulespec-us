@@ -2,6 +2,8 @@
 
 ## State
 
+- Review status: complete.
+- Verdict: `APPROVE`.
 - Review worktree: detached from `345c22030642cbd37a9fe46877591a8e1df5af7e`.
 - Canonical-basename validation worktree:
   `.git/review-worktrees/pr-1177-repair-canonical/rulespec-us` at the exact
@@ -72,7 +74,8 @@
   cache; raw web cache fetches failed. Read-only GitHub access, direct source
   inspection, Ruby stdlib, and existing Python environments supplied the
   required evidence.
+- Wrote the evidence-backed final report to `REVIEW.md`.
 
 ## Next
 
-- Commit the evidence-backed verdict to `REVIEW.md`.
+- No reviewer work remains for this repair-only scope.
