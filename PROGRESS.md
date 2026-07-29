@@ -16,12 +16,18 @@ No push, GitHub write, signing, or ProgramSpec manifest repair is in scope.
 - Selected the GitNexus debugging workflow, then confirmed that GitNexus graph
   tools are unavailable in this session; direct source and compiled-flow
   inspection will be used instead.
+- Replayed both SHA-verified reviewer reproducers from an exact-head,
+  canonical-basename archive. Each passes with the observed fail-open
+  expectations; each produces exactly the two targeted failures with
+  fail-closed expectations.
+- Programmatically compared all 37 excerpts in both modules against every
+  matching pinned-corpus row: 36 were byte-verbatim and the sole mismatch was
+  the ACIN `Broad- Based` text.
+- Corrected the ACIN excerpt to the retained row's exact `Broad- Based` bytes.
 
 ## Next
 
 - Inventory every MCE aggregation or waiver that scans household members.
-- Compare every excerpt in both changed modules against the pinned corpus
-  programmatically.
 - Repair blocker 1 with one canonical federal household-membership relation.
 - Add divergent-relation IPV, probation/parole, and eligible-member tests.
 - Run all requested companions, validation, composition/compile, mutation,
