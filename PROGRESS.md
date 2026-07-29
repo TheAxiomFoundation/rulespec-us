@@ -36,11 +36,16 @@ No push, GitHub write, or signing is in scope.
   private integrity judgment, and make the two household MCE outputs fail
   closed when the counts diverge. Under the pinned engine's monotone union,
   every new injected member tuple strictly enlarges the projection.
+- Added the private federal
+  `snap_state_plan_member_of_household_count`, computed directly as
+  `len(member_of_household)` inside the state-plan module, with companion
+  coverage. Caller dataset inputs cannot override a derived scalar's
+  executable formula in the pinned engine.
 
 ## Next
 
-- Implement the source-side count, integrity judgment, and exact injection
-  regression while retaining all round-1 regressions.
+- Implement the CA integrity judgment and exact injection regression while
+  retaining all round-1 regressions.
 - Run companions, pinned validation, proof validation, compose/compile,
   mutation evidence, reverse-index checks, and public-output containment.
 - Write untracked `WORKER-REPORT-REPAIR2.md` with final evidence.
