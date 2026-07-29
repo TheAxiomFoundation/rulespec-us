@@ -2,20 +2,18 @@
 
 ## State
 
-Re-review is in progress on the isolated review branch pinned to exact PR head
-`686d413cfe15410dc160010f7863096c8c20ef48`. GitHub and local
-`origin/fed-parity/ca-bbce` agreed on that head at review start. It contains
-repair evidence commit `79ad71497` followed by manifest re-sign commit
-`686d413cf`. No PR-branch, remote, or GitHub writes have been made.
+Re-review is complete on the isolated review branch pinned to exact live PR
+head `686d413cfe15410dc160010f7863096c8c20ef48`. Final verdict:
+**REQUEST-CHANGES**.
 
-Current verdict direction is **REQUEST-CHANGES**: the retired relation is
-correctly rejected, but the replacement private derived relation remains
-caller-populable. The pinned engine unions caller-supplied rows with derived
-rows, so an injected eligible member can still confer MCE when the federal
-membership relation contains only an excluded member.
+The retired relation is correctly rejected, but the replacement private
+derived relation remains caller-populable. The pinned engine unions
+caller-supplied rows with derived rows, so an injected eligible member can
+still confer MCE when the federal membership relation contains only an
+excluded member.
 
-The final review report will be written to `REVIEW.md` in this disposable
-worktree.
+The finding-first final report is committed at `REVIEW.md`. No PR-branch,
+remote, corpus, author-worktree, or GitHub writes were made.
 
 ## Done
 
@@ -54,12 +52,24 @@ worktree.
   Engine source confirms direct rows and derived rows are unioned.
 - Confirmed the review worktree is clean after moving mutation and injection
   evidence to explicit paths under `/private/tmp`.
+- Confirmed merged axiom-oracles #424 adds exactly 17 rule-output rows and
+  references neither the retired nor canonical relation name.
+- Compared compiled original PR head `8d1f31d50` with repaired target:
+  zero derived/parameter ID additions or removals; exactly two derived
+  definitions changed; the sole relation replacement is the old CA input for
+  the new derived relation.
+- Confirmed the live GitHub diff and local `origin/main...target` diff contain
+  the same 11 intended paths and no foreign/toolchain/workflow changes.
+- Performed the final live head-drift check: PR #1176 remained open,
+  mergeable, non-draft, and exactly at `686d413cf`.
+- Wrote and committed the final report to `REVIEW.md`.
 
 ## Next
 
-- Finish mapping #424 containment, exact diff-path/blast-radius accounting, and
-  live head-drift checks.
-- Record the HMAC-authentication limitation and sandbox/tool-wrapper failures.
-- Write and commit the finding-first final report to `REVIEW.md`.
-- Complete and commit this progress ledger, then deliver the required verdict
-  line and evidence digest.
+- Author: make derived/private relations invalid dataset inputs, or replace
+  the alias with a relation whose population cannot diverge from the federal
+  state-plan relation.
+- Add a regression proving direct input under
+  `#relation.calfresh_mce_canonical_member_of_household` is rejected.
+- Re-sign affected manifests after that executable repair, then request
+  another exact-head review.
