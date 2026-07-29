@@ -86,9 +86,22 @@
 - The local HMAC signing key is not available, so signature values cannot be
   independently recomputed; content-hash, schema, selection, and repository
   manifest tests are green.
+- Confirmed exact pinned dependency trees:
+  `axiom-encode@3869d66d`, `axiom-rules-engine@ffd821327`, and
+  `axiom-corpus@8af592162`.
+- Ran one pinned four-module `validate --skip-reviewers --json` invocation in
+  the canonical sibling checkout at exact head `b8ba5dbe7`: §63(c),
+  §63(c)(6), §67(h), and §6012 each report `ci_pass: true`,
+  `all_passed: true`, and `errors: []`.
+- Ran the four-file companion batch in that same canonical layout: 4 files,
+  17 cases, 4 compiled programs, zero failures.
+- An earlier companion attempt from the nested ledger path was noncanonical
+  and failed module resolution before executing the requested batch (only
+  3 programs/11 cases); the exact-head canonical rerun above is the
+  authoritative result.
 
 ## Next
 
 - Run pinned validation, companion, and manifest checks.
-- Run pinned validation and the four-file companion batch.
+- Assemble and commit the final evidence report and verdict.
 - Write and commit the final evidence report to `WORKER-REPORT.md`.
