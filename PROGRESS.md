@@ -48,10 +48,17 @@ No push, GitHub write, or signing is in scope.
 - Added the reviewer's exact canonical-relation injection shape as a
   fail-closed companion regression, plus a stronger case proving caller data
   cannot spoof either derived integrity output.
+- Pinned focused companions pass 56/56 across the federal state-plan, MCE,
+  and benefit modules. The two requested CA companions pass 49/49, including
+  all round-1 omission cases and both new injection cases.
+- Mutation evidence remains targeted: changing only the eligible-member
+  existence comparison from `> 0` to `< 0` produces 13 assertion failures in
+  exactly the resource-waiver, net-waiver, and zero-benefit MCE cases.
+- The reverse index required no byte change and passes 6/6 tests plus
+  generator `--check` at 4,250 provisions, 5,092 edges, and 4,487 modules.
 
 ## Next
 
-- Run focused companions, then full companions, pinned validation, proof
-  validation, compose/compile, mutation evidence, reverse-index checks, and
-  public-output containment.
+- Finish pinned validation, proof validation, compose/compile, retired-name
+  rejection, repository contracts, and public-output containment.
 - Write untracked `WORKER-REPORT-REPAIR2.md` with final evidence.
