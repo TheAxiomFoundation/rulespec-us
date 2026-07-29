@@ -22,12 +22,25 @@ No push, GitHub write, or signing is in scope.
 - Confirmed the reviewer reproduced a fail-open by directly supplying an
   eligible row under the private derived relation while the federal relation
   contained only an excluded member.
+- Confirmed path 1 is unavailable in the pinned engine. Formula relation
+  arguments must be bare identifiers, imports have no symbol-alias syntax,
+  and the program contains two canonical `member_of_household` producers.
+  The CA-local predicates therefore cannot bind a bare aggregation directly
+  to the fully qualified state-plan relation.
+- Recovered the exact reviewer fixture (`a652857f...`) and result
+  (`9a4d9cc9...`). Its only semantic addition is a two-row direct canonical
+  relation (`{}` plus a fully eligible second member) beside one excluded
+  federal member; the placeholder preserves the federal member's row index.
+- Selected path 2: expose a private source-side count computed inside the
+  federal state-plan module, compare it with the CA projection length in a
+  private integrity judgment, and make the two household MCE outputs fail
+  closed when the counts diverge. Under the pinned engine's monotone union,
+  every new injected member tuple strictly enlarges the projection.
 
 ## Next
 
-- Determine whether MCE aggregations can range directly over the fully
-  qualified federal relation; prefer eliminating the local surface.
-- Add the exact injection regression and retain all round-1 regressions.
+- Implement the source-side count, integrity judgment, and exact injection
+  regression while retaining all round-1 regressions.
 - Run companions, pinned validation, proof validation, compose/compile,
   mutation evidence, reverse-index checks, and public-output containment.
 - Write untracked `WORKER-REPORT-REPAIR2.md` with final evidence.
