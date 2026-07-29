@@ -57,10 +57,24 @@
   (§6012, §63(c), §63(c)(6), and §67(h)) are absent from the head waiver set
   and are selected for validation; the obsolete §63(c) fingerprint record is
   absent.
+- Audited every moved input binding across the requested tree. Each of the
+  four old `us:statutes/26/63/c#input.*` IDs has zero occurrences; each new
+  `us:statutes/26/63/c/6#input.*` ID has 16 occurrences (5 in the §6012
+  companion, 6 in the parent §63(c) companion, and 5 in the extracted
+  companion).
+- Confirmed the new TY2025 joint-return case satisfies every
+  26 USC 6012(f)(2) element: joint entitlement, $20,000 combined gross income
+  below the $31,500 joint standard deduction, same household, no separate
+  return, and neither spouse in the §63(c)(5) branch. Checked current official
+  House U.S. Code §§6012 and 63 text; IRS Publication 501 independently
+  corroborates the 2025 amount.
+- Reconfirmed containment: the full diff contains exactly the 15 intended
+  manifest/index/waiver/§6012/§63/§67 paths, the repair diff contains exactly
+  9 claimed paths, whitespace checks pass, and the requested tree contains no
+  `PROGRESS.md`.
 
 ## Next
 
 - Run pinned validation, companion, and manifest checks.
-- Audit waiver workflow semantics, legal correctness, moved bindings,
-  proof-import hashes, manifest signatures, and repository containment.
+- Audit proof-import hashes and manifest signatures.
 - Write and commit the final evidence report to `WORKER-REPORT.md`.
