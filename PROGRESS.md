@@ -2,17 +2,22 @@
 
 ## State
 
-- Review status: in progress.
+- Review status: in progress; exact PR range frozen.
 - Review branch: `review/pr-1177-f4cc1b8`.
 - Disposable worktree: `.git/review-worktrees/pr-1177-f4cc1b8`.
-- Locally pinned candidate head:
+- GitHub-verified PR head:
   `f4cc1b88d1efd8dcca25058695dc1735c0fbb3de`.
-- Expected head branch: `fed-parity/chunk1-salt-itemized`.
-- Local `origin/main`: `54004d3c69beda3c2363f9001ca6e37012348bc2`.
+- GitHub-verified head branch: `fed-parity/chunk1-salt-itemized`.
+- GitHub-verified base ref/tip:
+  `main` at `54004d3c69beda3c2363f9001ca6e37012348bc2`.
+- Immutable PR range:
+  `54004d3c69beda3c2363f9001ca6e37012348bc2..f4cc1b88d1efd8dcca25058695dc1735c0fbb3de`.
 - Required corpus checkout:
   `/Users/maxghenis/TheAxiomFoundation/axiom-corpus/.worktrees/pin-8af59216`.
 - Binding plan:
   `/Users/maxghenis/TheAxiomFoundation/ops/fed-parity-campaign/SPINE-PLAN.md`.
+- Canonical exact-head archive:
+  `.git/review-worktrees/pr-1177-canonical/rulespec-us`.
 - Final report: `REVIEW.md`.
 
 ## Done
@@ -25,11 +30,21 @@
 - Created this disposable local review worktree and review-only branch from
   that candidate head. No PR-branch, remote, or GitHub write was made.
 - Captured the eight-file candidate diff against local `origin/main`.
+- Verified through the read-only GitHub connector that PR #1177 is open,
+  non-draft, mergeable, targets `main` at `54004d3c...`, and has exact head
+  `f4cc1b88...` on `fed-parity/chunk1-salt-itemized`.
+- Confirmed GitHub's eight changed filenames exactly match the local immutable
+  range; the head is ten commits ahead and zero behind its merge base.
+- Recorded that shell `gh pr view` could not connect to `api.github.com`; the
+  read-only GitHub connector supplied the live metadata instead.
+- Confirmed the required corpus checkout is clean and detached at exact full
+  pin `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Read binding plan §5, §6.1, §6.2, §9 Chunk 1, and its commit discipline.
+- Created the required canonical-basename `git archive` root from the exact PR
+  head and verified an archive module's SHA-256 against the commit bytes.
 
 ## Next
 
-- Verify live PR metadata and freeze the immutable base/head range.
-- Read the binding plan and audit every prescriptive requirement.
 - Run legal, case-table, proof, import-surface, manifest, index, ledger, and
   canonical-root mechanical checks.
 - Write and commit the evidence-backed verdict to `REVIEW.md`.
