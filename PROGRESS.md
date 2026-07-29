@@ -72,9 +72,23 @@
   manifest/index/waiver/§6012/§63/§67 paths, the repair diff contains exactly
   9 claimed paths, whitespace checks pass, and the requested tree contains no
   `PROGRESS.md`.
+- Independently computed the requested-tree §63(c) digest and confirmed both
+  §6012 `standard_deduction` proof imports equal
+  `sha256:fbc6f30c840556e4303536a7f2f0bd47bb3612cc2beb30e0bb4ac2f6ac45bbba`.
+- Ran the focused manifest suite:
+  `tests/test_encoding_manifests.py` plus
+  `tests/test_bulk_applied_artifacts.py`; 37 passed with one expected
+  unmanifested-backlog warning.
+- Verified all eight applied-file hashes in the four modern manifests, the
+  presence/shape of all four HMAC-SHA256 signatures, and newest-manifest
+  selection: the new modern §6012 and §63(c) manifests both supersede their
+  untouched legacy-layout counterparts.
+- The local HMAC signing key is not available, so signature values cannot be
+  independently recomputed; content-hash, schema, selection, and repository
+  manifest tests are green.
 
 ## Next
 
 - Run pinned validation, companion, and manifest checks.
-- Audit proof-import hashes and manifest signatures.
+- Run pinned validation and the four-file companion batch.
 - Write and commit the final evidence report to `WORKER-REPORT.md`.
