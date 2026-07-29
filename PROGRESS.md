@@ -79,14 +79,37 @@
   made `calfresh_mce_household_exclusion_applies` hold and prevented MCE
   status, despite an eligible-only MCE relation row. The executable result
   refutes the provisional fail-closed seam.
-- One provisional legal-proof blocker remains pending independent source
-  confirmation: an ACIN proof excerpt changes retained `Broad- Based` to
-  `Broad-Based`, contrary to the requested verbatim-row standard.
+- Completed an independent pinned-corpus citation audit. All 15 declared or
+  checked source paths resolve, and 36 of 37 proof excerpts are literal
+  retained-row substrings. The sole mismatch is confirmed at MCE lines 90-91:
+  the proof says `Broad-Based`, while retained ACIN row
+  `028dddf7-273f-57d4-a05d-f9127b091b5a` says `Broad- Based`. All substantive
+  authority routes and encoded formulas otherwise match the controlling rows,
+  including all seven federal paragraph-(vii) gates and the distinct
+  paragraph-(ix) member exclusions.
+- Audited all three manifests. Their applied-file union is exactly the five
+  changed protected YAML files; all five SHA-256 values match the target
+  bytes, and the applied files last changed at ancestor commits `a350ed6b…`
+  or `4ce32e95…`. Supersedes records match their prior manifests, and all three
+  use the permitted `composition` manual exception.
+- Confirmed a second blocker in the ProgramSpec manifest. It records
+  `citation: ca-bbce:programs/us-ca/snap/fy-2026` and pre-fix encoder
+  `3869d66d…`/0.2.1200, but the merged post-encode#1312 signer
+  (`6ef7c14e…`, regression test at `tests/test_cli.py:15600`) necessarily emits
+  `programs/us-ca/snap/fy-2026`. Pinned-code reproduction emits the target
+  citation only when routed through a noncanonical `/tmp/ca-bbce` basename,
+  contradicting the signing commit's post-#1312 claim.
+- Reverse-index regeneration check passes (4,250 provisions, 5,092 edges,
+  4,487 modules); the delta is confined to the expected CA and federal
+  273.2 records. The oracle-pending ledger is byte-identical to base, unique,
+  sorted, and at its 2,139-entry ceiling; all 17 new executable IDs classify
+  as known-not-comparable, so no pending additions are required.
+- HMAC verification could not run because
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable. Structural signature
+  fields, applied-file hashes, and repository hash-sync checks pass.
 
 ## Next
 
-- Complete the manifest/index/oracle-ledger audit and independently confirm
-  the remaining provisional legal-proof blocker.
 - Compare federal/non-BBCE base and head compose surfaces, run a retained CA
   companion against both snapshots, finish the three disposition arithmetic
   walkthroughs, and write the evidence-backed verdict to `REVIEW.md`.
