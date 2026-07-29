@@ -2,7 +2,7 @@
 
 ## State
 
-- Review status: in progress; request-changes evidence confirmed.
+- Review status: complete; verdict is request changes.
 - Review branch: `review/pr-1176-8d1f31d`.
 - Disposable worktree: `.git/review-worktrees/pr-1176-8d1f31d`.
 - GitHub-verified PR: open, mergeable, non-draft PR #1176.
@@ -134,5 +134,10 @@
 
 ## Next
 
-- Write and commit the evidence-backed verdict to `REVIEW.md`, finalize this
-  ledger, and report without writing to the PR branch, any remote, or GitHub.
+- Author: unify or enforce completeness of household membership relations,
+  add divergent-relation fail-closed tests, correct the retained ACIN excerpt,
+  regenerate the ProgramSpec manifest through the actual post-encode#1312
+  canonical-root signer, and rerun/re-sign the affected artifacts.
+- Reviewer after a new head: repeat the canonical-root corpus, mutation,
+  companion, composition, manifest, non-regression, and adversarial omission
+  checks against the replacement SHA.
