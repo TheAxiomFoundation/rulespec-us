@@ -37,6 +37,15 @@ No push, GitHub write, signing, or ProgramSpec manifest repair is in scope.
   rejected by the pinned runner, proving that divergence is no longer a
   representable dataset state.
 - Smoke-ran both companions from a canonical archive: 47/47 cases passed.
+- The first full program compile exposed that a bare imported relation name
+  with a local predicate remained an unqualified implicit relation. Replaced
+  that alias with a private, tautological derived relation whose executable
+  source is the fully qualified federal state-plan relation; both MCE
+  aggregations now range over this complete canonical projection.
+- Verified the corrected projection in a canonical-basename archive: the
+  compiled program contains neither the unqualified alias nor the retired CA
+  input relation, both companions pass 47/47 cases, both modules validate with
+  zero findings, and proof validation passes 29/29 and 9/9 atoms.
 
 ## Next
 
