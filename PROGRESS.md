@@ -15,6 +15,11 @@
 - Required corpus checkout:
   `/Users/maxghenis/TheAxiomFoundation/axiom-corpus/.worktrees/pin-8af59216`.
 - Required corpus pin: `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Canonical exact-head archive:
+  `.git/review-worktrees/pr-1176-canonical/rulespec-us`.
+- Exact pinned engine build:
+  `/private/tmp/pr1176-engine-ffd82132/target/debug/axiom-rules-engine`.
+- Composed/compiled program artifacts: `/private/tmp/pr1176-program`.
 - Final report: `REVIEW.md`.
 
 ## Done
@@ -31,13 +36,49 @@
   head. No PR-branch, remote, or GitHub write was made.
 - Recorded the shell-network failure from `gh pr view`; the connector supplied
   the live metadata instead.
+- Confirmed the required corpus worktree is clean and detached at exactly
+  `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Created a canonical-basename `git archive` root from the exact PR head and
+  proved a changed module's archive bytes match its target-commit bytes.
+- Ran pinned-encoder validation against the required corpus checkout from the
+  canonical root: both changed policy modules report `ci_pass=true`,
+  `all_passed=true`, and no errors.
+- Ran proof validation: all 28 MCE atoms and all 9 benefit-composition atoms
+  passed.
+- Built axiom-rules-engine offline from exact pin
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
+- Ran the two changed companions from the canonical root with that engine:
+  2 files, 44 cases, 2 compiled programs, zero failures.
+- Composed `programs/us-ca/snap/fy-2026.yaml` with axiom-compose at exact
+  workflow pin `fabe0b3b3fd6e90d3e8f075516f9b668f524f711`; the pinned engine compiled
+  it successfully with exactly 328 derived outputs.
+- Ran the complete repository-layout and program-spec set from the canonical
+  root: 12 tests passed.
+- Attempted the GitNexus review graph workflow. The exact snapshot was
+  unindexed; analysis parsed it but sandbox policy denied the global registry
+  write to `/Users/maxghenis/.gitnexus/registry.json`. Direct import/symbol
+  searches will supply the blast-radius evidence.
+- Recorded environment-only failures and successful fallbacks: shell GitHub
+  DNS was blocked; `uv` could not initialize its home cache; the first Python
+  environment lacked pytest; and `/Users/maxghenis/bin/pytest` points to a
+  removed Homebrew Python. Read-only connector metadata, exact-source
+  `PYTHONPATH` execution, and an existing pytest/PyYAML environment completed
+  the required checks.
+- Found two provisional blockers pending independent confirmation in the final
+  audit:
+  - one ACIN proof excerpt changes retained `Broad- Based` to `Broad-Based`,
+    contrary to the requested verbatim-row standard;
+  - both household-bar aggregation and the eligible-member witness use a new
+    `calfresh_mce_member_of_household` relation that is not bound to the
+    canonical SNAP `member_of_household` relation, leaving a divergent-relation
+    fail-closed seam.
 
 ## Next
 
-- Audit the immutable diff, legal proof rows, gate logic, companions, manifests,
-  integration, reverse index, and oracle-pending ledger behavior.
-- Build a canonical-basename archive execution root at the exact PR head and
-  run the full pinned suite with the required corpus worktree.
-- Reproduce exclusion and BBCE gate mutations, compare non-regression surfaces,
-  independently re-derive the three required disposition walkthroughs, and
-  write the evidence-backed verdict to `REVIEW.md`.
+- Complete the manifest/index/oracle-ledger audit and independently confirm
+  every provisional blocker.
+- Reproduce the recorded BBCE-gate mutation, probe the divergent-relation
+  bypass, and restore exact bytes after each mutation.
+- Compare federal/non-BBCE base and head compose surfaces, run a retained CA
+  companion against both snapshots, finish the three disposition arithmetic
+  walkthroughs, and write the evidence-backed verdict to `REVIEW.md`.
