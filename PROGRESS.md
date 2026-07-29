@@ -2,12 +2,9 @@
 
 ## State
 
-Defensive correctness and completeness audit in progress on
-`fed-parity/ca-bbce`, starting from
-`686d413cfe15410dc160010f7863096c8c20ef48`.
-The round-2 blocker is the caller-injectable private derived relation
-`calfresh_mce_canonical_member_of_household`.
-No push, GitHub write, or signing is in scope.
+Complete. The round-2 blocker on `fed-parity/ca-bbce` is repaired and all
+requested source-sensitive gates have run. The repair builds on resumed head
+`02d6244a8`; no push, GitHub write, or signing was performed.
 
 ## Done
 
@@ -59,10 +56,43 @@ No push, GitHub write, or signing is in scope.
   exactly the resource-waiver, net-waiver, and zero-benefit MCE cases.
 - The reverse index required no byte change and passes 6/6 tests plus
   generator `--check` at 4,250 provisions, 5,092 edges, and 4,487 modules.
+- Re-ran all three changed companions from a canonical-root git archive:
+  54/54 assertions passed. The two requested California companions account
+  for 47/47 of those assertions.
+- Materialized and ran the committed injection fixture over the California
+  companion in a disposable canonical archive: 2/2 adversarial cases passed.
+  Case 1 is programmatically identical to the reviewer's attacked input and
+  expected status; case 2 additionally attempts to spoof both private derived
+  scalar judgments.
+- Pinned validation passed for the federal state-plan module and both
+  California modules with `ci_pass=true`, `all_passed=true`, and no errors.
+- Proof validation passed for all three changed modules. The MCE module
+  remains proof-required and reports 30 atoms with no issues.
+- Compose and compile passed. Relative to the pre-repair artifact, the
+  compiled program adds only the two private derived helper IDs; it removes
+  nothing and changes no parameter or relation inventory.
+- Verified the compiled AST binds the trusted count directly to the fully
+  qualified federal relation, binds the integrity guard to that derived
+  count, and places the fail-closed guard at the start of both MCE outputs.
+  Neither helper compiles as caller input.
+- Re-ran exact retired-name probes for IPV and probation. Both fail validation
+  because the retired relation is undeclared. The IPV, probation, and eligible
+  omission regressions retain their expected outcomes.
+- Repository layout/program contracts pass 12/12. `git diff --check` is clean.
+- Reverse-index regeneration remains byte-identical; reverse-index tests pass
+  6/6 and generator `--check` succeeds.
+- Confirmed the only output-inventory change is two source-private derived
+  helpers. Existing merged-oracle PR #424 public mappings remain unchanged;
+  downstream consumers that inventory every compiled derived ID must honor
+  `metadata.private` for these helpers.
+- Confirmed the expected no-signing handoff: the manifest-sync test reports
+  only the two edited module manifests as stale (1 failed, 2 passed). The main
+  lane must refresh/re-sign those modules and their changed companion
+  artifacts before push or merge.
+- Wrote the required untracked `WORKER-REPORT-REPAIR2.md`. The pre-existing
+  untracked `WORKER-REPORT.md` remains untouched.
 
 ## Next
 
-- Re-run ordinary companions, explicit injection fixture, and pinned
-  validation, then finish compose/compile, retired-name rejection, repository
-  contracts, and public-output containment.
-- Write untracked `WORKER-REPORT-REPAIR2.md` with final evidence.
+- Main lane: refresh and sign the affected manifests/companion artifacts,
+  then perform any push or GitHub update.
