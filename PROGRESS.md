@@ -2,8 +2,8 @@
 
 ## State
 
-- Review status: substantive review complete; final report in progress.
-- Expected verdict: `REQUEST-CHANGES` for two binding conformance defects.
+- Review status: complete.
+- Verdict: `REQUEST-CHANGES` for two binding conformance defects.
 - Review branch: `review/pr-1177-f4cc1b8`.
 - Disposable worktree: `.git/review-worktrees/pr-1177-f4cc1b8`.
 - GitHub-verified PR head:
@@ -100,10 +100,14 @@
   verified live metadata; GitNexus analysis parsed the snapshot but sandbox
   policy denied its global registry write at
   `/Users/maxghenis/.gitnexus/registry.json`.
+- Wrote and committed the evidence-backed verdict to `REVIEW.md` in commit
+  `b90a86cac`.
 
 ## Next
 
-- Write and commit the evidence-backed verdict to `REVIEW.md`.
 - Author after review: add a mutation-killing asymmetric relation-order
   diagnostic, correct the non-verbatim section 164 excerpt, then revalidate and
   regenerate/re-sign every affected manifest after the content commits.
+- Reviewer after revision: freeze the new head and rerun the full canonical
+  archive, corpus, mutation, closure, manifest, reverse-index, and pending-ledger
+  gates.
