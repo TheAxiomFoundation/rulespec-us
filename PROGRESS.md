@@ -48,9 +48,12 @@ No push, GitHub write, or signing is in scope.
 - Added the reviewer's exact canonical-relation injection shape as a
   fail-closed companion regression, plus a stronger case proving caller data
   cannot spoof either derived integrity output.
-- Pinned focused companions pass 56/56 across the federal state-plan, MCE,
-  and benefit modules. The two requested CA companions pass 49/49, including
-  all round-1 omission cases and both new injection cases.
+- An initial pinned execution pass covered all 56 ordinary and adversarial
+  cases. Standalone validation then exposed a harness mismatch: it rejects
+  relation inputs to `kind: derived_relation` even though the pinned runtime
+  accepts and unions them. The two adversarial cases now live in a committed
+  explicit injection fixture, while the adjacent companion retains the
+  validator-compatible control and all round-1 regressions.
 - Mutation evidence remains targeted: changing only the eligible-member
   existence comparison from `> 0` to `< 0` produces 13 assertion failures in
   exactly the resource-waiver, net-waiver, and zero-benefit MCE cases.
@@ -59,6 +62,7 @@ No push, GitHub write, or signing is in scope.
 
 ## Next
 
-- Finish pinned validation, proof validation, compose/compile, retired-name
-  rejection, repository contracts, and public-output containment.
+- Re-run ordinary companions, explicit injection fixture, and pinned
+  validation, then finish compose/compile, retired-name rejection, repository
+  contracts, and public-output containment.
 - Write untracked `WORKER-REPORT-REPAIR2.md` with final evidence.
