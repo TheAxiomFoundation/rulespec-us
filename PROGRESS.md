@@ -39,14 +39,40 @@
 - Confirmed all four manifest applied-file hashes match exact target bytes,
   and the focused schema/manifest pytest set passes 4/4 (one pre-existing
   unmanifested-module warning).
+- Inspected `/Users/maxghenis/axiom-rules/src` at
+  `c4b62bdb740d4149f0872783964f917e74cffe42`: `DataRelationRef`,
+  lowering, `RelationSpec`, `RelationSchema`, and runtime evaluation retain
+  only relation name/arity/tuple slots. The sole `arguments` hit under `src/`
+  is unrelated CLI prose; the data-relation schema permits that unknown
+  property but does not lower it.
+- Ran the new contract unmutated: 1 passed. In isolated scratch, applied the
+  predecessor's exact two-line `(TaxUnit, Person)` to `(Person, TaxUnit)`
+  reversal and reran the same node: 1 failed, reporting declared
+  `['Person', 'TaxUnit']` versus expected `['TaxUnit', 'Person']`.
+- Proved CI collection: repo-root `pytest --collect-only -q tests/` includes
+  the exact new node among 66 tests; the full repository suite passes 66/66
+  with one pre-existing warning. The pinned reusable workflow's repository
+  test step runs `python -m pytest -q tests`.
+- Confirmed sign-last ancestry: `f4cc1b88d -> d5d943632 -> 345c22030`;
+  repair commit `d5d943632` changes only two modules plus the test, while
+  `345c22030` changes only the two manifests. Every applied-file digest equals
+  its byte digest in signing parent `d5d943632`; both `supersedes` records
+  exactly identify the prior manifest digest/signature.
+- Read-only exact-head CI confirms Repository Checks and
+  `validate / generated-guard` succeeded (run `30432777085`); source
+  staleness/reverse index also succeeded (run `30432776846`).
 - Recorded a noncanonical-root false start: import resolution failed for the
   companion command, and two validators scanned an overly broad parent tree
   until interrupted. Re-running from a checkout literally named
   `rulespec-us` eliminated both environment artifacts.
+- Recorded sandbox/tooling limits: GitNexus indexing parsed the disposable
+  checkout but could not write `/Users/maxghenis/.gitnexus/registry.json`
+  (`EPERM`) and was interrupted after reporting failure; a subprocess
+  inspection attempt was sandbox-denied; `uv` could not initialize its home
+  cache; raw web cache fetches failed. Read-only GitHub access, direct source
+  inspection, Ruby stdlib, and existing Python environments supplied the
+  required evidence.
 
 ## Next
 
-- Inspect engine runtime use of relation `arity` versus `arguments`.
-- Run the unmutated and mutated relation-schema test and confirm CI discovery.
-- Finish signature/supersedes and signing-ancestry checks.
 - Commit the evidence-backed verdict to `REVIEW.md`.
