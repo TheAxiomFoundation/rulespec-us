@@ -99,6 +99,20 @@
   and failed module resolution before executing the requested batch (only
   3 programs/11 cases); the exact-head canonical rerun above is the
   authoritative result.
+- Read the existing GitHub Repository Checks run `30404017228` for this head.
+  Waiver-change guard, generated guard (including secret-backed manifest
+  authentication), module validation, companions, and proof validation all
+  passed. Its only failure was full oracle coverage under the then-current
+  `axiom-oracles@678dd840`, which lacked exactly the two PR mappings.
+- Confirmed current `axiom-encode/main` now pins
+  `axiom-oracles@f8ea6027`; that merge contains exact classifications for
+  §63(c)(6) and §67(h). Reproduced the shared workflow's full-coverage command
+  against the exact head with that current mapping: exit 0, no unmapped or
+  untested-comparable outputs. A fresh Repository Checks execution would
+  therefore clear the historical transient oracle-pin failure.
+- Creating a detached oracle worktree was sandbox-denied at the source
+  checkout's git metadata; a read-only local clone under `/private/tmp`
+  provided the exact `f8ea6027` tree for the successful rerun.
 
 ## Next
 
