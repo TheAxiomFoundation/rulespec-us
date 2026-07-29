@@ -11,8 +11,8 @@
   `origin/main` at `af6c57d618acff5cb268d345653ea3e4cf64feb6`.
 - Repair commits: `5fdcce258` and `b8ba5dbe7`.
 - Scope: repair round plus containment only.
-- Status: repair/containment verification in progress; verdict not yet
-  determined.
+- Status: complete.
+- Final verdict: `APPROVE`.
 
 ## Done
 
@@ -113,9 +113,11 @@
 - Creating a detached oracle worktree was sandbox-denied at the source
   checkout's git metadata; a read-only local clone under `/private/tmp`
   provided the exact `f8ea6027` tree for the successful rerun.
+- Wrote the complete evidence digest, current-gate adjudication, and sandbox
+  disclosures to `WORKER-REPORT.md`.
 
 ## Next
 
 - Run pinned validation, companion, and manifest checks.
-- Assemble and commit the final evidence report and verdict.
+- None; hand off the committed report.
 - Write and commit the final evidence report to `WORKER-REPORT.md`.
