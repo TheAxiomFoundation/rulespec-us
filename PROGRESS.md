@@ -24,12 +24,22 @@ No push, GitHub write, signing, or ProgramSpec manifest repair is in scope.
   matching pinned-corpus row: 36 were byte-verbatim and the sole mismatch was
   the ACIN `Broad- Based` text.
 - Corrected the ACIN excerpt to the retained row's exact `Broad- Based` bytes.
+- Traced every MCE member scan. Only the household-bar and eligible-member
+  aggregations scan members; all benefit-side waivers delegate to MCE status.
+- Removed the PR-new California membership relation and ranged both MCE
+  aggregations over the imported federal state-plan `member_of_household`.
+- Migrated the isolated companion to the canonical relation and merged the
+  California-only bar facts into the benefit companion's existing federal
+  rows, preserving the E/D rows' true elderly/disabled facts.
+- Added canonical equivalents of the reviewer's divergent IPV,
+  probation/parole, and eligible-member omission cases. A direct attempt to
+  retain the now-undeclared California relation as adversarial input was
+  rejected by the pinned runner, proving that divergence is no longer a
+  representable dataset state.
+- Smoke-ran both companions from a canonical archive: 47/47 cases passed.
 
 ## Next
 
-- Inventory every MCE aggregation or waiver that scans household members.
-- Repair blocker 1 with one canonical federal household-membership relation.
-- Add divergent-relation IPV, probation/parole, and eligible-member tests.
 - Run all requested companions, validation, composition/compile, mutation,
   reverse-index, output-surface, and intended-path gates.
 - Write `WORKER-REPORT-REPAIR.md` with exact evidence and final head.
