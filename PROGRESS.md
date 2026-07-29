@@ -64,21 +64,29 @@
   removed Homebrew Python. Read-only connector metadata, exact-source
   `PYTHONPATH` execution, and an existing pytest/PyYAML environment completed
   the required checks.
-- Found two provisional blockers pending independent confirmation in the final
-  audit:
-  - one ACIN proof excerpt changes retained `Broad- Based` to `Broad-Based`,
-    contrary to the requested verbatim-row standard;
-  - both household-bar aggregation and the eligible-member witness use a new
-    `calfresh_mce_member_of_household` relation that is not bound to the
-    canonical SNAP `member_of_household` relation, leaving a divergent-relation
-    fail-closed seam.
+- Re-ran the exact-head canonical companion set independently: 2 files, 44
+  cases, 2 compiled programs, zero failures.
+- Reproduced the BBCE-gate mutation in a separate exact-head archive. Changing
+  the eligible-member count gate from `> 0` to the impossible `< 0` produced
+  13 assertion failures confined to exactly three intended MCE cases:
+  resource waiver, net-ceiling waiver, and MCE zero-benefit denial. Restoring
+  the target formula restored the target SHA-256
+  `e119bb7abc2dd05d698b41e854a7b9c4a1b17e00defd559ee0258958beea5c71`
+  and returned the composition companion to 12/12 green.
+- Adversarially probed the apparently divergent
+  `calfresh_mce_member_of_household` relation. A barred IPV member supplied
+  only through the canonical federal `member_of_household` relation still
+  made `calfresh_mce_household_exclusion_applies` hold and prevented MCE
+  status, despite an eligible-only MCE relation row. The executable result
+  refutes the provisional fail-closed seam.
+- One provisional legal-proof blocker remains pending independent source
+  confirmation: an ACIN proof excerpt changes retained `Broad- Based` to
+  `Broad-Based`, contrary to the requested verbatim-row standard.
 
 ## Next
 
 - Complete the manifest/index/oracle-ledger audit and independently confirm
-  every provisional blocker.
-- Reproduce the recorded BBCE-gate mutation, probe the divergent-relation
-  bypass, and restore exact bytes after each mutation.
+  the remaining provisional legal-proof blocker.
 - Compare federal/non-BBCE base and head compose surfaces, run a retained CA
   companion against both snapshots, finish the three disposition arithmetic
   walkthroughs, and write the evidence-backed verdict to `REVIEW.md`.
