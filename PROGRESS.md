@@ -2,7 +2,7 @@
 
 ## State
 
-- Review status: in progress.
+- Review status: in progress; request-changes evidence confirmed.
 - Review branch: `review/pr-1176-8d1f31d`.
 - Disposable worktree: `.git/review-worktrees/pr-1176-8d1f31d`.
 - GitHub-verified PR: open, mergeable, non-draft PR #1176.
@@ -73,12 +73,20 @@
   the target formula restored the target SHA-256
   `e119bb7abc2dd05d698b41e854a7b9c4a1b17e00defd559ee0258958beea5c71`
   and returned the composition companion to 12/12 green.
-- Adversarially probed the apparently divergent
-  `calfresh_mce_member_of_household` relation. A barred IPV member supplied
-  only through the canonical federal `member_of_household` relation still
-  made `calfresh_mce_household_exclusion_applies` hold and prevented MCE
-  status, despite an eligible-only MCE relation row. The executable result
-  refutes the provisional fail-closed seam.
+- Adversarially probed the independent
+  `calfresh_mce_member_of_household` relation. The first one-row-per-relation
+  probe was a false negative because the pinned companion runner assigns
+  `related_0` independently within each relation, aliasing those two rows to
+  one person.
+- Reproduced the actual fail-open with internally consistent two-person
+  households. The federal state-plan relation contained an eligible
+  `related_0` and a barred `related_1`, while the CalFresh relation omitted
+  `related_1`. Both an IPV bar and a probation/parole bar were ignored:
+  `calfresh_mce_household_exclusion_applies` evaluated `not_holds` and MCE
+  evaluated `holds`. Restoring the legally required fail-closed expectations
+  produced exactly two targeted assertion failures. The exact compiled
+  program exposes the federal and CalFresh relations independently and has no
+  equality or subset invariant.
 - Completed an independent pinned-corpus citation audit. All 15 declared or
   checked source paths resolve, and 36 of 37 proof excerpts are literal
   retained-row substrings. The sole mismatch is confirmed at MCE lines 90-91:
@@ -107,9 +115,24 @@
 - HMAC verification could not run because
   `AXIOM_ENCODE_APPLY_SIGNING_KEY` is unavailable. Structural signature
   fields, applied-file hashes, and repository hash-sync checks pass.
+- Composed all 32 program specs unaffected by the CA SNAP ProgramSpec from
+  both base and exact head with the pinned composer. Every emitted RuleSpec
+  file is byte-identical across snapshots, including the nested payroll spec.
+- Composed the CA SNAP program at base and exact head. The head adds 20
+  derived outputs and one parameter, removes none, and changes only the two
+  expected existing eligibility bridges (`calfresh_income_and_resource_eligible`
+  and `snap_eligible`); the other 306 common derived definitions are
+  byte-identical.
+- Ran the pre-existing CA standard-utility companion against base and exact
+  head: both snapshots passed 2/2 cases with identical results.
+- Independently re-derived the three requested disposition walkthroughs from
+  encoded deduction, rounding, and allotment formulas:
+  `ecps-56918` yields net $475.63 and $155; `ecps-59281` yields net $1,819.17,
+  zero before minimums, and $24; `ecps-60516` uses the E/D gross bypass and
+  uncapped shelter deduction to yield net $1,529.99, zero before minimums,
+  and $24.
 
 ## Next
 
-- Compare federal/non-BBCE base and head compose surfaces, run a retained CA
-  companion against both snapshots, finish the three disposition arithmetic
-  walkthroughs, and write the evidence-backed verdict to `REVIEW.md`.
+- Write and commit the evidence-backed verdict to `REVIEW.md`, finalize this
+  ledger, and report without writing to the PR branch, any remote, or GitHub.
