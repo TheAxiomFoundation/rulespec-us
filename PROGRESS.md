@@ -35,17 +35,23 @@ No push, GitHub write, or signing is in scope.
   federal state-plan module, compare it with the CA projection length in a
   private integrity judgment, and make the two household MCE outputs fail
   closed when the counts diverge. Under the pinned engine's monotone union,
-  every new injected member tuple strictly enlarges the projection.
+  every non-source member ID strictly enlarges the projection; duplicate
+  tuples are deduplicated and cannot change either aggregation.
 - Added the private federal
   `snap_state_plan_member_of_household_count`, computed directly as
   `len(member_of_household)` inside the state-plan module, with companion
   coverage. Caller dataset inputs cannot override a derived scalar's
   executable formula in the pinned engine.
+- Added the private California integrity judgment comparing the canonical
+  projection length with the trusted federal count. Integrity failure makes
+  the household-exclusion output `holds` and MCE status `not_holds`.
+- Added the reviewer's exact canonical-relation injection shape as a
+  fail-closed companion regression, plus a stronger case proving caller data
+  cannot spoof either derived integrity output.
 
 ## Next
 
-- Implement the CA integrity judgment and exact injection regression while
-  retaining all round-1 regressions.
-- Run companions, pinned validation, proof validation, compose/compile,
-  mutation evidence, reverse-index checks, and public-output containment.
+- Run focused companions, then full companions, pinned validation, proof
+  validation, compose/compile, mutation evidence, reverse-index checks, and
+  public-output containment.
 - Write untracked `WORKER-REPORT-REPAIR2.md` with final evidence.
