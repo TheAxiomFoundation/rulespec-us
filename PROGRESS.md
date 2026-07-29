@@ -40,10 +40,27 @@
   repository impact analysis.
 - A policy-blocked `rm -rf` cleanup attempt made no filesystem change; the
   partial index was moved instead.
+- Read the exact shared workflow blob at
+  `TheAxiomFoundation/.github@b380085c` through the read-only GitHub
+  connector. Confirmed pending evidence is loaded from the protected base,
+  `require_pending_evidence` compares that evidence to current module bytes,
+  and `waiver_module_is_unchanged` emits skip-list entries only for unchanged
+  modules.
+- Reproduced the workflow's exact `approval_growth` function against
+  `origin/main` and the requested head: result `False`; the only state changes
+  are removal of `6012.yaml:active` and `63/c.yaml:pending`, with no additions
+  or metadata changes.
+- Confirmed protected-base §63(c) evidence attests `sha256:53a218...` while
+  the repaired module is `sha256:fbc6f30c...`; retaining the pending waiver
+  would therefore fail exact-evidence validation.
+- Simulated the waiver skip-list against the PR diff. All four changed modules
+  (§6012, §63(c), §63(c)(6), and §67(h)) are absent from the head waiver set
+  and are selected for validation; the obsolete §63(c) fingerprint record is
+  absent.
 
 ## Next
 
-- Run pinned validation, companion, manifest, and waiver-growth checks.
+- Run pinned validation, companion, and manifest checks.
 - Audit waiver workflow semantics, legal correctness, moved bindings,
   proof-import hashes, manifest signatures, and repository containment.
 - Write and commit the final evidence report to `WORKER-REPORT.md`.
