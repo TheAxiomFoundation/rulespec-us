@@ -2,7 +2,8 @@
 
 ## State
 
-- Review status: in progress; exact PR range frozen.
+- Review status: substantive review complete; final report in progress.
+- Expected verdict: `REQUEST-CHANGES` for two binding conformance defects.
 - Review branch: `review/pr-1177-f4cc1b8`.
 - Disposable worktree: `.git/review-worktrees/pr-1177-f4cc1b8`.
 - GitHub-verified PR head:
@@ -54,9 +55,55 @@
 - Attempted the GitNexus graph workflow in a separate exact-head worktree.
   GitNexus reports the repository unindexed; online `npx` then hung on the
   restricted network, while offline `npx` reported the package was not cached.
+- Confirmed all 16 prescribed SALT cases and all 17 prescribed itemized cases
+  are present with exact plan inputs and statutory expected values. Independent
+  rational recomputation found zero arithmetic mismatches, including
+  `40,399.70`, `5,950`, and every section 68 threshold/lesser-of case.
+- Confirmed the exact 8/3 direct import lists; no local section 68
+  rate/threshold/lesser-of formula; imported section 67(h) consistency;
+  negative-component guards; guarded public outputs; and verbatim section 165
+  atoms for the positive casualty case.
+- Found a binding relation-order test defect. In a separate exact-head archive,
+  swapping only the SALT relation arguments from `(TaxUnit, Person)` to
+  `(Person, TaxUnit)` still passed the SALT companion 25/25 and the combined
+  companion set 53/53. Pinned validation also accepted the mutated SALT module.
+  The named positive relation witness is therefore not the mutation test
+  required by plan §5 and §10.
+- Found a binding proof-atom defect at
+  `salt_deduction_pipeline.yaml:250`. Its section 164 excerpt omits the corpus
+  row's exact `the term “modified adjusted gross income” means` wording.
+  Programmatic exact-Unicode comparison found 12/13 SALT excerpts unique and
+  one absent; all 14 itemized excerpts are unique. The pinned structural proof
+  validator still reports 24/24 and 23/23 because it does not compare excerpt
+  text.
+- Audited the ten-module merged closure: 80 declarations are unique, all 13
+  import selections and 24 proof imports resolve, entities agree, and the sole
+  relation predicate has no collision. Neither `63/c.yaml` nor the Rev. Proc.
+  standard-deduction module is present.
+- Audited both manifests: applied-file sets are disjoint and exactly the four
+  protected pipeline/companion YAML files; hashes match exact-head and
+  signature-parent bytes; content commits are ancestors; the signature commit
+  changes only the two manifests; and both exceptions are exactly
+  `composition`. The local HMAC key is unavailable, but GitHub's exact-head
+  generated-guard job succeeded.
+- Regenerated the reverse index: it is byte-current at 4,247 provisions, 5,105
+  edges, and 4,490 modules. The pending ledger is sorted/unique, has
+  `ceiling == count == 2148`, and is the exact field-preserving union of both
+  merge parents.
+- Confirmed the PR diff is exactly the intended eight files with no workflow,
+  toolchain, CODEOWNERS, lockfile, or unrelated change.
+- Ran repository layout, reverse-index, and manifest tests: 18 passed with one
+  pre-existing unmanifested-module warning.
+- Recorded environment-only limitations and fallbacks: the axiom-encode virtual
+  environment lacks pytest, so an existing pytest/PyYAML environment ran the
+  repository tests; shell GitHub DNS was blocked, so the read-only connector
+  verified live metadata; GitNexus analysis parsed the snapshot but sandbox
+  policy denied its global registry write at
+  `/Users/maxghenis/.gitnexus/registry.json`.
 
 ## Next
 
-- Run legal, case-table, proof, import-surface, manifest, index, ledger, and
-  canonical-root mechanical checks.
 - Write and commit the evidence-backed verdict to `REVIEW.md`.
+- Author after review: add a mutation-killing asymmetric relation-order
+  diagnostic, correct the non-verbatim section 164 excerpt, then revalidate and
+  regenerate/re-sign every affected manifest after the content commits.
