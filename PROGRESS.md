@@ -18,6 +18,8 @@
   `/Users/maxghenis/TheAxiomFoundation/ops/fed-parity-campaign/SPINE-PLAN.md`.
 - Canonical exact-head archive:
   `.git/review-worktrees/pr-1177-canonical/rulespec-us`.
+- Exact pinned engine build:
+  `/private/tmp/pr1177-engine-ffd82132/target/release/axiom-rules-engine`.
 - Final report: `REVIEW.md`.
 
 ## Done
@@ -42,6 +44,16 @@
 - Read binding plan §5, §6.1, §6.2, §9 Chunk 1, and its commit discipline.
 - Created the required canonical-basename `git archive` root from the exact PR
   head and verified an archive module's SHA-256 against the commit bytes.
+- Rebuilt `axiom-rules-engine` offline from exact toolchain pin
+  `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
+- Ran the pinned companion runner from the canonical archive with that engine:
+  2 files, 53 cases, 2 compiled programs, zero failures.
+- Ran pinned-encoder validation against the required corpus checkout from the
+  canonical archive: both modules report `ci_pass=true`, `all_passed=true`,
+  and zero errors.
+- Attempted the GitNexus graph workflow in a separate exact-head worktree.
+  GitNexus reports the repository unindexed; online `npx` then hung on the
+  restricted network, while offline `npx` reported the package was not cached.
 
 ## Next
 
