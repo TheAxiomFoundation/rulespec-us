@@ -31,6 +31,12 @@ EXPECTED_RELATION_SCHEMAS = {
             "arguments": ["TaxUnit", "Person"],
         },
     },
+    "us/statutes/26/170/p.yaml": {
+        "charitable_contribution_of_tax_unit": {
+            "arity": 2,
+            "arguments": ["TaxUnit", "Payment"],
+        },
+    },
 }
 
 
