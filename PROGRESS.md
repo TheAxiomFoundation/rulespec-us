@@ -50,12 +50,13 @@
 - Passed the exact-pinned §55 companion (14 cases), proof validation (81 atoms),
   money-atom gate, and focused deterministic validate. Negating the §56 domain
   attestation produced 48 expected assertion failures before restoration.
+- Removed §55's stale pending validation waiver and matching fingerprint row
+  after the corrected module passed focused pinned validation; both ledgers
+  still parse and contain no live §55 entry.
 
 ## Next
 
-1. Remove §55's stale validation-gap evidence now that focused validation is
-   green.
-2. Update the pending oracle ledger and reverse index.
-3. Run every companion, pinned validate, program compile, containment, and
+1. Update the pending oracle ledger and reverse index.
+2. Run every companion, pinned validate, program compile, containment, and
    flip/restore mutation gate.
-4. Write the final `WORKER-REPORT.md` without tracking it.
+3. Write the final `WORKER-REPORT.md` without tracking it.
