@@ -40,10 +40,21 @@
   (13 atoms), money-atom gate, and focused deterministic validate; negating
   the subsection (c)(2) attestation produced seven expected assertion failures
   before restoration.
+- Corrected §55 to restore the §151 senior deduction and bounded §§57–59
+  adjustments to AMTI, subtract the §68 reduction for itemizers, and use one
+  §26(b) regular-tax total with ordinary FTC and AMTFTC confined to their
+  respective sides.
+- Removed the post-2017 kiddie branch and erroneous Form 4972 subtraction while
+  making zero §911(f) exclusion and zero Form 4972 amounts explicit fail-closed
+  domain conditions.
+- Passed the exact-pinned §55 companion (14 cases), proof validation (81 atoms),
+  money-atom gate, and focused deterministic validate. Negating the §56 domain
+  attestation produced 48 expected assertion failures before restoration.
 
 ## Next
 
-1. Correct and test §55, then remove its stale validation-gap evidence if green.
+1. Remove §55's stale validation-gap evidence now that focused validation is
+   green.
 2. Update the pending oracle ledger and reverse index.
 3. Run every companion, pinned validate, program compile, containment, and
    flip/restore mutation gate.
