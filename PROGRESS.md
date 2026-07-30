@@ -18,7 +18,7 @@
   `/Users/maxghenis/TheAxiomFoundation/axiom-corpus/.worktrees/pin-8af59216`.
 - Binding plan:
   `/Users/maxghenis/TheAxiomFoundation/ops/fed-parity-campaign/SPINE-PLAN.md`.
-- Planned canonical exact-head archive:
+- Canonical exact-head archive:
   `.git/review-worktrees/pr-1179-canonical/rulespec-us`.
 - Final report: `REVIEW.md`.
 
@@ -36,11 +36,21 @@
   and zero commits behind its local `origin/main` merge base.
 - Created this disposable local review worktree and review-only branch from
   the candidate head. No PR-branch, remote, or GitHub write was made.
+- Confirmed the required corpus checkout is clean and detached at exact pin
+  `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Read binding `SPINE-PLAN.md` §5, §6.3, §9 Chunk 2 and commit discipline,
+  plus the tranche definition of done.
+- Froze the five-file candidate diff: taxable-income compose, companion,
+  manifest, reverse index, and pending ledger only; `git diff --check` passes.
+- Created the required canonical-basename exact-head archive at
+  `.git/review-worktrees/pr-1179-canonical/rulespec-us`.
+- Verified the archive's pipeline SHA-256
+  `460e8554e965c4fcf5839d7963faad91b29f7972e2fc40bf3b5d430a6fdaf7c5`
+  exactly matches the frozen commit bytes and contains no session ledger or
+  review report.
 
 ## Next
 
-- Read the binding plan sections and freeze the exact intended diff.
-- Create and verify the canonical-basename exact-head archive.
 - Audit legal fidelity, prescribed cases, guards, proof atoms, imports,
   manifests, reverse index, pending ledger, and file scope.
 - Run the companion, validation, proof, and repository mechanical gates.
