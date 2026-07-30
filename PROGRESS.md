@@ -56,10 +56,11 @@
 - Added the exact zero-loss pending-oracle union for all 11 new public
   §§57–59 outputs. The ledger is lexicographically sorted and unique, with
   `ceiling == count == 2159` and no pre-existing entry removed.
+- Regenerated the reverse provision index to 4,272 provisions, 5,132 edges,
+  and 4,493 modules; its dedicated six-test suite passes.
 
 ## Next
 
-1. Regenerate and verify the reverse index.
-2. Run every companion, pinned validate, program compile, containment, and
+1. Run every companion, pinned validate, program compile, containment, and
    flip/restore mutation gate.
-3. Write the final `WORKER-REPORT.md` without tracking it.
+2. Write the final `WORKER-REPORT.md` without tracking it.
