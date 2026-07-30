@@ -48,6 +48,11 @@
   semantic delta marks those two existing taxable-pipeline edges as
   `proof_atom` as well as `module`, with provision/edge/module counts unchanged
   at 4,249/5,120/4,491.
+- Corrected the MAGI fixture after pinned validation rejected merge-key
+  overrides: common §931 zero facts and the positive-addback variant now use
+  disjoint anchors, so the strict YAML loader and companion runner agree.
+- Reconfirmed the pinned companion at 28/28 and pinned module validation with
+  `ci_pass=true`, `all_passed=true`, and zero errors in the working tree.
 
 ## Next
 
