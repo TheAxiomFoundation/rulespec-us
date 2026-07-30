@@ -39,12 +39,37 @@
   contains neither `PROGRESS.md` nor `REVIEW.md`; the compose blob is
   `507fa3179ab04da5d2562af6fb97d4fb60b86e85` with SHA-256
   `812f15410e4266a6118b9929399dbe4ae3f654eb77ad0e7bb77b15ee8c50de8f`.
+- Confirmed the current section 165(d) proof excerpt is a 302-byte exact
+  substring occurring once in the resolver-selected pinned provision and
+  states both the 90-percent loss limit and wagering-gains ceiling.
+- Confirmed the compose's rationale, itemizer branch, and completed input
+  contract all define the wagering amount as after both current-law limits,
+  rather than merely updating the excerpt.
+- Confirmed the final is sourced to sections 61, 62, and 63(a)-(b), with
+  byte-exact definition atoms for the gross-income, adjusted-gross-income,
+  itemizer, and nonitemizer bridge. All 13 compose source excerpts occur
+  exactly once in their resolver-selected pinned provision bodies.
+- Independently recomputed the section 931 diagnostic: `75,000 + 10,000 =
+  85,000` MAGI; `6,000 - 0.06 * 10,000 = 5,400` senior deduction;
+  `18,150 + 5,400 = 23,550` deductions; and `75,000 - 23,550 = 51,450`
+  taxable income. Every asserted intermediate and final matches.
+- Confirmed the static registry pins the section 151 exemption and senior
+  relations as `(TaxUnit, Person)` and the section 170(p) relation as
+  `(TaxUnit, Payment)`.
+- Re-ran three isolated exact two-line argument-order mutations. Reversing
+  exemption, senior, or charity independently yields return code 1 and one
+  targeted schema-test failure; the pristine baseline passes.
+- Ran the byte-exact predecessor companion blob `727d57e5...` over the
+  repaired compose blob `507fa317...`. Its sole failing case is
+  `ti-entity-zeroes-standard`: the repaired domain returns `not_holds` and
+  taxable income returns zero instead of the predecessor's expected
+  `holds`/`100000`.
+- Confirmed the repaired contradictory regression has the exact same period
+  and 85-key resolved input map as the predecessor fixture, including both
+  `taxpayer_is_individual=true` and the nonindividual entity fact `true`.
 
 ## Next
 
-- Verify the two legal-proof repairs and the MAGI arithmetic independently.
-- Execute all three exact relation-schema mutations and the predecessor's
-  contradictory-facts regression.
 - Run the companion, pinned validation, proof, ledger, manifest, and
   containment gates.
 - Write and commit the evidence-backed verdict to `REVIEW.md`.
