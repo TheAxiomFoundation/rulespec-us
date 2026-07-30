@@ -70,10 +70,21 @@
   with zero guarded money outputs. Additional exact-engine probes for statuses
   `-1`, `5`, `8`, `9`, and `10`, plus nonindividual units under every valid
   status `0..4`, all fail closed (`10/10`).
+- Programmatically audited proof evidence against the exact corpus pin. Across
+  703 JSONL files and 143,779 records, all 25 distinct citations resolve
+  uniquely and all 49 excerpts are strict UTF-8 substrings of corpus body or
+  source-history evidence: §55 `24/24`, §57 `3/3`, §58 `11/11`, and §59
+  `11/11`. The repaired §57 excerpt is substantive operative body text.
+- Independently ran pinned `ValidatorPipeline` with
+  `policy_repo_path=<canonical-rulespec-us-root>` (not `<root>/us`), exact
+  corpus and engine pins, oracles disabled, proofs required, repository layout
+  enforced, one worker, and reviewers skipped. §§55, 57, 58, and 59 each have
+  zero compile findings and zero CI findings; `all_passed` and `ci_pass` are
+  true for all four. §59 therefore reproduces the predecessor's correctly
+  rooted validation with zero findings.
 
 ## Next
 
-- Verify proof excerpts, correctly rooted pinned validation, and schema
-  mutation kills.
+- Verify schema mutation kills.
 - Reproduce companions, compilation/validation gates, and the mutation battery.
 - Write and commit the final evidence-backed verdict to `REVIEW.md`.
