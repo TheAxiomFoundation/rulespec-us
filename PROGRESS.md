@@ -31,6 +31,27 @@
 - Ran manifest, repository-layout, reverse-index, and manifest-provenance
   contracts: 26 passed; the single warning is the unchanged 19-module
   unmanifested backlog.
+- Independently audited the static surface: exactly two new rule IDs since
+  pre-round-3 `686d413c`, both private; no removals; both fail-closed MCE
+  outputs consume the guard. The 14-path merge-base diff is contained to the
+  intended CA, ProgramSpec, federal state-plan, four manifests, reverse index,
+  and repair report; `git diff --check` is clean and PR head tracks no
+  `PROGRESS.md`.
+- Verified all four manifests have composition attestations, exact
+  supersession hashes, and seven applied-file hashes matching both ancestor
+  `01ec7fb5e` and head. ProgramSpec citation is exactly
+  `programs/us-ca/snap/fy-2026`.
+- Verified the 17 merged axiom-oracles PR #424 mapping rows are byte-identical
+  on oracle main and contain neither helper.
+- Completed the independent federal blast audit:
+  - Arizona base/overlay companions pass 6/6 and their complete canonical
+    request/response transcripts are byte-identical.
+  - New York base/overlay companions pass 12/12 with byte-identical complete
+    transcripts.
+  - Raw compiled artifacts differ only by the new private helper plus its
+    evaluation-order entry; removing those inert entries yields
+    byte-identical artifacts.
+  - Federal exact-head companion passes 7/7 and validation has zero findings.
 - Attempted the required GitNexus index. The sandbox denied its write to
   `/Users/maxghenis/.gitnexus/registry.json`; direct source, git, and compiled
   artifact checks are being used instead.
@@ -40,9 +61,6 @@
 
 ## Next
 
-- Finish the independent static audit of containment, manifests, private
-  surface, and oracle rows.
 - Finish the adversarial equal-count/equal-cardinality probes and guard
   mutation.
-- Finish federal and cross-state byte-identity blast-radius checks.
 - Commit the final evidence report and issue the verdict.
