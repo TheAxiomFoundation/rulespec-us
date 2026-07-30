@@ -94,10 +94,46 @@
 - Reran exact-engine mutation evidence: §57 a(7), §58 c(2), §59 completion,
   and §59(j) flips each fail their companions (5/7/7/8 assertions), and an
   independent AMTFTC guard inversion fails two assertions.
+- Added a separate Form 4972 guard mutation. Replacing the required
+  `form_4972_lumpsum_distributions == 0` condition with `!= 0` makes the
+  exact-engine §55 companion fail 49 assertions across nine cases, including
+  the dedicated nonzero-Form-4972 case.
+- Independently recomputed the correction fixtures: §68-reversal AMTI
+  `$119,000`; senior-addback AMTI `$122,100`; signed §§57–59-adjustment AMTI
+  `$166,950`; and the split-credit case TMT after AMTFTC `$185,618`, regular
+  tax after ordinary FTC `$155,000`, AMT `$30,618`, and income tax before
+  credits `$190,618`.
+- Reproduced base §55 companion 5/5 and head batch 36/36. Shared no-AMT,
+  high-income, and MFS expected outputs are unchanged; a reviewer-only probe
+  preserves the removed joint phaseout case. A matched post-2017 kiddie probe
+  changes only as required by §59(j)'s sunset: exemption `$14,750` to
+  `$90,100`, taxable excess `$85,250` to `$26,000`, and resulting AMT to
+  `$6,760`.
+- Reproduced the fresh FY2026 FIIT composition and exact-engine compile:
+  artifact format 2, 150 derived outputs, and fast-path compatibility. Base
+  has 137 outputs; head adds 14 intended outputs and removes only the
+  inoperative kiddie-limit output.
+- Completed the import closure audit: only §55 imports the new §§57–59
+  surfaces; all external proof hashes are current and local imports use
+  `sha256:local`; there are no repository-wide stragglers.
+- Verified the pending-oracle ledger is the exact sorted/unique union:
+  2,148 to 2,159, with exactly 11 additions and no removed or modified prior
+  row. The §55 waiver and fingerprint entries were removed rather than
+  refreshed, and §§57–59 have no live waiver rows.
+- Independently reproduced reverse-index parity at 4,272 provisions, 5,132
+  edges, and 4,493 modules.
+- Verified all four ordinary-provenance manifests name only their module and
+  companion, record current file hashes, carry `rulespec-us#1001`, and attest
+  bytes already present at signing parent `c36b0b58b`; the signing commit
+  changes only the four manifests.
+- Confirmed final containment is 12 non-manifest files plus four manifests,
+  not the requested 13 plus manifests. The author ledger's earlier count of
+  13 included its temporary `PROGRESS.md`, which was removed before signing;
+  the relation-schema contract that should cover the new compiled §151
+  relation closure was not added.
+- Reproduced the repository layout, manifest, reverse-index, and existing
+  relation-schema tests. The full repository test suite passes.
 
 ## Next
 
-- Finish behavior-preservation arithmetic and record every intended delta.
-- Finish cascade, ledger, manifest, index, composition, and containment
-  accounting.
 - Write the evidence-backed verdict to `REVIEW.md`.
