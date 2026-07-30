@@ -27,10 +27,15 @@
 - Passed the §59 companion (8 cases), proof validation (16 atoms), and focused
   deterministic validate; flip/restore mutations made both the completion
   judgment and kiddie judgment fail their named expectations.
+- Encoded §57(a)(5) as a guarded completed-return preference, with explicit
+  zero attestations for every other operative 2026 §57 preference.
+- Passed the exact-pinned §57 companion (8 cases), proof validation (4 atoms),
+  money-atom gate, and focused deterministic validate; negating the §57(a)(7)
+  attestation produced five expected assertion failures before restoration.
 
 ## Next
 
-1. Review, gate, and commit the bounded §57 and §58 modules.
+1. Review, gate, and commit the bounded §58 module.
 2. Correct and test §55, then remove its stale validation-gap evidence if green.
 3. Update the pending oracle ledger and reverse index.
 4. Run every companion, pinned validate, program compile, containment, and
