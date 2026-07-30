@@ -8,8 +8,9 @@
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Scope is limited to the five blockers in the frozen PR review plus mechanics
   directly affected by their repair.
-- Imported injectable relation schemas and the corrected legal-proof boundary
-  are now in place; companion/domain repairs remain in progress.
+- Imported relation schemas, corrected legal proofs, and the prescribed §151
+  MAGI-addback diagnostic are now in place; the contradictory-domain repair
+  remains in progress.
 - The existing composition manifest is intentionally not re-signed here; its
   applied-file hashes must be refreshed by the authorized main lane after all
   repair content is final.
@@ -34,10 +35,14 @@
   into the final alongside the retained §63(b) proof.
 - Confirmed every new or retained §61/§62/§63/§165 excerpt is an exact byte
   substring of its resolver-selected pinned-corpus body.
+- Added a companion-only §151 diagnostic in which a real $10,000 §931
+  exclusion raises single-senior MAGI from $75,000 to $85,000, reduces the
+  senior amount to $5,400, produces $23,550 total deductions, and yields
+  $51,450 taxable income.
+- Confirmed the expanded pinned companion passes all 28 cases.
 
 ## Next
 
-- Add the prescribed §151 MAGI-addback diagnostic.
 - Reject contradictory individual/nonindividual facts and add a regression.
 - Regenerate affected mechanics, run all required gates, and write the
   untracked repair report.
