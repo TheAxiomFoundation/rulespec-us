@@ -32,12 +32,18 @@
 - Passed the exact-pinned §57 companion (8 cases), proof validation (4 atoms),
   money-atom gate, and focused deterministic validate; negating the §57(a)(7)
   attestation produced five expected assertion failures before restoration.
+- Encoded bounded §58 loss adjustments as nonnegative completed pre-insolvency
+  amounts less separately attested, nonduplicative subsection (c)(1)
+  reductions; no unproved allocation order or exhaustion equation is imposed.
+- Passed the exact-pinned §58 companion (11 cases), proof validation (13
+  atoms), money-atom gate, and focused deterministic validate; negating the
+  subsection (c)(2) attestation produced nine expected assertion failures
+  before restoration.
 
 ## Next
 
-1. Review, gate, and commit the bounded §58 module.
-2. Correct and test §55, then remove its stale validation-gap evidence if green.
-3. Update the pending oracle ledger and reverse index.
-4. Run every companion, pinned validate, program compile, containment, and
+1. Correct and test §55, then remove its stale validation-gap evidence if green.
+2. Update the pending oracle ledger and reverse index.
+3. Run every companion, pinned validate, program compile, containment, and
    flip/restore mutation gate.
-5. Write the final `WORKER-REPORT.md` without tracking it.
+4. Write the final `WORKER-REPORT.md` without tracking it.
