@@ -8,8 +8,11 @@
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Scope is limited to the five blockers in the frozen PR review plus mechanics
   directly affected by their repair.
-- Imported injectable relation schemas are now pinned; legal proof and
-  companion/domain repairs remain in progress.
+- Imported injectable relation schemas and the corrected legal-proof boundary
+  are now in place; companion/domain repairs remain in progress.
+- The existing composition manifest is intentionally not re-signed here; its
+  applied-file hashes must be refreshed by the authorized main lane after all
+  repair content is final.
 
 ## Done
 
@@ -24,11 +27,16 @@
 - Demonstrated that reversing each registered argument vector independently
   fails the schema test, restored each imported module byte-for-byte, and
   reconfirmed the positive test after every restoration.
+- Replaced the pre-OBBBA §165(d) proof with the resolver-selected current
+  sentence proving both the 90-percent-of-losses limitation and wagering-gain
+  ceiling, and made the completed input boundary explicit after both limits.
+- Added byte-verbatim §61, §62, and §63(a) atoms to bridge the itemizer branch
+  into the final alongside the retained §63(b) proof.
+- Confirmed every new or retained §61/§62/§63/§165 excerpt is an exact byte
+  substring of its resolver-selected pinned-corpus body.
 
 ## Next
 
-- Repair the stale §165 proof/completed-boundary semantics and add the missing
-  §63(a) itemizer proof bridge.
 - Add the prescribed §151 MAGI-addback diagnostic.
 - Reject contradictory individual/nonindividual facts and add a regression.
 - Regenerate affected mechanics, run all required gates, and write the
