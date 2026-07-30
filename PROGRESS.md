@@ -32,12 +32,13 @@
 - Passed the exact-pinned §57 companion (8 cases), proof validation (4 atoms),
   money-atom gate, and focused deterministic validate; negating the §57(a)(7)
   attestation produced five expected assertion failures before restoration.
-- Encoded bounded §58 loss adjustments as nonnegative completed pre-insolvency
-  amounts less separately attested, nonduplicative subsection (c)(1)
-  reductions; no unproved allocation order or exhaustion equation is imposed.
-- Passed the exact-pinned §58 companion (11 cases), proof validation (13
-  atoms), money-atom gate, and focused deterministic validate; negating the
-  subsection (c)(2) attestation produced nine expected assertion failures
+- Corrected the initial §58 boundary after re-reading SPINE-PLAN §6.4: both
+  downstream loss adjustments are signed completed after-insolvency aliases,
+  and the module infers no allocation or ordering for the single subsection
+  (c)(1) insolvency amount.
+- Passed the corrected exact-pinned §58 companion (6 cases), proof validation
+  (13 atoms), money-atom gate, and focused deterministic validate; negating
+  the subsection (c)(2) attestation produced seven expected assertion failures
   before restoration.
 
 ## Next
