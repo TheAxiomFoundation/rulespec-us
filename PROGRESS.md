@@ -2,7 +2,8 @@
 
 ## State
 
-- Review status: in progress.
+- Review status: complete.
+- Verdict: `APPROVE`.
 - Frozen repair head:
   `f2bdb8e15182fe8e312b34b36217d5623a411161`.
 - Prior reviewed head:
@@ -108,7 +109,8 @@
   fresh-archive comparison then passed. Direct `apply_patch` into a mutation
   tree under `/private/tmp` was also sandbox-rejected; the reviewer used an
   in-workspace staging patch and copied it into the isolated tree.
+- Wrote the evidence-backed final verdict to `REVIEW.md`.
 
 ## Next
 
-- Write and commit the evidence-backed verdict to `REVIEW.md`.
+- No reviewer action remains for this frozen head.
