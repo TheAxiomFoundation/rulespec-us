@@ -2,7 +2,7 @@
 
 ## State
 
-- Review status: in progress.
+- Review status: in progress; three binding defects confirmed.
 - Frozen candidate head:
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Expected head branch: `fed-parity/chunk2-taxable-income`.
@@ -48,10 +48,38 @@
   `460e8554e965c4fcf5839d7963faad91b29f7972e2fc40bf3b5d430a6fdaf7c5`
   exactly matches the frozen commit bytes and contains no session ledger or
   review report.
+- Confirmed the first 14 companion cases exactly match the plan's case IDs and
+  expected taxable-income values. Independent exact-decimal recomputation
+  matched all 14, including equal-election, all-component, floor, and senior
+  phaseout boundaries.
+- Ran the exact pinned companion from the canonical archive with encoder
+  `3869d66d...` and engine `ffd821327...`: 1 file, 27 cases, 1 compiled
+  program, zero failures.
+- Ran pinned validation against the required corpus: `ci_pass=true`,
+  `all_passed=true`, and zero errors. Structural proof validation passed 33
+  atoms with zero reported issues.
+- Programmatically compared every source excerpt in the new compose to the
+  exact resolver-selected pinned corpus bytes. Eight of nine occur exactly
+  once; the section 165 wagering excerpt occurs zero times. Current section
+  165(d) instead requires both a 90-percent loss haircut and the gains ceiling.
+- Confirmed the companion omits the prescriptive section 151 MAGI-addback
+  diagnostic: every section 911/931/933 fact is false or zero, so none of the
+  27 cases proves that an exclusion changes the senior phaseout.
+- Audited the 25-module merged closure: 227 rule declarations and four
+  relation predicates are unique; all 119 proof imports resolve, all 69
+  nonlocal hashes are current, and the merged Chunk 1 hashes are
+  `81d04979...` (SALT) and `da533e2f...` (itemized). The closure includes the
+  Revenue Procedure standard final and excludes `us/statutes/26/63/c.yaml`.
+- Found incomplete relation-schema coverage. The closure has four injectable
+  relations, but the executable static contract pins only SALT. In a separate
+  exact-head mutation archive, reversing only the section 151 senior relation
+  from `(TaxUnit, Person)` to `(Person, TaxUnit)` still passed the static
+  contract and the entire taxable-income companion 27/27, including its
+  claimed imported-relation orientation witness.
 
 ## Next
 
-- Audit legal fidelity, prescribed cases, guards, proof atoms, imports,
-  manifests, reverse index, pending ledger, and file scope.
-- Run the companion, validation, proof, and repository mechanical gates.
+- Complete the remaining guard, manifest, reverse-index, pending-ledger, and
+  repository mechanical audits.
+- Run the remaining repository mechanical gates.
 - Record the evidence-backed verdict in `REVIEW.md`.
