@@ -2,9 +2,9 @@
 
 ## State
 
-- Review status: active.
+- Review status: complete.
 - Verdict: `REQUEST-CHANGES`; multiple independent blocking defects are
-  confirmed. Remaining report assembly and final gate accounting are active.
+  confirmed. Review and report are closed on the immutable range below.
 - Live PR head verified through the read-only GitHub connector:
   `5a90ed8aa2cfb62f2ce3f431ffd6e155650b43aa`.
 - Expected and verified head branch:
@@ -133,7 +133,10 @@
   relation closure was not added.
 - Reproduced the repository layout, manifest, reverse-index, and existing
   relation-schema tests. The full repository test suite passes.
+- Wrote the complete evidence-backed request-changes verdict to `REVIEW.md`,
+  including repair requirements and all sandbox/tooling disclosures.
 
 ## Next
 
-- Write the evidence-backed verdict to `REVIEW.md`.
+- Await a revised PR head, then start a new frozen-head review rather than
+  reusing this immutable evidence range.
