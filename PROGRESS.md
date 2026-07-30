@@ -67,9 +67,48 @@
 - Confirmed the repaired contradictory regression has the exact same period
   and 85-key resolved input map as the predecessor fixture, including both
   `taxpayer_is_individual=true` and the nonindividual entity fact `true`.
+- Built the exact pinned engine commit `ffd821327...` from a fresh archive
+  with Cargo offline and ran the exact pinned encoder `3869d66d...` from the
+  canonical root. The companion passes 28/28 with one compiled program and
+  zero failures.
+- Pinned validation against corpus `8af592162...` reports
+  `ci_pass=true`, `all_passed=true`, and zero errors.
+- Structural proof validation passes all 37 atoms with zero issues. The
+  strict money-atom pass reports zero obligations and zero missing atoms.
+- Reverse-index check mode is byte-current at 4,249 provisions, 5,120 edges,
+  and 4,491 modules.
+- Focused repository, manifest, index, and relation-schema gates pass 19/19.
+  The sole warning reports the same 19 pre-existing unmanifested modules and
+  is explicitly report-only.
+- Recomputed the pending ledger from local base `ae64af274...`: base
+  ceiling/count 2,148; head ceiling/count 2,151; both sorted and unique; zero
+  lost or changed base records; exactly the three taxable-pipeline additions.
+  The ledger blob is unchanged from the prior reviewed head.
+- Audited the manifest's exact two applied hashes. They match canonical disk,
+  content ancestor `b47607e...`, signature parent `f0864dc...`, and head.
+  The requested head changes only the manifest, uses the exact pinned encoder,
+  carries only the `composition` exception, and supersedes the parent manifest
+  hash exactly.
+- Confirmed the repair range is ten linear commits with zero merges. Before
+  the drop, its path set is exactly the five repair-era paths: compose,
+  companion, relation test, reverse index, and `PROGRESS.md`; `f0864dc...`
+  deletes only the ledger and `f2bdb8e...` changes only the manifest.
+  The net five-file delta is the four substantive repair files plus manifest.
+- Confirmed `git diff --check` is clean and the canonical root is byte-equal
+  to a fresh `git archive` of the frozen head.
+- The manifest HMAC key is absent, so the signature value could not be
+  cryptographically recomputed. Its algorithm/key envelope and all non-secret
+  content, ancestor, supersession, and repository manifest gates pass.
+- Recorded tooling disclosures: the default `pytest` shim points to a missing
+  interpreter and system Python lacks PyYAML, so all authoritative Python
+  gates were rerun successfully through the pinned encoder virtual
+  environment. One parallel run created only generated pytest caches in the
+  canonical archive; an explicit recursive cleanup was sandbox-blocked, so
+  the known cache files were removed through `apply_patch`/`unlink`, and the
+  fresh-archive comparison then passed. Direct `apply_patch` into a mutation
+  tree under `/private/tmp` was also sandbox-rejected; the reviewer used an
+  in-workspace staging patch and copied it into the isolated tree.
 
 ## Next
 
-- Run the companion, pinned validation, proof, ledger, manifest, and
-  containment gates.
 - Write and commit the evidence-backed verdict to `REVIEW.md`.
