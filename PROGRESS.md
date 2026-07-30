@@ -46,10 +46,33 @@
 - Reproduced the focused repository containment gates: manifest sync, relation
   schemas, reverse index, and layout are `19 passed` (one expected warning for
   the repository's 19 pre-existing unmanifested modules).
+- Verified the exact engine source tree has `110/110` tracked blobs matching
+  pinned commit `ffd821327...`; the deterministic release binary used here has
+  SHA-256 `674ca6e7...`.
+- Read pinned §55(d)(2) and §55(d)(4): the MFS addition uses AMTI determined
+  without only the addition sentence, capped at the MFS exemption, and the
+  post-2017 rule substitutes 50 percent for 25 percent.
+- Confirmed the repair's preliminary-AMTI expression contains taxable income,
+  excluded deductions, both adopted §151 amounts, §57, both §58 amounts, and
+  all three signed §59 adjustments before computing the MFS addition.
+- Independently recomputed the repaired counterexample:
+  `$624,100 + $16,100 + $50,000 = $690,200`; addition
+  `min($70,100, 50% × $50,000) = $25,000`; AMTI `$715,200`; and TMT
+  `$31,785 + $166,026 = $197,811`, exactly `$7,000` above the defective
+  predecessor result.
+- Independently recomputed the neighboring MFS case: preliminary AMTI
+  `$666,100`, addition `$12,950`, final AMTI `$679,050`, TMT `$187,689`,
+  and AMT `$27,689` after `$160,000` regular tax.
+- Reproduced the exact-pinned four-companion batch at `39/39`; §55 alone is
+  `17/17`, so both retained MFS expectations execute at the lawful values.
+- Confirmed the repaired domain requires an individual and an exact filing
+  status in `0..4`. The committed status-9 and nonindividual cases fail closed
+  with zero guarded money outputs. Additional exact-engine probes for statuses
+  `-1`, `5`, `8`, `9`, and `10`, plus nonindividual units under every valid
+  status `0..4`, all fail closed (`10/10`).
 
 ## Next
 
-- Verify §55(d)(2) arithmetic and executable domain regressions.
 - Verify proof excerpts, correctly rooted pinned validation, and schema
   mutation kills.
 - Reproduce companions, compilation/validation gates, and the mutation battery.
