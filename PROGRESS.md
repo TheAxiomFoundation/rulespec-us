@@ -8,8 +8,8 @@
 - Mode: defensive correctness and completeness audit
 - Constraints: local unsigned commits only; no push and no GitHub writes
 - Pre-existing untracked file preserved: `WORKER-REPORT.md`
-- Section 55 arithmetic and domain blockers are repaired and green under the
-  exact pinned companion harness.
+- Section 55 arithmetic/domain and proof/rooted-validation blockers are
+  repaired and green under the exact pinned harnesses.
 
 ## Done
 
@@ -32,10 +32,18 @@
 - Exact pinned section 55 companion passes `17/17`; the repaired reproduction
   returns increment `$25,000`, AMTI `$715,200`, and TMT `$197,811`.
 - Explicit-key duplicate audit, safe YAML load, and `git diff --check` pass.
+- Replaced the section 57 heading-only proof with the pinned operative body
+  and repaired both strict-byte section 55 proof excerpts.
+- Narrowed requested-source metadata while retaining cross-section legal
+  grounding in proof atoms; the reviewer's explicit-root pinned validator is
+  green for section 55 and section 59 with zero findings.
+- Kept filing-status `9` as an executable companion regression using the
+  repository's TaxUnit table-row form, which is accepted by the pinned
+  fixture-policy validator; section 55 remains `17/17`.
 
 ## Next
 
-1. Repair literal proof evidence and section 59 rooted validation.
-2. Add the two imported section 151 relation schemas to the static contract.
-3. Regenerate derived artifacts and run every requested gate from a canonical
+1. Add and mutation-test the two imported section 151 relation schemas.
+2. Reconcile derived artifacts and containment.
+3. Run every requested gate from a committed canonical
    basename archive root.
