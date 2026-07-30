@@ -44,8 +44,12 @@
 - Converted the former entity-standard-deduction fixture into an explicit
   contradictory-facts regression that asserts the imported disqualifier still
   holds while the local guard, deductions, and taxable income fail closed.
+- Regenerated the reverse index after the §61/§62 bridge atoms; the only
+  semantic delta marks those two existing taxable-pipeline edges as
+  `proof_atom` as well as `module`, with provision/edge/module counts unchanged
+  at 4,249/5,120/4,491.
 
 ## Next
 
-- Regenerate affected mechanics, run all required gates, and write the
-  untracked repair report.
+- Run all required canonical archive gates and ledger/diff audits.
+- Commit the final progress state and write the untracked repair report.
