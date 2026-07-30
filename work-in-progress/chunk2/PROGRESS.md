@@ -2,10 +2,10 @@
 
 ## State
 
-The taxable-income compose and its 27-case companion are implemented. The exact
-ten-import closure compiles without duplicate rules, excludes the colliding
-`us/statutes/26/63/c.yaml` surface, and introduces no local relation. The pinned
-companion runner and `validate --skip-reviewers` are green in the working tree.
+The taxable-income compose and its 27-case companion are committed at
+`3fdd0caff`. Canonical-basename archive testing and pinned validation are green.
+The reverse index and oracle-pending sorted union are regenerated and verified;
+the three new executable outputs classify as tested pending coverage.
 
 ## Done
 
@@ -21,12 +21,19 @@ companion runner and `validate --skip-reviewers` are green in the working tree.
   including invalid status, all-attestations-false, election mismatch, negative
   wagering loss, all four section 63(c)(6) disqualifiers, and relation orientation.
 - Passed 27/27 companion cases and pinned corpus validation with zero findings.
+- Repeated both gates from `/private/tmp/chunk2-archive.LMS76C/rulespec-us`, a
+  canonical-basename `git archive` of the committed compose step: 27/27 and pass.
+- Regenerated the reverse index to 4,249 provisions, 5,120 edges, and 4,491
+  modules; its diff adds only the taxable-income module and removes no edge.
+- Extended the pending ledger from 2,148 to 2,151 entries as an exact sorted
+  union with no changed or lost baseline entry.
+- Ran the pinned changed-file coverage classifier: all three new outputs are
+  `pending_classification` and companion-tested; none is unmapped.
 
 ## Next
 
-- Commit the coherent compose/companion step.
-- Re-run the pinned gates from a canonical-basename `git archive` root.
-- Regenerate and verify the reverse index, add the sorted pending-ledger union,
-  and commit those mechanical artifacts.
-- Run final gates and write the untracked worker report; leave signing and the
-  manifest to the main lane as instructed.
+- Commit the mechanical reverse-index, pending-ledger, and progress updates.
+- Run final archive gates, duplicate-surface and intended-file audits, and the
+  relation-schema mutation demonstration.
+- Write the untracked worker report; leave signing and the manifest to the main
+  lane as instructed.
