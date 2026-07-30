@@ -1,0 +1,108 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ky/statute/krs/141.020/document-1
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ky/statute/krs/141.020/document-1
+      rationale: |-
+        KRS 141.020 is the controlling codified authority for the individual
+        income-tax levy and the tax-year-2026 rate. Subsection (1) directs that
+        the applicable rate be applied to net income before allowable credits,
+        and subsection (2)(f) supplies the 3.5 percent rate for taxable years
+        beginning on or after January 1, 2026.
+
+        This statute-scoped module accepts completed Kentucky net income as its
+        only caller-supplied legal boundary, floors that amount at zero, and
+        applies the statutory rate before credits. It does not construct or
+        accept Kentucky additions, subtractions, deductions, exemptions, or
+        credits. It is not composed into the separate 2026 full-year-resident
+        source-hold module and does not claim a complete annual return, tax
+        after credits, or final liability. Every executable version fails
+        closed outside tax year 2026.
+  summary: |-
+    Kentucky tax-year-2026 KRS 141.020 individual income-tax schedule before
+    credits. The caller supplies completed Kentucky net income at the TaxUnit
+    level. The module floors that amount at zero and applies the statute's
+    3.5 percent rate.
+
+    Upstream net-income construction, deductions, exemptions, credits,
+    nonresident allocation, and final-return liability are outside this narrow
+    schedule. Its public result is tax under the KRS 141.020 rate before
+    allowable credits, not a final-return or liability result.
+rules:
+  - name: ky_pit_2026_krs_141_020_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: KRS 141.020(2)(f), tax-year-2026 individual income-tax rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ky/statute/krs/141.020/document-1
+              excerpt: "the tax shall be three and one-half percent (3.5%) of net income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0.035'
+
+  - name: ky_pit_2026_krs_141_020_net_income_boundary
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Caller-supplied completed Kentucky net income under KRS 141.020(1), floored at zero
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ky/statute/krs/141.020/document-1
+              excerpt: "upon his or her entire net income as defined in this chapter"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, ky_pit_2026_krs_141_020_completed_net_income)
+
+  - name: ky_pit_2026_krs_141_020_schedule_before_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: KRS 141.020(1) and (2)(f), 3.5 percent of Kentucky net income before allowable credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ky/statute/krs/141.020/document-1
+              excerpt: "applying the rates in subsection (2) of this section to net income and subtracting allowable tax credits"
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ky/statute/krs/141.020/document-1
+              excerpt: "the tax shall be three and one-half percent (3.5%) of net income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ky_pit_2026_krs_141_020_net_income_boundary * ky_pit_2026_krs_141_020_rate
+
+inputs:
+  - name: ky_pit_2026_krs_141_020_completed_net_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed Kentucky net income supplied by the caller as an upstream legal boundary.
