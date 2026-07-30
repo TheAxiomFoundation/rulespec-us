@@ -82,9 +82,32 @@
   zero compile findings and zero CI findings; `all_passed` and `ci_pass` are
   true for all four. §59 therefore reproduces the predecessor's correctly
   rooted validation with zero findings.
+- Reproduced pinned structural proof validation at `114/114` atoms
+  (`81/4/13/16`) and the focused money-atom gate with zero missing.
+- Confirmed the positive static schema contract passes and exactly locks both
+  imported §151 relations to arity two and `[TaxUnit, Person]`.
+- Applied each two-line relation-vector reversal in a separate disposable
+  archive under `.git/review-worktrees/`. Each reversal makes the static test
+  fail exactly once and identify the reversed relation, while the §55 runtime
+  companion remains `17/17`; the intended runtime-inert schema drift is
+  therefore killed for both relations.
+- Reproduced the complete behavioral mutation battery with the exact pinned
+  companion runner. Removing §57 from the preliminary MFS AMTI, accepting
+  status 9, and tautologizing the individual guard fail `10/3/3` assertions.
+  Flipping §57(a)(7), §58(c)(2), §59 completion, and §59(j) fail `5/7/7/8`
+  assertions. Every mutant exits nonzero and its targeted regression is among
+  the failures.
+- Reproduced FY2026 FIIT composition and compile using the workflow-pinned
+  composer and exact engine: artifact format 2, 150 derived outputs, 150
+  evaluation-order entries, and a compatible `generic_bulk` fast path with no
+  blockers.
+- Test execution added only disposable `.pytest_cache`/`__pycache__` folders
+  to the canonical archive; excluding those caches, it remains byte-identical
+  to `git archive 7e69fbb5e`. No tracked candidate byte changed.
+- Sandbox disclosure: an initial mutation patch targeting `/private/tmp` was
+  rejected. All mutation copies were instead created under the authorized
+  `.git/review-worktrees/` ledger area, and every requested gate completed.
 
 ## Next
 
-- Verify schema mutation kills.
-- Reproduce companions, compilation/validation gates, and the mutation battery.
 - Write and commit the final evidence-backed verdict to `REVIEW.md`.
