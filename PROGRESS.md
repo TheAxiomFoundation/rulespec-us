@@ -3,8 +3,8 @@
 ## State
 
 - Review status: active.
-- Verdict: `REQUEST-CHANGES` unless the confirmed §55(d)(2) defect is
-  disproved; remaining review dimensions are still active.
+- Verdict: `REQUEST-CHANGES`; multiple independent blocking defects are
+  confirmed. Remaining report assembly and final gate accounting are active.
 - Live PR head verified through the read-only GitHub connector:
   `5a90ed8aa2cfb62f2ce3f431ffd6e155650b43aa`.
 - Expected and verified head branch:
@@ -54,10 +54,10 @@
 - Reconstructed exact `axiom-encode@3869d66d...` from the local pinned Git
   object and verified the available release engine source tree matches all 110
   tracked files at `axiom-rules-engine@ffd821327...`.
-- Reproduced the canonical focused gates: four companions pass 36/36; four
-  validations have `ci_pass=true`, `all_passed=true`, and zero errors; proof
-  validation passes 114 atoms (81/4/13/16); the focused money-atom gate has
-  zero missing obligations.
+- Reproduced the canonical focused gates: four companions pass 36/36; the
+  branch CLI reports four validation passes; structural proof validation
+  passes 114 atoms (81/4/13/16); the focused money-atom gate has zero missing
+  obligations.
 - Confirmed a blocking §55(d)(2) interaction defect. `amt_separate_addition`
   computes the MFS increment from taxable income plus excluded deductions
   before the newly added senior and §§57–59 amounts, although retained
@@ -65,13 +65,39 @@
   sentence. An independent in-domain MFS + $50,000 §57(a)(5) counterexample
   should produce a $25,000 increment, $715,200 AMTI, and $197,811 base tax;
   the exact-head engine instead produces $0, $690,200, and $190,811.
+- Confirmed two independent §55 fail-closed defects. The verified-domain
+  judgment accepts filing status `9`, because it never enumerates statuses
+  `0..4`, and it accepts `taxpayer_is_individual=false`, because the new §151
+  import closure is not guarded by the binding individual-only boundary.
+- Confirmed the §55 companion omits both binding house-style cases: invalid
+  filing status and relation-order mutation.
+- Confirmed the §151 import adds two relation schemas to the compiled §55
+  closure, but the static schema-contract test still covers only the SALT
+  relation. In a reviewer archive, reversing
+  `exemption_individual_of_tax_unit` and updating its import hashes leaves both
+  the static contract (1/1) and the complete §55 companion (14/14) green.
+- Confirmed one §57 proof excerpt is not body evidence. The text
+  `Specified private activity bonds` occurs only in the PR-B corpus record's
+  heading; the release-bound proof evidence is the body and source history.
+  A programmatic exact-body audit resolves every citation uniquely and finds
+  this sole mismatch among the 25 §§57–59 source excerpts.
+- Confirmed explicit-root deterministic validation is not zero-findings:
+  §59's source string names both §55(d)(4)(A)(iii) and §59(j), so the exact
+  pinned validator rejects it as outside requested subtree
+  `us:statutes/26/59`. The CLI's apparent pass is not equivalent: its
+  path-discovery helper resolves the canonical archive's `us/` directory,
+  rather than the canonical repository root, as `policy_repo_path`.
+- Confirmed strict retained-corpus byte checks also find two nonverbatim §55
+  excerpts: one drops statutory curly quotation marks and one YAML-folds
+  statutory blank-line separators. The pinned structural proof validator does
+  not enforce literal excerpt identity.
+- Reran exact-engine mutation evidence: §57 a(7), §58 c(2), §59 completion,
+  and §59(j) flips each fail their companions (5/7/7/8 assertions), and an
+  independent AMTFTC guard inversion fails two assertions.
 
 ## Next
 
-- Audit §55 legal corrections and independently recompute companion expected
-  values.
-- Audit §§57–59 atoms, proof bytes/citations, bounded-domain guards, and
-  judgment mutations.
-- Reproduce behavior, cascade, ledger, manifest, index, composition, companion,
-  and validation gates.
+- Finish behavior-preservation arithmetic and record every intended delta.
+- Finish cascade, ledger, manifest, index, composition, and containment
+  accounting.
 - Write the evidence-backed verdict to `REVIEW.md`.
