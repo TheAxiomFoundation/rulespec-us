@@ -8,9 +8,8 @@
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Scope is limited to the five blockers in the frozen PR review plus mechanics
   directly affected by their repair.
-- Imported relation schemas, corrected legal proofs, and the prescribed §151
-  MAGI-addback diagnostic are now in place; the contradictory-domain repair
-  remains in progress.
+- All five review blockers now have source/test repairs in place; final
+  mechanical regeneration and full canonical gate execution remain.
 - The existing composition manifest is intentionally not re-signed here; its
   applied-file hashes must be refreshed by the authorized main lane after all
   repair content is final.
@@ -40,9 +39,13 @@
   senior amount to $5,400, produces $23,550 total deductions, and yields
   $51,450 taxable income.
 - Confirmed the expanded pinned companion passes all 28 cases.
+- Made the individual verified-domain guard reject a simultaneous
+  estate/trust/common-trust-fund/partnership fact.
+- Converted the former entity-standard-deduction fixture into an explicit
+  contradictory-facts regression that asserts the imported disqualifier still
+  holds while the local guard, deductions, and taxable income fail closed.
 
 ## Next
 
-- Reject contradictory individual/nonindividual facts and add a regression.
 - Regenerate affected mechanics, run all required gates, and write the
   untracked repair report.
