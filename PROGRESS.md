@@ -2,14 +2,14 @@
 
 ## State
 
-- Defensive correctness and completeness audit in progress on
+- Defensive correctness and completeness audit completed on
   `fed-parity/chunk2-taxable-income`.
 - Starting point verified at the current local pushed head
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Scope is limited to the five blockers in the frozen PR review plus mechanics
   directly affected by their repair.
-- All five review blockers now have source/test repairs in place; final
-  mechanical regeneration and full canonical gate execution remain.
+- All five review blockers, affected mechanics, and required executable and
+  containment gates are complete.
 - The existing composition manifest is intentionally not re-signed here; its
   applied-file hashes must be refreshed by the authorized main lane after all
   repair content is final.
@@ -51,10 +51,24 @@
 - Corrected the MAGI fixture after pinned validation rejected merge-key
   overrides: common §931 zero facts and the positive-addback variant now use
   disjoint anchors, so the strict YAML loader and companion runner agree.
-- Reconfirmed the pinned companion at 28/28 and pinned module validation with
-  `ci_pass=true`, `all_passed=true`, and zero errors in the working tree.
+- Passed the pinned companion at 28/28 and pinned module validation with
+  `ci_pass=true`, `all_passed=true`, and zero errors.
+- Passed structural proof validation for all 37 atoms, the strict money-atom
+  check with zero missing obligations, and an independent resolver-selected
+  byte audit for all 13 source excerpts.
+- Passed the final schema contract and reverse-index freshness checks.
+- Confirmed the pending ledger remains a sorted, unique, field-preserving
+  union from 2,148 to 2,151 entries with zero lost or changed base records and
+  only the existing three taxable-pipeline additions; executable output IDs
+  and mapping implications are unchanged by this repair.
+- Confirmed repair containment to the compose, companion, relation-schema
+  test, reverse index, and this progress log, with no workflow, toolchain,
+  lockfile, imported-module, or tracked report change.
+- Made every repair commit locally with signing disabled and performed no
+  push, GitHub write, signing action, or oracle-repository write.
 
 ## Next
 
-- Run all required canonical archive gates and ledger/diff audits.
-- Commit the final progress state and write the untracked repair report.
+- The authorized main lane re-signs the composition manifest last, after any
+  review follow-up, and reruns its manifest/guard checks.
+- The main lane may then push the repaired branch and resume PR review.
