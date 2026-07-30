@@ -8,8 +8,9 @@
 - Mode: defensive correctness and completeness audit
 - Constraints: local unsigned commits only; no push and no GitHub writes
 - Pre-existing untracked file preserved: `WORKER-REPORT.md`
-- All four review blockers are repaired; relation-schema containment is now
-  statically protected in addition to the exact pinned runtime gates.
+- All four review blockers and every requested worker-owned gate are complete.
+- The only remaining handoff is authorized re-signing of the affected
+  provenance manifests by the main lane.
 
 ## Done
 
@@ -43,9 +44,36 @@
 - Added exact `TaxUnit, Person` schema contracts for both imported section 151
   relations. The positive contract passes and the reviewer's preserved
   reversed-order mutant is detected even though its runtime companion passes.
+- Gated committed canonical archive `95d76e1a3` with the exact pinned encoder,
+  engine, corpus, and explicit repository root: companions `39/39`; all four
+  validators zero-finding; structural proof `114/114`; strict body evidence
+  `49/49`; money obligations zero missing.
+- Reproduced live mutations: new section 55 complete-AMTI/status/individual
+  mutations fail `10/3/3` assertions; inherited section 57(a)(7), section
+  58(c)(2), section 59 completion, and section 59(j) mutations fail
+  `5/7/7/8`; the reversed section 151 relation is detected statically.
+- Recompiled FY2026 FIIT successfully: artifact format `2`, `150` derived
+  outputs, `150` evaluation-order entries, and compatible `generic_bulk`
+  fast path with no blockers.
+- Reverse index is byte-fresh at `4,272` provisions, `5,132` edges, and `4,493`
+  modules. All validation/oracle debt ledgers are byte-identical to the
+  reviewed head.
+- Reconciled containment: the reviewed starting PR was `12` non-manifest
+  files plus four manifests; the repaired branch is necessarily `14` plus
+  four because it adds this committed ledger and the required schema contract.
+- Full repository pytest is `73 passed, 1 failed, 1 warning`; the sole failure
+  is the expected manifest-sync guard for repaired sections 55, 57, and 59.
+  The signed manifests remain byte-identical to the reviewed head because
+  this worker was expressly forbidden to sign.
+- Disclosed environment constraints: the default `python` shim is broken;
+  GitNexus has no repository index; an out-of-worktree patch and two recursive
+  cleanup attempts were policy-blocked. Existing pinned interpreters and
+  exact-target moves supplied complete evidence without changing candidate
+  bytes.
 
 ## Next
 
-1. Reconcile derived artifacts and containment.
-2. Run every requested gate from a committed canonical
-   basename archive root.
+1. Main lane re-signs sections 55, 57, and 59 (including section 55's changed
+   companion) with the authorized provenance key.
+2. Main lane reruns the manifest-sync test/full pytest, then pushes and
+   requests re-review.
