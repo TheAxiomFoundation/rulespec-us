@@ -2,10 +2,11 @@
 
 ## State
 
-The taxable-income compose and its 27-case companion are committed at
-`3fdd0caff`. Canonical-basename archive testing and pinned validation are green.
-The reverse index and oracle-pending sorted union are regenerated and verified;
-the three new executable outputs classify as tested pending coverage.
+All worker-authorized implementation and gates are complete. The compose and
+27-case companion are committed, the reverse index and pending ledger are
+regenerated, and the final canonical archive passes the pinned test, validation,
+index, and changed-file coverage checks. Signing and manifest creation remain
+reserved for the main lane.
 
 ## Done
 
@@ -29,11 +30,23 @@ the three new executable outputs classify as tested pending coverage.
   union with no changed or lost baseline entry.
 - Ran the pinned changed-file coverage classifier: all three new outputs are
   `pending_classification` and companion-tested; none is unmapped.
+- Proved the merged surface has 25 modules and 227 unique rules (24 imported
+  modules and 224 imported rules), no duplicate name, no `63/c.yaml`, and no
+  local relation.
+- Demonstrated the static relation contract kill: swapping the existing SALT
+  relation's two argument lines failed with declared `(Person, TaxUnit)` versus
+  expected `(TaxUnit, Person)`; restoration passed and left no diff.
+- Verified the final and deduction-total PolicyEngine candidates directly in
+  the cached PolicyEngine-US 1.767.3 package (`taxable_income` and
+  `taxable_income_deductions`).
+- Audited the branch diff: exactly the two pipeline files, reverse index,
+  pending ledger, and this non-root progress file; no root `PROGRESS.md`,
+  `.github` change, stale importer, manifest, or unrelated file.
 
 ## Next
 
-- Commit the mechanical reverse-index, pending-ledger, and progress updates.
-- Run final archive gates, duplicate-surface and intended-file audits, and the
-  relation-schema mutation demonstration.
-- Write the untracked worker report; leave signing and the manifest to the main
-  lane as instructed.
+- Commit this final progress state.
+- Write `WORKER-REPORT.md` untracked with the final head SHA, gate evidence,
+  case walkthroughs, bridge values, and exact oracle mapping handoff.
+- Main lane: review, sign the applied pipeline files, create the manifest last,
+  and pair the RuleSpec head with the taxable-income oracle PR.
