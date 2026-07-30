@@ -21,6 +21,16 @@ EXPECTED_RELATION_SCHEMAS = {
             "arguments": ["TaxUnit", "Person"],
         },
     },
+    "us/statutes/26/151.yaml": {
+        "exemption_individual_of_tax_unit": {
+            "arity": 2,
+            "arguments": ["TaxUnit", "Person"],
+        },
+        "senior_deduction_individual_of_tax_unit": {
+            "arity": 2,
+            "arguments": ["TaxUnit", "Person"],
+        },
+    },
 }
 
 

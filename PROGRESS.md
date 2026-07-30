@@ -8,8 +8,8 @@
 - Mode: defensive correctness and completeness audit
 - Constraints: local unsigned commits only; no push and no GitHub writes
 - Pre-existing untracked file preserved: `WORKER-REPORT.md`
-- Section 55 arithmetic/domain and proof/rooted-validation blockers are
-  repaired and green under the exact pinned harnesses.
+- All four review blockers are repaired; relation-schema containment is now
+  statically protected in addition to the exact pinned runtime gates.
 
 ## Done
 
@@ -40,10 +40,12 @@
 - Kept filing-status `9` as an executable companion regression using the
   repository's TaxUnit table-row form, which is accepted by the pinned
   fixture-policy validator; section 55 remains `17/17`.
+- Added exact `TaxUnit, Person` schema contracts for both imported section 151
+  relations. The positive contract passes and the reviewer's preserved
+  reversed-order mutant is detected even though its runtime companion passes.
 
 ## Next
 
-1. Add and mutation-test the two imported section 151 relation schemas.
-2. Reconcile derived artifacts and containment.
-3. Run every requested gate from a committed canonical
+1. Reconcile derived artifacts and containment.
+2. Run every requested gate from a committed canonical
    basename archive root.
