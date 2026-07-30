@@ -35,11 +35,24 @@
   The read-only GitHub connector supplied live PR metadata instead.
 - Created this disposable review-only worktree from the exact candidate head.
   No PR-branch, remote, or GitHub write was made.
+- Read the binding plan's house style, AMT consumer contract, Atomic PR A file
+  and output list, commit discipline, and definition of done.
+- Confirmed the required corpus checkout is clean and detached at exact pin
+  `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Frozen the candidate range at 13 commits ahead and zero behind the supplied
+  base. Its final tree changes 16 files: four manifests, eight statute/companion
+  files, the reverse index, two validation-waiver ledgers, and the oracle
+  pending ledger. `git diff --check` passes.
+- Created the clean canonical-basename exact-head archive at
+  `.git/review-worktrees/pr-1180-canonical/rulespec-us`.
+- Verified the archive excludes this review ledger/report and recorded its
+  deterministic `git archive` SHA-256 as
+  `e4854b7a420e0a565dbb569b3843456af88734fc9c8261d91afc5a29473edb24`.
+- Began three independent read-only passes covering §55 legal arithmetic,
+  §§57–59 proof/guard/mutation behavior, and mechanical cascade/provenance.
 
 ## Next
 
-- Read the binding plan sections and freeze the exact candidate diff.
-- Create the canonical exact-head archive and verify the corpus pin.
 - Audit §55 legal corrections and independently recompute companion expected
   values.
 - Audit §§57–59 atoms, proof bytes/citations, bounded-domain guards, and
