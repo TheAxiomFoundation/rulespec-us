@@ -2,10 +2,11 @@
 
 ## State
 
-Adversarial guard verification is in progress against target
+Adversarial guard verification is complete against target
 `0e042edd42d29e47e39f5b2f5a3ab7085cffe90b`. The exact predecessor
 direct-relation injection and all three explicit-identity completeness probes
-now pass their fail-closed expectations.
+pass their fail-closed expectations. The final subreview is
+`GUARD-PROBES-REPORT.md`.
 
 ## Done
 
@@ -31,8 +32,19 @@ now pass their fail-closed expectations.
 - An eligible plus IPV-barred pair fed only to the anchor produced count `2`,
   integrity `holds`, per-member IPV exclusion `holds`, household exclusion
   `holds`, and MCE `not_holds`; the derived local scan sees the anchor rows.
+- Disabled only the integrity-helper formula in local commit `b8df807c3`.
+  The two lawful divergent regressions then emitted six targeted failures and
+  both actual tuples became `(1, holds, not_holds, holds)`. Replacing the
+  expectations with those unsafe values made both cases pass wrongly, 2/2.
+- Against the disabled artifact, the equal-count and anchor-only IPV probes
+  remained fail-closed while the distinct-member swap alone flipped open,
+  independently proving exclusion-scan versus guard responsibility.
+- Restored the target formula in local commit `f9febb78f`, verified target
+  module SHA-256 `ba01095a...`, an empty module diff from `0e042edd`, and 2/2
+  lawful divergent fixtures green.
+- Recorded commands, hashes, exact outputs, mechanisms, and artifact paths in
+  `GUARD-PROBES-REPORT.md`.
 
 ## Next
 
-- Mutate the guard off, demonstrate the regressions become wrongly eligible, restore,
-  and record an evidence report.
+- Hand the evidence to the root reviewer.
