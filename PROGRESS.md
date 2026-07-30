@@ -2,7 +2,7 @@
 
 ## State
 
-- Review status: in progress; three binding defects confirmed.
+- Review status: in progress; `REQUEST-CHANGES` evidence complete.
 - Frozen candidate head:
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Expected head branch: `fed-parity/chunk2-taxable-income`.
@@ -76,10 +76,41 @@
   from `(TaxUnit, Person)` to `(Person, TaxUnit)` still passed the static
   contract and the entire taxable-income companion 27/27, including its
   claimed imported-relation orientation witness.
+- Found that the itemizer final has no section 63(a) legal proof. The target's
+  final is sourced and proved only to section 63(b), even though the same
+  output executes the itemizer branch; the imported itemized module proves
+  sections 63(d)-(e), not section 63(a)'s general taxable-income definition.
+- Found an outside-boundary injection accepted by the companion. The
+  `ti-entity-zeroes-standard` case simultaneously asserts
+  `taxpayer_is_individual=true` and
+  `estate_or_trust_common_trust_fund_or_partnership=true`, yet expects the
+  individual verified domain to hold and taxable income to be nonzero.
+- Regenerated the reverse index in check mode: byte-current at 4,249
+  provisions, 5,120 edges, and 4,491 modules.
+- Audited the pending ledger: base and head are sorted and unique with
+  `ceiling == count`; the head is the exact field-preserving union, with zero
+  losses or changed prior records and exactly the three new taxable-pipeline
+  entries (2,148 to 2,151).
+- Audited the composition manifest: its exact two applied files and hashes
+  match current, content-commit, and pre-signature ancestor bytes; the content
+  commit is an ancestor; the signature commit changes only the manifest; the
+  exception is exactly `composition`; and no candidate commit follows it.
+- Ran focused repository layout, reverse-index, manifest, and relation-schema
+  tests: 19 passed with one report-only warning for 19 pre-existing
+  unmanifested modules. An independent full repository run passed 74 tests
+  with the same warning.
+- Confirmed the candidate diff is exactly the intended five files, with no
+  workflow, toolchain, lockfile, state, or tracked session-ledger change.
+- Attempted the GitNexus graph workflow from a detached exact-head worktree.
+  The repository was unindexed; offline `npx` had no cached package, and the
+  installed analyzer was blocked from writing its global registry. The direct
+  25-module closure audit supplied the dependency and collision evidence.
+- Recorded environment-only limitations: live GitHub/fetch access was blocked
+  by sandbox networking, and the local manifest HMAC signing key was absent
+  and the secret store locked. The signature envelope is shape-valid and all
+  non-secret provenance checks pass, but the HMAC itself is not
+  cryptographically reverified here.
 
 ## Next
 
-- Complete the remaining guard, manifest, reverse-index, pending-ledger, and
-  repository mechanical audits.
-- Run the remaining repository mechanical gates.
-- Record the evidence-backed verdict in `REVIEW.md`.
+- Record the evidence-backed verdict in `REVIEW.md` and finalize the ledger.
