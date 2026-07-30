@@ -1,0 +1,450 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ca/statute/wic/18901.5
+      - us-ca/statute/wic/18901.3
+      - us-ca/guidance/cdss/acl-2014-14-56/page-1
+      - us-ca/guidance/cdss/acl-2014-14-56/page-3
+      - us-ca/guidance/cdss/acl-2014-14-56e/page-2
+      - us-ca/guidance/cdss/acl-2015-15-42/page-2
+      - us-ca/guidance/cdss/acin-2025-i-46-25/page-7
+      - us/regulation/7/273/2
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-ca/statute/wic/18901.5
+        - us-ca/statute/wic/18901.3
+        - us/regulation/7/273/2
+      rationale: |-
+        WIC 18901.5 mandates California categorical eligibility, WIC 18901.3
+        supplies the controlling drug-felony opt-out and its preserved
+        probation/parole and fleeing-felon limits, and 7 CFR 273.2(j) defines
+        the federal categorical framework, household bars, member exclusions,
+        and deemed eligibility factors. The CDSS letters are the operative
+        statewide sources for California's PUB 275 trigger, inclusive 200%
+        screen, and implementation details; the annual ACIN supplies the
+        current FY 2026 table.
+  summary: |-
+    California calls SNAP broad-based categorical eligibility modified
+    categorical eligibility (MCE). This module encodes the statewide PUB 275
+    route, its inclusive 200 percent FPL gross-income screen, every distinct
+    federal household categorical-eligibility bar, California's drug-felony
+    opt-out, and the five separate federal member exclusions. The household
+    bars and member exclusions remain distinct: a paragraph-(vii) bar prevents
+    the household from gaining MCE, while paragraph (ix) excludes only the
+    affected person from an otherwise categorically eligible household.
+imports:
+  - us:policies/usda/snap/fy-2026-cola/income-eligibility-standards
+  - us:policies/usda/snap/state-plan-composition
+  - us:regulations/7-cfr/273/4
+  - us:regulations/7-cfr/273/5
+  - us:regulations/7-cfr/273/7
+  - us:regulations/7-cfr/273/10
+rules:
+  - name: calfresh_mce_canonical_member_of_household
+    kind: derived_relation
+    source: Canonical federal SNAP household-membership projection
+    derived_relation:
+      arity: 2
+      source_relation: us:policies/usda/snap/state-plan-composition#relation.member_of_household
+      current_slot: 1
+      related_slot: 0
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "No person shall be included as a member in any household which is otherwise categorically eligible if that person is:"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: true
+
+  - name: calfresh_mce_canonical_membership_integrity_verified
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Executable canonical-member projection integrity contract
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "No person shall be included as a member in any household which is otherwise categorically eligible if that person is:"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          len(calfresh_mce_canonical_member_of_household)
+          == snap_state_plan_member_of_household_count
+
+  - name: calfresh_mce_gross_income_limit_rate
+    kind: parameter
+    dtype: Rate
+    source: ACL 14-56, statewide MCE gross-income screen
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-56/page-1
+              excerpt: "at or below 200 percent of the Federal Poverty Level (FPL)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: '2.00'
+
+  - name: calfresh_mce_gross_income_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: ACL 14-56E, corrected inclusive MCE gross-income limit
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-56e/page-2
+              excerpt: "gross income at or less than 200 percent of the FPL"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acin-2025-i-46-25/page-7
+              excerpt: "Gross Monthly Income Eligibility Standards for Modified Categorical Eligibility (MCE)/Broad- Based Categorical Eligibility (BBCE) (200% of Poverty Level)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_net_income_limit_100_percent_fpl_48_states_dc
+          * calfresh_mce_gross_income_limit_rate
+
+  - name: calfresh_wic_18901_3_drug_felony_opt_out_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: WIC 18901.3(a), California drug-felony opt-out
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/statute/wic/18901.3
+              excerpt: "California opts out of the provisions of Section 115(a)(2) of Public Law 104-193 (21 U.S.C. Sec. 862a(a)(2))."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: true
+
+  - name: calfresh_mce_federal_drug_felony_exclusion_before_state_opt_out
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(vii)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Any member of that household is ineligible under § 273.11(m) by virtue of a conviction for a drug-related felony"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: member_has_drug_felony_conviction
+
+  - name: calfresh_mce_household_exclusion_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(vii), as modified by WIC 18901.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Under no circumstances shall any household be considered categorically eligible if:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "The entire household is disqualified because one or more of its members failed to comply with workfare in accordance with § 273.22"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not calfresh_mce_canonical_membership_integrity_verified
+          or entire_household_disqualified_for_workfare_noncompliance
+          or count_where(
+            calfresh_mce_canonical_member_of_household,
+            calfresh_mce_member_household_exclusion_applies
+          ) > 0
+
+  - name: calfresh_mce_member_household_exclusion_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(vii), as modified by WIC 18901.3
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Any member of that household is disqualified for an intentional Program violation in accordance with § 273.16"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "failure to comply with monthly reporting requirements in accordance with § 273.21"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "The head of the household is disqualified for failure to comply with the work requirements in accordance with § 273.7"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Any member of that household is ineligible under § 273.11(m) by virtue of a conviction for a drug-related felony"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/statute/wic/18901.3
+              excerpt: "California opts out of the provisions of Section 115(a)(2) of Public Law 104-193 (21 U.S.C. Sec. 862a(a)(2))."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "under § 273.11(n) for being a fleeing felon or a probation or parole violator"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/statute/wic/18901.3
+              excerpt: "the individual is in violation of probation or parole or that the individual is a fleeing felon pursuant to federal law"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "under § 273.11(s) for having a conviction of certain crimes and not being in compliance with the sentence"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          member_disqualified_for_intentional_program_violation
+          or member_failed_monthly_reporting_requirement
+          or (
+            member_is_household_head
+            and member_disqualified_for_work_requirement_noncompliance
+          )
+          or (
+            calfresh_mce_federal_drug_felony_exclusion_before_state_opt_out
+            and not calfresh_wic_18901_3_drug_felony_opt_out_applies
+          )
+          or member_is_fleeing_felon
+          or member_is_probation_or_parole_violator
+          or (
+            member_has_serious_crime_conviction
+            and member_not_in_compliance_with_serious_crime_sentence
+          )
+
+  - name: calfresh_categorical_member_ineligible_alien_exclusion_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "An ineligible alien as defined in § 273.4"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: not snap_member_citizenship_or_alien_status_eligible
+
+  - name: calfresh_categorical_member_student_exclusion_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Ineligible under the student provisions in § 273.5"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_member_student_ineligible
+
+  - name: calfresh_categorical_member_cash_out_ssi_exclusion_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix)(C)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "An SSI recipient in a cash-out State as defined in § 273.20"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: member_is_ssi_recipient_in_cash_out_state
+
+  - name: calfresh_categorical_member_institution_exclusion_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix)(D)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Institutionalized in a nonexempt facility as defined in § 273.1(e)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: member_is_institutionalized_in_nonexempt_facility
+
+  - name: calfresh_categorical_member_work_exclusion_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix)(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Ineligible because of failure to comply with a work requirement of § 273.7"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: not snap_member_general_work_requirement_eligible
+
+  - name: calfresh_categorical_member_inclusion_status
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "No person shall be included as a member in any household which is otherwise categorically eligible if that person is:"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not calfresh_categorical_member_ineligible_alien_exclusion_applies
+          and not calfresh_categorical_member_student_exclusion_applies
+          and not calfresh_categorical_member_cash_out_ssi_exclusion_applies
+          and not calfresh_categorical_member_institution_exclusion_applies
+          and not calfresh_categorical_member_work_exclusion_applies
+
+  - name: calfresh_mce_member_eligible
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(ix) and ACL 15-42
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "No person shall be included as a member in any household which is otherwise categorically eligible if that person is:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2015-15-42/page-2
+              excerpt: "meet all other conditions of eligibility for CalFresh"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_member_eligible
+          and calfresh_categorical_member_inclusion_status
+
+  - name: calfresh_mce_status_conferred
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WIC 18901.5 and ACLs 14-56 and 15-42
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/statute/wic/18901.5
+              excerpt: "The department shall establish a program of categorical eligibility for CalFresh"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2015-15-42/page-2
+              excerpt: "with gross income at or below 200 percent of the FPL must be conferred MCE status if they are issued or have online access to the TANF-funded “Family Planning – PUB 275” brochure and meet all other conditions of eligibility for CalFresh"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-56/page-3
+              excerpt: "Receipt of the PUB 275, in and of itself, does not confer MCE status."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Under no circumstances shall any household be considered categorically eligible if:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "No person shall be included as a member in any household which is otherwise categorically eligible if that person is:"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          calfresh_mce_canonical_membership_integrity_verified
+          and (
+            household_was_issued_pub_275
+            or household_has_online_access_to_pub_275
+          )
+          and snap_total_gross_income <= calfresh_mce_gross_income_limit
+          and not calfresh_mce_household_exclusion_applies
+          and count_where(
+            calfresh_mce_canonical_member_of_household,
+            calfresh_mce_member_eligible
+          ) > 0

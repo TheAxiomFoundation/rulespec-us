@@ -1,0 +1,341 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/63
+      - us/statute/26/67
+      - us/statute/26/68
+      - us/statute/26/1
+      - us/statute/26/2
+      - us/statute/26/7703
+      - us/statute/26/163
+      - us/statute/26/164
+      - us/statute/26/165
+      - us/statute/26/170
+      - us/statute/26/213
+      - us/guidance/irs/rev-proc-2025-32/page-10
+      - us/guidance/irs/rev-proc-2025-32/page-11
+      - us/guidance/irs/rev-proc-2025-32/page-12
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us/statute/26/63
+        - us/statute/26/67
+        - us/statute/26/68
+        - us/statute/26/1
+        - us/statute/26/2
+        - us/statute/26/7703
+        - us/statute/26/163
+        - us/statute/26/164
+        - us/statute/26/165
+        - us/statute/26/170
+        - us/statute/26/213
+        - us/guidance/irs/rev-proc-2025-32/page-10
+        - us/guidance/irs/rev-proc-2025-32/page-11
+        - us/guidance/irs/rev-proc-2025-32/page-12
+      rationale: |-
+        Section 63 supplies the itemized-deduction definition and confirms
+        that deduction allowability is determined without regard to the
+        downstream election. Sections 163, 164, 165, 170, and 213 anchor the
+        completed interest, SALT, casualty, charitable, and medical
+        components. The imported section 67(h) judgment disallows the
+        miscellaneous component in 2026. The imported section 68 final and
+        reduction apply the exact 2/37 computation after all other itemized
+        limitations, using the imported Revenue Procedure 2025-32 top-bracket
+        thresholds for the five caller-resolved filing-status categories.
+  summary: |-
+    Fail-closed federal itemized taxable-income deduction composition for tax
+    year 2026.
+
+    The first five components are completed nonnegative amounts after their
+    own entitlement, floor, ceiling, disaster, and substantiation rules. The
+    imported SALT pipeline supplies its guarded final. The sixth component,
+    miscellaneous itemized deductions, must be zero consistently with the
+    imported section 67(h) judgment. The
+    `no_other_component_in_pe_six_item_itemized_aggregate` attestation is
+    deliberately limited to the six-item aggregate represented here; it does
+    not assert that no other section 63(d) deduction exists.
+
+    This module constructs only the completed pre-section-68 aggregate. It
+    supplies that amount and the completed
+    `taxable_income_determined_without_section_68` boundary to the imported
+    section 68 module. It does not duplicate the section 68 base, lesser-of,
+    2/37, or final subtraction formulas. The two public outputs are guarded
+    aliases of the imported section 68 reduction and final. Section 63(e)'s
+    itemization election remains a downstream taxable-income decision.
+
+    Filing status is the exact TaxUnit input declared by the imported SALT
+    pipeline: 0 single, 1 joint, 2 married filing separately, 3 head of
+    household, and 4 surviving spouse. The same input resolves the imported
+    Revenue Procedure filing-status table. An invalid status, nonindividual,
+    negative completed component, nonzero miscellaneous component, false
+    aggregate attestation, invalid imported SALT domain, inconsistent section
+    67(h) judgment, or failed section 68 ordering judgment makes every local
+    amount fail closed to zero.
+imports:
+  - us:policies/income_tax/salt_deduction_pipeline#federal_salt_deduction
+  - us:statutes/26/67/h#miscellaneous_itemized_deduction_allowed_for_individual
+  - us:statutes/26/68#itemized_deductions_allowed_after_section_68
+rules:
+  - name: itemized_taxable_income_deductions_verified_domain_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 63(d)-(e), 67(h), and 68(a)-(b), fail-closed six-component aggregate boundary
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the term “itemized deductions” means the deductions allowable under this chapter other than"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/68
+              excerpt: "In the case of an individual"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/2
+              excerpt: "the term “surviving spouse” means a taxpayer"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/7703
+              excerpt: "the determination of whether an individual is married shall be made as of the close of his taxable year"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/salt_deduction_pipeline#salt_deduction_pipeline_verified_domain_applies
+              output: salt_deduction_pipeline_verified_domain_applies
+              hash: sha256:81d049791e96d949b63b0b7599f88b4767ab4c68d5e05389d49ead70afb063b8
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/67/h#miscellaneous_itemized_deduction_allowed_for_individual
+              output: miscellaneous_itemized_deduction_allowed_for_individual
+              hash: sha256:9c506b698ed2573df3d8a15421d56edf821049d122bb216b21d97f1a5ddcb851
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/68/b#section_68_applied_after_other_itemized_deduction_limitations
+              output: section_68_applied_after_other_itemized_deduction_limitations
+              hash: sha256:b414ea74c35ae01658716b730dec1427c8db0e9ae0b7e0be3f4c8f08a8ec5906
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          (
+            filing_status == 0
+            or filing_status == 1
+            or filing_status == 2
+            or filing_status == 3
+            or filing_status == 4
+          )
+          and taxpayer_is_individual
+          and salt_deduction_pipeline_verified_domain_applies
+          and charitable_deduction >= 0
+          and interest_deduction >= 0
+          and federal_salt_deduction >= 0
+          and medical_expense_deduction >= 0
+          and casualty_loss_deduction >= 0
+          and misc_deduction == 0
+          and not miscellaneous_itemized_deduction_allowed_for_individual
+          and no_other_component_in_pe_six_item_itemized_aggregate
+          and section_68_applied_after_other_itemized_deduction_limitations
+
+  - name: itemized_deductions_otherwise_allowable_after_other_limitations
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 63(d), completed six-component aggregate before section 68
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the term “itemized deductions” means the deductions allowable under this chapter other than"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the determination of whether a deduction is allowable under this chapter shall be made without regard to the preceding sentence"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/163
+              excerpt: "There shall be allowed as a deduction all interest paid or accrued within the taxable year on indebtedness."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/salt_deduction_pipeline#federal_salt_deduction
+              output: federal_salt_deduction
+              hash: sha256:81d049791e96d949b63b0b7599f88b4767ab4c68d5e05389d49ead70afb063b8
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/164
+              excerpt: "State and local personal property taxes."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/165
+              excerpt: "There shall be allowed as a deduction any loss sustained during the taxable year and not compensated for by insurance or otherwise."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/165
+              excerpt: "shall be allowed as a deduction under subsection (a) only to the extent it is attributable to a Federally declared disaster"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/170
+              excerpt: "There shall be allowed as a deduction any charitable contribution"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/213
+              excerpt: "to the extent that such expenses exceed 7.5 percent of adjusted gross income"
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us/statute/26/68
+              excerpt: "This section shall be applied after the application of any other limitation on the allowance of any itemized deduction."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/itemized_taxable_income_deductions_pipeline#itemized_taxable_income_deductions_verified_domain_applies
+              output: itemized_taxable_income_deductions_verified_domain_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if itemized_taxable_income_deductions_verified_domain_applies:
+            charitable_deduction
+            + interest_deduction
+            + federal_salt_deduction
+            + medical_expense_deduction
+            + casualty_loss_deduction
+            + misc_deduction
+          else:
+            0
+
+  - name: federal_section_68_reduction
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 68(a), guarded alias of the imported section 68 reduction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/68#itemized_deduction_reduction_under_section_68
+              output: itemized_deduction_reduction_under_section_68
+              hash: sha256:b1bc1c5a6a7d1bb9249e87a58ff816a38d725f9a6a81529c929f3f7f7456cb26
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/itemized_taxable_income_deductions_pipeline#itemized_taxable_income_deductions_verified_domain_applies
+              output: itemized_taxable_income_deductions_verified_domain_applies
+              hash: sha256:local
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if itemized_taxable_income_deductions_verified_domain_applies:
+            itemized_deduction_reduction_under_section_68
+          else:
+            0
+
+  - name: federal_itemized_taxable_income_deductions
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 63(d) and 68, guarded final itemized taxable-income deduction aggregate
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/68#itemized_deductions_allowed_after_section_68
+              output: itemized_deductions_allowed_after_section_68
+              hash: sha256:b1bc1c5a6a7d1bb9249e87a58ff816a38d725f9a6a81529c929f3f7f7456cb26
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:policies/income_tax/itemized_taxable_income_deductions_pipeline#itemized_taxable_income_deductions_verified_domain_applies
+              output: itemized_taxable_income_deductions_verified_domain_applies
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/63
+              excerpt: "the term “itemized deductions” means the deductions allowable under this chapter other than"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if itemized_taxable_income_deductions_verified_domain_applies:
+            itemized_deductions_allowed_after_section_68
+          else:
+            0
+inputs:
+  - name: taxpayer_is_individual
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Required section 68(a) individual-taxpayer boundary.
+  - name: charitable_deduction
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed allowable charitable deduction after all section 170 entitlement, percentage, carryover, and substantiation rules.
+  - name: interest_deduction
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed allowable itemized interest deduction after all section 163 classification and limitation rules.
+  - name: medical_expense_deduction
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed allowable medical-expense deduction after the section 213 floor and all other applicable limitations.
+  - name: casualty_loss_deduction
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed allowable casualty-loss deduction after section 165 basis, insurance, disaster, claim, and floor rules.
+  - name: misc_deduction
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Completed miscellaneous itemized deduction; must be zero consistently with the imported section 67(h) judgment for 2026.
+  - name: no_other_component_in_pe_six_item_itemized_aggregate
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Holds only when the supplied six components exhaust the bounded PE six-item itemized aggregate; it does not exclude deductions modeled elsewhere in taxable income.
