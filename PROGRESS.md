@@ -52,6 +52,25 @@
     evaluation-order entry; removing those inert entries yields
     byte-identical artifacts.
   - Federal exact-head companion passes 7/7 and validation has zero findings.
+- Completed all guard probes at the exact target:
+  - Direct eligible-row injection and attempted derived-scalar spoof both
+    produce `(count=1, integrity=not_holds, exclusion=holds,
+    MCE=not_holds)` via the cardinality guard.
+  - Equal-count rows on both surfaces produce
+    `(2, holds, holds, not_holds)` because the same-row IPV scan catches the
+    barred member.
+  - A distinct eligible member exchanged one-for-one for the barred anchor
+    member produces `(1, not_holds, holds, not_holds)` because the source
+    projection remains in the local union and the cardinality guard catches
+    the attempted swap.
+  - Inconsistent eligible+IPV rows fed only to the anchor produce
+    `(2, holds, holds, not_holds)` because both rows project into the local
+    per-member exclusion scan.
+- Mutated only the integrity helper to `formula: true`. With lawful
+  expectations retained, the two divergent cases fail 0/2 with six targeted
+  assertions and both unsafe tuples become `(1, holds, not_holds, holds)`;
+  those unsafe expectations pass wrongly 2/2. Restoration returns the module
+  to target SHA-256 `ba01095a...`, empty target diff, and lawful 2/2 green.
 - Attempted the required GitNexus index. The sandbox denied its write to
   `/Users/maxghenis/.gitnexus/registry.json`; direct source, git, and compiled
   artifact checks are being used instead.
@@ -61,6 +80,4 @@
 
 ## Next
 
-- Finish the adversarial equal-count/equal-cardinality probes and guard
-  mutation.
 - Commit the final evidence report and issue the verdict.
