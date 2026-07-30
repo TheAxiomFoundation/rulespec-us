@@ -2,7 +2,8 @@
 
 ## State
 
-- Review status: in progress.
+- Review status: complete.
+- Verdict: `APPROVE`; no blocking repair or containment finding remains.
 - Frozen candidate head:
   `7e69fbb5ed19b58d262989cf455c4b9469119a1f`.
 - Prior reviewed head:
@@ -107,7 +108,10 @@
 - Sandbox disclosure: an initial mutation patch targeting `/private/tmp` was
   rejected. All mutation copies were instead created under the authorized
   `.git/review-worktrees/` ledger area, and every requested gate completed.
+- Wrote the complete evidence-backed approval report to `REVIEW.md`, including
+  the exact arithmetic, proof/rooting results, schema and behavioral mutation
+  kills, manifest provenance, containment, and sandbox disclosures.
 
 ## Next
 
-- Write and commit the final evidence-backed verdict to `REVIEW.md`.
+- None. This frozen-head repair re-review is complete.
