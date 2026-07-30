@@ -2,7 +2,8 @@
 
 ## State
 
-- Review status: in progress; `REQUEST-CHANGES` evidence complete.
+- Review status: complete.
+- Verdict: `REQUEST-CHANGES` for five binding defects.
 - Frozen candidate head:
   `4ced8fb7065311338ea732cab0a26105e750c40f`.
 - Expected head branch: `fed-parity/chunk2-taxable-income`.
@@ -110,7 +111,13 @@
   and the secret store locked. The signature envelope is shape-valid and all
   non-secret provenance checks pass, but the HMAC itself is not
   cryptographically reverified here.
+- Wrote the evidence-backed final verdict to `REVIEW.md`.
 
 ## Next
 
-- Record the evidence-backed verdict in `REVIEW.md` and finalize the ledger.
+- Author after review: correct the two legal-proof defects, add the prescribed
+  senior-MAGI addback diagnostic, extend executable relation schemas, and
+  reject contradictory entity facts; then revalidate and re-sign last.
+- Reviewer after revision: freeze the new head and rerun the canonical
+  companion, corpus/verbatim/proof checks, relation mutations, closure,
+  manifest, index, ledger, and repository gates.
