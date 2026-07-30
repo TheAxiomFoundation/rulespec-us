@@ -3,7 +3,8 @@
 ## State
 
 - Review status: active.
-- Verdict: pending.
+- Verdict: `REQUEST-CHANGES` unless the confirmed §55(d)(2) defect is
+  disproved; remaining review dimensions are still active.
 - Live PR head verified through the read-only GitHub connector:
   `5a90ed8aa2cfb62f2ce3f431ffd6e155650b43aa`.
 - Expected and verified head branch:
@@ -50,6 +51,20 @@
   `e4854b7a420e0a565dbb569b3843456af88734fc9c8261d91afc5a29473edb24`.
 - Began three independent read-only passes covering §55 legal arithmetic,
   §§57–59 proof/guard/mutation behavior, and mechanical cascade/provenance.
+- Reconstructed exact `axiom-encode@3869d66d...` from the local pinned Git
+  object and verified the available release engine source tree matches all 110
+  tracked files at `axiom-rules-engine@ffd821327...`.
+- Reproduced the canonical focused gates: four companions pass 36/36; four
+  validations have `ci_pass=true`, `all_passed=true`, and zero errors; proof
+  validation passes 114 atoms (81/4/13/16); the focused money-atom gate has
+  zero missing obligations.
+- Confirmed a blocking §55(d)(2) interaction defect. `amt_separate_addition`
+  computes the MFS increment from taxable income plus excluded deductions
+  before the newly added senior and §§57–59 amounts, although retained
+  §55(d)(2) measures it from AMTI determined without only the increment
+  sentence. An independent in-domain MFS + $50,000 §57(a)(5) counterexample
+  should produce a $25,000 increment, $715,200 AMTI, and $197,811 base tax;
+  the exact-head engine instead produces $0, $690,200, and $190,811.
 
 ## Next
 
