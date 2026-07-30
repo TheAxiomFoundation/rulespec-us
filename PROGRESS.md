@@ -26,10 +26,22 @@
 - Inspected the primary checkout without modifying its unrelated dirty state.
 - Created this review-only local branch and disposable worktree from the
   frozen repair head. No PR branch, remote, or GitHub write was made.
+- Confirmed the prior reviewed head is an ancestor of the repair head with
+  exactly ten intervening commits.
+- Froze the final delta to the compose, companion, relation-schema test,
+  reverse index, and composition manifest; `git diff --check` is clean.
+- Audited the intervening commit path set: the same four non-manifest repair
+  files plus `PROGRESS.md`; the progress ledger is deleted before the final
+  manifest-only signature commit.
+- Confirmed the required corpus checkout is clean and detached at exact pin
+  `8af592162231e9de748ba6b98792b426ad4fe8b7`.
+- Created the canonical-basename exact-head archive at the planned path. It
+  contains neither `PROGRESS.md` nor `REVIEW.md`; the compose blob is
+  `507fa3179ab04da5d2562af6fb97d4fb60b86e85` with SHA-256
+  `812f15410e4266a6118b9929399dbe4ae3f654eb77ad0e7bb77b15ee8c50de8f`.
 
 ## Next
 
-- Freeze the exact repair delta and canonical archive.
 - Verify the two legal-proof repairs and the MAGI arithmetic independently.
 - Execute all three exact relation-schema mutations and the predecessor's
   contradictory-facts regression.
