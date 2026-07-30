@@ -53,10 +53,13 @@
 - Removed §55's stale pending validation waiver and matching fingerprint row
   after the corrected module passed focused pinned validation; both ledgers
   still parse and contain no live §55 entry.
+- Added the exact zero-loss pending-oracle union for all 11 new public
+  §§57–59 outputs. The ledger is lexicographically sorted and unique, with
+  `ceiling == count == 2159` and no pre-existing entry removed.
 
 ## Next
 
-1. Update the pending oracle ledger and reverse index.
+1. Regenerate and verify the reverse index.
 2. Run every companion, pinned validate, program compile, containment, and
    flip/restore mutation gate.
 3. Write the final `WORKER-REPORT.md` without tracking it.
