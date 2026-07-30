@@ -21,10 +21,16 @@
   non-module consumer is the unpinned FY2026 federal income-tax program scope.
 - Confirmed the changed §55 pending waiver/fingerprint must be removed if its
   corrected module validates cleanly, following the §6012 precedent.
+- Encoded bounded §59 completed-return surfaces with a guarded AMTFTC, signed
+  subsection (e)/(g)/(h) adjustments, and the post-2017 `not_holds` §59(j)
+  applicability judgment.
+- Passed the §59 companion (8 cases), proof validation (16 atoms), and focused
+  deterministic validate; flip/restore mutations made both the completion
+  judgment and kiddie judgment fail their named expectations.
 
 ## Next
 
-1. Encode and test bounded §§57–59, committing each coherent module step.
+1. Review, gate, and commit the bounded §57 and §58 modules.
 2. Correct and test §55, then remove its stale validation-gap evidence if green.
 3. Update the pending oracle ledger and reverse index.
 4. Run every companion, pinned validate, program compile, containment, and
