@@ -123,7 +123,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "ff5b067ac4a0c87682e3e8f07a1081a81d7f6f078ae3d5910bbdc99e43dbc982" in workflow
+    assert "73b126caeeef96d7064137103f7d430aa203dffcf4ca359b3ab22fd6b2197e7c" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     guard_expression = (
         "${{ !((github.event_name == 'pull_request' && "
