@@ -1,18 +1,44 @@
 format: rulespec/v1
 module:
   source_verification:
-    corpus_citation_path: us/guidance/usda/fns/snap-fy2026-cola/page-1
+    corpus_citation_paths:
+      - us/guidance/usda/fns/snap-fy2026-cola/page-1
+      - us/regulation/7/273/2
+      - us-ca/guidance/cdss/acl-2014-14-56/page-3
+      - us-ca/guidance/cdss/acl-2015-15-42/page-4
+      - us-ca/guidance/cdss/acl-2014-14-63/page-2
+      - us-ca/guidance/cdss/acl-2013-13-32/page-3
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-ca/statute/wic/18901.5
+        - us/regulation/7/273/2
+        - us/regulation/7/273/8
+        - us/regulation/7/273/9
+        - us/regulation/7/273/10
+      rationale: |-
+        WIC 18901.5 mandates California categorical eligibility. The federal
+        regulations define categorical deemed factors, the ordinary resource
+        and income routes, net-income benefit calculation, minimum allotment,
+        and the state zero-benefit option. The CDSS letters exercise and
+        operationalize those authorities for California by exempting MCE
+        resources, waiving its net-eligibility ceiling, preserving the E/D
+        route, and choosing denial/discontinuance for zero-benefit CE/MCE
+        households of three or more.
   summary: |-
     California CalFresh FY 2026 benefit calculation composition. This module
     imports federal USDA FY 2026 SNAP allotment, deduction, resource-limit,
     income-standard, income-calculation, residency, citizenship, SSN, student,
     work-requirement, and allotment rules, plus encoded California MPP SNAP
-    provisions. It composes those sources into CalFresh eligibility and monthly
-    benefit calculations.
+    provisions and California modified categorical eligibility (MCE). It
+    composes those sources into CalFresh eligibility and monthly benefit
+    calculations, including MCE resource and net-eligibility waivers and the
+    state zero-benefit denial for categorical households of three or more.
 imports:
   - us:policies/usda/snap/state-plan-composition
   - us:regulations/7-cfr/273/8
   - us:regulations/7-cfr/273/9
+  - us-ca:policies/cdss/snap/modified-categorical-eligibility
   - us-ca:policies/cdss/snap/standard-utility-allowance
   - us-ca:regulations/mpp/63-503/324
 rules:
@@ -45,12 +71,21 @@ rules:
     dtype: Judgment
     period: Month
     source: California CalFresh SNAP eligibility composition bridge
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-63/page-2
+              excerpt: "California has opted to deny zero benefit cases."
     versions:
       - effective_from: '2025-10-01'
         formula: |-
           snap_residency_eligible
           and snap_household_member_eligible
           and calfresh_income_and_resource_eligible
+          and not calfresh_categorical_zero_benefit_denial_applies
   - name: shelter_costs
     kind: derived
     entity: Household
@@ -68,6 +103,29 @@ rules:
     dtype: Judgment
     period: Month
     source: California CalFresh categorical eligibility composition bridge
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "When determining eligibility for a categorically eligible household all provisions of this subchapter except for those listed below shall apply"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-56/page-3
+              excerpt: "receipt of the PUB 275 exempts all resources in the determination of eligibility"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2015-15-42/page-4
+              excerpt: "households of three or more persons that have been conferred MCE/BBCE status will be entitled to the allotment amount indicated in the tables of benefit issuance by household size even if the household’s net income exceeds the maximum amount allowable"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2013-13-32/page-3
+              excerpt: "E/D households are not subject to a gross income test in the determination of CalFresh eligibility. However, if the household’s resources do not exceed the maximum, the household must be net income eligible to receive CalFresh benefits."
     versions:
       - effective_from: '2025-10-01'
         formula: |-
@@ -76,3 +134,73 @@ rules:
             snap_resource_eligible
             and snap_standard_income_eligible
           )
+          or (
+            snap_total_gross_income <= calfresh_mce_gross_income_limit
+            and calfresh_mce_resource_eligibility_test_waived
+            and calfresh_mce_net_income_eligibility_test_waived
+          )
+
+  - name: calfresh_mce_resource_eligibility_test_waived
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: ACL 14-56, MCE resource exemption
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-56/page-3
+              excerpt: "receipt of the PUB 275 exempts all resources in the determination of eligibility"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: calfresh_mce_status_conferred
+
+  - name: calfresh_mce_net_income_eligibility_test_waived
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.2(j)(2)(xi) and ACL 15-42
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/2
+              excerpt: "Section 273.10(c) for the purposes of eligibility."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2015-15-42/page-4
+              excerpt: "households of three or more persons that have been conferred MCE/BBCE status will be entitled to the allotment amount indicated in the tables of benefit issuance by household size even if the household’s net income exceeds the maximum amount allowable"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: calfresh_mce_status_conferred
+
+  - name: calfresh_categorical_zero_benefit_denial_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: ACL 14-63, categorical zero-benefit denial
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ca/guidance/cdss/acl-2014-14-63/page-2
+              excerpt: "If a household of three or more that is determined to be categorically eligible either through traditional CE or MCE and has a net income amount that results in eligibility for zero benefits, the county will deny the application."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          household_size >= 3
+          and (
+            snap_categorically_eligible_for_resource_exemption
+            or calfresh_mce_status_conferred
+          )
+          and snap_calculated_monthly_allotment_before_minimums == 0

@@ -1,0 +1,112 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-ga/statute/48/48-7-20
+      - us-ga/statute/session-laws/2026/hb463/document-1
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us-ga/statute/48/48-7-20
+        - us-ga/statute/session-laws/2026/hb463/document-1
+      rationale: |-
+        O.C.G.A. § 48-7-20 imposes annual individual income tax on Georgia
+        taxable net income. The imported section 48-7-20 RuleSpec supplies the
+        official 4.99 percent rate enacted by 2026 Ga. Laws Act 465 for taxable
+        years beginning in 2026.
+
+        The pinned official corpus does not contain the tax-year-2026 Form 500
+        or IT-511 annual-return package. This module therefore accepts
+        caller-completed Georgia taxable net income as its sole boundary and
+        does not construct filing status, federal or Georgia adjustments,
+        deductions, exemptions, overtime or tip exclusions, credits, payments,
+        or final-return ordering. It is an annual section 48-7-20
+        before-nonrefundable-credits surface, not a final Form 500 liability or
+        an estimated-tax calculation.
+  summary: |-
+    Canonical tax-year-2026 annual O.C.G.A. § 48-7-20 tax before
+    nonrefundable credits. The caller supplies completed Georgia taxable net
+    income, the module fails closed when that boundary is negative, and the one
+    public output applies the imported official 4.99 percent rate.
+  deferred_outputs:
+    - output: us-ga:policies/income_tax/2026_annual_tax_before_nonrefundable_credits#complete_georgia_taxable_net_income
+      reason: |-
+        Constructing Georgia taxable net income requires the complete federal
+        and Georgia adjustment, deduction, exemption, filing-status, overtime,
+        tip, and other exclusion rules. Those upstream surfaces are not
+        established by section 48-7-20 and remain a caller boundary.
+    - output: us-ga:policies/income_tax/2026_annual_tax_before_nonrefundable_credits#final_form_500_income_tax
+      reason: |-
+        The pinned corpus has no tax-year-2026 Form 500 or IT-511 package, and
+        the complete credit, payment, and final-return ordering is not encoded.
+    - output: us-ga:policies/income_tax/2026_annual_tax_before_nonrefundable_credits#estimated_income_tax
+      reason: |-
+        Section 48-7-20's annual tax-imposition rule does not establish the
+        separate estimated-tax worksheet, installment, or payment surfaces.
+imports:
+  - us-ga:statutes/48/48-7-20#individual_income_tax_rate
+rules:
+  - name: ga_pit_2026_annual_input_is_nonnegative
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: O.C.G.A. § 48-7-20, nonnegative caller-completed Georgia taxable net income boundary
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-20
+              excerpt: "A tax is imposed upon every resident of this state with respect to the Georgia taxable net income of the taxpayer"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: ga_pit_2026_completed_georgia_taxable_net_income >= 0
+
+  - name: ga_pit_2026_annual_tax_before_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: O.C.G.A. § 48-7-20(a.1), annual 2026 tax on completed Georgia taxable net income before nonrefundable credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ga:statutes/48/48-7-20#individual_income_tax_rate
+              output: individual_income_tax_rate
+              hash: sha256:3b14bace271098396b2e7f91054f8f5453fdd291c7ba60a776f47b1f55d5fd02
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/statute/48/48-7-20
+              excerpt: "The tax imposed pursuant to subsection (a) of this Code section shall be computed"
+          - path: versions[0].effective_from
+            kind: effective_period
+            source:
+              corpus_citation_path: us-ga/statute/session-laws/2026/hb463/document-1
+              excerpt: "4.99 percent"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if ga_pit_2026_annual_input_is_nonnegative:
+            ga_pit_2026_completed_georgia_taxable_net_income
+            * individual_income_tax_rate
+          else:
+            0
+inputs:
+  - name: ga_pit_2026_completed_georgia_taxable_net_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Caller-completed annual Georgia taxable net income under O.C.G.A. § 48-7-27.

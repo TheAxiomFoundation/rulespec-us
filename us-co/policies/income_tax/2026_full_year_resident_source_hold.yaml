@@ -1,0 +1,402 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-co/statute/39/39-22-104
+      - us-co/statute/39/39-22-123.5
+      - us-co/statute/39/39-22-627
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us-co/statute/39/39-22-104
+        - us-co/statute/39/39-22-123.5
+        - us-co/statute/39/39-22-627
+      rationale: |-
+        The pinned official 2025 Colorado Revised Statutes Title 39 corpus
+        supplies the federal-taxable-income starting point and modification
+        direction in section 39-22-104, one refundable-credit provision in
+        section 39-22-123.5, and the temporary-rate mechanism in section
+        39-22-627. Its expression date is August 31, 2025.
+
+        That authority does not pin a complete executable tax-year-2026
+        return. Section 39-22-104 contains conditional 2026 modification
+        branches and amounts that depend on ballot outcomes or agency
+        determinations. Section 39-22-627 makes the annual rate depend on
+        certified excess revenue, adjusted thresholds, executive estimates,
+        approval, and coordination with other refund methods. The corpus also
+        does not establish a closed 2026 individual surtax or specialty-tax
+        surface, complete credit eligibility and limitation rules, or credit
+        ordering through signed liability. Final 2026 return forms and
+        instructions are not pinned.
+
+        Consequently, this module accepts only federal-return outputs and raw
+        resident/filing-unit facts. It never accepts Colorado adjusted gross
+        income, modifications, taxable income, tax, surtax, credits, or
+        liability. Typed source holds remain active, and every public Colorado
+        Money stage is a fail-closed zero sentinel. Those sentinels are not
+        legal claims that Colorado income, credits, or tax are zero.
+  summary: |-
+    Tax-year-2026 Colorado full-year-resident individual-income-tax
+    source-readiness boundary. It preserves federal taxable income as the
+    starting point required by C.R.S. section 39-22-104 and accepts federal
+    adjusted gross income plus raw residency and filing-unit facts needed for
+    future modification work.
+
+    Colorado modifications, taxable income, tax including the section
+    39-22-627 annual rate adjustment and any surtaxes, tax after
+    nonrefundable credits, refundable credits, and signed liability before
+    payments all fail closed while the pinned source gaps remain. The module
+    is intentionally incomplete and makes no annual liability or oracle-parity
+    claim.
+
+    Withholding, estimated payments, extension payments, penalties, interest,
+    refunds of payments, local taxes, nonresident sourcing, part-year
+    allocation, estates, and trusts are outside scope.
+  deferred_outputs:
+    - output: us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_state_income_after_modifications
+      reason: |-
+        Section 39-22-104 requires additions and subtractions before applying
+        the rate, but the pinned authority does not resolve every operative
+        2026 conditional branch and agency-determined amount into an
+        executable annual-return chain.
+      source_values:
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_modification_source_hold_applies
+    - output: us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_taxable_income
+      reason: |-
+        Colorado taxable income cannot be completed until the entire 2026
+        modification chain is source complete.
+      source_values:
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_modification_source_hold_applies
+    - output: us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_tax_before_credits_including_rate_adjustment_and_surtaxes
+      reason: |-
+        The permanent section 39-22-104 rate cannot establish tax-year-2026
+        tax before credits without the annual section 39-22-627 determination,
+        source-complete taxable income, and a closed surtax and specialty-tax
+        surface.
+      source_values:
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_modification_source_hold_applies
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_rate_adjustment_source_hold_applies
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_surtax_surface_source_hold_applies
+    - output: us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_tax_after_nonrefundable_credits
+      reason: |-
+        Complete 2026 nonrefundable-credit eligibility, limitations,
+        carryforwards, and ordering are not pinned.
+      source_values:
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_credit_surface_source_hold_applies
+    - output: us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_refundable_credits
+      reason: |-
+        The pinned earned-income-credit provision is not a complete 2026
+        refundable-credit inventory or ordering chain.
+      source_values:
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_credit_surface_source_hold_applies
+    - output: us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_net_income_tax_liability_before_payments
+      reason: |-
+        Signed annual resident liability cannot be completed until every
+        modification, annual-rate, surtax, and credit source hold is cleared.
+      source_values:
+        - us-co:policies/income_tax/2026_full_year_resident_source_hold#co_pit_2026_complete_liability_source_hold_applies
+
+rules:
+  - name: co_pit_2026_federal_taxable_income_boundary
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: C.R.S. section 39-22-104 federal taxable income starting point from the aligned federal return
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "the federal taxable income, as determined pursuant to section 63 of the internal revenue code"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: co_pit_2026_federal_taxable_income
+
+  - name: co_pit_2026_input_domain_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: C.R.S. section 39-22-104 full-year resident individual federal-return boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "the federal taxable income shall be modified as provided in subsections (3) and (4) of this section"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          co_pit_2026_is_full_year_colorado_resident_return
+          and co_pit_2026_federal_and_colorado_filing_units_are_aligned
+          and (
+            co_pit_2026_federal_taxable_income >= 0
+            or co_pit_2026_federal_taxable_income < 0
+          )
+          and (
+            co_pit_2026_federal_adjusted_gross_income >= 0
+            or co_pit_2026_federal_adjusted_gross_income < 0
+          )
+
+  - name: co_pit_2026_modification_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Unresolved operative 2026 additions, subtractions, conditional branches, and agency-determined amounts under C.R.S. section 39-22-104
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "Prior to the application of the rate of tax prescribed in subsection (1), (1.5), or (1.7) of this section, the federal taxable income shall be modified as provided in subsections (3) and (4) of this section."
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: co_pit_2026_rate_adjustment_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Missing final tax-year-2026 C.R.S. section 39-22-627 temporary-rate determination
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-627
+              excerpt: "the executive director shall temporarily reduce the state income tax rate"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: co_pit_2026_surtax_surface_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Complete tax-year-2026 individual surtax and specialty-tax applicability is not pinned
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "a tax of four and forty one-hundredths percent is imposed on the federal taxable income"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: co_pit_2026_credit_surface_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Complete tax-year-2026 nonrefundable and refundable credit inventory, limitations, carryforwards, and ordering are not pinned
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-123.5
+              excerpt: "permanent and refundable state earned income tax credit for eligible Colorado taxpayers"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: co_pit_2026_complete_liability_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Combined source hold for incomplete tax-year-2026 Colorado resident liability
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "Except as otherwise provided in section 39-22-627"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-627
+              excerpt: "the executive director shall temporarily reduce the state income tax rate"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          co_pit_2026_modification_source_hold_applies
+          or co_pit_2026_rate_adjustment_source_hold_applies
+          or co_pit_2026_surtax_surface_source_hold_applies
+          or co_pit_2026_credit_surface_source_hold_applies
+
+  - name: co_pit_2026_state_income_after_modifications
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed Colorado income-after-modifications sentinel while the complete 2026 addition and subtraction chain is source held
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "the federal taxable income shall be modified as provided in subsections (3) and (4) of this section"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0'
+
+  - name: co_pit_2026_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed Colorado taxable-income sentinel while the complete 2026 modification chain is source held
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "the federal taxable income shall be modified"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0'
+
+  - name: co_pit_2026_tax_before_credits_including_rate_adjustment_and_surtaxes
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed Colorado tax sentinel while taxable income, annual rate adjustment, and the complete surtax surface are source held
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "a tax of four and forty one-hundredths percent is imposed on the federal taxable income"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-627
+              excerpt: "the state income tax rate for the income tax year"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0'
+
+  - name: co_pit_2026_tax_after_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed Colorado tax-after-nonrefundable-credits sentinel while the credit surface is source held
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-123.5
+              excerpt: "earned income tax credit against the taxes due under this article 22"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0'
+
+  - name: co_pit_2026_refundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed Colorado refundable-credit sentinel while the complete 2026 credit surface is source held
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-123.5
+              excerpt: "permanent and refundable state earned income tax credit"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0'
+
+  - name: co_pit_2026_net_income_tax_liability_before_payments
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Fail-closed signed Colorado resident income-tax liability sentinel before payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-co/statute/39/39-22-104
+              excerpt: "a tax of four and forty one-hundredths percent is imposed"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: '0'
+
+inputs:
+  - name: co_pit_2026_federal_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Federal taxable income from the aligned federal return; it is not a completed Colorado income amount.
+  - name: co_pit_2026_federal_adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Federal adjusted gross income from the aligned federal return for future raw modification tests; it is not a completed Colorado income amount.
+  - name: co_pit_2026_is_full_year_colorado_resident_return
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Whether the return is within this program's full-year Colorado resident scope.
+  - name: co_pit_2026_federal_and_colorado_filing_units_are_aligned
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: Whether the federal and Colorado returns cover the same filing unit.
