@@ -1,0 +1,195 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ct/statute/12-704e
+  summary: |-
+    Resident taxpayers subject to Connecticut income tax are allowed a credit equal to the applicable percentage of the federal earned income credit claimed and allowed. The applicable percentage is 23%, 30.5%, or 40% depending on taxable-year commencement. Excess credit is refundable without interest, subject to sections 12-739 and 12-742, and taxpayers with at least one federal qualifying child receive an additional $250. Married individuals filing a joint federal return but separate Connecticut return prorate the credit by separate-return federal AGI over joint-return federal AGI.
+  deferred_outputs:
+    - output: us-ct:statutes/12-704e/b#refundable_excess_credit_after_sections_12_739_and_12_742
+      reason: Refund treatment depends on the operative exceptions in sections 12-739 and 12-742, which are not supplied as copied RuleSpec context.
+    - output: us-ct:statutes/12-704e/d#earned_income_tax_credit_excluded_from_need_based_income_and_resources
+      reason: Subsection (d) applies across state and federal need-based benefit programs and depends on program-specific income and resource eligibility determinations outside this tax-credit module.
+rules:
+  - name: ct_eitc_applicable_percentage
+    kind: parameter
+    dtype: Rate
+    source: 12-704e(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "twenty-three per cent for taxable years commencing prior to January 1, 2021"
+          - path: versions[1].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "thirty and one-half per cent for taxable years commencing on or after January 1, 2021"
+          - path: versions[2].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "forty per cent for taxable years commencing on or after January 1, 2023"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          0.23
+      - effective_from: '2021-01-01'
+        formula: |-
+          0.305
+      - effective_from: '2023-01-01'
+        formula: |-
+          0.40
+
+  - name: qualifying_child_additional_credit_amount
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 12-704e(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "at least one qualifying child for federal income tax purposes... additional two hundred fifty dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          250
+
+  - name: ct_eitc_eligible
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 12-704e(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          resident_of_this_state_under_section_12_701_a_1
+          and subject_to_tax_imposed_under_this_chapter
+          and federal_earned_income_credit_claimed_and_allowed > 0
+
+  - name: ct_eitc_base_credit
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-704e(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "applicable percentage of the earned income credit claimed and allowed"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if ct_eitc_eligible: ct_eitc_applicable_percentage * federal_earned_income_credit_claimed_and_allowed else: 0
+
+  - name: married_separate_ct_eitc_fraction
+    kind: derived
+    entity: TaxUnit
+    dtype: Decimal
+    period: Year
+    source: 12-704e(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "numerator... federal adjusted gross income... separate return... denominator... joint federal income tax return"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          federal_adjusted_gross_income_reported_on_separate_connecticut_return / federal_adjusted_gross_income_reported_on_joint_federal_return
+
+  - name: ct_eitc_credit_before_child_addition
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-704e(c)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "filed a joint federal income tax return... required to file a separate return"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if filed_joint_federal_income_tax_return_and_required_to_file_separate_connecticut_return: ct_eitc_base_credit * married_separate_ct_eitc_fraction else: ct_eitc_base_credit
+
+  - name: ct_eitc_credit_allowed
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-704e(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "at least one qualifying child... additional two hundred fifty dollars"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          ct_eitc_credit_before_child_addition + (if has_at_least_one_qualifying_child_for_federal_income_tax_purposes: qualifying_child_additional_credit_amount else: 0)
+
+  - name: ct_eitc_excess_over_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 12-704e(b)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ct/statute/12-704e
+              excerpt: "If the amount of the credit... exceeds the taxpayer's liability"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          max(0, ct_eitc_credit_allowed - tax_liability_imposed_under_this_chapter)
