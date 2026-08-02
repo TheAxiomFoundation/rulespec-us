@@ -109,15 +109,21 @@ module:
         - us/rulemaking/federal-register/2026-07-20/2026-14542
         - us/rulemaking/federal-register/2026-07-28/2026-15181
       rationale: |-
-        With one exception, every operative rate is imported from the
+        With three exceptions, every operative rate is imported from the
         encoded USITC HTS line, chapter 99 overlay, and CBP de minimis
-        modules, whose own proofs carry the authority. The exception is the
-        70 percent ad valorem rate for products of the Russian Federation
-        under heading 9903.90.09 and U.S. note 30(c), applied in lieu of
-        the column 2 rate on HTS 7601.10.30 (enumerated in U.S. note
-        30(d)); no standalone module encodes that heading, so the
-        composition carries it as the named parameter
+        modules, whose own proofs carry the authority. The first exception
+        is the 70 percent ad valorem rate for products of the Russian
+        Federation under heading 9903.90.09 and U.S. note 30(c), applied
+        in lieu of the column 2 rate on HTS 7601.10.30 (enumerated in
+        U.S. note 30(d)); no standalone module encodes that heading, so
+        the composition carries it as the named parameter
         russia_heading_9903_90_09_rate_of_duty with its proof atoms. The
+        other two are the 10 percent potash rates of headings 9903.01.15
+        (Canada, U.S. note 2(l)) and 9903.01.05 (Mexico, U.S. note 2(c)),
+        carried as the composition-local parameters
+        fentanyl_canada_potash_additional_duty_rate and
+        fentanyl_mexico_potash_additional_duty_rate with their proof
+        atoms, because no standalone module encodes those headings. The
         composition otherwise contributes only the wiring the imported
         modules leave open: line selection over the three encoded HTS
         statistical reporting numbers, column and special-subcolumn
@@ -141,10 +147,23 @@ module:
         and Mexico out of the reciprocal regime entirely. The exception
         headings each fentanyl heading names (9903.01.11 through
         9903.01.15 for Canada, 9903.01.02 through 9903.01.05 for Mexico)
-        gate on entry attributes the harness does not supply (donation,
-        informational material, USMCA duty-free entry, potash), so the
-        composition models them as judgments over free entry facts that
-        default to not holding.
+        gate on entry attributes derivable only from the entry declaration
+        (donation, informational material, USMCA duty-free entry, potash).
+        The engine lowers every bare fact a demanded rule consumes to a
+        required input, so those facts cannot appear on the rate the
+        five-input panel demands: ieepa_component_rate therefore consumes
+        only facts derivable from the panel inputs (origin, HTS line, and
+        the HTS-derived 9903.01.13 energy carve-out), and the declared
+        exception and potash branches are modeled on the separate rate
+        ieepa_component_rate_with_declared_exceptions, which additionally
+        consumes the declared entry facts and is demanded only when those
+        facts are supplied. That rate models the IEEPA component only: a
+        heading 9903.01.14/9903.01.04 USMCA-qualifying entry would also
+        take the Free "S" special subcolumn on the base HTS lines, but
+        base special-subcolumn eligibility here is modeled from origin
+        (Korea-only) because free entry facts cannot reach the
+        panel-demanded base path, so no total-duty output is asserted for
+        USMCA entries.
         The IEEPA components end after 2026-02-23 because EO 14388 (FR
         2026-03829) applies its replacement regime to goods entered for
         consumption on or after 2026-02-24; the termination order EO 14389
@@ -724,11 +743,6 @@ rules:
               corpus_citation_path: us/statute/hts/9903.01.10
               excerpt: "Rates of duty (1-General): The duty provided in the applicable subheading + 35%"
           - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/hts/9903.01.10
-              excerpt: "Except for products described in headings 9903.01.11, 9903.01.12, 9903.01.13, 9903.01.14 or 9903.01.15"
-          - path: versions[0].formula
             kind: formula
             source:
               corpus_citation_path: us/statute/hts/9903.01.13
@@ -746,6 +760,62 @@ rules:
           - path: versions[0].formula
             kind: exception
             source:
+              corpus_citation_path: us/statute/hts/9903.01.26
+              excerpt: "Articles the product of Canada, as provided for in subdivision (v)(iv) of U.S. note 2 to this subchapter"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/hts/9903.01.27
+              excerpt: "Articles the product of Mexico, as provided for in subdivision (v)(v) of U.S. note 2 to this subchapter"
+          - path: versions[1].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us/rulemaking/federal-register/2026-02-25/2026-03829
+              excerpt: "effective with respect to goods entered for consumption, or withdrawn from warehouse for consumption, on or after 12:01 a.m. eastern standard time on February 24, 2026"
+          - path: versions[1].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/rulemaking/federal-register/2026-02-25/2026-03832
+              excerpt: "as soon as practicable, terminate the collection of the additional ad valorem duties described in section 1 of this order"
+    versions:
+      - effective_from: '2026-02-15'
+        effective_to: '2026-02-23'
+        formula: |-
+          (if origin_is_china: fentanyl_china_note_u_additional_duty_rate
+           elif origin_is_canada:
+             (if entry_is_energy_resource: fentanyl_energy_additional_duty_rate
+              else: fentanyl_canada_note_j_additional_duty_rate)
+           elif origin_is_mexico: fentanyl_mexico_note_a_additional_duty_rate
+           else: 0)
+          + (if entry_is_reciprocal_annex_excluded or entry_is_reciprocal_metals_excluded: 0
+             elif origin_is_canada or origin_is_mexico: 0
+             elif origin_is_vietnam: reciprocal_vietnam_additional_duty_rate
+             elif origin_is_south_africa: reciprocal_south_africa_additional_duty_rate
+             elif origin_is_uk: reciprocal_uk_additional_duty_rate
+             elif origin_is_brazil: reciprocal_brazil_additional_duty_rate
+             else: reciprocal_baseline_additional_duty_rate)
+          + (if origin_is_brazil and not entry_is_line_b: brazil_ieepa_additional_duty_rate else: 0)
+      - effective_from: '2026-02-24'
+        formula: |-
+          terminated_ieepa_additional_ad_valorem_duty_rate
+
+  - name: ieepa_component_rate_with_declared_exceptions
+    kind: derived
+    entity: CustomsEntry
+    dtype: Rate
+    period: Day
+    source: Chapter 99 subchapter III IEEPA overlay composition with declared exception and potash entry facts
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/statute/hts/9903.01.10
+              excerpt: "Except for products described in headings 9903.01.11, 9903.01.12, 9903.01.13, 9903.01.14 or 9903.01.15"
+          - path: versions[0].formula
+            kind: exception
+            source:
               corpus_citation_path: us/statute/hts/9903.01.01
               excerpt: "Except for products described in headings 9903.01.02, 9903.01.03, 9903.01.04 and 9903.01.05"
           - path: versions[0].formula
@@ -758,16 +828,6 @@ rules:
             source:
               corpus_citation_path: us/statute/hts/9903.01.05
               excerpt: "Potash that is a product of Mexico, as provided for in U.S. note 2(c) to this subchapter"
-          - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/hts/9903.01.26
-              excerpt: "Articles the product of Canada, as provided for in subdivision (v)(iv) of U.S. note 2 to this subchapter"
-          - path: versions[0].formula
-            kind: exception
-            source:
-              corpus_citation_path: us/statute/hts/9903.01.27
-              excerpt: "Articles the product of Mexico, as provided for in subdivision (v)(v) of U.S. note 2 to this subchapter"
           - path: versions[1].formula
             kind: effective_period
             source:
