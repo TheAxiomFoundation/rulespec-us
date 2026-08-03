@@ -69,7 +69,6 @@ def allowed_yaml_roots() -> set[str]:
         ".axiom",
         ".github",
         "bulk",
-        "programs",
         "known-dangling.yaml",
         "known-missing-money-atoms.yaml",
         "known-validation-gaps.yaml",
@@ -145,6 +144,10 @@ def test_no_obsolete_formula_artifacts() -> None:
     ]
 
     assert obsolete == []
+
+
+def test_no_root_level_programs_directory() -> None:
+    assert not (ROOT / "programs").exists()
 
 
 def test_no_disallowed_roots_or_yaml_fixtures() -> None:
