@@ -117,6 +117,11 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     assert "legacy-rulespec-freeze:" in workflow
     assert "needs: migration-authorization" in workflow
     assert (
+        "BASE_SHA: ${{ github.event.pull_request.base.sha || "
+        "github.event.before || '' }}"
+    ) in workflow
+    assert '[[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]' in workflow
+    assert (
         "needs: [migration-authorization, legacy-rulespec-freeze, workflow-toolchain]"
         in workflow
     )
