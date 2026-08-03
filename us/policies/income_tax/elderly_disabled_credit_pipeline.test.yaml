@@ -1,0 +1,264 @@
+# Hand-computed tax-year-2026 fixtures for 26 USC 22. Initial amounts are
+# $5,000 for single or a joint return with one qualified spouse, $7,500 for a
+# joint return with two qualified spouses, and $3,750 for MFS. The amount is
+# reduced by nontaxable benefits and one-half of AGI over $7,500 single,
+# $10,000 joint, or $5,000 MFS, then multiplied by 15%.
+#
+# The disability branch is fully executable, so `eld-disabled-under-65`
+# exercises it in addition to retaining every P7 row. Empty payment relations
+# pass the pipeline boundary. Any nonempty section 104(a)(4) relation fails
+# closed until the imported rule allocates the exception only to its lawful
+# veterans-benefit bucket. Expected amounts are pre-section-26 credits; none
+# comes from PolicyEngine.
+
+- name: eld-basic
+  # Initial 5,000 - SS 2,000 - 50% * (8,000 - 7,500) = 2,750.
+  # Credit = 15% * 2,750 = 412.50. The grid's shape omitted the $250 AGI
+  # reduction; $412.50 is the lawful encoded result.
+  period: &tax_year_2026
+    period_kind: tax_year
+    start: '2026-01-01'
+    end: '2026-12-31'
+  input:
+    <<: &common_section_22_inputs
+      us:statutes/26/22#input.railroad_retirement_act_benefits_excluded_from_gross_income: 0
+      us:statutes/26/22#input.veterans_affairs_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+      us:statutes/26/22#input.other_non_title_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+      us:statutes/26/22#input.workers_compensation_treated_as_social_security_benefit: 0
+      us:statutes/26/22#input.is_nonresident_alien: false
+      us:statutes/26/22#relation.section_22_payment_of_tax_unit: []
+      us:policies/income_tax/elderly_disabled_credit_pipeline#input.all_under_65_section_22_qualified_individuals_were_permanently_and_totally_disabled_when_retired: false
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 8000
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 2000
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - &aged_66
+        us:statutes/26/22#input.age: 66
+        us:statutes/26/22#input.retired_on_disability_before_year_end: false
+        us:statutes/26/22#input.unable_to_engage_substantial_gainful_activity: false
+        us:statutes/26/22#input.medically_determinable_impairment: false
+        us:statutes/26/22#input.impairment_expected_to_result_in_death: false
+        us:statutes/26/22#input.impairment_duration_months: 0
+        us:statutes/26/22#input.disability_proof_furnished: false
+        us:statutes/26/22#input.section_22_disability_income: 0
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '412.5'
+
+- name: eld-agi-reduce
+  # Initial 5,000 - 50% * (12,000 - 7,500) = 2,750.
+  # Credit = 15% * 2,750 = 412.50.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 12000
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '412.5'
+
+- name: eld-joint-both
+  # Initial 7,500 - SS 3,000 - 50% * (15,000 - 10,000) = 2,000.
+  # Credit = 15% * 2,000 = 300.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 1
+    us:statutes/26/22#input.adjusted_gross_income: 15000
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 3000
+    us:statutes/26/22#input.married_at_close_of_taxable_year: true
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+      - *aged_66
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '300'
+
+- name: eld-zero-high-agi
+  # 50% * (30,000 - 7,500) = 11,250 exceeds the $5,000 initial amount.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 30000
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '0'
+
+- name: eld-ss-wipes
+  # SS 6,000 plus the $250 AGI reduction exceeds the $5,000 initial amount.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 8000
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 6000
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '0'
+
+- name: eld-joint-one-65
+  # One qualified spouse uses the $5,000 initial amount under 22(c)(2)(A)(i).
+  # 5,000 - SS 1,000 - 50% * (12,000 - 10,000) = 3,000.
+  # Credit = 15% * 3,000 = 450.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 1
+    us:statutes/26/22#input.adjusted_gross_income: 12000
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 1000
+    us:statutes/26/22#input.married_at_close_of_taxable_year: true
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+      - us:statutes/26/22#input.age: 60
+        us:statutes/26/22#input.retired_on_disability_before_year_end: false
+        us:statutes/26/22#input.unable_to_engage_substantial_gainful_activity: false
+        us:statutes/26/22#input.medically_determinable_impairment: false
+        us:statutes/26/22#input.impairment_expected_to_result_in_death: false
+        us:statutes/26/22#input.impairment_duration_months: 0
+        us:statutes/26/22#input.disability_proof_furnished: false
+        us:statutes/26/22#input.section_22_disability_income: 0
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '450'
+
+- name: eld-disabled-under-65
+  # The disability branch caps the $5,000 initial amount at disability income:
+  # 15% * min(5,000, 2,000) = 300.
+  period: *tax_year_2026
+  input:
+    us:statutes/26/22#input.railroad_retirement_act_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.veterans_affairs_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.other_non_title_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.workers_compensation_treated_as_social_security_benefit: 0
+    us:statutes/26/22#input.is_nonresident_alien: false
+    us:statutes/26/22#relation.section_22_payment_of_tax_unit: []
+    us:policies/income_tax/elderly_disabled_credit_pipeline#input.all_under_65_section_22_qualified_individuals_were_permanently_and_totally_disabled_when_retired: true
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 0
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - us:statutes/26/22#input.age: 60
+        us:statutes/26/22#input.retired_on_disability_before_year_end: true
+        us:statutes/26/22#input.unable_to_engage_substantial_gainful_activity: true
+        us:statutes/26/22#input.medically_determinable_impairment: true
+        us:statutes/26/22#input.impairment_expected_to_result_in_death: false
+        us:statutes/26/22#input.impairment_duration_months: 12
+        us:statutes/26/22#input.disability_proof_furnished: true
+        us:statutes/26/22#input.section_22_disability_income: 2000
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '300'
+
+- name: eld-disabled-retirement-permanence-not-attested
+  # The imported annual disability facts would otherwise produce $300, but
+  # section 22(b)(2) requires permanence when the individual retired. A false
+  # at-retirement attestation fails closed to zero.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 0
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - us:statutes/26/22#input.age: 60
+        us:statutes/26/22#input.retired_on_disability_before_year_end: true
+        us:statutes/26/22#input.unable_to_engage_substantial_gainful_activity: true
+        us:statutes/26/22#input.medically_determinable_impairment: true
+        us:statutes/26/22#input.impairment_expected_to_result_in_death: false
+        us:statutes/26/22#input.impairment_duration_months: 12
+        us:statutes/26/22#input.disability_proof_furnished: true
+        us:statutes/26/22#input.section_22_disability_income: 2000
+  output:
+    us:statutes/26/22#elderly_disabled_credit: '300'
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '0'
+
+- name: eld-no-qualified-individual
+  # Empty taxpayer/spouse relation means no qualified individual and no credit.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 0
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit: []
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '0'
+
+- name: eld-at-agi-threshold
+  # At the $7,500 threshold there is no AGI reduction: 15% * 5,000 = 750.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 7500
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '750'
+
+- name: eld-two-dollars-over-agi-threshold
+  # AGI reduction = 50% * 2 = 1; credit = 15% * 4,999 = 749.85.
+  period: *tax_year_2026
+  input:
+    <<: *common_section_22_inputs
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 7502
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+  output:
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '749.85'
+
+- name: eld-nonempty-section-104-payment-relation-fails-closed
+  # The imported rule wrongly lets this separate $5,000 Foreign Service
+  # section 808 annuity cancel the $5,000 Social Security reduction and would
+  # return $750. The exception belongs only to clause (i)(III), so this
+  # pipeline defers all nonempty payment relations and returns zero.
+  period: *tax_year_2026
+  input:
+    us:statutes/26/22#input.railroad_retirement_act_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.veterans_affairs_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.other_non_title_pension_annuity_or_disability_benefits_excluded_from_gross_income: 0
+    us:statutes/26/22#input.workers_compensation_treated_as_social_security_benefit: 0
+    us:statutes/26/22#input.is_nonresident_alien: false
+    us:policies/income_tax/elderly_disabled_credit_pipeline#input.all_under_65_section_22_qualified_individuals_were_permanently_and_totally_disabled_when_retired: false
+    us:statutes/26/22#input.filing_status: 0
+    us:statutes/26/22#input.adjusted_gross_income: 0
+    us:statutes/26/22#input.social_security_title_ii_benefits_excluded_from_gross_income: 5000
+    us:statutes/26/22#input.married_at_close_of_taxable_year: false
+    us:statutes/26/22#input.spouses_lived_apart_all_year: false
+    us:statutes/26/22#relation.taxpayer_or_spouse_of_tax_unit:
+      - *aged_66
+    us:statutes/26/22#relation.section_22_payment_of_tax_unit:
+      - us:statutes/26/104/a/4#input.payment_amount: 5000
+        us:statutes/26/104/a/4#input.payment_received_as_pension_annuity_or_similar_allowance: false
+        us:statutes/26/104/a/4#input.personal_injuries_or_sickness_resulted_from_active_service_in_armed_forces_of_any_country: false
+        us:statutes/26/104/a/4#input.personal_injuries_or_sickness_resulted_from_active_service_in_coast_and_geodetic_survey: false
+        us:statutes/26/104/a/4#input.personal_injuries_or_sickness_resulted_from_active_service_in_public_health_service: false
+        us:statutes/26/104/a/4#input.payment_received_as_disability_annuity_payable_under_section_808_of_foreign_service_act_1980: true
+  output:
+    us:statutes/26/22#elderly_disabled_credit: '750'
+    us:policies/income_tax/elderly_disabled_credit_pipeline#federal_elderly_disabled_credit: '0'

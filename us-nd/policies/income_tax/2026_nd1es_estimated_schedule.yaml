@@ -1,0 +1,508 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nd/statute/57/57-38-30.3
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us-nd/statute/57/57-38-30.3
+      rationale: |-
+        N.D.C.C. section 57-38-30.3(1) imposes individual income tax under
+        filing-status schedules, and subdivision (g) directs the Tax
+        Commissioner to prescribe annually indexed replacement schedules.
+        The official corpus provision composes the current Century Code with
+        the Tax Commissioner's official 2026 Form ND-1ES estimated-income-tax
+        worksheet. The form supplies every threshold, cumulative base amount,
+        and marginal rate for its single, joint or qualifying-surviving-spouse,
+        married-separate, and head-of-household estimated-tax schedules.
+
+        This narrow module accepts caller-supplied estimated North Dakota
+        taxable income and four filing-status classifications. Exactly one
+        status must hold; missing or overlapping statuses fail closed to zero.
+        The module does not construct annual-return taxable income, substitute
+        for the Commissioner's prescribed annual Tax Table, apply credits or
+        return rounding, compute estimated payments, or claim final annual
+        liability. Every executable version fails closed outside tax year 2026.
+  summary: |-
+    Canonical North Dakota 2026 Form ND-1ES estimated-tax schedule component.
+    It normalizes caller-supplied estimated North Dakota taxable income to zero,
+    validates that exactly one filing status is selected, and applies the
+    corresponding Form ND-1ES schedule while preserving the Commissioner's
+    published cumulative top-bracket bases.
+
+    Its sole public result is estimated schedule tax before credits. It is not
+    annual Form ND-1 tax, an annual Tax Table result, estimated payments, or
+    final liability. PolicyEngine parity is not claimed.
+rules:
+  - name: nd_pit_2026_nd1es_estimated_taxable_income_boundary
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES worksheet, caller-supplied estimated North Dakota taxable income
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "North Dakota taxable income multiplied by the rates in the applicable rate schedule"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: max(0, nd_pit_2026_nd1es_estimated_taxable_income)
+
+  - name: nd_pit_2026_nd1es_filing_status_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Official 2026 Form ND-1ES mutually exclusive filing-status schedules
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Single, other than head of household or surviving spouse."}
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Married filing jointly and surviving spouse."}
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Married filing separately."}
+          - path: versions[0].formula
+            kind: condition
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Head of household."}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          (
+            nd_pit_2026_nd1es_filing_status_single
+            or nd_pit_2026_nd1es_filing_status_joint_or_surviving_spouse
+            or nd_pit_2026_nd1es_filing_status_separate
+            or nd_pit_2026_nd1es_filing_status_head_of_household
+          )
+          and not (
+            nd_pit_2026_nd1es_filing_status_single
+            and (
+              nd_pit_2026_nd1es_filing_status_joint_or_surviving_spouse
+              or nd_pit_2026_nd1es_filing_status_separate
+              or nd_pit_2026_nd1es_filing_status_head_of_household
+            )
+          )
+          and not (
+            nd_pit_2026_nd1es_filing_status_joint_or_surviving_spouse
+            and (
+              nd_pit_2026_nd1es_filing_status_separate
+              or nd_pit_2026_nd1es_filing_status_head_of_household
+            )
+          )
+          and not (
+            nd_pit_2026_nd1es_filing_status_separate
+            and nd_pit_2026_nd1es_filing_status_head_of_household
+          )
+
+  - name: nd_pit_2026_nd1es_middle_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: N.D.C.C. section 57-38-30.3(1)(a)-(d), official 2026 middle-bracket rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$49,575 | $250,400 | $0.00 + 1.95% | $49,575"}
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$82,800 | $304,850 | $0.00 + 1.95% | $82,800"}
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$41,400 | $152,425 | $0.00 + 1.95% | $41,400"}
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$66,400 | $277,600 | $0.00 + 1.95% | $66,400"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0195'}
+
+  - name: nd_pit_2026_nd1es_top_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: N.D.C.C. section 57-38-30.3(1)(a)-(d), official 2026 top-bracket rate
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$250,400 |  | $3,916.09 + 2.50% | $250,400"}
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$304,850 |  | $4,329.98 + 2.50% | $304,850"}
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$152,425 |  | $2,164.99 + 2.50% | $152,425"}
+          - path: versions[0].formula
+            kind: parameter
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$277,600 |  | $4,118.40 + 2.50% | $277,600"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.025'}
+
+  - name: nd_pit_2026_nd1es_single_zero_tax_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES single zero-tax ceiling
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$0 | $49,575 | $0.00 + 0.00% | $0"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '49575'}
+
+  - name: nd_pit_2026_nd1es_single_top_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES single top-bracket threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$49,575 | $250,400 | $0.00 + 1.95% | $49,575"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '250400'}
+
+  - name: nd_pit_2026_nd1es_single_top_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES single top-bracket cumulative base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$250,400 |  | $3,916.09 + 2.50% | $250,400"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '3916.09'}
+
+  - name: nd_pit_2026_nd1es_joint_zero_tax_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES joint and qualifying-surviving-spouse zero-tax ceiling
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$0 | $82,800 | $0.00 + 0.00% | $0"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '82800'}
+
+  - name: nd_pit_2026_nd1es_joint_top_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES joint and qualifying-surviving-spouse top-bracket threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$82,800 | $304,850 | $0.00 + 1.95% | $82,800"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '304850'}
+
+  - name: nd_pit_2026_nd1es_joint_top_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES joint and qualifying-surviving-spouse top-bracket cumulative base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$304,850 |  | $4,329.98 + 2.50% | $304,850"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '4329.98'}
+
+  - name: nd_pit_2026_nd1es_separate_zero_tax_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES married-separate zero-tax ceiling
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$0 | $41,400 | $0.00 + 0.00% | $0"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '41400'}
+
+  - name: nd_pit_2026_nd1es_separate_top_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES married-separate top-bracket threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$41,400 | $152,425 | $0.00 + 1.95% | $41,400"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '152425'}
+
+  - name: nd_pit_2026_nd1es_separate_top_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES married-separate top-bracket cumulative base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$152,425 |  | $2,164.99 + 2.50% | $152,425"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '2164.99'}
+
+  - name: nd_pit_2026_nd1es_head_zero_tax_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES head-of-household zero-tax ceiling
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$0 | $66,400 | $0.00 + 0.00% | $0"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '66400'}
+
+  - name: nd_pit_2026_nd1es_head_top_threshold
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES head-of-household top-bracket threshold
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$66,400 | $277,600 | $0.00 + 1.95% | $66,400"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '277600'}
+
+  - name: nd_pit_2026_nd1es_head_top_base
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES head-of-household top-bracket cumulative base
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "$277,600 |  | $4,118.40 + 2.50% | $277,600"}
+    versions:
+      - {effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '4118.40'}
+
+  - name: nd_pit_2026_nd1es_single_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(1)(a), official 2026 single schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Single, other than head of household or surviving spouse."}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_single_zero_tax_ceiling: 0
+          else: if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_single_top_threshold:
+              nd_pit_2026_nd1es_middle_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_single_zero_tax_ceiling)
+          else:
+              nd_pit_2026_nd1es_single_top_base
+              + nd_pit_2026_nd1es_top_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_single_top_threshold)
+
+  - name: nd_pit_2026_nd1es_joint_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(1)(b), official 2026 joint and surviving-spouse schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Married filing jointly and surviving spouse."}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_joint_zero_tax_ceiling: 0
+          else: if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_joint_top_threshold:
+              nd_pit_2026_nd1es_middle_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_joint_zero_tax_ceiling)
+          else:
+              nd_pit_2026_nd1es_joint_top_base
+              + nd_pit_2026_nd1es_top_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_joint_top_threshold)
+
+  - name: nd_pit_2026_nd1es_separate_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(1)(c), official 2026 married-separate schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Married filing separately."}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_separate_zero_tax_ceiling: 0
+          else: if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_separate_top_threshold:
+              nd_pit_2026_nd1es_middle_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_separate_zero_tax_ceiling)
+          else:
+              nd_pit_2026_nd1es_separate_top_base
+              + nd_pit_2026_nd1es_top_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_separate_top_threshold)
+
+  - name: nd_pit_2026_nd1es_head_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: N.D.C.C. section 57-38-30.3(1)(d), official 2026 head-of-household schedule
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-nd/statute/57/57-38-30.3, excerpt: "Head of household."}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_head_zero_tax_ceiling: 0
+          else: if nd_pit_2026_nd1es_estimated_taxable_income_boundary <= nd_pit_2026_nd1es_head_top_threshold:
+              nd_pit_2026_nd1es_middle_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_head_zero_tax_ceiling)
+          else:
+              nd_pit_2026_nd1es_head_top_base
+              + nd_pit_2026_nd1es_top_rate * (nd_pit_2026_nd1es_estimated_taxable_income_boundary - nd_pit_2026_nd1es_head_top_threshold)
+
+  - name: nd_pit_2026_nd1es_estimated_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Official 2026 Form ND-1ES applicable estimated-tax schedule before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nd/statute/57/57-38-30.3
+              excerpt: "corresponding to an individual's filing status used for federal income tax purposes"
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if not nd_pit_2026_nd1es_filing_status_is_valid:
+              0
+          else: if nd_pit_2026_nd1es_filing_status_joint_or_surviving_spouse:
+              nd_pit_2026_nd1es_joint_schedule_tax
+          else: if nd_pit_2026_nd1es_filing_status_separate:
+              nd_pit_2026_nd1es_separate_schedule_tax
+          else: if nd_pit_2026_nd1es_filing_status_head_of_household:
+              nd_pit_2026_nd1es_head_schedule_tax
+          else:
+              nd_pit_2026_nd1es_single_schedule_tax
+
+inputs:
+  - name: nd_pit_2026_nd1es_estimated_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Estimated North Dakota taxable income supplied by the caller for Form ND-1ES.
+  - name: nd_pit_2026_nd1es_filing_status_single
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for a single return other than head of household or qualifying surviving spouse.
+  - name: nd_pit_2026_nd1es_filing_status_joint_or_surviving_spouse
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for a joint or qualifying-surviving-spouse return.
+  - name: nd_pit_2026_nd1es_filing_status_separate
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for a married-separate return.
+  - name: nd_pit_2026_nd1es_filing_status_head_of_household
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: True only for a head-of-household return.

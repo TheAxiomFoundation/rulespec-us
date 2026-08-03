@@ -1,0 +1,342 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us-mi/statute/206.30/2
+      - us-mi/statute/206.30/3
+      - us-mi/statute/206.30/7
+      - us-mi/statute/206.51/1
+      - us-mi/statute/206.272
+      - us-mi/guidance/treasury/taxpayer-notices/2026/04/15/individual-income-tax-rate/rate-determination
+    upstream_source_check:
+      status: official_parameter_source
+      checked_paths:
+        - us-mi/statute/206.30/2
+        - us-mi/statute/206.30/3
+        - us-mi/statute/206.30/7
+        - us-mi/statute/206.51/1
+        - us-mi/statute/206.272
+      rationale: |-
+        The retained corpus contains current Michigan statute fragments and
+        the official Treasury 2026 rate determination. Those fragments do not
+        form a complete executable resident return chain: federal conformity
+        and all section 206.30(1) additions/subtractions, deduction ordering,
+        credit inventory, surtax/special-tax rules, and final-return ordering
+        remain incomplete. This module consequently accepts only federal AGI,
+        full-year-resident status, and aligned filing-unit status. It never
+        accepts caller-completed Michigan income, deductions, exemptions,
+        taxable income, tax, surtax, or credit amounts. Every incomplete stage
+        is represented by a typed source-hold Judgment and a zero Money
+        sentinel. The zero is a fail-closed sentinel, not a claim that tax is
+        zero. Payments, filing administration, local taxes, and nonresident
+        allocation are outside scope.
+  summary: |-
+    Michigan 2026 full-year-resident individual-income-tax source-held
+    program boundary. It preserves the requested federal AGI -> Michigan
+    income -> deductions/exemptions -> taxable income -> tax/surtax -> credits
+    -> signed net before payments stage names while refusing to invent missing
+    law. The public money outputs are zero sentinels while their stage holds
+    are active; no caller-completed state output or mechanical authority
+    bypass is accepted.
+rules:
+  - name: mi_pit_e2e_input_domain_is_valid
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Michigan full-year resident federal boundary
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: Tax is imposed on the taxable income of every resident.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          mi_pit_e2e_is_full_year_resident_return
+          and mi_pit_e2e_federal_and_michigan_filing_units_are_aligned
+          and (
+            mi_pit_e2e_federal_adjusted_gross_income >= 0
+            or mi_pit_e2e_federal_adjusted_gross_income < 0
+          )
+
+  - name: mi_pit_e2e_income_base_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Missing complete federal-to-Michigan income-base construction
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+              excerpt: Taxable income is computed after statutory subtractions.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: mi_pit_e2e_deduction_and_exemption_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Missing complete 2026 Michigan deduction and exemption chain
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.30/3
+              excerpt: Additional exemptions are subject to statutory eligibility conditions.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: mi_pit_e2e_tax_and_surtax_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Missing complete 2026 Michigan tax and surtax/special-tax authority
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: Section 51 supplies the rate on taxable income but not the complete upstream resident chain.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: mi_pit_e2e_credit_surface_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Missing complete 2026 Michigan nonrefundable and refundable credit inventory
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: Section 272 supplies only the earned-income-credit slice and refund rule.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: true
+
+  - name: mi_pit_e2e_complete_liability_source_hold_applies
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: Combined hold for incomplete 2026 Michigan resident liability
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: The tax rate cannot execute without source-complete taxable income and credits.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          mi_pit_e2e_income_base_source_hold_applies
+          or mi_pit_e2e_deduction_and_exemption_source_hold_applies
+          or mi_pit_e2e_tax_and_surtax_source_hold_applies
+          or mi_pit_e2e_credit_surface_source_hold_applies
+
+  - name: mi_pit_e2e_fail_closed_sentinel
+    kind: derived
+    entity: TaxUnit
+    dtype: Integer
+    period: Year
+    source: Typed -1 indicator for the active source hold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/guidance/treasury/taxpayer-notices/2026/04/15/individual-income-tax-rate/rate-determination
+              excerpt: The notice determines the annual rate but not a complete return.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: -1
+
+  - name: mi_pit_e2e_net_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Source-held Michigan net income sentinel
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+              excerpt: The source slice does not complete the federal-to-Michigan income base.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+
+  - name: mi_pit_e2e_deductions_and_exemptions
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Source-held Michigan deductions and exemptions sentinel
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/7
+              excerpt: Indexed exemptions and exceptions are not complete for this resident program.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+
+  - name: mi_pit_e2e_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Source-held Michigan taxable-income sentinel
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.30/2
+              excerpt: Taxable income depends on incomplete upstream resident rules.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+
+  - name: mi_pit_e2e_tax_before_credits_including_surtaxes
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Source-held Michigan tax and surtax sentinel
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: Section 51 rate is not composed without taxable income and the complete special-tax surface.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+
+  - name: mi_pit_e2e_tax_after_nonrefundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Source-held Michigan post-nonrefundable-credit sentinel
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: The retained source does not establish the complete credit inventory or ordering.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+
+  - name: mi_pit_e2e_refundable_credits
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Source-held Michigan refundable-credit sentinel
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.272
+              excerpt: Section 272 supplies one refundable EITC slice, not the complete current-year inventory.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+
+  - name: mi_pit_e2e_net_income_tax_liability_before_payments
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Signed net resident liability sentinel before payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-mi/statute/206.51/1
+              excerpt: Final signed liability remains source held until the resident chain is complete.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: 0
+inputs:
+  - name: mi_pit_e2e_federal_adjusted_gross_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Federal adjusted gross income boundary; no completed Michigan state amount is accepted.
+  - name: mi_pit_e2e_is_full_year_resident_return
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Full-year Michigan resident return selector.
+  - name: mi_pit_e2e_federal_and_michigan_filing_units_are_aligned
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: Filing-unit alignment selector for the federal boundary.
