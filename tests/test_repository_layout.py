@@ -149,8 +149,42 @@ def test_canonical_program_inventory_is_complete() -> None:
         if not path.name.endswith(".test.yaml")
     }
 
-    assert "us-nh/programs/income-tax/fy-2026.yaml" in program_specs
-    assert "us/programs/us-tariff-duty/fy-2026.yaml" in program_specs
+    assert program_specs == {
+        "us-ak/programs/tanf/fy-2026.yaml",
+        "us-al/programs/snap/fy-2026.yaml",
+        "us-al/programs/tanf/fy-2026.yaml",
+        "us-ar/programs/tanf/fy-2026.yaml",
+        "us-az/programs/snap/fy-2026.yaml",
+        "us-az/programs/tanf/fy-2026.yaml",
+        "us-ca/programs/snap/fy-2026.yaml",
+        "us-ca/programs/tanf/fy-2026.yaml",
+        "us-co/programs/snap/fy-2026.yaml",
+        "us-co/programs/tanf/fy-2026.yaml",
+        "us-ct/programs/tanf/fy-2026.yaml",
+        "us-de/programs/tanf/fy-2026.yaml",
+        "us-fl/programs/snap/fy-2026.yaml",
+        "us-fl/programs/tca/fy-2026.yaml",
+        "us-ga/programs/snap/fy-2026.yaml",
+        "us-ga/programs/tanf/fy-2026.yaml",
+        "us-il/programs/scretd/fy-2026.yaml",
+        "us-in/programs/tanf/fy-2026.yaml",
+        "us-ks/programs/tanf/fy-2026.yaml",
+        "us-ma/programs/snap/fy-2026.yaml",
+        "us-md/programs/tca/fy-2026.yaml",
+        "us-me/programs/tanf/fy-2026.yaml",
+        "us-nc/programs/snap/fy-2026.yaml",
+        "us-nh/programs/income-tax/fy-2026.yaml",
+        "us-ny/programs/income-tax/fy-2026.yaml",
+        "us-ny/programs/snap/fy-2026.yaml",
+        "us-ny/programs/tanf/fy-2026.yaml",
+        "us-sc/programs/snap/fy-2026.yaml",
+        "us-tn/programs/snap/fy-2026.yaml",
+        "us-tx/programs/tanf/fy-2026.yaml",
+        "us-ut/programs/tanf/fy-2026.yaml",
+        "us/programs/fiit/fy-2026.yaml",
+        "us/programs/payroll/oasdi-wage-tax/fy-2026.yaml",
+        "us/programs/us-tariff-duty/fy-2026.yaml",
+    }
 
 
 def test_no_disallowed_roots_or_yaml_fixtures() -> None:

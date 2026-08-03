@@ -241,20 +241,7 @@ KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
     '.axiom/encoding-manifests/us/policies/usitc/us-tariff-duty/overlays/section-301/forced-labor-uruguay-9903-05-82.json',
     '.axiom/encoding-manifests/us/policies/usitc/us-tariff-duty/overlays/section-301/forced-labor-venezuela-9903-05-83.json',
     '.axiom/encoding-manifests/us/policies/usitc/us-tariff-duty/overlays/section-301/forced-labor-vietnam-9903-05-84.json',
-    '.axiom/encoding-manifests/us/programs/us/us-tariff-duty/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-ar/tanf/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-az/snap/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-ca/snap/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-ca/tanf/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-de/tanf/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-fl/snap/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-ga/snap/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-in/tanf/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-md/tca/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-me/tanf/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-nh/income-tax/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-ny/snap/fy-2026.json',
-    '.axiom/encoding-manifests/us/programs/us-ut/tanf/fy-2026.json',
+    '.axiom/encoding-manifests/us/statutes/42/1437c–1.json',
     '.axiom/encoding-manifests/us/regulations/42-cfr/431/213.json',
     '.axiom/encoding-manifests/us/regulations/42-cfr/431/231.json',
     '.axiom/encoding-manifests/us/regulations/42-cfr/435/110.json',
@@ -4805,13 +4792,6 @@ def manifest_roots() -> list[tuple[Path, Path]]:
 
 
 def resolve_applied_path(base: Path, applied: str) -> Path:
-    parts = Path(applied).parts
-    if len(parts) >= 3 and parts[0] == "programs" and parts[1].startswith("us"):
-        return base / parts[1] / "programs" / Path(*parts[2:])
-    if applied == "statutes/42/1437c\u20131.yaml":
-        return base / "statutes/42/1437c-1.yaml"
-    if applied == "statutes/42/1437c\u20131.test.yaml":
-        return base / "statutes/42/1437c-1.test.yaml"
     return base / applied
 
 
