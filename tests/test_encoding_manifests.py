@@ -241,7 +241,6 @@ KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
     '.axiom/encoding-manifests/us/policies/usitc/us-tariff-duty/overlays/section-301/forced-labor-uruguay-9903-05-82.json',
     '.axiom/encoding-manifests/us/policies/usitc/us-tariff-duty/overlays/section-301/forced-labor-venezuela-9903-05-83.json',
     '.axiom/encoding-manifests/us/policies/usitc/us-tariff-duty/overlays/section-301/forced-labor-vietnam-9903-05-84.json',
-    '.axiom/encoding-manifests/us/statutes/42/1437c–1.json',
     '.axiom/encoding-manifests/us/regulations/42-cfr/431/213.json',
     '.axiom/encoding-manifests/us/regulations/42-cfr/431/231.json',
     '.axiom/encoding-manifests/us/regulations/42-cfr/435/110.json',
