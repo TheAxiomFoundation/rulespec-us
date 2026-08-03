@@ -1,0 +1,83 @@
+# Alabama Family Assistance (TANF) -- FY 2026, recipient-month benefit.
+#
+# Mirrors the encoded Alabama DHR slice in rulespec-us/us-al:
+#   - policies/dhr/tanf/state-plan/2024/payment-standards
+#       (2024 State Plan Attachment E monthly maximum payment standards by
+#        assistance-unit size 1..16)
+#   - policies/dhr/public-assistance-payment-manual/appendix-n/section-2/
+#     payment-computation
+#       (20% earned-income work-expense deduction, nearest-dollar countable
+#        income, deficit entitlement, $10 minimum-grant / income-below-standard
+#        payment gate; Appendix N Section 2)
+# and adds the oracle-suite plumbing: the household-membership data relation,
+# the payment_standard -> al_tanf_payment_standard bridge, and a benefit gated
+# on the demographic fact PolicyEngine's al_tanf requires (a minor or pregnant
+# member) so the comparison never pays childless units PE's al_tanf would not.
+#
+# Target oracle surface: PolicyEngine al_tanf (SPMUnit, MONTH). The annualized
+# output mirrors the covered az/co/ks convention; the compare framework
+# annualizes PE's monthly al_tanf to match.
+
+program: us-al/tanf
+period: 2026-01
+
+outputs:
+  - al_tanf_annual_benefit
+
+acknowledged_incomplete:
+  - al_tanf_annual_benefit
+
+scope:
+  state:
+    - policies/dhr/tanf/state-plan/2024/payment-standards
+    - policies/dhr/public-assistance-payment-manual/appendix-n/section-2/payment-computation
+
+transformations:
+  - pattern: data_relation
+    name: member_of_household
+    arity: 2
+    source: axiom-oracles ECPS projection household membership
+
+  # Bridge the payment-computation free input `payment_standard` to the
+  # State-Plan payment-standard chart output.
+  - pattern: derived_formula
+    name: payment_standard
+    effective_from: '2024-10-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-al/tanf payment-standard bridge
+    formula: al_tanf_payment_standard
+
+  - pattern: derived_formula
+    name: al_tanf_payable
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: axiom-oracles programs/us-al/tanf payable-case composition
+    formula: |-
+      household_has_minor_or_pregnant_member
+      and al_tanf_payment_eligible
+
+  - pattern: derived_formula
+    name: al_tanf_monthly_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-al/tanf monthly benefit
+    formula: |-
+      if al_tanf_payable: al_tanf_entitlement_amount else: 0
+
+  - pattern: derived_formula
+    name: al_tanf_annual_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Year
+    unit: USD
+    source: axiom-oracles programs/us-al/tanf program output
+    formula: al_tanf_monthly_benefit * 12

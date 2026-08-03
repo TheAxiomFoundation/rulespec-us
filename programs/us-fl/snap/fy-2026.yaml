@@ -1,0 +1,168 @@
+# Florida Food Assistance (SNAP) -- FY 2026
+#
+# Florida's encoded Food Assistance appendix currently supplies FY 2026 income
+# standards, maximum benefits, deductions, utility allowances, shelter cap,
+# minimum allotment, and asset limits. This wrapper scopes that state appendix
+# with the federal SNAP baseline and publishes the dashboard-facing benefit
+# output.
+
+program: us-fl/snap
+period: 2026-01
+
+outputs:
+  - snap_eligible
+  - snap_benefit
+
+auto_gate_outputs:
+  - snap_eligible
+
+scope:
+  federal:
+    - regulations/7-cfr/273/2/j
+    - regulations/7-cfr/273/3
+    - regulations/7-cfr/273/4
+    - regulations/7-cfr/273/5
+    - regulations/7-cfr/273/6
+    - regulations/7-cfr/273/7
+    - regulations/7-cfr/273/8
+    - regulations/7-cfr/273/9
+    - regulations/7-cfr/273/9/d/6/iii
+    - regulations/7-cfr/273/10
+    - regulations/7-cfr/273/24
+    - regulations/7-cfr/275/23/d/1
+    - regulations/7-cfr/275/23/d/2
+    - regulations/7-cfr/275/23/e/1
+    - statutes/7/2012/j
+    - statutes/7/2012/m/4
+    - statutes/7/2014/a
+    - statutes/7/2014/c
+    - statutes/7/2014/d
+    - statutes/7/2014/e/2
+    - statutes/7/2014/e/6/A
+    - statutes/7/2014/g
+    - statutes/7/2015/b/1
+    - statutes/7/2015/d/2
+    - statutes/7/2015/d/2/A
+    - statutes/7/2015/d/2/B
+    - statutes/7/2015/d/2/C
+    - statutes/7/2015/d/2/D
+    - statutes/7/2015/d/2/E
+    - statutes/7/2015/d/2/F
+    - statutes/7/2015/e
+    - statutes/7/2017/a
+
+  state:
+    - policies/dcf/ess-program-policy-manual/appendix-a-1-food-assistance-income-eligibility-standards-and-deductions/page-1
+
+transformations:
+  - pattern: all_of
+    name: snap_member_eligible
+    effective_from: '2026-01-01'
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: us:statutes/7/2014
+    conditions:
+      - snap_member_citizenship_or_alien_status_eligible
+      - snap_member_ssn_requirement_eligible
+      - snap_member_work_requirement_eligible
+      - snap_member_student_eligible
+
+  - pattern: any_related
+    name: snap_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    period: Month
+    source: us:statutes/7/2014
+    relation: member_of_household
+    condition: snap_member_eligible
+
+  - pattern: any_of
+    name: snap_income_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-fl/snap/fy-2026 income-standard composition
+    conditions:
+      - snap_standard_income_eligible
+
+  - pattern: sum_terms
+    name: snap_countable_earned_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 income composition
+    terms:
+      - snap_gross_monthly_earned_income
+
+  - pattern: sum_terms
+    name: snap_countable_unearned_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 income composition
+    terms:
+      - snap_total_monthly_unearned_income
+
+  - pattern: sum_terms
+    name: snap_gross_monthly_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 income composition
+    terms:
+      - snap_countable_earned_income
+      - snap_countable_unearned_income
+
+  - pattern: sum_terms
+    name: snap_monthly_household_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 income composition
+    terms:
+      - snap_countable_earned_income
+      - snap_countable_unearned_income
+
+  - pattern: sum_terms
+    name: snap_total_allowable_shelter_expenses
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 shelter-cost composition
+    terms:
+      - household_shelter_costs_incurred
+
+  - pattern: sum_terms
+    name: snap_excess_shelter_deduction
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 shelter deduction composition
+    terms:
+      - snap_excess_shelter_deduction_for_net_income
+
+  - pattern: conditional_value
+    name: snap_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-fl/snap/fy-2026 benefit composition
+    condition: snap_eligible
+    when_true: snap_monthly_allotment
+    when_false: 0
