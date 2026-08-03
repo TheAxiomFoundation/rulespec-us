@@ -8,52 +8,160 @@ module:
       - us-wv/statute/11-21-4J
       - us-wv/statute/11-21-4H
     upstream_source_check:
-      status: composed_from_supplied_current_authority
+      status: official_parameter_source
       checked_paths:
         - us-wv/statute/chapter-11/article-21
         - us-wv/statute/11-21-3
         - us-wv/statute/11-21-4J
         - us-wv/statute/11-21-4H
       rationale: |-
-        The complete official Article 21 package contains the tax imposition in
-        section 3, the operative 2026 individual schedules in section 4J, and
-        the future-reduction mechanism in section 4H. Section 4H applies from
-        January 1, 2027 in lieu of section 4J. This narrow composition accepts
-        completed-return West Virginia taxable income and the active 2026
-        bracket's cumulative base tax, floor, and marginal rate as supplied
-        inputs. Beginning in 2027 it switches to a separately supplied section
-        4H schedule result, preventing the 2026 section 4J schedule from being
-        silently carried across the statutory boundary.
+        The official current Article 21 package imposes the individual tax in
+        section 3 and fixes both individual schedules for taxable years beginning
+        in 2026 in section 4J. Section 4J(a) applies to every individual except a
+        married individual filing separately; section 4J(b) applies the
+        half-width schedule to each spouse filing separately. Section 4H applies
+        a later revenue-certification mechanism beginning in 2027 in lieu of
+        section 4J. This module therefore encodes the enacted 2026 schedules and
+        fails closed before and after that tax year.
   summary: |-
-    West Virginia individual-income-tax schedule for the 2026 ordinary
-    full-year resident wage-earner slice. It normalizes supplied completed-
-    return West Virginia taxable income and applies the supplied active section
-    4J bracket in cumulative-base-plus-marginal form before nonrefundable
-    credits. It matches PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2
-    `wv_income_tax_before_non_refundable_credits` exactly on the standard six-
-    case childless age-40 wage grid. A second schedule-tax version begins on
-    January 1, 2027 and accepts the then-current section 4H result as supplied,
-    preserving the future-trigger boundary without predicting a rate
-    determination that the statute leaves to later revenue certifications.
+    Composed West Virginia individual-income-tax schedule for tax year 2026
+    before nonrefundable credits. It accepts nonnegative completed-return West
+    Virginia taxable income and the one filing-status distinction required by
+    section 11-21-4J: married filing separately versus every other individual
+    status. It makes no independent claim about adjusted gross income,
+    modifications, exemptions, nonresident allocation, estates or trusts, or
+    credits. PolicyEngine-US 1.752.2 has the same direct dependency graph:
+    `wv_taxable_income` and `filing_status` feed
+    `wv_income_tax_before_non_refundable_credits`. On all 1,608 positive-weight
+    West Virginia tax units in the certified 2024 Populace routed to tax year
+    2026, this legal schedule had maximum absolute error $0.222400001, maximum
+    relative error 5.79505e-8, weighted MAE $0.00004597994, zero units above $1,
+    and zero units outside $0.01 or 1e-7 relative tolerance. Omitting the
+    married-separate branch produces 13 errors above $1 (weighted population
+    6,474.948435) and maximum absolute error $398.750041, so the status boundary
+    is material. The defensive zero floor is an identity over the declared
+    nonnegative completed-return boundary.
 rules:
+  - name: wv_pit_pilot_first_bracket_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: W. Va. Code section 11-21-4J(a) and (b), first-bracket rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Not over $10,000 2.11% of the taxable income"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0211'}]
+
+  - name: wv_pit_pilot_second_bracket_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: W. Va. Code section 11-21-4J(a) and (b), second-bracket rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "$211 plus 2.81% of excess over $10,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0281'}]
+
+  - name: wv_pit_pilot_third_bracket_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: W. Va. Code section 11-21-4J(a) and (b), third-bracket rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "$632.50 plus 3.16% of excess over $25,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0316'}]
+
+  - name: wv_pit_pilot_fourth_bracket_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: W. Va. Code section 11-21-4J(a) and (b), fourth-bracket rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "$1,106.50 plus 4.22% of excess over $40,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0422'}]
+
+  - name: wv_pit_pilot_top_bracket_rate
+    kind: parameter
+    dtype: Rate
+    period: Year
+    source: W. Va. Code section 11-21-4J(a) and (b), top-bracket rate
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: parameter, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Over $60,000 $1,950.50 plus 4.58% of excess over $60,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '0.0458'}]
+
+  - name: wv_pit_pilot_first_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-4J(a), general first-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Not over $10,000 2.11% of the taxable income"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '10000'}]
+
+  - name: wv_pit_pilot_second_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-4J(a), general second-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Over $10,000 but not over $25,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '25000'}]
+
+  - name: wv_pit_pilot_third_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-4J(a), general third-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Over $25,000 but not over $40,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '40000'}]
+
+  - name: wv_pit_pilot_fourth_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-4J(a), general fourth-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Over $40,000 but not over $60,000"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '60000'}]
+
+  - name: wv_pit_pilot_separate_first_bracket_ceiling
+    kind: parameter
+    dtype: Money
+    period: Year
+    unit: USD
+    source: W. Va. Code section 11-21-4J(b), married-separate first-bracket ceiling
+    metadata: {private: true, proof: {atoms: [{path: 'versions[0].formula', kind: amount, source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Not over $5,000 2.11% of the taxable income"}}]}}
+    versions: [{effective_from: '2026-01-01', effective_to: '2026-12-31', formula: '5000'}]
+
   - name: wv_pit_pilot_taxable_income
     kind: derived
     entity: TaxUnit
     dtype: Money
     period: Year
     unit: USD
-    source: W. Va. Code section 11-21-4J, supplied West Virginia taxable income
+    source: W. Va. Code section 11-21-4J, supplied nonnegative completed-return West Virginia taxable income defensively normalized at zero
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
-            source:
-              corpus_citation_path: us-wv/statute/11-21-4J
-              excerpt: "on the West Virginia taxable income of every individual"
+            source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "on the West Virginia taxable income of every individual"}
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, wv_pit_pilot_supplied_taxable_income)
+        effective_to: '2026-12-31'
+        formula: max(0, wv_pit_pilot_state_taxable_income)
+
+  - name: wv_pit_pilot_schedule_scale
+    kind: derived
+    entity: TaxUnit
+    dtype: Number
+    period: Year
+    source: W. Va. Code section 11-21-4J(a) and (b), ratio of general to married-separate first-bracket ceilings
+    metadata:
+      private: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "Rate of tax on married individuals filing separate returns"}
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: "if wv_pit_pilot_filing_status_is_separate: wv_pit_pilot_first_bracket_ceiling / wv_pit_pilot_separate_first_bracket_ceiling else: 1"
 
   - name: wv_pit_pilot_schedule_tax
     kind: derived
@@ -61,32 +169,24 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: W. Va. Code sections 11-21-4J and 11-21-4H, bounded schedules
+    source: W. Va. Code section 11-21-4J(a) and (b), enacted five-band 2026 filing-status schedules
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
-            source:
-              corpus_citation_path: us-wv/statute/11-21-4J
-              excerpt: "For taxable years beginning on and after January 1, 2026, the tax imposed by §11-21-3"
-          - path: versions[0].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-wv/statute/11-21-4J
-              excerpt: "Over $60,000 $1,950.50 plus 4.58% of excess over $60,000"
-          - path: versions[1].formula
-            kind: formula
-            source:
-              corpus_citation_path: us-wv/statute/11-21-4H
-              excerpt: "shall apply for all taxable years beginning on and after January 1, 2027, and shall be in lieu of the rates of tax specified in §11-21-4j"
+            source: {corpus_citation_path: us-wv/statute/11-21-4J, excerpt: "shall be determined in accordance with the following table"}
     versions:
       - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
         formula: |-
-          wv_pit_pilot_supplied_bracket_base
-          + wv_pit_pilot_supplied_marginal_rate * max(0, wv_pit_pilot_taxable_income - wv_pit_pilot_supplied_bracket_floor)
-      - effective_from: '2027-01-01'
-        formula: max(0, wv_pit_pilot_supplied_section_4h_schedule_tax)
+          (
+            wv_pit_pilot_first_bracket_rate * min(wv_pit_pilot_taxable_income * wv_pit_pilot_schedule_scale, wv_pit_pilot_first_bracket_ceiling)
+            + wv_pit_pilot_second_bracket_rate * min(max(0, wv_pit_pilot_taxable_income * wv_pit_pilot_schedule_scale - wv_pit_pilot_first_bracket_ceiling), wv_pit_pilot_second_bracket_ceiling - wv_pit_pilot_first_bracket_ceiling)
+            + wv_pit_pilot_third_bracket_rate * min(max(0, wv_pit_pilot_taxable_income * wv_pit_pilot_schedule_scale - wv_pit_pilot_second_bracket_ceiling), wv_pit_pilot_third_bracket_ceiling - wv_pit_pilot_second_bracket_ceiling)
+            + wv_pit_pilot_fourth_bracket_rate * min(max(0, wv_pit_pilot_taxable_income * wv_pit_pilot_schedule_scale - wv_pit_pilot_third_bracket_ceiling), wv_pit_pilot_fourth_bracket_ceiling - wv_pit_pilot_third_bracket_ceiling)
+            + wv_pit_pilot_top_bracket_rate * max(0, wv_pit_pilot_taxable_income * wv_pit_pilot_schedule_scale - wv_pit_pilot_fourth_bracket_ceiling)
+          ) / wv_pit_pilot_schedule_scale
 
   - name: wv_pit_pilot_income_tax_liability
     kind: derived
@@ -94,15 +194,26 @@ rules:
     dtype: Money
     period: Year
     unit: USD
-    source: W. Va. Code section 11-21-3, tax imposed before credits
+    source: W. Va. Code section 11-21-3, individual income tax before credits
     metadata:
       proof:
         atoms:
           - path: versions[0].formula
             kind: formula
-            source:
-              corpus_citation_path: us-wv/statute/11-21-3
-              excerpt: "A tax determined in accordance with the rates hereinafter set forth in this article is hereby imposed"
+            source: {corpus_citation_path: us-wv/statute/11-21-3, excerpt: "A tax determined in accordance with the rates hereinafter set forth in this article is hereby imposed"}
     versions:
       - effective_from: '2026-01-01'
-        formula: max(0, wv_pit_pilot_schedule_tax)
+        effective_to: '2026-12-31'
+        formula: wv_pit_pilot_schedule_tax
+inputs:
+  - name: wv_pit_pilot_state_taxable_income
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: Nonnegative completed-return West Virginia taxable income supplied by the caller as an upstream oracle boundary.
+  - name: wv_pit_pilot_filing_status_is_separate
+    entity: TaxUnit
+    dtype: Boolean
+    period: Year
+    description: True only for married-filing-separately status; false for every other individual filing status.

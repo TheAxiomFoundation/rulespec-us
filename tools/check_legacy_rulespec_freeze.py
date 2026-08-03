@@ -25,7 +25,7 @@ RETIRED_SCHEMA_FIELD_RE = re.compile(
 
 def _git_paths(root: Path, *args: str) -> list[str]:
     result = subprocess.run(
-        ["git", *args],
+        ["git", "-c", "core.quotePath=false", *args],
         cwd=root,
         check=True,
         capture_output=True,
@@ -44,8 +44,20 @@ def _is_legacy_rulespec_path(raw_path: str) -> bool:
     )
 
 
+def _is_legacy_encoding_manifest_path(raw_path: str) -> bool:
+    path = Path(raw_path)
+    return (
+        len(path.parts) >= 4
+        and JURISDICTION_RE.fullmatch(path.parts[0]) is not None
+        and path.parts[1:3] == (".axiom", "encoding-manifests")
+        and path.suffix == ".json"
+    )
+
+
 def _is_frozen_artifact_path(raw_path: str) -> bool:
-    return _is_legacy_rulespec_path(raw_path)
+    return _is_legacy_rulespec_path(raw_path) or _is_legacy_encoding_manifest_path(
+        raw_path
+    )
 
 
 def _validated_hash_inventory(

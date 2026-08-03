@@ -86,19 +86,22 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 78
+    assert len(retired["artifacts"]) == 307
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
 
 
-def test_classifier_covers_only_legacy_yaml() -> None:
+def test_classifier_covers_only_legacy_rulespec_and_manifest_locations() -> None:
     checker = _load_checker()
 
     assert checker._is_legacy_rulespec_path("us-mo/block-1.yaml")
     assert checker._is_legacy_rulespec_path("us-mo/manual/snap/block-1.yaml")
     assert not checker._is_legacy_rulespec_path("us-mo/policies/snap/block-1.yaml")
     assert not checker._is_legacy_rulespec_path("us-mo/programs/snap/fy-2026.yaml")
+    assert checker._is_frozen_artifact_path(
+        "us/.axiom/encoding-manifests/statutes/42/1437c–1.json"
+    )
     assert not checker._is_frozen_artifact_path(
         ".axiom/encoding-manifests/us-mo/manual/dss/snap/1115-000-00/"
         "1115-035-00/1115-035-25/block-1.json"
@@ -118,12 +121,12 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "f50bc5745e62572ee019a082cf346faf571fd40e41d313beaa223a12f5f5b646" in workflow
+    assert "0d960eaf2830a9657108ffcba72bf965dd10ddeb0fc5fcc1b28a6039a21e5c0b" in workflow
     assert (
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ ((github.event_name == 'pull_request'"
     ) in workflow
-    assert "73b126caeeef96d7064137103f7d430aa203dffcf4ca359b3ab22fd6b2197e7c" in workflow
+    assert "827c551bf7d8dc562ae74c8d6f02a3862afeaf0ad656a203b4fe35b79f5f8aac" in workflow
     assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
     guard_expression = (
         "${{ !((github.event_name == 'pull_request' && "

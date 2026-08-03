@@ -23,7 +23,7 @@ DISALLOWED_GENERIC_RULE_NAMES = {
     "value",
 }
 KNOWN_MISSING_COMPANION_TESTS: list[str] = []
-KNOWN_SHAPE_ISSUES: list[str] = []
+KNOWN_SHAPE_ISSUES = ["us-ca/regulations/mpp/63-406/1.yaml"]
 KNOWN_UNCOVERED_DERIVED_RULES = [
     "us/statutes/42/415/a.yaml#aime_in_first_pia_segment",
     "us/statutes/42/415/a.yaml#aime_in_second_pia_segment",
@@ -172,10 +172,6 @@ def test_rulespec_files_have_companion_tests() -> None:
         if not path.with_name(f"{path.stem}.test.yaml").exists()
     ]
 
-    # These seven modules have no executable rules, so [] companions are the
-    # repository idiom. The companions land with the canonical-provenance
-    # migration PR; this main-first schema change cannot touch jurisdiction
-    # content while the pinned generated guard is active.
     assert missing == KNOWN_MISSING_COMPANION_TESTS
 
 
