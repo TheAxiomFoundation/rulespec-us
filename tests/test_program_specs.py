@@ -1,4 +1,4 @@
-"""Program specs under programs/ must be structurally valid and every
+"""Program specs under jurisdiction programs/ roots must be valid and every
 scope entry must resolve to a module in this repository.
 
 Monorepo-native port of axiom-programs' validate_specs.py: jurisdiction
@@ -15,9 +15,6 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-PROGRAMS = ROOT / "programs"
-
-
 def scope_prefix(program: str, scope_name: str) -> str:
     normalized = scope_name.strip()
     if normalized == "federal":
@@ -28,7 +25,7 @@ def scope_prefix(program: str, scope_name: str) -> str:
 
 
 def spec_paths() -> list[Path]:
-    return sorted(PROGRAMS.glob("*/*/*.yaml"))
+    return sorted(ROOT.glob("us*/programs/*/*.yaml"))
 
 
 def load_allowlist() -> set[tuple[str, str, str]]:
@@ -43,7 +40,7 @@ def load_allowlist() -> set[tuple[str, str, str]]:
 
 
 def test_program_specs_exist() -> None:
-    assert spec_paths(), "programs/ contains no specs"
+    assert spec_paths(), "jurisdiction programs/ roots contain no specs"
 
 
 def test_program_specs_are_structurally_valid() -> None:

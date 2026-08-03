@@ -1,0 +1,99 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ms/statute/27-7-5
+    upstream_source_check:
+      status: composed_from_supplied_current_authority
+      checked_paths:
+        - us-ms/statute/27-7-5
+      rationale: |-
+        Mississippi Code section 27-7-5 imposes tax on the net income of every
+        resident individual. For individuals in calendar year 2026, no tax
+        applies through $10,000 of taxable income and the rate on taxable income
+        above $10,000 is 4 percent. This narrow composition accepts completed-
+        return Mississippi taxable income and the active bracket's cumulative
+        base tax, floor, and marginal rate as caller-supplied current-authority
+        inputs. Deductions, exemptions, fiscal-year proration, special income
+        classes, and credits remain outside this rate-section module.
+  summary: |-
+    Composed Mississippi individual-income-tax schedule for the 2026 ordinary
+    full-year resident wage-earner slice. It normalizes supplied completed-
+    return Mississippi taxable income and applies the supplied active section
+    27-7-5 bracket in cumulative-base-plus-marginal form before credits. Its
+    exact PolicyEngine 4.18.9 / PolicyEngine-US 1.752.2 analog is
+    `ms_income_tax_before_credits_unit` on the six-case childless age-40 grid:
+    single at $30,000/$60,000/$150,000 of wages and one-earner joint at
+    $60,000/$120,000/$300,000. PolicyEngine supplies completed taxable income;
+    expected outputs are independently hand-computed from the statutory 2026
+    schedule.
+rules:
+  - name: ms_pit_pilot_taxable_income
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5, supplied Mississippi taxable income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "upon the entire net income of every resident individual"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ms_pit_pilot_supplied_taxable_income)
+
+  - name: ms_pit_pilot_schedule_tax
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5(1), individual 2026 schedule
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2022 and all taxable years thereafter, there shall be no tax levied on the first Five Thousand Dollars ($5,000.00) of taxable income;"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2023 and all calendar years thereafter, there shall be no tax levied under subparagraph (ii)"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "For calendar year 2026, on such taxable income, the rate shall be four percent (4%);"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: |-
+          ms_pit_pilot_supplied_bracket_base
+          + ms_pit_pilot_supplied_marginal_rate * max(0, ms_pit_pilot_taxable_income - ms_pit_pilot_supplied_bracket_floor)
+
+  - name: ms_pit_pilot_income_tax_liability
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: Miss. Code section 27-7-5, resident tax before credits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ms/statute/27-7-5
+              excerpt: "there is hereby assessed and levied, to be collected and paid"
+    versions:
+      - effective_from: '2026-01-01'
+        formula: max(0, ms_pit_pilot_schedule_tax)

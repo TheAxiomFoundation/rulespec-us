@@ -1,6 +1,6 @@
 # Program Artifact Pipeline
 
-`programs/` specs are source; compiled artifacts are build outputs and are
+Jurisdiction `programs/` specs are source; compiled artifacts are build outputs and are
 never committed. The `program-artifacts` workflow compiles every spec through
 axiom-compose + axiom-rules-engine (pinned refs in the workflow env):
 

@@ -22,15 +22,7 @@ DISALLOWED_GENERIC_RULE_NAMES = {
     "threshold",
     "value",
 }
-KNOWN_MISSING_COMPANION_TESTS = [
-    "us-ny/regulations/18-nycrr/385/3.yaml",
-    "us-ny/regulations/18-nycrr/387/10.yaml",
-    "us-ny/regulations/18-nycrr/387/12/a.yaml",
-    "us-ny/regulations/18-nycrr/387/12/b.yaml",
-    "us-ny/regulations/18-nycrr/387/9/a/1.yaml",
-    "us-ny/regulations/18-nycrr/387/9/a/2.yaml",
-    "us-sc/policies/dss/snap-policy-manual/page-398.yaml",
-]
+KNOWN_MISSING_COMPANION_TESTS: list[str] = []
 KNOWN_SHAPE_ISSUES = ["us-ca/regulations/mpp/63-406/1.yaml"]
 KNOWN_UNCOVERED_DERIVED_RULES = [
     "us/statutes/42/415/a.yaml#aime_in_first_pia_segment",
@@ -69,7 +61,6 @@ def allowed_yaml_roots() -> set[str]:
         ".axiom",
         ".github",
         "bulk",
-        "programs",
         "known-dangling.yaml",
         "known-missing-money-atoms.yaml",
         "known-validation-gaps.yaml",
@@ -147,6 +138,55 @@ def test_no_obsolete_formula_artifacts() -> None:
     assert obsolete == []
 
 
+def test_no_root_level_programs_directory() -> None:
+    assert not (ROOT / "programs").exists()
+
+
+def test_canonical_program_inventory_is_complete() -> None:
+    program_specs = {
+        path.relative_to(ROOT).as_posix()
+        for path in ROOT.glob("us*/programs/**/*.yaml")
+        if not path.name.endswith(".test.yaml")
+    }
+
+    assert program_specs == {
+        "us-ak/programs/tanf/fy-2026.yaml",
+        "us-al/programs/snap/fy-2026.yaml",
+        "us-al/programs/tanf/fy-2026.yaml",
+        "us-ar/programs/tanf/fy-2026.yaml",
+        "us-az/programs/snap/fy-2026.yaml",
+        "us-az/programs/tanf/fy-2026.yaml",
+        "us-ca/programs/snap/fy-2026.yaml",
+        "us-ca/programs/tanf/fy-2026.yaml",
+        "us-co/programs/snap/fy-2026.yaml",
+        "us-co/programs/tanf/fy-2026.yaml",
+        "us-ct/programs/tanf/fy-2026.yaml",
+        "us-de/programs/tanf/fy-2026.yaml",
+        "us-fl/programs/snap/fy-2026.yaml",
+        "us-fl/programs/tca/fy-2026.yaml",
+        "us-ga/programs/snap/fy-2026.yaml",
+        "us-ga/programs/tanf/fy-2026.yaml",
+        "us-il/programs/scretd/fy-2026.yaml",
+        "us-in/programs/tanf/fy-2026.yaml",
+        "us-ks/programs/tanf/fy-2026.yaml",
+        "us-ma/programs/snap/fy-2026.yaml",
+        "us-md/programs/tca/fy-2026.yaml",
+        "us-me/programs/tanf/fy-2026.yaml",
+        "us-nc/programs/snap/fy-2026.yaml",
+        "us-nh/programs/income-tax/fy-2026.yaml",
+        "us-ny/programs/income-tax/fy-2026.yaml",
+        "us-ny/programs/snap/fy-2026.yaml",
+        "us-ny/programs/tanf/fy-2026.yaml",
+        "us-sc/programs/snap/fy-2026.yaml",
+        "us-tn/programs/snap/fy-2026.yaml",
+        "us-tx/programs/tanf/fy-2026.yaml",
+        "us-ut/programs/tanf/fy-2026.yaml",
+        "us/programs/fiit/fy-2026.yaml",
+        "us/programs/payroll/oasdi-wage-tax/fy-2026.yaml",
+        "us/programs/us-tariff-duty/fy-2026.yaml",
+    }
+
+
 def test_no_disallowed_roots_or_yaml_fixtures() -> None:
     singular_bases = [ROOT, *jurisdiction_dirs()]
     disallowed_roots = [
@@ -180,10 +220,6 @@ def test_rulespec_files_have_companion_tests() -> None:
         if not path.with_name(f"{path.stem}.test.yaml").exists()
     ]
 
-    # These seven modules have no executable rules, so [] companions are the
-    # repository idiom. The companions land with the canonical-provenance
-    # migration PR; this main-first schema change cannot touch jurisdiction
-    # content while the pinned generated guard is active.
     assert missing == KNOWN_MISSING_COMPANION_TESTS
 
 

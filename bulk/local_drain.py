@@ -9,8 +9,9 @@ declaration needed to keep new-state PRs out of the unmapped coverage state.
 
 Two decisions matter and are baked in here so PRs go green:
 
-* **Generation uses the toolchain-pinned encoder** (``.axiom/toolchain.toml``
-  ``axiom_encode_version``, currently 0.2.1200). The required ``validate /
+* **Generation uses the toolchain-pinned encoder**
+  (``.axiom/workflow-toolchain.toml`` ``axiom_encode_version``, currently
+  0.2.1308). The required ``validate /
   validate`` check validates with that same pin, so generating with anything
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
@@ -69,7 +70,7 @@ from applied_artifacts import discover_applied_artifacts
 
 REPO = "TheAxiomFoundation/rulespec-us"
 REPO_NAME = "rulespec-us"
-COV_ENCODER_REF = "ffb0e7ccde22f6e136dc52aecaf4b5ed3ea6c6b7"
+COV_ENCODER_REF = "b03fa3c5f6455ec58bdd832f7855a1ffbb136c7d"
 COV_ENCODER_REMOTE = "https://github.com/TheAxiomFoundation/axiom-encode.git"
 COV_ORACLES_REF = "9901e2479ac39bba865b8232e1c7d879ba447d8d"
 HERE = Path(__file__).resolve().parent           # <checkout>/bulk
@@ -175,8 +176,8 @@ def signing_key() -> str:
 
 
 def pinned_toolchain() -> dict:
-    data = tomllib.loads((CHECKOUT / ".axiom/toolchain.toml").read_text())
-    return data.get("toolchain", data)
+    data = tomllib.loads((CHECKOUT / ".axiom/workflow-toolchain.toml").read_text())
+    return data.get("workflow_toolchain", data)
 
 
 def citation_slug(citation: str) -> str:
