@@ -151,8 +151,6 @@ def check(root: Path, *, base_ref: str | None = None) -> None:
     artifacts = _load_hash_inventory(
         manifest_path, expected_format="axiom/legacy-rulespec-freeze/v1"
     )
-    if not artifacts:
-        raise ValueError("legacy freeze manifest must list artifacts")
 
     tracked = set(_git_paths(root, "ls-files"))
     discovered = {path for path in tracked if _is_frozen_artifact_path(path)}
@@ -201,14 +199,22 @@ def check(root: Path, *, base_ref: str | None = None) -> None:
             )
 
     if base_ref:
-        changed = _git_paths(root, "diff", "--name-only", f"{base_ref}...HEAD")
-        changed_legacy = sorted(
-            path for path in changed if _is_frozen_artifact_path(path)
+        base_legacy = _load_hash_inventory_from_git(
+            root,
+            base_ref=base_ref,
+            path=MANIFEST_PATH,
+            expected_format="axiom/legacy-rulespec-freeze/v1",
         )
-        if changed_legacy:
+        additions = sorted(set(artifacts) - set(base_legacy))
+        changed = sorted(
+            item
+            for item in set(artifacts) & set(base_legacy)
+            if artifacts[item] != base_legacy[item]
+        )
+        if additions or changed:
             raise ValueError(
-                "pull request changes frozen legacy RuleSpec artifacts: "
-                + ", ".join(changed_legacy)
+                "legacy freeze is decrement-only; "
+                f"added={additions}, changed={changed}"
             )
 
         allowlist_path = root / RETIRED_SCHEMA_TEST_PATH

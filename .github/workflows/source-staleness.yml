@@ -133,23 +133,18 @@ jobs:
           python -m pip install --target "$RUNNER_TEMP/axiom-verification-site-packages" \
             _axiom/axiom-encode
 
-      - name: Fetch pinned signed corpus release object from public registry
+      - name: Fetch pinned signed corpus release object from public bucket
         shell: bash
         env:
-          SUPABASE_URL: https://swocpijqqahhuwtuahwc.supabase.co
-          SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          RELEASE_BASE_URL: https://pub-a8952f8657fc49fda358146ac001366c.r2.dev
           RELEASE_NAME: ${{ steps.toolchain.outputs.axiom_corpus_release }}
           RELEASE_CONTENT_SHA256: ${{ steps.toolchain.outputs.axiom_corpus_release_content_sha256 }}
         run: |
           set -euo pipefail
-          test -n "$SUPABASE_ANON_KEY"
           destination="$GITHUB_WORKSPACE/_axiom/axiom-corpus/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
           mkdir -p "$(dirname "$destination")"
-          url="${SUPABASE_URL%/}/rest/v1/release_objects?select=release_object&release_name=eq.${RELEASE_NAME}&content_sha256=eq.${RELEASE_CONTENT_SHA256}&limit=2"
+          url="${RELEASE_BASE_URL%/}/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            --header "apikey: $SUPABASE_ANON_KEY" \
-            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
-            --header "Accept-Profile: corpus" \
             --output "$destination.tmp" "$url"
           python - "$destination.tmp" "$destination" "$RELEASE_NAME" "$RELEASE_CONTENT_SHA256" <<'PY'
           import hashlib
@@ -159,18 +154,15 @@ jobs:
 
           source, destination = Path(sys.argv[1]), Path(sys.argv[2])
           expected_name, expected_sha = sys.argv[3], sys.argv[4]
-          rows = json.loads(source.read_bytes())
-          if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
-              raise SystemExit("public release registry did not return exactly one object")
-          payload = rows[0].get("release_object")
+          payload = json.loads(source.read_bytes())
           if not isinstance(payload, dict) or payload.get("release") != expected_name:
-              raise SystemExit("public release registry returned the wrong object")
+              raise SystemExit("public release bucket returned the wrong object")
           content = payload.get("content")
           actual = hashlib.sha256(json.dumps(
               content, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
           ).encode()).hexdigest()
           if payload.get("content_sha256") != actual or actual != expected_sha:
-              raise SystemExit("public release registry returned a content-address mismatch")
+              raise SystemExit("public release bucket returned a content-address mismatch")
           destination.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
           source.unlink()
           PY

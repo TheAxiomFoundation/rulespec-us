@@ -115,63 +115,43 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
     workflow = (ROOT / ".github/workflows/repository-checks.yml").read_text()
 
     assert "legacy-rulespec-freeze:" in workflow
-    assert "needs: [legacy-rulespec-freeze, workflow-toolchain]" in workflow
-    assert "df2a6d1a9cf25d4963f127d26d61281c188febeb" in workflow
+    assert "needs: migration-authorization" in workflow
+    assert (
+        "needs: [migration-authorization, legacy-rulespec-freeze, workflow-toolchain]"
+        in workflow
+    )
+    assert "25ff794218ccd23cad630670656b67f84f3ae2fd" in workflow
+    assert workflow.count(
+        "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
+    ) == 3
+    assert "actions/checkout@v6.0.2" not in workflow
     assert (
         "retired-schema-bootstrap-sha256: >-\n"
-        "        ${{ ((github.event_name == 'pull_request'"
+        "        ${{ fromJSON(needs.migration-authorization.outputs.allowed)"
     ) in workflow
     assert "0d960eaf2830a9657108ffcba72bf965dd10ddeb0fc5fcc1b28a6039a21e5c0b" in workflow
     assert (
         "validation-waiver-bootstrap-sha256: >-\n"
-        "        ${{ ((github.event_name == 'pull_request'"
+        "        ${{ fromJSON(needs.migration-authorization.outputs.allowed)"
     ) in workflow
     assert "827c551bf7d8dc562ae74c8d6f02a3862afeaf0ad656a203b4fe35b79f5f8aac" in workflow
-    assert '[ "${{ github.event.pull_request.number }}" != "911" ]' in workflow
-    guard_expression = (
-        "${{ !((github.event_name == 'pull_request' && "
-        "github.event.pull_request.number == 911) || (github.event_name == 'push' "
-        "&& github.ref == 'refs/heads/main' && "
-        "startsWith(github.event.head_commit.message, "
-        "'Merge pull request #911 from '))) }}"
-    )
-    assert guard_expression in workflow
+    assert "migration-authorization-path: .axiom/reviewed-migrations.json" in workflow
+    assert "${{ !fromJSON(needs.migration-authorization.outputs.allowed) }}" in workflow
+    assert "github.event.head_commit.message" not in workflow
     assert "run-generated-guard: false" not in workflow
 
 
-@pytest.mark.parametrize(
-    ("event_name", "pr_number", "ref", "head_message", "expected"),
-    [
-        ("pull_request", 911, "refs/pull/911/merge", "", False),
-        ("pull_request", 912, "refs/pull/912/merge", "", True),
-        (
-            "push",
-            None,
-            "refs/heads/main",
-            "Merge pull request #911 from TheAxiomFoundation/hard-cut",
-            False,
-        ),
-        ("push", None, "refs/heads/main", "fix: mention #911", True),
-        ("push", None, "refs/heads/main", "Merge pull request #911", True),
-        ("push", None, "refs/heads/main", "ordinary push", True),
-        ("push", None, "refs/heads/topic", "Merge pull request #911", True),
-        ("schedule", None, "refs/heads/main", "", True),
-    ],
-)
-def test_generated_guard_migration_exception_truth_table(
-    event_name: str,
-    pr_number: int | None,
-    ref: str,
-    head_message: str,
-    expected: bool,
-) -> None:
-    migration_pr = event_name == "pull_request" and pr_number == 911
-    migration_merge = (
-        event_name == "push"
-        and ref == "refs/heads/main"
-        and head_message.startswith("Merge pull request #911 from ")
-    )
-    assert (not (migration_pr or migration_merge)) is expected
+def test_generated_guard_migration_exception_is_content_bound() -> None:
+    workflow = (ROOT / ".github/workflows/repository-checks.yml").read_text()
+
+    assert 'AUTHORIZATION_PATH = ".axiom/reviewed-migrations.json"' in workflow
+    assert 'if os.environ["PR_BASE_REF"] != "main"' in workflow
+    assert 'mode != b"100644" or kind != b"blob"' in workflow
+    assert "duplicate authorization key" in workflow
+    assert 'git("merge-tree", "--write-tree", base, candidate)' in workflow
+    assert "reviewed topic was already present in protected main" in workflow
+    assert 'record.get("head") == candidate' in workflow
+    assert "authorized migration digests or schema differ" in workflow
 
 
 def test_generation_workflows_use_immutable_toolchain() -> None:
@@ -198,9 +178,14 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
     assert 'ref: "main"' not in source_staleness
     assert '--git "$(command -v git)"' in source_staleness
     assert "sudo install -m 0755" not in source_staleness
+    assert "pub-a8952f8657fc49fda358146ac001366c.r2.dev" in source_staleness
+    assert "NEXT_PUBLIC_SUPABASE_ANON_KEY" not in source_staleness
+    assert "/rest/v1/release_objects" not in source_staleness
 
     repository_checks = (ROOT / ".github/workflows/repository-checks.yml").read_text()
     assert '.axiom/workflow-toolchain.toml").read_text()' in repository_checks
+    assert "corpus-release-registry-url" not in repository_checks
+    assert "corpus-release-registry-anon-key" not in repository_checks
     workflow_inputs = {
         "axiom-encode-ref": "axiom_encode_ref",
         "axiom-rules-engine-ref": "axiom_rules_engine_ref",
@@ -266,7 +251,7 @@ def test_freeze_rejects_symlink_substitution(tmp_path: Path) -> None:
         _load_checker().check(root)
 
 
-def test_freeze_rejects_base_ref_change_even_after_digest_update(
+def test_freeze_rejects_base_ref_digest_change_even_after_inventory_update(
     tmp_path: Path,
 ) -> None:
     root, artifact = _freeze_repo(tmp_path)
@@ -277,7 +262,35 @@ def test_freeze_rejects_base_ref_change_even_after_digest_update(
     _git(root, "add", ".")
     _git(root, "commit", "-qm", "change frozen artifact")
 
-    with pytest.raises(ValueError, match="pull request changes frozen"):
+    with pytest.raises(ValueError, match="legacy freeze is decrement-only"):
+        _load_checker().check(root, base_ref=base)
+
+
+def test_legacy_freeze_allows_controlled_decrement(tmp_path: Path) -> None:
+    root, artifact = _freeze_repo(tmp_path)
+    base = _git(root, "rev-parse", "HEAD")
+    artifact.unlink()
+    _write_manifest(root, {})
+    _git(root, "add", "-u")
+    _git(root, "add", ".axiom/legacy-rulespec-freeze.json")
+    _git(root, "commit", "-qm", "replace frozen legacy artifact")
+
+    _load_checker().check(root, base_ref=base)
+
+
+def test_legacy_freeze_rejects_inventory_growth(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    base = _git(root, "rev-parse", "HEAD")
+    addition = root / "us-mo/manual/snap/block-2.yaml"
+    addition.write_text("value: added\n")
+    digest = hashlib.sha256(addition.read_bytes()).hexdigest()
+    payload = json.loads((root / ".axiom/legacy-rulespec-freeze.json").read_text())
+    artifacts = payload["artifacts"] | {str(addition.relative_to(root)): digest}
+    _write_manifest(root, artifacts)
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "grow frozen legacy inventory")
+
+    with pytest.raises(ValueError, match="legacy freeze is decrement-only"):
         _load_checker().check(root, base_ref=base)
 
 
