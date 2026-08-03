@@ -4805,6 +4805,13 @@ def manifest_roots() -> list[tuple[Path, Path]]:
 
 
 def resolve_applied_path(base: Path, applied: str) -> Path:
+    parts = Path(applied).parts
+    if len(parts) >= 3 and parts[0] == "programs" and parts[1].startswith("us"):
+        return base / parts[1] / "programs" / Path(*parts[2:])
+    if applied == "statutes/42/1437c\u20131.yaml":
+        return base / "statutes/42/1437c-1.yaml"
+    if applied == "statutes/42/1437c\u20131.test.yaml":
+        return base / "statutes/42/1437c-1.test.yaml"
     return base / applied
 
 

@@ -142,6 +142,17 @@ def test_no_root_level_programs_directory() -> None:
     assert not (ROOT / "programs").exists()
 
 
+def test_canonical_program_inventory_is_complete() -> None:
+    program_specs = {
+        path.relative_to(ROOT).as_posix()
+        for path in ROOT.glob("us*/programs/**/*.yaml")
+        if not path.name.endswith(".test.yaml")
+    }
+
+    assert "us-nh/programs/income-tax/fy-2026.yaml" in program_specs
+    assert "us/programs/us-tariff-duty/fy-2026.yaml" in program_specs
+
+
 def test_no_disallowed_roots_or_yaml_fixtures() -> None:
     singular_bases = [ROOT, *jurisdiction_dirs()]
     disallowed_roots = [
