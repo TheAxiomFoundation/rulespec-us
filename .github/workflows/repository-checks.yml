@@ -14,23 +14,207 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
+  migration-authorization:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.authorize.outputs.allowed }}
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Authorize exact reviewed migration from protected base
+        id: authorize
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          import re
+          import subprocess
+
+          SHA = re.compile(r"[0-9a-f]{40}")
+          AUTHORIZATION_PATH = ".axiom/reviewed-migrations.json"
+          RETIRED = "0d960eaf2830a9657108ffcba72bf965dd10ddeb0fc5fcc1b28a6039a21e5c0b"
+          WAIVER = "827c551bf7d8dc562ae74c8d6f02a3862afeaf0ad656a203b4fe35b79f5f8aac"
+
+          def fail(message: str) -> None:
+              raise SystemExit(f"MigrationAuthorizationError: {message}")
+
+          def git(*args: str, check: bool = True) -> bytes:
+              return subprocess.run(
+                  ["git", *args], check=check, capture_output=True
+              ).stdout
+
+          event = os.environ["GITHUB_EVENT_NAME"]
+          base = os.environ["BASE_SHA"]
+          candidate = ""
+          if event == "pull_request" and os.environ["PR_NUMBER"] == "911":
+              if os.environ["PR_BASE_REF"] != "main":
+                  fail("PR #911 must target protected main")
+              candidate = os.environ["PR_HEAD_SHA"]
+          elif event == "push" and os.environ["GITHUB_REF"] == "refs/heads/main":
+              fields = git("rev-list", "--parents", "-n", "1", os.environ["GITHUB_SHA"]).decode().split()
+              if len(fields) == 3 and fields[1] == base:
+                  candidate = fields[2]
+                  if subprocess.run(
+                      ["git", "merge-base", "--is-ancestor", candidate, base]
+                  ).returncode == 0:
+                      fail("reviewed topic was already present in protected main")
+                  expected = git("merge-tree", "--write-tree", base, candidate).strip()
+                  actual = git("rev-parse", f"{os.environ['GITHUB_SHA']}^{{tree}}").strip()
+                  if expected != actual:
+                      fail("merge tree differs from the reviewed topic")
+          if not candidate:
+              print("allowed=false")
+              raise SystemExit(0)
+          if SHA.fullmatch(base) is None or SHA.fullmatch(candidate) is None:
+              fail("base or candidate identity is malformed")
+
+          tree = git("ls-tree", "-z", base, "--", AUTHORIZATION_PATH)
+          records = [record for record in tree.split(b"\0") if record]
+          if len(records) != 1:
+              fail("protected base lacks one exact authorization file")
+          metadata, listed = records[0].split(b"\t", 1)
+          mode, kind, _object_id = metadata.split(b" ", 2)
+          if listed.decode() != AUTHORIZATION_PATH or mode != b"100644" or kind != b"blob":
+              fail("protected authorization is not a regular file")
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      fail(f"duplicate authorization key {key!r}")
+                  result[key] = value
+              return result
+
+          try:
+              payload = json.loads(
+                  git("show", f"{base}:{AUTHORIZATION_PATH}").decode("utf-8"),
+                  object_pairs_hook=unique_object,
+                  parse_constant=lambda value: fail(f"invalid JSON constant {value}"),
+              )
+          except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+              fail(f"protected authorization is not strict UTF-8 JSON: {exc}")
+          if type(payload) is not dict or set(payload) != {"format", "migrations"}:
+              fail("authorization schema is malformed")
+          if payload["format"] != "axiom/reviewed-migrations/v1" or type(payload["migrations"]) is not list:
+              fail("authorization format is unsupported")
+          matches = [
+              record
+              for record in payload["migrations"]
+              if type(record) is dict
+              and record.get("pull_request") == 911
+              and record.get("head") == candidate
+          ]
+          if len(matches) != 1:
+              fail("candidate is not exactly authorized by protected main")
+          expected = {
+              "pull_request": 911,
+              "head": candidate,
+              "retired_schema_bootstrap_sha256": RETIRED,
+              "validation_waiver_bootstrap_sha256": WAIVER,
+          }
+          if matches[0] != expected:
+              fail("authorized migration digests or schema differ")
+          print("allowed=true")
+          PY
+
+  legacy-rulespec-freeze:
+    needs: migration-authorization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Verify frozen legacy RuleSpec artifacts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "${{ needs.migration-authorization.outputs.allowed }}" != "true" ] && \
+             [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && \
+             [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            args+=(--base-ref "$BASE_SHA")
+          fi
+          python tools/check_legacy_rulespec_freeze.py "${args[@]}"
+
+  workflow-toolchain:
+    runs-on: ubuntu-latest
+    outputs:
+      axiom_encode_ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+      axiom_rules_engine_ref: ${{ steps.pins.outputs.axiom_rules_engine_ref }}
+      axiom_corpus_ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
+      rulespec_us_ref: ${{ steps.pins.outputs.rulespec_us_ref }}
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Read protected workflow toolchain
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          toolchain = tomllib.loads(
+              Path(".axiom/workflow-toolchain.toml").read_text()
+          )["workflow_toolchain"]
+          for key in (
+              "axiom_encode_ref",
+              "axiom_rules_engine_ref",
+              "axiom_corpus_ref",
+              "rulespec_us_ref",
+          ):
+              value = toolchain.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+          PY
+
   validate:
-    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec-legacy-pending-safe.yml@b380085c2e3b810f2c6b55d71a65fec8e3765fb0 # temporary v5 migration bridge
+    needs: [migration-authorization, legacy-rulespec-freeze, workflow-toolchain]
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@25ff794218ccd23cad630670656b67f84f3ae2fd
     secrets: inherit
     with:
+      axiom-encode-ref: ${{ needs.workflow-toolchain.outputs.axiom_encode_ref }}
+      axiom-rules-engine-ref: ${{ needs.workflow-toolchain.outputs.axiom_rules_engine_ref }}
+      axiom-corpus-ref: ${{ needs.workflow-toolchain.outputs.axiom_corpus_ref }}
+      rulespec-us-ref: ${{ needs.workflow-toolchain.outputs.rulespec_us_ref }}
+      migration-authorization-path: .axiom/reviewed-migrations.json
       validate-roots: auto
+      # PR #911 is the reviewed history-preserving canonical-layout migration.
+      # Its one merge push is covered by the immutable retired-schema freeze;
+      # the guard runs again on every subsequent push and pull request.
+      run-generated-guard: >-
+        ${{ !fromJSON(needs.migration-authorization.outputs.allowed) }}
+      retired-schema-bootstrap-sha256: >-
+        ${{ fromJSON(needs.migration-authorization.outputs.allowed) && '0d960eaf2830a9657108ffcba72bf965dd10ddeb0fc5fcc1b28a6039a21e5c0b' || '' }}
+      validation-waiver-bootstrap-sha256: >-
+        ${{ fromJSON(needs.migration-authorization.outputs.allowed) && '827c551bf7d8dc562ae74c8d6f02a3862afeaf0ad656a203b4fe35b79f5f8aac' || '' }}
+      guard-programs-root: false
 
   drift-alarm:
-    # Red-main alarm. A full validation runs on every push to main and on the
-    # daily schedule; if either goes red, open (or refresh) a tracking issue so
-    # cross-shard drift that a scoped PR let through can never accumulate
-    # silently. Never fires for pull requests.
-    needs: validate
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.validate.result != 'success' }}
+    # Red-main alarm. Repository validation and the legacy freeze run on every
+    # push to main and on the daily schedule; if either goes red, open (or
+    # refresh) a tracking issue. Never fires for pull requests.
+    needs: [legacy-rulespec-freeze, validate]
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && (needs.legacy-rulespec-freeze.result != 'success' || needs.validate.result != 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,15 +225,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT_NAME: ${{ github.event_name }}
+          FREEZE_RESULT: ${{ needs.legacy-rulespec-freeze.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
         run: |
           set -euo pipefail
-          title="Scheduled full RuleSpec validation is red on main"
-          body="The full-matrix validation run failed on main (${EVENT_NAME}): ${RUN_URL}
+          title="RuleSpec repository checks are red on main"
+          body="A repository check failed on main (${EVENT_NAME}): ${RUN_URL}
 
-          Shard-on-demand validates only the touched jurisdiction on pull
-          requests, so a red full run on main is the signal that cross-shard
-          drift reached main. Investigate the failing shard(s) in the run above,
-          then close this issue once main is green again."
+          Legacy RuleSpec freeze: ${FREEZE_RESULT}
+          Full-matrix validation: ${VALIDATE_RESULT}
+
+          Investigate the failed check in the run above, then close this issue
+          once main is green again."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
