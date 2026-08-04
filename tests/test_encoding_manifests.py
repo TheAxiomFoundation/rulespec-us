@@ -4012,7 +4012,6 @@ KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
     '.axiom/encoding-manifests/us-nj/regulations/njac-10-90/10-90-3/3.json',
     '.axiom/encoding-manifests/us-nj/regulations/njac-10-90/10-90-3/8.json',
     '.axiom/encoding-manifests/us-nj/regulations/njac-10-90/10-90-3/9.json',
-    '.axiom/encoding-manifests/us-nj/statutes/54a:4-7.json',
     '.axiom/encoding-manifests/us-nm/policies/cms/new-mexico-chip-eligibility.json',
     '.axiom/encoding-manifests/us-nm/policies/cms/new-mexico-medicaid-chip-bhp-eligibility-levels.json',
     '.axiom/encoding-manifests/us-nm/policies/income_tax/pilot_liability_pipeline.json',
