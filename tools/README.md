@@ -4,9 +4,12 @@ Jurisdiction `programs/` specs are source; compiled artifacts are build outputs 
 never committed. The `program-artifacts` workflow compiles every spec through
 axiom-compose + axiom-rules-engine (pinned refs in the workflow env):
 
-- **On PRs** it is a gate: any spec outside `tools/known-broken-specs.txt`
-  that fails to compile fails the check, so spec/corpus drift (renamed module
-  paths, coverage-gate violations) is caught at PR time.
+- **On PRs targeting `main`** it is a gate: any spec outside
+  `tools/known-broken-specs.txt` that fails to compile fails the check, so
+  spec/corpus drift (renamed module paths, coverage-gate violations) is caught
+  before it reaches the deployable branch. Migration staging PRs use the
+  signed validation and provenance pipeline instead because their frozen
+  legacy paths are intentionally not canonical-engine inputs.
 - **On main** it publishes `dist/` — provenance-stamped `*.compiled.json`,
   composed `*.rulespec.yaml`, and `manifest.json` — as a GitHub release
   tagged `program-artifacts-<shortsha>`.
