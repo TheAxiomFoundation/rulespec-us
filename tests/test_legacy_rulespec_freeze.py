@@ -210,6 +210,11 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
     assert "e19f1b7573c74512f20a6b71a0c55dbbf333d41b" not in program_artifacts
     assert "${{ steps.toolchain.outputs.axiom_rules_engine_ref }}" in program_artifacts
     assert "${{ steps.toolchain.outputs.axiom_compose_ref }}" in program_artifacts
+    assert "  pull_request:\n    branches: [main]\n" in program_artifacts
+    assert (
+        "    if: github.event_name != 'pull_request' || github.base_ref == 'main'"
+        in program_artifacts
+    )
 
     bulk_encode = (ROOT / ".github/workflows/bulk-encode.yml").read_text()
     assert "disabled pending reviewed activation" in bulk_encode
