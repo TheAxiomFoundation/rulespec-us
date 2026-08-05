@@ -4,21 +4,21 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us-la/statute/47:294
-    source_sha256: 305be359c89fd6608590e432a3cddd707cd1828e652dad8d8ef6dce3cc2d6a9c
-  summary: '"For tax year 2025" the standard deduction is "$12,500.00" for "Single
-    Individual and Married-Separate"; "Married-Joint Return, a Qualified Surviving
-    Spouse, and Head of Household" receive "200% of the dollar amount" provided for
-    Single Individuals. Beginning January 1, 2026, the deduction is adjusted annually
-    using the CPI-U percentage increase for the previous calendar year.'
+    source_sha256: 2d7ceb0e2e4f07667becfe83ee45f652b1b793d3b72fb0f47c56a184dc28f17b
+  summary: “For tax year 2025,” the standard deduction is “$12,500.00” for a Single
+    Individual and Married-Separate, while a Married-Joint Return, Qualified Surviving
+    Spouse, and Head of Household receive “200% of the dollar amount” provided for
+    Single Individuals. “Beginning January 1, 2026,” the amount is adjusted annually
+    using the prior calendar year's CPI-U percentage increase.
   deferred_outputs:
-  - output: us-la:statutes/47/294#standard_deduction
-    reason: Taxpayer-specific standard deduction determination requires the federally
-      determined filing status, for which no executable upstream filing-status RuleSpec
-      export is supplied. The post-2025 annual adjustment also requires a period-indexed
-      prior-year deduction and CPI-U percentage increase mechanism not supplied in
-      executable context.
+  - output: us-la:statutes/47/294/a#standard_deduction
+    reason: La. R.S. 47:294(A) requires taxpayers to use the same filing status on
+      their Louisiana return as on their federal income tax return. Computing the
+      taxpayer-specific standard deduction under La. R.S. 47:294(A)(1) and La. R.S.
+      47:294(A)(2) requires an executable upstream federal filing-status output, which
+      is not supplied in the copied context.
 rules:
-- name: standard_deduction_single_individual_married_separate_2025
+- name: standard_deduction_single_individual_married_separate
   kind: parameter
   dtype: Money
   unit: USD
@@ -32,10 +32,16 @@ rules:
         source:
           corpus_citation_path: us-la/statute/47:294
           excerpt: Single Individual and Married-Separate $12,500.00
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-la/statute/47:294
+          excerpt: For tax year 2025
   versions:
   - effective_from: '2025-01-01'
+    effective_to: '2025-12-31'
     formula: '12500'
-- name: standard_deduction_joint_surviving_spouse_head_of_household_multiplier
+- name: joint_surviving_spouse_head_of_household_multiplier
   kind: parameter
   dtype: Rate
   period: Year
@@ -48,11 +54,18 @@ rules:
         source:
           corpus_citation_path: us-la/statute/47:294
           excerpt: 200% of the dollar amount
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-la/statute/47:294
+          excerpt: For tax year 2025
   versions:
   - effective_from: '2025-01-01'
+    effective_to: '2025-12-31'
     formula: '2.00'
-- name: standard_deduction_joint_surviving_spouse_head_of_household_2025
-  kind: parameter
+- name: standard_deduction_joint_surviving_spouse_head_of_household
+  kind: derived
+  entity: TaxUnit
   dtype: Money
   unit: USD
   period: Year
@@ -64,19 +77,75 @@ rules:
         kind: formula
         source:
           corpus_citation_path: us-la/statute/47:294
-          excerpt: 200% of the dollar amount
+          excerpt: (2) Married-Joint Return, a Qualified Surviving 200% of the dollar
+            amount Spouse, and Head of Household provided for Single Individuals
       - path: versions[0].formula
         kind: import
         import:
-          target: us-la:statutes/47/294#standard_deduction_single_individual_married_separate_2025
-          output: standard_deduction_single_individual_married_separate_2025
+          target: us-la:statutes/47/294#standard_deduction_single_individual_married_separate
+          output: standard_deduction_single_individual_married_separate
           hash: sha256:local
       - path: versions[0].formula
         kind: import
         import:
-          target: us-la:statutes/47/294#standard_deduction_joint_surviving_spouse_head_of_household_multiplier
-          output: standard_deduction_joint_surviving_spouse_head_of_household_multiplier
+          target: us-la:statutes/47/294#joint_surviving_spouse_head_of_household_multiplier
+          output: joint_surviving_spouse_head_of_household_multiplier
           hash: sha256:local
   versions:
   - effective_from: '2025-01-01'
-    formula: standard_deduction_single_individual_married_separate_2025 * standard_deduction_joint_surviving_spouse_head_of_household_multiplier
+    effective_to: '2025-12-31'
+    formula: standard_deduction_single_individual_married_separate * joint_surviving_spouse_head_of_household_multiplier
+- name: annual_standard_deduction_adjustment
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  unit: USD
+  period: Year
+  source: La. R.S. 47:294(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-la/statute/47:294
+          excerpt: multiplying the amount of the prior year's standard deduction by
+            the percentage increase in the Consumer Price Index
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-la/statute/47:294
+          excerpt: Beginning January 1, 2026
+  versions:
+  - effective_from: '2026-01-01'
+    formula: prior_year_standard_deduction * cpi_u_percentage_increase
+- name: standard_deduction_after_annual_adjustment
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  unit: USD
+  period: Year
+  source: La. R.S. 47:294(B)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-la/statute/47:294
+          excerpt: the amount of the standard deduction provided in Subsection A of
+            this Section shall be adjusted annually by an amount calculated
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:statutes/47/294#annual_standard_deduction_adjustment
+          output: annual_standard_deduction_adjustment
+          hash: sha256:local
+      - path: versions[0].effective_from
+        kind: effective_period
+        source:
+          corpus_citation_path: us-la/statute/47:294
+          excerpt: Beginning January 1, 2026
+  versions:
+  - effective_from: '2026-01-01'
+    formula: prior_year_standard_deduction + annual_standard_deduction_adjustment
