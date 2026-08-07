@@ -1,12 +1,24 @@
 name: program-artifacts
 
 # Compiles every programs/ spec through axiom-compose + axiom-rules-engine.
-# On pull requests this is a gate: any spec outside
-# tools/known-broken-specs.txt that fails to compile fails the check, so
-# spec/corpus drift is caught at PR time instead of at admission time.
-# On pushes to main it additionally publishes the provenance-stamped
-# artifacts and manifest as a GitHub release, which downstream consumers
-# (axiom-api) pin by tag + sha256.
+#
+# Two decoupled jobs share this build:
+#
+# - On pull requests this is a GATE: any spec outside
+#   tools/known-broken-specs.txt that fails to compile fails the check, so
+#   spec/corpus drift is caught at PR time instead of at admission time. It
+#   publishes nothing and should never be a reason to disable the workflow.
+# - Publishing is DELIBERATE: `workflow_dispatch` on main compiles and
+#   publishes the provenance-stamped artifacts and manifest as an immutable
+#   GitHub release, which downstream consumers (axiom-api) pin by tag +
+#   sha256. A dispatch from any other ref runs the compile only.
+#
+# Publishing used to ride every push to main. That coupled the release
+# cadence to merge traffic (two releases inside four hours on 2026-08-05) and
+# gave the kill switch a hidden blast radius: disabling the workflow to stop
+# the release spam also silently removed the PR compile gate, and #1233
+# merged without it. Releases are deliberate acts, like corpus releases; the
+# gate must not share their off switch.
 
 on:
   pull_request:
@@ -17,15 +29,7 @@ on:
       - "us-*/**"
       - ".axiom/toolchain.toml"
       - ".github/workflows/program-artifacts.yml"
-  push:
-    branches: [main]
-    paths:
-      - "programs/**"
-      - "tools/**"
-      - "us/**"
-      - "us-*/**"
-      - ".axiom/toolchain.toml"
-      - ".github/workflows/program-artifacts.yml"
+  workflow_dispatch:
 
 env:
   # Toolchain pins — bump deliberately; they define artifact provenance.
@@ -78,7 +82,7 @@ jobs:
       # Attest build provenance for the published artifacts; consumers can
       # verify with `gh attestation verify <file> --repo TheAxiomFoundation/rulespec-us`.
       - name: Attest build provenance
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
@@ -86,7 +90,7 @@ jobs:
             dist/*.compiled.json
 
       - name: Publish artifacts release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
