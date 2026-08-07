@@ -3,7 +3,7 @@
 This file records validation gaps that cannot be repaired honestly from the
 source text already available to this repository. It does not cover missing
 corpus material: modules blocked by source recovery are listed separately in
-`data/coverage/awaiting-source-recovery.json`.
+`.axiom/awaiting-source-recovery.json`.
 
 ## Massachusetts weekly and biweekly conversion factors
 
