@@ -222,16 +222,31 @@ def artifact_schema_of(artifact: Path) -> int:
 
 def engine_capabilities(engine_bin: str) -> dict | None:
     """What the binary says it can load, or None on engines predating the
-    `capabilities` subcommand. Used only to cross-check the emitted artifacts."""
+    `capabilities` subcommand.
+
+    Only a nonzero exit (unknown subcommand) or a missing binary reads as
+    "legacy engine". An engine that CLAIMS the subcommand — exits zero — and
+    then emits something unparseable is broken, not old, and must fail the
+    build rather than masquerade as legacy and bypass the cross-check. Same
+    for a hang: a 60s timeout on printing two fields is not a legacy engine.
+    """
     try:
         out = subprocess.run(
             [engine_bin, "capabilities"], capture_output=True, text=True, timeout=60
         )
-        if out.returncode != 0:
-            return None
-        return json.loads(out.stdout)
-    except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
+    except (OSError, FileNotFoundError):
+        return None  # missing/unrunnable binary; the first compile will say so
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"{engine_bin}: `capabilities` hung; broken engine, not a legacy one")
+    if out.returncode != 0:
         return None
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError(
+            f"{engine_bin}: `capabilities` exited 0 but emitted non-JSON; "
+            f"refusing to treat a broken engine as a legacy one"
+        )
 
 
 def assemble_manifest(

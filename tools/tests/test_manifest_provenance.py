@@ -167,4 +167,10 @@ def test_engine_capabilities_is_none_on_engines_without_the_subcommand(tmp_path)
     # builder must fall back to the emitted artifacts, not crash or invent.
     assert bpa.engine_capabilities(_fake_engine(tmp_path, "exit 1")) is None
     assert bpa.engine_capabilities(str(tmp_path / "missing")) is None
-    assert bpa.engine_capabilities(_fake_engine(tmp_path, "echo not-json")) is None
+
+
+def test_engine_capabilities_fails_closed_on_a_broken_self_report(tmp_path):
+    # Exit 0 with unparseable output is a BROKEN engine, not a legacy one:
+    # treating it as legacy would silently bypass the pre-build cross-check.
+    with pytest.raises(RuntimeError):
+        bpa.engine_capabilities(_fake_engine(tmp_path, "echo not-json"))
