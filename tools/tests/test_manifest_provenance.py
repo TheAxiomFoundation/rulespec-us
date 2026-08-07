@@ -143,3 +143,28 @@ def test_artifact_schema_of_reads_the_emitted_value(tmp_path):
     artifact.write_text(json.dumps({"program": {}}))
     with pytest.raises(RuntimeError):
         bpa.artifact_schema_of(artifact)
+
+
+def _fake_engine(tmp_path, body: str):
+    bin_path = tmp_path / "axiom-rules-engine"
+    bin_path.write_text(f"#!/bin/sh\n{body}\n")
+    bin_path.chmod(0o755)
+    return str(bin_path)
+
+
+def test_engine_capabilities_reads_the_self_report(tmp_path):
+    bin_path = _fake_engine(
+        tmp_path, 'echo \'{"engine_version": "0.2.1", "artifact_format_version": 2}\''
+    )
+    assert bpa.engine_capabilities(bin_path) == {
+        "engine_version": "0.2.1",
+        "artifact_format_version": 2,
+    }
+
+
+def test_engine_capabilities_is_none_on_engines_without_the_subcommand(tmp_path):
+    # Engines predating `capabilities` exit nonzero on the unknown command; the
+    # builder must fall back to the emitted artifacts, not crash or invent.
+    assert bpa.engine_capabilities(_fake_engine(tmp_path, "exit 1")) is None
+    assert bpa.engine_capabilities(str(tmp_path / "missing")) is None
+    assert bpa.engine_capabilities(_fake_engine(tmp_path, "echo not-json")) is None

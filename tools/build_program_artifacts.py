@@ -350,6 +350,22 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # Cross-check before building anything: an engine that can report its own
+    # loader contract must agree with what this builder expects to stamp.
+    # Engines predating `capabilities` return None and the emitted artifacts
+    # remain the sole authority (artifact_schema_of, below).
+    caps = engine_capabilities(engine_bin)
+    if caps is not None:
+        reported = caps.get("artifact_format_version")
+        if reported != EXPECTED_ARTIFACT_SCHEMA_VERSION:
+            print(
+                f"engine reports artifact_format_version {reported}, builder expects "
+                f"{EXPECTED_ARTIFACT_SCHEMA_VERSION} — refusing to publish artifacts whose "
+                f"compat contract would be wrong",
+                file=sys.stderr,
+            )
+            return 2
+
     manifest_programs = []
     unexpected_failures: list[str] = []
     unexpected_successes: list[str] = []
