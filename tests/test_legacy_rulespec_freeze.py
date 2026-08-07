@@ -168,7 +168,7 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
         "axiom_encode_ref": "caebbda1a190181ef8184ed7aaffedb3789202a3",
         "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
-        "axiom_corpus_ref": "0fd35bfbda98836c406ec539a492c4e661c6695d",
+        "axiom_corpus_ref": "d9d6fba0b9069c7e0f0ed4255817b3e78c00dd64",
         "rulespec_us_ref": "6bbb9bd3e49e75b66f378ff71cdb40addfa0b6c5",
     }
     release_toolchain = tomllib.loads((ROOT / ".axiom/toolchain.toml").read_text())[
