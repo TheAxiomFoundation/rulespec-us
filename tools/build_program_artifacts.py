@@ -38,9 +38,12 @@ from pathlib import Path
 import yaml
 
 MANIFEST_FORMAT_VERSION = 1
-# The compiled-artifact format generation. Bumped only on a
-# breaking artifact-format change; the engine negotiates against it on load.
-ARTIFACT_SCHEMA_VERSION = 2
+# The compiled-artifact format generation this builder is known to work with.
+# It is an EXPECTATION, not the stamped value: what lands in the manifest is
+# read back from the artifact the engine emitted (artifact_schema_of), and a
+# mismatch fails the build. Bumping the engine across a format boundary without
+# bumping this is therefore a hard error, not a silently mislabeled release.
+EXPECTED_ARTIFACT_SCHEMA_VERSION = 2
 # The fixed, tested lower bound an artifact requires of the engine. A floor, not
 # the building engine's version — any engine >= this that supports the artifact
 # schema can load it. Raise only when an emitted feature demands a newer engine.
@@ -169,21 +172,81 @@ def engine_build_sha(engine_bin: str) -> str:
     return ""
 
 
-def build_compat(engine_version: str, engine_sha: str) -> dict:
+def build_compat(engine_version: str, engine_sha: str, artifact_schema: int) -> dict:
     """The four-field compatibility contract carried by every artifact.
 
-    - artifact_schema: the compiled-artifact format generation (gating).
+    - artifact_schema: the compiled-artifact format generation, READ BACK from
+      the artifact the engine actually emitted — never a hardcoded claim.
     - built_by_engine: pure provenance (version + real build sha) — never gates.
-    - requires_engine: the negotiation floor. min_version is a FIXED tested
-      lower bound (not the building engine's version): every engine >= this that
-      still supports artifact_schema can load the artifact. Raise it only when an
-      emitted feature actually requires a newer engine.
+    - requires_engine: the negotiation floor. It carries BOTH dimensions,
+      because they move independently and only one of them gates:
+
+      * min_version is a FIXED tested semver lower bound (not the building
+        engine's version). It does not gate loading.
+      * artifact_format_version is what the loader matches EXACTLY. An engine
+        reporting a different number rejects this artifact however new its
+        semver is.
+
+      Emitting only min_version is what let engine v0.1.0 (format 1) and these
+      artifacts (format 2) both advertise "0.1.0" and read as compatible while
+      every load failed. Released v0.2.0 widens the same false pass: a consumer
+      compares 0.2.0 >= 0.1.0, concludes compatible, and is refused at load.
+      Compare `axiom-rules-engine capabilities`.artifact_format_version against
+      requires_engine.artifact_format_version; treat semver as advisory.
     """
     return {
-        "artifact_schema": ARTIFACT_SCHEMA_VERSION,
+        "artifact_schema": artifact_schema,
         "built_by_engine": {"version": engine_version, "git_sha": engine_sha},
-        "requires_engine": {"min_version": MIN_ENGINE_VERSION, "capabilities": []},
+        "requires_engine": {
+            "min_version": MIN_ENGINE_VERSION,
+            "artifact_format_version": artifact_schema,
+            "capabilities": [],
+        },
     }
+
+
+def artifact_schema_of(artifact: Path) -> int:
+    """The format generation the engine actually stamped into this artifact.
+
+    Ground truth, not a declaration: the loader compares this exact number, so
+    the manifest must report what was emitted rather than what the builder
+    believes. Any engine produces it; no new engine feature is required.
+    """
+    found = json.loads(artifact.read_text()).get("artifact_format_version")
+    if not isinstance(found, int):
+        raise RuntimeError(
+            f"{artifact.name}: artifact_format_version is {found!r}, expected an int"
+        )
+    return found
+
+
+def engine_capabilities(engine_bin: str) -> dict | None:
+    """What the binary says it can load, or None on engines predating the
+    `capabilities` subcommand.
+
+    Only a nonzero exit (unknown subcommand) or a missing binary reads as
+    "legacy engine". An engine that CLAIMS the subcommand — exits zero — and
+    then emits something unparseable is broken, not old, and must fail the
+    build rather than masquerade as legacy and bypass the cross-check. Same
+    for a hang: a 60s timeout on printing two fields is not a legacy engine.
+    """
+    try:
+        out = subprocess.run(
+            [engine_bin, "capabilities"], capture_output=True, text=True, timeout=60
+        )
+    except (OSError, FileNotFoundError):
+        return None  # missing/unrunnable binary; the first compile will say so
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"{engine_bin}: `capabilities` hung; broken engine, not a legacy one")
+    if out.returncode != 0:
+        return None
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError(
+            f"{engine_bin}: `capabilities` exited 0 but emitted non-JSON; "
+            f"refusing to treat a broken engine as a legacy one"
+        )
 
 
 def assemble_manifest(
@@ -193,6 +256,7 @@ def assemble_manifest(
     engine_version: str,
     engine_sha: str,
     toolchain: dict,
+    artifact_schema: int,
 ) -> dict:
     """Assemble the top-level manifest. Pure function so it is directly testable
     with real inputs (the fields below must come from here, not a test's copy)."""
@@ -215,7 +279,8 @@ def assemble_manifest(
         # a release name may be stamped only when an axiom-corpus release
         # manifest's provenance commit exactly equals that pin.
         "corpus_release": None,
-        "artifact_schema": ARTIFACT_SCHEMA_VERSION,
+        # Observed from the emitted artifacts, not declared. See build_compat.
+        "artifact_schema": artifact_schema,
         "programs": programs,
     }
 
@@ -300,9 +365,26 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # Cross-check before building anything: an engine that can report its own
+    # loader contract must agree with what this builder expects to stamp.
+    # Engines predating `capabilities` return None and the emitted artifacts
+    # remain the sole authority (artifact_schema_of, below).
+    caps = engine_capabilities(engine_bin)
+    if caps is not None:
+        reported = caps.get("artifact_format_version")
+        if reported != EXPECTED_ARTIFACT_SCHEMA_VERSION:
+            print(
+                f"engine reports artifact_format_version {reported}, builder expects "
+                f"{EXPECTED_ARTIFACT_SCHEMA_VERSION} — refusing to publish artifacts whose "
+                f"compat contract would be wrong",
+                file=sys.stderr,
+            )
+            return 2
+
     manifest_programs = []
     unexpected_failures: list[str] = []
     unexpected_successes: list[str] = []
+    artifact_schemas: set[int] = set()
     engine_version = "unknown"
 
     # Compose and compile in a neutral temp directory OUTSIDE the repo: the
@@ -334,7 +416,19 @@ def main() -> int:
 
         # The four-field compatibility contract, self-describing inside each
         # artifact so a consumer can negotiate with the engine before loading.
-        compat = build_compat(engine_version, engine_sha)
+        schema = artifact_schema_of(artifact_path)
+        if schema != EXPECTED_ARTIFACT_SCHEMA_VERSION:
+            print(
+                f"FAIL {spec_rel}: engine emitted artifact_format_version {schema}, "
+                f"builder expects {EXPECTED_ARTIFACT_SCHEMA_VERSION}. The engine pin moved "
+                f"across a format boundary; bump EXPECTED_ARTIFACT_SCHEMA_VERSION "
+                f"deliberately and re-cut the engine release.",
+                file=sys.stderr,
+            )
+            unexpected_failures.append(spec_rel)
+            continue
+        artifact_schemas.add(schema)
+        compat = build_compat(engine_version, engine_sha, schema)
         provenance = {
             "corpus": corpus,
             "spec_path": spec_rel,
@@ -372,8 +466,21 @@ def main() -> int:
             f"({manifest_programs[-1]['counts']['derived']}d)"
         )
 
+    if len(artifact_schemas) > 1:
+        print(
+            f"artifacts disagree on artifact_format_version {sorted(artifact_schemas)} — "
+            f"a single manifest cannot describe them",
+            file=sys.stderr,
+        )
+        return 1
     manifest = assemble_manifest(
-        manifest_programs, corpus, composer, engine_version, engine_sha, toolchain
+        manifest_programs,
+        corpus,
+        composer,
+        engine_version,
+        engine_sha,
+        toolchain,
+        artifact_schemas.pop() if artifact_schemas else EXPECTED_ARTIFACT_SCHEMA_VERSION,
     )
     (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
