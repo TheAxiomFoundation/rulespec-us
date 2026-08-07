@@ -4,13 +4,16 @@ module:
     required: true
   source_verification:
     corpus_citation_path: us-la/statute/47:297.8
-    source_sha256: 985cbec0bc2a0ce34cbe744b20251c2049f85727f88d71621e1c2db902ec3beb
-  summary: “there shall be a credit against the tax imposed by this Chapter for individuals”
-    equal to three and one-half percent of the federal earned income tax credit, except
-    that the rate is five percent for tax years beginning on or after January 1, 2019,
-    through December 31, 2030. For resident individuals, excess credit constitutes
-    an overpayment, and the right to its refund is not subject to R.S. 47:1621(B).
-    The enactment was effective January 1, 2008.
+    source_sha256: 8f1bf58221983b011e20236decc2ade27781ca073be5881d1046fa8e61259674
+  summary: '“there shall be a credit against the tax imposed by this Chapter for individuals”
+
+    equal to three and one-half percent of the federal earned income tax credit,
+
+    except five percent for tax years beginning on or after January 1, 2019,
+
+    through December 31, 2030. For resident individuals, excess credit is an
+
+    overpayment whose refund is not subject to R.S. 47:1621(B).'
 rules:
 - name: earned_income_tax_credit_enactment_indicator
   kind: parameter
@@ -20,10 +23,9 @@ rules:
     proof:
       atoms:
       - path: versions[0].formula
-        kind: effective_period
+        kind: default
         source:
           corpus_citation_path: us-la/statute/47:297.8
-          excerpt: eff. Jan. 1, 2008
       - path: versions[1].formula
         kind: effective_period
         source:
@@ -34,24 +36,6 @@ rules:
     formula: '0'
   - effective_from: '2008-01-01'
     formula: '1'
-- name: earned_income_tax_credit_applies
-  kind: derived
-  entity: Person
-  dtype: Judgment
-  period: Year
-  source: Acts 2007, No. 278, §1; La. R.S. 47:297.8(A)
-  metadata:
-    proof:
-      atoms:
-      - path: versions[0].formula
-        kind: import
-        import:
-          target: us-la:statutes/47/297/8#earned_income_tax_credit_enactment_indicator
-          output: earned_income_tax_credit_enactment_indicator
-          hash: sha256:local
-  versions:
-  - effective_from: '0001-01-01'
-    formula: earned_income_tax_credit_enactment_indicator == 1
 - name: earned_income_tax_credit_base_rate
   kind: parameter
   dtype: Rate
@@ -79,7 +63,7 @@ rules:
         source:
           corpus_citation_path: us-la/statute/47:297.8
           excerpt: five percent
-      - path: versions[0].formula
+      - path: versions[0].effective_from
         kind: effective_period
         source:
           corpus_citation_path: us-la/statute/47:297.8
@@ -106,7 +90,7 @@ rules:
           target: us-la:statutes/47/297/8#earned_income_tax_credit_temporary_rate
           output: earned_income_tax_credit_temporary_rate
           hash: sha256:local
-      - path: versions[1].formula
+      - path: versions[1].effective_from
         kind: effective_period
         source:
           corpus_citation_path: us-la/statute/47:297.8
@@ -124,13 +108,38 @@ rules:
     formula: earned_income_tax_credit_temporary_rate
   - effective_from: '2031-01-01'
     formula: earned_income_tax_credit_base_rate
+- name: earned_income_tax_credit_applies
+  kind: derived
+  entity: Person
+  dtype: Judgment
+  period: Year
+  source: La. R.S. 47:297.8(A)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-la/statute/47:297.8
+          excerpt: federal earned income tax credit for which the individual is eligible
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:statutes/47/297/8#earned_income_tax_credit_enactment_indicator
+          output: earned_income_tax_credit_enactment_indicator
+          hash: sha256:local
+  versions:
+  - effective_from: '0001-01-01'
+    formula: 'earned_income_tax_credit_enactment_indicator == 1
+
+      and individual_is_eligible_for_federal_earned_income_tax_credit'
 - name: louisiana_earned_income_tax_credit
   kind: derived
   entity: Person
   dtype: Money
   period: Year
   unit: USD
-  source: La. R.S. 47:297.8(A)
+  source: La. R.S. 47:297.8(A)(1)-(2)
   metadata:
     proof:
       atoms:
@@ -138,7 +147,25 @@ rules:
         kind: formula
         source:
           corpus_citation_path: us-la/statute/47:297.8
-          excerpt: percent of the federal earned income tax credit
+          excerpt: there shall be a credit against the tax imposed by this Chapter
+            for individuals in an amount equal to three and one-half percent of the
+            federal earned income tax credit for which the individual is eligible
+            for the taxable year pursuant to Section 32 of the Internal Revenue Code.
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-la/statute/47:297.8
+          excerpt: (2) For tax years beginning on or after January 1, 2019, through
+            December 31, 2030, there shall be a credit against the tax imposed by
+            this Chapter for individuals in an amount equal to five percent of the
+            federal earned income tax credit for which the individual is eligible
+            for the taxable year under Section 32 of the Internal Revenue Code.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-la:statutes/47/297/8#earned_income_tax_credit_applies
+          output: earned_income_tax_credit_applies
+          hash: sha256:local
       - path: versions[0].formula
         kind: import
         import:
@@ -147,7 +174,8 @@ rules:
           hash: sha256:local
   versions:
   - effective_from: '2008-01-01'
-    formula: earned_income_tax_credit_rate * max(0, federal_earned_income_tax_credit)
+    formula: 'if earned_income_tax_credit_applies: earned_income_tax_credit_rate *
+      max(0, federal_earned_income_tax_credit) else: 0'
 - name: earned_income_tax_credit_excess_overpayment
   kind: derived
   entity: Person
@@ -187,8 +215,8 @@ rules:
         kind: condition
         source:
           corpus_citation_path: us-la/statute/47:297.8
-          excerpt: right to a refund of any such overpayment shall not be subject
-            to the requirements of R.S. 47:1621(B)
+          excerpt: The right to a refund of any such overpayment shall not be subject
+            to the requirements of R.S. 47:1621(B).
       - path: versions[0].formula
         kind: import
         import:
@@ -197,4 +225,6 @@ rules:
           hash: sha256:local
   versions:
   - effective_from: '2008-01-01'
-    formula: earned_income_tax_credit_excess_overpayment > 0
+    formula: 'individual_is_resident
+
+      and earned_income_tax_credit_excess_overpayment > 0'
