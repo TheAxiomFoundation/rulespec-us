@@ -104,3 +104,21 @@ def test_scope_entries_resolve_or_are_allowlisted() -> None:
         for stale in sorted(allowlist - seen)
     )
     assert problems == []
+
+
+def test_georgia_snap_shelter_composes_the_utility_allowance() -> None:
+    spec = yaml.safe_load((ROOT / "us-ga/programs/snap/fy-2026.yaml").read_text())
+    shelter = next(
+        transformation
+        for transformation in spec["transformations"]
+        if transformation.get("name") == "snap_total_allowable_shelter_expenses"
+    )
+
+    assert shelter["pattern"] == "derived_formula"
+    assert shelter["formula"] == (
+        "monthly_allowable_shelter_costs\n"
+        "+ max(\n"
+        "    max(snap_standard_utility_allowance, snap_limited_utility_allowance),\n"
+        "    max(snap_one_utility_allowance, snap_individual_utility_allowance)\n"
+        "  )"
+    )
