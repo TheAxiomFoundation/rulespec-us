@@ -4793,6 +4793,23 @@ def resolve_applied_path(base: Path, applied: str) -> Path:
     return base / applied
 
 
+def is_rulespec_module_path(path: Path) -> bool:
+    """Return whether a resolved applied path is a jurisdiction RuleSpec YAML."""
+    try:
+        parts = path.relative_to(ROOT).parts
+    except ValueError:
+        return False
+    if len(parts) < 2 or path.name.endswith(".test.yaml") or path.suffix != ".yaml":
+        return False
+    jurisdiction = parts[0]
+    return jurisdiction == "us" or (
+        len(jurisdiction) == 5
+        and jurisdiction.startswith("us-")
+        and jurisdiction[3:].islower()
+        and jurisdiction[3:].isalpha()
+    )
+
+
 def retired_manifest_jurisdiction(
     manifest_dir: Path,
     manifest_path: Path,
@@ -4833,7 +4850,9 @@ def retired_manifest_jurisdiction(
 def latest_manifest_entries() -> dict[Path, tuple[Path, dict]]:
     """Authoritative (manifest path, applied_files entry) per rule module.
 
-    Companion ``.test.yaml`` entries are ignored; when several manifests
+    Only RuleSpec ``.yaml`` module entries are considered. Companion tests and
+    repository support files captured in an apply snapshot are evidence, not
+    durable ownership claims over those shared paths. When several manifests
     cover one module, the newest ``generated_at`` wins.
     """
     latest: dict[Path, tuple[str, Path, dict]] = {}
@@ -4853,7 +4872,11 @@ def latest_manifest_entries() -> dict[Path, tuple[Path, dict]]:
                 if not isinstance(entry, dict):
                     continue
                 applied = entry.get("path")
-                if not applied or applied.endswith(".test.yaml"):
+                if (
+                    not isinstance(applied, str)
+                    or not applied.endswith(".yaml")
+                    or applied.endswith(".test.yaml")
+                ):
                     continue
                 applied_parts = Path(applied).parts
                 applied_base = base
@@ -4865,6 +4888,8 @@ def latest_manifest_entries() -> dict[Path, tuple[Path, dict]]:
                 ):
                     applied_base = base / retired_jurisdiction
                 module = resolve_applied_path(applied_base, applied)
+                if not is_rulespec_module_path(module):
+                    continue
                 current = latest.get(module)
                 if current is None or generated_at > current[0]:
                     latest[module] = (generated_at, manifest_path, entry)
@@ -4897,6 +4922,14 @@ def test_encoded_modules_match_their_manifests() -> None:
         ".axiom/encoding-manifests/ if the edit is being accepted as-is:\n"
         + "\n".join(stale)
     )
+
+
+def test_manifest_module_index_excludes_shared_apply_snapshot_files() -> None:
+    entries = latest_manifest_entries()
+
+    assert ROOT / ".axiom" / "toolchain.toml" not in entries
+    assert ROOT / "known-validation-gaps.yaml" not in entries
+    assert all(is_rulespec_module_path(path) for path in entries)
 
 
 def test_manifests_reference_existing_modules() -> None:
