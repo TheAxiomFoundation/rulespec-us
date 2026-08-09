@@ -86,7 +86,7 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 307
+    assert len(retired["artifacts"]) == 173
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
@@ -325,7 +325,37 @@ def test_freeze_rejects_unlisted_retired_schema_module(tmp_path: Path) -> None:
     artifact.parent.mkdir(parents=True)
     artifact.write_text(
         "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
+    )
+    _git(root, "add", ".")
+
+    with pytest.raises(ValueError, match="retired-schema.*unlisted"):
+        _load_checker().check(root)
+
+
+def test_freeze_accepts_current_upstream_source_check(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
         "    upstream_source_check: {}\n"
+    )
+    _git(root, "add", ".")
+
+    _load_checker().check(root)
+
+
+def test_freeze_classifies_mixed_source_verification_as_retired(
+    tmp_path: Path,
+) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    upstream_source_check: {}\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
     )
     _git(root, "add", ".")
 
@@ -358,7 +388,7 @@ def test_retired_schema_freeze_is_decrement_only(tmp_path: Path) -> None:
     artifact.parent.mkdir(parents=True)
     artifact.write_text(
         "format: rulespec/v1\nmodule:\n  source_verification:\n"
-        "    upstream_source_check: {}\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
     )
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     _write_retired_schema_manifest(root, {str(RETIRED_SCHEMA_PATH): digest})

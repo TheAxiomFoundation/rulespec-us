@@ -18,9 +18,7 @@ MANIFEST_PATH = Path(".axiom/legacy-rulespec-freeze.json")
 RETIRED_SCHEMA_FREEZE_PATH = Path(".axiom/retired-schema-freeze.json")
 RETIRED_SCHEMA_TEST_PATH = Path("tests/test_encoding_manifests.py")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
-RETIRED_SCHEMA_FIELD_RE = re.compile(
-    rb"(?m)^\s+(?:corpus_citation_paths|upstream_source_check):"
-)
+RETIRED_SCHEMA_FIELD_RE = re.compile(rb"(?m)^\s+corpus_citation_paths:")
 
 
 def _git_paths(root: Path, *args: str) -> list[str]:
