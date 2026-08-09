@@ -125,7 +125,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "needs: [migration-authorization, legacy-rulespec-freeze, workflow-toolchain]"
         in workflow
     )
-    assert "25ff794218ccd23cad630670656b67f84f3ae2fd" in workflow
+    assert "5889a592473a7e9513986a652fb95a8d077fa314" in workflow
     assert workflow.count(
         "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
     ) == 3
@@ -167,7 +167,7 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "axiom_encode_version": "0.2.1373",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
         "axiom_encode_ref": "caebbda1a190181ef8184ed7aaffedb3789202a3",
-        "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
+        "axiom_rules_engine_ref": "e5e40d40353f8459da4e46a9feae7279c2fecccc",
         "axiom_corpus_ref": "0fd35bfbda98836c406ec539a492c4e661c6695d",
         "rulespec_us_ref": "6bbb9bd3e49e75b66f378ff71cdb40addfa0b6c5",
     }
