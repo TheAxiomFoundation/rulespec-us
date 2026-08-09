@@ -86,7 +86,7 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 307
+    assert len(retired["artifacts"]) == 173
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
@@ -125,7 +125,7 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "needs: [migration-authorization, legacy-rulespec-freeze, workflow-toolchain]"
         in workflow
     )
-    assert "25ff794218ccd23cad630670656b67f84f3ae2fd" in workflow
+    assert "5889a592473a7e9513986a652fb95a8d077fa314" in workflow
     assert workflow.count(
         "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
     ) == 3
@@ -167,7 +167,7 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "axiom_encode_version": "0.2.1373",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
         "axiom_encode_ref": "caebbda1a190181ef8184ed7aaffedb3789202a3",
-        "axiom_rules_engine_ref": "05eac9d2f89dabe5c6673176260762cef3a58f47",
+        "axiom_rules_engine_ref": "e5e40d40353f8459da4e46a9feae7279c2fecccc",
         "axiom_corpus_ref": "0fd35bfbda98836c406ec539a492c4e661c6695d",
         "rulespec_us_ref": "6bbb9bd3e49e75b66f378ff71cdb40addfa0b6c5",
     }
@@ -325,7 +325,37 @@ def test_freeze_rejects_unlisted_retired_schema_module(tmp_path: Path) -> None:
     artifact.parent.mkdir(parents=True)
     artifact.write_text(
         "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
+    )
+    _git(root, "add", ".")
+
+    with pytest.raises(ValueError, match="retired-schema.*unlisted"):
+        _load_checker().check(root)
+
+
+def test_freeze_accepts_current_upstream_source_check(tmp_path: Path) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
         "    upstream_source_check: {}\n"
+    )
+    _git(root, "add", ".")
+
+    _load_checker().check(root)
+
+
+def test_freeze_classifies_mixed_source_verification_as_retired(
+    tmp_path: Path,
+) -> None:
+    root, _ = _freeze_repo(tmp_path)
+    artifact = root / RETIRED_SCHEMA_PATH
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        "format: rulespec/v1\nmodule:\n  source_verification:\n"
+        "    upstream_source_check: {}\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
     )
     _git(root, "add", ".")
 
@@ -358,7 +388,7 @@ def test_retired_schema_freeze_is_decrement_only(tmp_path: Path) -> None:
     artifact.parent.mkdir(parents=True)
     artifact.write_text(
         "format: rulespec/v1\nmodule:\n  source_verification:\n"
-        "    upstream_source_check: {}\n"
+        "    corpus_citation_paths: [us-ar/statute/1]\n"
     )
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     _write_retired_schema_manifest(root, {str(RETIRED_SCHEMA_PATH): digest})
