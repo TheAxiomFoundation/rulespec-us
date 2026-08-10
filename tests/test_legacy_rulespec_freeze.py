@@ -86,7 +86,7 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 172
+    assert len(retired["artifacts"]) == 175
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
@@ -134,12 +134,12 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ fromJSON(needs.migration-authorization.outputs.allowed)"
     ) in workflow
-    assert "0d960eaf2830a9657108ffcba72bf965dd10ddeb0fc5fcc1b28a6039a21e5c0b" in workflow
+    assert "c30d3ea13aeb2cceacba89049724b8f549095d83790dafe19d5fcbb63f766c67" in workflow
     assert (
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ fromJSON(needs.migration-authorization.outputs.allowed)"
     ) in workflow
-    assert "827c551bf7d8dc562ae74c8d6f02a3862afeaf0ad656a203b4fe35b79f5f8aac" in workflow
+    assert "0e162cbb3fc5628367f7e8c1db97abc3a3e80c97f4cabcbd2167de695c7838cb" in workflow
     assert "migration-authorization-path: .axiom/reviewed-migrations.json" in workflow
     assert "${{ !fromJSON(needs.migration-authorization.outputs.allowed) }}" in workflow
     assert "github.event.head_commit.message" not in workflow
@@ -164,11 +164,11 @@ def test_generation_workflows_use_immutable_toolchain() -> None:
         "workflow_toolchain"
     ]
     assert toolchain == {
-        "axiom_encode_version": "0.2.1373",
+        "axiom_encode_version": "0.2.1644",
         "axiom_compose_ref": "fabe0b3b3fd6e90d3e8f075516f9b668f524f711",
-        "axiom_encode_ref": "caebbda1a190181ef8184ed7aaffedb3789202a3",
+        "axiom_encode_ref": "d90d7f3e4843365b87d1770bf201a27d19942004",
         "axiom_rules_engine_ref": "e5e40d40353f8459da4e46a9feae7279c2fecccc",
-        "axiom_corpus_ref": "0fd35bfbda98836c406ec539a492c4e661c6695d",
+        "axiom_corpus_ref": "60de5efae2a1b1dd58b7c92fa9b73a86bd78f30a",
         "rulespec_us_ref": "6bbb9bd3e49e75b66f378ff71cdb40addfa0b6c5",
     }
     release_toolchain = tomllib.loads((ROOT / ".axiom/toolchain.toml").read_text())[
