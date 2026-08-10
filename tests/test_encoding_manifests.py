@@ -1058,7 +1058,6 @@ KNOWN_RETIRED_SCHEMA_MANIFESTS: frozenset[str] = frozenset({
     '.axiom/encoding-manifests/us-al/policies/dhr/ssp/state-supplement-payment-standard.json',
     '.axiom/encoding-manifests/us-al/policies/dhr/tanf/state-plan/2024/payment-standards.json',
     '.axiom/encoding-manifests/us-al/policies/income_tax/2026_resident_liability_source_hold.json',
-    '.axiom/encoding-manifests/us-al/policies/income_tax/2026_section_40_18_5_schedule_before_credits.json',
     '.axiom/encoding-manifests/us-al/policies/income_tax/pilot_liability_pipeline.json',
     '.axiom/encoding-manifests/us-al/regulations/660-4/1/01/block-1.json',
     '.axiom/encoding-manifests/us-al/regulations/660-4/1/02/block-1.json',
