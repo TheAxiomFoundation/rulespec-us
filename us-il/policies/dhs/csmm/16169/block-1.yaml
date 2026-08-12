@@ -1,0 +1,251 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9
+      rationale: |-
+        7 CFR 273.9 provides the federal SNAP utility allowance delegation and state-option context. This Illinois DHS manual slice supplies the state-specific utility-standard conditions used here.
+  summary: |-
+    Allow the SNAP household one of the following utility standards: Air Conditioning/Heating, Limited Utility, Single Utility, or Telephone Standard. A qualifying member's LIHEAP payment of $21 or more during the month of application or in any of the last 12 months qualifies the household for the Air Conditioning/Heating Standard even without incurred utility expense. Do not allow shelter expenses paid by vendor payment or reimbursed to the household and excluded as income.
+rules:
+  - name: snap_liheap_payment_minimum_for_air_conditioning_heating_standard
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: WAG 13-01-08-b, LIHEAP payment threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "LIHEAP payment of $21 or more"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          21
+
+  - name: snap_liheap_air_conditioning_heating_standard_lookback_months
+    kind: parameter
+    dtype: Count
+    source: WAG 13-01-08-b, LIHEAP lookback period
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "during the month of application or in any of the last 12 months"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          12
+
+  - name: snap_limited_utility_standard_minimum_utility_count
+    kind: parameter
+    dtype: Count
+    source: WAG 13-01-08-b, Limited Utility Standard utility count
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "billed for at least 2 utilities"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          2
+
+  - name: snap_liheap_payment_meets_air_conditioning_heating_standard_threshold
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, LIHEAP qualifying payment condition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "LIHEAP payment of $21 or more during the month of application or in any of the last 12 months"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/16169/block-1#snap_liheap_payment_minimum_for_air_conditioning_heating_standard
+              output: snap_liheap_payment_minimum_for_air_conditioning_heating_standard
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_has_qualifying_member
+          and snap_household_liheap_payment_amount >= snap_liheap_payment_minimum_for_air_conditioning_heating_standard
+          and snap_household_liheap_payment_was_received_in_application_month_or_last_lookback_months
+
+  - name: snap_air_conditioning_heating_standard_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, Air Conditioning/Heating Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/16169/block-1#snap_liheap_payment_meets_air_conditioning_heating_standard_threshold
+              output: snap_liheap_payment_meets_air_conditioning_heating_standard_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_billed_for_electricity_for_air_conditioning_or_heat
+          or snap_household_billed_for_heat_that_is_not_electric
+          or (snap_household_all_utilities_included_in_rent and snap_household_billed_for_excess_heat_or_excess_electricity_for_air_conditioning_or_heat)
+          or snap_liheap_payment_meets_air_conditioning_heating_standard_threshold
+
+  - name: snap_limited_utility_standard_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, Limited Utility Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "billed for at least 2 utilities. The expense may not be for heat or air conditioning."
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-il:policies/dhs/csmm/16169/block-1#snap_limited_utility_standard_minimum_utility_count
+              output: snap_limited_utility_standard_minimum_utility_count
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_billed_utility_count >= snap_limited_utility_standard_minimum_utility_count
+          and not snap_household_billed_for_heat_or_air_conditioning_utility_expense
+
+  - name: snap_single_utility_standard_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, Single Utility Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "billed for a single utility expense that is not for a telephone, air conditioning, or heat"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_billed_for_single_utility_expense
+          and not snap_household_single_utility_expense_is_for_telephone
+          and not snap_household_single_utility_expense_is_for_air_conditioning
+          and not snap_household_single_utility_expense_is_for_heat
+
+  - name: snap_telephone_standard_applies
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, Telephone Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "billed only for a telephone, including cell phone. The expense must be for basic phone service."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_billed_only_for_telephone
+          and snap_household_telephone_expense_is_for_basic_phone_service
+
+  - name: snap_shared_utility_household_receives_full_appropriate_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, shared utility expense standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "Allow each household the appropriate full standard, even if the SNAP households share the cost of the same utility."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_lives_with_two_or_more_snap_households
+          and snap_household_shares_utility_expenses
+          and snap_household_contributes_toward_shared_utility_expenses
+          and snap_household_qualifies_for_utility_standard
+
+  - name: snap_flat_utility_payment_can_support_utility_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, flat utility amount specification
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "A SNAP household that pays a flat amount for utilities must specify what utility expenses are incurred to allow the appropriate standard."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_pays_flat_amount_for_utilities
+          and snap_household_specifies_utility_expenses_incurred
+
+  - name: snap_shelter_expense_allowable_after_vendor_or_reimbursement_rule
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: WAG 13-01-08-b, vendor payment and reimbursement exclusion
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-il/manual/dhs/csmm/16169/block-1
+              excerpt: "Do not allow shelter expenses that are paid by a vendor payment or that are reimbursed to the household and excluded as income."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_has_shelter_expense
+          and not snap_shelter_expense_paid_by_vendor_payment
+          and not snap_shelter_expense_reimbursed_to_household_and_excluded_as_income
