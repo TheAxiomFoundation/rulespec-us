@@ -615,8 +615,8 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.1373"
-    assert toolchain["axiom_encode_ref"] == "caebbda1a190181ef8184ed7aaffedb3789202a3"
+    assert toolchain["axiom_encode_version"] == "0.2.1682"
+    assert toolchain["axiom_encode_ref"] == "d4a4c711e9941c3b4c4f83eb06eba1b30bd30a57"
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
@@ -638,7 +638,7 @@ def test_local_runner_toolchain_status_handles_missing_checkouts(
             "axiom_encode_ref": "a" * 40,
             "axiom_rules_engine_ref": "b" * 40,
             "axiom_corpus_ref": "c" * 40,
-            "axiom_encode_version": "0.2.1373",
+            "axiom_encode_version": "0.2.1682",
         }
     )
 
