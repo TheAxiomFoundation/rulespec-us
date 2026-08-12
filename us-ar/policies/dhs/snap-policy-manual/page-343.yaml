@@ -1,0 +1,168 @@
+format: rulespec/v1
+imports:
+  - us-ar:policies/dhs/snap-policy-manual/page-341#standard_utility_allowance_eligible
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9/d/6/iii
+      rationale: |-
+        Federal SNAP utility-allowance authority was checked for the heating-or-cooling standard framework. This Arkansas manual page supplies state implementation details for cooling-cost qualification, the Basic Utility Allowance, Homeless Living Allowance, and Telephone Standard.
+  summary: |-
+    "A household that incurs the full cost of running a central air conditioning unit, a room air conditioner, or a water cooler (evaporative cooler) is entitled to elect the utility standard." Fan-only costs and ownership without use do not qualify. The BUA applies to households not eligible for SUA and includes basic utility fees and taxes for one telephone. HLA requires a homeless household statement of expenses and no free shelter throughout the month. The telephone standard applies to households incurring any telephone-service expense regardless of number or type of telephone.
+rules:
+  - name: basic_utility_allowance_included_telephone_count
+    kind: parameter
+    dtype: Count
+    source: SNAP Certification Manual section 6622, Basic Utility Allowance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+              excerpt: "taxes for one (1) telephone"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          1
+
+  - name: cooling_cost_entitles_household_to_utility_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620, Cooling
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          (
+            household_incurs_full_cost_of_running_central_air_conditioning_unit
+            or household_incurs_full_cost_of_running_room_air_conditioner
+            or household_incurs_full_cost_of_running_evaporative_cooler
+          )
+          and household_uses_air_conditioner_or_evaporative_cooler
+          and not household_incurs_only_cost_for_running_fan
+
+  - name: basic_utility_allowance_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6622, Basic Utility Allowance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ar:policies/dhs/snap-policy-manual/page-341#standard_utility_allowance_eligible
+              output: standard_utility_allowance_eligible
+              hash: sha256:4fe3ffd0178132379818c84d9e085c7727682cc487a6026b7d47881a947abbac
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+              excerpt: "Households that are not eligible for the Standard Utility Allowance (SUA) are eligible for the Basic Utility Allowance (BUA)."
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+              excerpt: "taxes for one (1) telephone"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          not standard_utility_allowance_eligible
+          or (
+            household_only_responsible_for_sewage_trash_water_garbage_and_other_basic_service_fees
+            and household_responsible_telephone_count_for_basic_utility_allowance <= basic_utility_allowance_included_telephone_count
+          )
+
+  - name: telephone_cost_standalone_deduction_disallowed_under_basic_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6622, Basic Utility Allowance telephone costs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-ar:policies/dhs/snap-policy-manual/page-343#basic_utility_allowance_eligible
+              output: basic_utility_allowance_eligible
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+              excerpt: "The costs for a telephone are included in the Basic Utility Allowance (BUA) and may not be allowed as a standalone deduction."
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          basic_utility_allowance_eligible
+          and household_incurs_expenses_for_any_type_of_telephone_service
+
+  - name: homeless_living_allowance_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6624, Homeless Living Allowance
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_meets_definition_of_homeless_household
+          and household_provides_statement_declaring_expenses
+          and not household_receives_free_shelter_throughout_month
+          and (
+            household_has_homeless_living_expenses
+            or individual_living_in_vehicle_makes_ownership_or_vehicle_damage_insurance_payments
+          )
+
+  - name: telephone_standard_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6625, Telephone Standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-343
+              excerpt: "households that incur expenses for any type of telephone service regardless of the number or type of telephone"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_incurs_expenses_for_any_type_of_telephone_service
