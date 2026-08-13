@@ -473,12 +473,27 @@ def generate(
     by_chapter: dict[str, list[dict]] = defaultdict(list)
     for r in spine_lines:
         by_chapter[digits(r["htsno"])[:2]].append(r)
+    # Chapter 99 exceeds the CI validation budget as one module (its 9902
+    # miscellaneous-suspension block alone carries ~1,655 rated lines), so
+    # it emits as three sub-shards split at deterministic boundaries:
+    # 99a = 9901 + the first 830 9902 lines (intkey order), 99b = the
+    # remaining 9902 lines, 99c = 9903 through 9999.
+    if "99" in by_chapter:
+        ch99 = sorted(by_chapter.pop("99"), key=lambda r: intkey(r["htsno"]))
+        pre = [r for r in ch99 if digits(r["htsno"])[:4] <= "9902"]
+        post = [r for r in ch99 if digits(r["htsno"])[:4] >= "9903"]
+        by_chapter["99a"] = pre[:830]
+        by_chapter["99b"] = pre[830:]
+        by_chapter["99c"] = post
 
     out_dir.mkdir(parents=True, exist_ok=True)
     hashes: dict[str, str] = {}
-    selected = (
-        sorted(by_chapter) if not chapters else sorted(set(by_chapter) & chapters)
-    )
+    if not chapters:
+        selected = sorted(by_chapter)
+    else:
+        selected = sorted(
+            ch for ch in by_chapter if ch in chapters or ch[:2] in chapters
+        )
     for ch in selected:
         emitter = ChapterEmitter(ch, by_chapter[ch], bodies, SNAPSHOT_LABEL)
         module_text = emitter.module()
