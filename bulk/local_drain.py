@@ -10,7 +10,7 @@ declaration needed to keep new-state PRs out of the unmapped coverage state.
 Two decisions matter and are baked in here so PRs go green:
 
 * **Generation uses the toolchain-pinned encoder** (``.axiom/workflow-toolchain.toml``
-  ``axiom_encode_version``, currently 0.2.1683). The required ``validate /
+  ``axiom_encode_version``, currently 0.2.1690). The required ``validate /
   validate`` check validates with that same pin, so generating with anything
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
