@@ -138,6 +138,9 @@ def validation_toolchain(root: Path) -> dict:
         return {}
     return {
         "axiom_compose_ref": str(data.get("axiom_compose_ref", "")),
+        "axiom_artifact_rules_engine_ref": str(
+            data.get("axiom_artifact_rules_engine_ref", "")
+        ),
         "axiom_rules_engine_ref": str(data.get("axiom_rules_engine_ref", "")),
         "axiom_corpus_ref": str(data.get("axiom_corpus_ref", "")),
         "axiom_encode_ref": str(data.get("axiom_encode_ref", "")),

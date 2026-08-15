@@ -18,8 +18,9 @@ into runnable programs.
   RuleSpec shape, derived-rule coverage, and program-spec scope auditing —
   plus `generate_reverse_index.py`, which builds the provision→rules index.
 - `.axiom/toolchain.toml`: signed corpus-release and validation-waiver binding.
-- `.axiom/workflow-toolchain.toml`: immutable validation and generation checkout
-  identities (full commit SHAs).
+- `.axiom/workflow-toolchain.toml`: immutable validation, generation,
+  artifact-publication, and legacy staleness-scan checkout identities (full
+  commit SHAs). Role-specific pins keep compatibility migrations explicit.
 - `.axiom/index/provisions_to_rules.json`: generated reverse index mapping
   each corpus citation path to the modules that depend on it (via module
   `source_verification` and proof-atom sources). Regenerate with

@@ -83,9 +83,11 @@ jobs:
 
           path = Path(".axiom/workflow-toolchain.toml")
           data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
-          value = data.get("axiom_encode_ref", "")
+          value = data.get("source_staleness_axiom_encode_ref", "")
           if not re.fullmatch(r"[0-9a-f]{40}", value):
-              raise SystemExit(f"{path}: axiom_encode_ref must be a full lowercase commit SHA")
+              raise SystemExit(
+                  f"{path}: source_staleness_axiom_encode_ref must be a full lowercase commit SHA"
+              )
           print(value)
           PY
           )"
@@ -114,10 +116,8 @@ jobs:
           ref: ${{ steps.toolchain.outputs.axiom_encode_ref }}
           path: _axiom/axiom-encode
 
-      - name: Install axiom-encode
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e _axiom/axiom-encode
+      - name: Install scanner dependency
+        run: python -m pip install --upgrade pip pyyaml
 
       - name: Report unpinned-module counts
         id: pins
@@ -197,10 +197,26 @@ jobs:
           echo '## check-source-staleness output' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           set +e
-          axiom-encode check-source-staleness \
-            --rulespec-root "$GITHUB_WORKSPACE" \
-            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+          python - \
+            "$GITHUB_WORKSPACE/_axiom/axiom-encode/src/axiom_encode/source_hash.py" \
+            "$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/_axiom/axiom-corpus" <<'PY' \
             | tee -a "$RUNNER_TEMP/staleness-report.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          import runpy
+          import sys
+
+          scanner = runpy.run_path(sys.argv[1])
+          raise SystemExit(
+              scanner["run_check_source_staleness"](
+                  [
+                      "--rulespec-root",
+                      sys.argv[2],
+                      "--corpus-root",
+                      sys.argv[3],
+                  ]
+              )
+          )
+          PY
           status=${PIPESTATUS[0]}
           set -e
           echo '```' >> "$GITHUB_STEP_SUMMARY"

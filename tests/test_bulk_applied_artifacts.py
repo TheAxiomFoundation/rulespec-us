@@ -617,6 +617,25 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     assert toolchain["axiom_encode_version"] == "0.2.1690"
     assert toolchain["axiom_encode_ref"] == "29b30fb7855c7306d9ead9ddba020dea40f938cc"
+    assert toolchain["axiom_artifact_rules_engine_ref"] == (
+        "ffd8213271947b0189a9dd61a055c1e0e78908a0"
+    )
+    assert toolchain["source_staleness_axiom_encode_ref"] == (
+        "ab702bf59ffa7123c9e24c3ae77b63c2b95ef9ab"
+    )
+
+
+def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
+    root = Path(__file__).resolve().parents[1]
+    artifacts = (root / ".github/workflows/program-artifacts.yml").read_text()
+    staleness = (root / ".github/workflows/source-staleness.yml").read_text()
+    validation = (root / ".github/workflows/repository-checks.yml").read_text()
+
+    assert "steps.toolchain.outputs.axiom_artifact_rules_engine_ref" in artifacts
+    assert "data.get(\"source_staleness_axiom_encode_ref\"" in staleness
+    assert 'scanner = runpy.run_path(sys.argv[1])' in staleness
+    assert "pip install -e _axiom/axiom-encode" not in staleness
+    assert "needs.workflow-toolchain.outputs.axiom_rules_engine_ref" in validation
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
