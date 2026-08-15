@@ -19,9 +19,7 @@ with the vintage disclosure in every module summary.
 
 Gates (final bytes, evidence in .b16-evidence/):
 - G1 determinism: double-emit + --check OK (10 files byte-exact).
-- G2 dual-parse differential: 21/21 tables exact set equality both
-  directions (g2-final.json); headline counts 856/283/5,906/2,963
-  (301 lists), 1,097+1+11 / 546 (s122 uncond/GN6), 232 families.
+- G2 structurally independent differential: 21/21 tables have exact set equality in both directions (g2-final.json). The generator and checker share only the sha-pinned notes-provisions JSONL and a short declarative table identity comprising the output table name, U.S. note number, and subdivision path (plus the legal 9818 scope for note 2(aa)(i)); they share no prose anchors, parsing code, or HTS-token regex. The checker independently walks nested, case-preserving subdivision markers across page boundaries and scans HTS numbers character by character; for the China 301 tables and note 2(aa)(ii)–(iv), it additionally verifies the note/subdivision association named by each charging heading's description in the separately sha-pinned RATE snapshot.
 - G3 oracle reconciliation: zero-unknown on 301 list 1, 201,
   122-unconditional; 309 differences enumerated (283 vintage — the
   Rev-15-vs-versioned-oracle wedge, concentrated in metals; 24
