@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-2"
+GENERATOR_VERSION = "b1.6-schedule-compositions-3"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
 WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
@@ -84,6 +84,37 @@ COMPONENT_RULES = (
     "forced_labor_section_301_component_rate",
     "forced_labor_section_301_entry_component_rate",
 )
+
+GENERATED_MEMBERSHIP_INPUTS = (
+    "entry_is_china_301_list123", "entry_is_china_301_list4a",
+    "entry_is_section_232_aluminum", "entry_is_section_232_steel",
+    "entry_is_section_201_cspv", "entry_is_section_122_exempt",
+    "entry_is_section_232_covered", "entry_is_brazil_301_listed",
+    "entry_is_forced_labor_301_listed", "entry_is_china_301_2024_action",
+    "entry_is_china_301_solar",
+)
+
+# Exact witness substrings: every other gate and effective window is preserved.
+COMPONENT_FORMULA_REPLACEMENTS = {
+    "ieepa_component_rate": (("not entry_is_line_b", "not entry_is_section_232_aluminum"),),
+    "ieepa_component_rate_with_declared_exceptions": (("not entry_is_line_b", "not entry_is_section_232_aluminum"),),
+    "section_122_component_rate": (("entry_is_line_a or entry_is_line_b", "entry_is_section_122_exempt or entry_is_section_232_covered"),),
+    "section_201_component_rate": (("entry_is_line_e", "entry_is_section_201_cspv"),),
+    "section_232_aluminum_component_rate": (("entry_is_line_b", "entry_is_section_232_aluminum"),),
+    "china_section_301_component_rate": (
+        ("entry_is_line_a", "entry_is_china_301_list123"),
+        ("entry_is_line_b", "entry_is_china_301_2024_action"),
+        ("entry_is_line_c", "entry_is_china_301_list4a"),
+        ("entry_is_line_e", "entry_is_china_301_solar"),
+    ),
+    "brazil_section_301_component_rate": (("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_brazil:", "if entry_is_brazil_301_listed and origin_is_brazil:"),),
+    "forced_labor_section_301_component_rate": (
+        ("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_forced_labor_ten_percent_country:", "if entry_is_forced_labor_301_listed and origin_is_forced_labor_ten_percent_country:"),
+        ("elif origin_is_eu or origin_is_taiwan:", "elif entry_is_forced_labor_301_listed and (origin_is_eu or origin_is_taiwan):"),
+        ("elif origin_is_forced_labor_twelve_and_one_half_percent_country:", "elif entry_is_forced_labor_301_listed and origin_is_forced_labor_twelve_and_one_half_percent_country:"),
+        ("elif origin_is_japan or origin_is_korea or origin_is_switzerland:", "elif entry_is_forced_labor_301_listed and (origin_is_japan or origin_is_korea or origin_is_switzerland):"),
+    ),
+}
 
 DECLARED_BOOLEAN_INPUTS = (
     "article_is_potash",
@@ -478,6 +509,46 @@ def instance_rule(witness_rule: dict, chapter: str) -> dict:
     )
 
 
+def generalized_component_rule(witness_rule: dict, chapter: str) -> dict:
+    generalized = copy.deepcopy(witness_rule)
+    for old, new in COMPONENT_FORMULA_REPLACEMENTS.get(witness_rule["name"], ()):
+        hits = 0
+        for version in generalized.get("versions", []):
+            formula = version.get("formula")
+            if isinstance(formula, str) and old in formula:
+                version["formula"] = formula.replace(old, new)
+                hits += 1
+        if not hits:
+            raise SystemExit(f"generalization token absent in {witness_rule['name']}: {old}")
+    return serialize_rule_for_chapter(generalized, chapter, copied_from_witness=True)
+
+
+def steel_parameter_rule() -> dict:
+    atoms = [
+        {"path": "versions[0].formula", "kind": "parameter", "source": {
+            "corpus_citation_path": f"us/statute/hts/{heading}",
+            "excerpt": "Rates of duty (1-General): The duty provided in the applicable subheading + 50%"}}
+        for heading in ("9903.81.87", "9903.81.88")
+    ]
+    return {
+        "name": "s232_steel_heading_rate", "kind": "parameter", "dtype": "Rate",
+        "source": "HTS 9903.81.87/.88 current primary and derivative steel rates; 2026 Rev. 15 vintage",
+        "metadata": {"proof": {"atoms": atoms}},
+        "versions": [{"effective_from": WITNESS_EFFECTIVE_FROM, "formula": "0.50"}],
+    }
+
+
+def steel_component_rule() -> dict:
+    return {
+        "name": "section_232_steel_component_rate", "kind": "derived",
+        "entity": "CustomsEntry", "dtype": "Rate", "period": "Day",
+        "source": "Section 232 primary and derivative steel overlay; 2026 Rev. 15 single-version surface",
+        "metadata": {"proof": copy.deepcopy(steel_parameter_rule()["metadata"])},
+        "versions": [{"effective_from": WITNESS_EFFECTIVE_FROM,
+                      "formula": "if entry_is_section_232_steel: s232_steel_heading_rate\nelse: 0"}],
+    }
+
+
 def normalize_instance_rule(rule: dict, chapter: str) -> dict:
     """Undo lossless placement serialization for witness equality checks."""
     normalized = copy.deepcopy(rule)
@@ -625,6 +696,7 @@ def statutory_stack_rule() -> dict:
                     "+ section_201_component_rate\n"
                     "+ section_122_component_rate\n"
                     "+ section_232_aluminum_component_rate\n"
+                    "+ section_232_steel_component_rate\n"
                     "+ section_338_component_rate\n"
                     "+ china_section_301_component_rate\n"
                     "+ brazil_section_301_component_rate\n"
@@ -695,7 +767,11 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
                 )
             )
         else:
-            rules.append(instance_rule(witness_rule, chapter))
+            rules.append(generalized_component_rule(witness_rule, chapter))
+    rules.extend([
+        serialize_rule_for_chapter(steel_parameter_rule(), chapter, copied_from_witness=False),
+        serialize_rule_for_chapter(steel_component_rule(), chapter, copied_from_witness=False),
+    ])
     rules.append(
         serialize_rule_for_chapter(
             statutory_stack_rule(), chapter, copied_from_witness=False
@@ -706,8 +782,9 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
     # Assert it inside the generator, in addition to pinning the witness bytes.
     generated_by_name = {rule["name"]: rule for rule in rules}
     for name in COMPONENT_RULES:
-        if normalize_instance_rule(generated_by_name[name], chapter) != witness_rules[name]:
-            raise SystemExit(f"internal error: copied component {name} differs from witness")
+        expected = generalized_component_rule(witness_rules[name], PILOT_CHAPTER)
+        if normalize_instance_rule(generated_by_name[name], chapter) != normalize_instance_rule(expected, PILOT_CHAPTER):
+            raise SystemExit(f"internal error: generalized component {name} differs from expected rewrite")
 
     components_before_rename = {
         name: copy.deepcopy(generated_by_name[name]) for name in COMPONENT_RULES
@@ -741,12 +818,18 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
             "the separate section 232 aluminum component."
         )
     structural_note += (
-        " The identifiers entry_is_line_a, entry_is_line_b, entry_is_line_c, "
-        "entry_is_line_d, and entry_is_line_e are caller inputs supplied by entry "
-        "preparation from incidence classification. They are intentionally "
-        "referenced without local derived rules under the repository's "
-        "referenced-implies-input convention. The chapter 72 pilot uses this same "
-        "input surface; its earlier byte freeze ends with this generator version."
+        " Membership-semantic China-301 list123/list4A, section-232 aluminum/steel, "
+        "section-201 CSPV, section-122 exemption, and section-232-covered identifiers "
+        "are caller inputs supplied by entry preparation. Brazil-301 and forced-labor-301 "
+        "membership inputs currently default to the declared-boolean FALSE pattern because "
+        "entry preparation cannot yet populate those lists; both actions are outside the "
+        "April-June window (effective 2026-07-22 and 2026-07-24). China 2024-action and "
+        "solar inputs also default FALSE pending note-31 membership tables. Beer/section-338 "
+        "keeps entry_is_line_d because no membership module exists. Steel uses the Rev. 15 "
+        "50-percent single-version rate, and the April-June window is wholly post-escalation. "
+        "The witness's 7202.11.10.00 steel exemplar is a ferroalloy outside note 16(c), so "
+        "the untouched witness correctly has no steel component slot. These identifiers are "
+        "referenced without local derived rules under the referenced-implies-input convention."
     )
     if chapter != PILOT_CHAPTER:
         depth, use_effective_from = placement_variant(chapter)
@@ -1000,6 +1083,8 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
         inputs[f"{module_path}#input.{name}"] = False
     for name in ENTRY_FLAG_RULES:
         inputs[f"{module_path}#input.{name}"] = False
+    for name in GENERATED_MEMBERSHIP_INPUTS:
+        inputs[f"{module_path}#input.{name}"] = False
 
     holds: set[str] = set()
     rate_values = {
@@ -1044,6 +1129,7 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
                 "country_of_origin": "CN",
                 **{name: False for name in DECLARED_BOOLEAN_INPUTS},
                 **{name: False for name in ENTRY_FLAG_RULES},
+                **{name: False for name in GENERATED_MEMBERSHIP_INPUTS},
                 "entry_is_humanitarian_donation_article": True,
                 "entry_is_line_a": True,
             },
