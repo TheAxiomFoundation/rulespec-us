@@ -528,11 +528,11 @@ def steel_parameter_rule() -> dict:
         {"path": "versions[0].formula", "kind": "parameter", "source": {
             "corpus_citation_path": f"us/statute/hts/{heading}",
             "excerpt": "Rates of duty (1-General): The duty provided in the applicable subheading + 50%"}}
-        for heading in ("9903.81.87", "9903.81.88")
+        for heading in ("9903.82.02",)
     ]
     return {
         "name": "s232_steel_heading_rate", "kind": "parameter", "dtype": "Rate",
-        "source": "HTS 9903.81.87/.88 current primary and derivative steel rates; 2026 Rev. 15 vintage",
+        "source": "HTS 9903.82.02 current consolidated primary and derivative steel rate; 2026 Rev. 15 vintage",
         "metadata": {"proof": {"atoms": atoms}},
         "versions": [{"effective_from": WITNESS_EFFECTIVE_FROM, "formula": "0.50"}],
     }
