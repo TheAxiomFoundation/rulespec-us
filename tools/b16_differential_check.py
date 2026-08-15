@@ -36,6 +36,7 @@ class LegalTable:
     # These associations are independently obtained from the charging
     # heading's description in the RATE snapshot and checked below.
     rate_heading: str = ""
+    widths: tuple[int, ...] = (8, 10)
 
 
 # Law coordinates, not parser instructions or excerpts from the notes text.
@@ -49,12 +50,12 @@ LEGAL_TABLES = (
     LegalTable("s122_aa_ii_membership", 2, ("aa", "ii"), rate_heading="9903.03.03"),
     LegalTable("s122_aa_iii_membership", 2, ("aa", "iii"), rate_heading="9903.03.04"),
     LegalTable("s122_gn6_conditional_membership", 2, ("aa", "iv"), rate_heading="9903.03.05"),
-    LegalTable("s232_steel_primary_membership", 16, ("c", "iii")),
+    LegalTable("s232_steel_primary_membership", 16, ("c", "iii"), "7", widths=(4, 6, 8)),
     LegalTable("s232_steel_derivative_legacy_membership", 16, ("c", "iv")),
     LegalTable("s232_steel_derivative_april_membership", 16, ("c", "vii")),
     LegalTable("s232_steel_derivative_equipment_membership", 16, ("c", "x")),
     LegalTable("s232_steel_derivative_mobile_membership", 16, ("c", "xi")),
-    LegalTable("s232_aluminum_primary_membership", 19, ("b",)),
+    LegalTable("s232_aluminum_primary_membership", 19, ("b",), "76", widths=(4, 8)),
     LegalTable("s232_aluminum_derivative_membership", 19, ("j",)),
 )
 
@@ -186,8 +187,8 @@ def subdivision(text: str, note_lo: int, note_hi: int, path: tuple[str, ...]) ->
     return lo, hi
 
 
-def scan_hts(text: str, lo: int, hi: int) -> set[str]:
-    """Scan DDDD.DD.DD[DD] tokens with explicit character transitions."""
+def scan_hts(text: str, lo: int, hi: int, allow_terminal_period: bool = False) -> set[str]:
+    """Scan printed 4/6/8/10-digit HTS tokens by character transitions."""
     out: set[str] = set()
     i = lo
     while i < hi:
@@ -195,28 +196,33 @@ def scan_hts(text: str, lo: int, hi: int) -> set[str]:
             i += 1
             continue
         start = i
-        groups: list[str] = []
-        for width in (4, 2, 2):
-            j = i
-            while j < hi and is_ascii_digit(text[j]) and j - i < width:
-                j += 1
-            if j - i != width:
+        groups: list[str] = [text[i:i + 4]]
+        if len(groups[0]) != 4 or not all(is_ascii_digit(c) for c in groups[0]):
+            i = start + 1
+            continue
+        i += 4
+        for _ in range(2):
+            if i >= hi or text[i] != ".":
                 break
-            groups.append(text[i:j])
-            i = j
-            if len(groups) < 3:
-                if i >= hi or text[i] != ".":
-                    break
-                i += 1
+            i += 1
+            group = text[i:i + 2]
+            if len(group) != 2 or not all(is_ascii_digit(c) for c in group):
+                break
+            groups.append(group)
+            i += 2
         if len(groups) == 3:
-            j = i
-            while j < hi and is_ascii_digit(text[j]) and j - i < 2:
-                j += 1
-            if j - i == 2:
-                groups.append(text[i:j])
-                i = j
-            if (i >= hi or (not is_ascii_digit(text[i]) and text[i] != ".")):
-                out.add("".join(groups))
+            group = text[i:i + 2]
+            if len(group) == 2 and all(is_ascii_digit(c) for c in group):
+                groups.append(group)
+                i += 2
+        if groups and (
+            i >= hi
+            or (
+                not is_ascii_digit(text[i])
+                and (text[i] != "." or allow_terminal_period)
+            )
+        ):
+            out.add("".join(groups))
         i = max(i, start + 1)
     return out
 
@@ -308,11 +314,14 @@ def main() -> int:
                 raise ValueError(f"note {spec.note} absent")
             lo, hi = subdivision(stream, *note_ranges[spec.note], spec.path)
             lo = skip_leading_annotations(stream, lo, hi)
-            codes = {code for code in scan_hts(stream, lo, hi) if not code.startswith("99")}
+            codes = {code for code in scan_hts(stream, lo, hi, 4 in spec.widths) if not code.startswith("99")}
+            codes = {code for code in codes if len(code) in spec.widths}
             if spec.include_prefix:
                 codes = {code for code in codes if code.startswith(spec.include_prefix)}
-            for width in (8, 10):
-                table = spec.table + ("_hts10" if width == 10 else "")
+            for width in spec.widths:
+                base = spec.table.removesuffix("_membership")
+                suffix = {4: "_heading_membership", 6: "_subheading6_membership", 8: "_membership", 10: "_membership_hts10"}[width]
+                table = base + suffix
                 expected = {str(int(code)) for code in codes if len(code) == width}
                 got = generated.get(table, set())
                 if not expected and not got:

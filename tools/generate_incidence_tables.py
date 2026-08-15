@@ -3,7 +3,8 @@
 
 The grammar below is data: each production is an action, exact subdivision
 anchor, exact peer stop anchor, and membership class.  The single parser carries
-subdivision state across physical pages and preserves 8- and 10-digit atoms.
+subdivision state across physical pages and preserves atoms at their printed
+4-, 6-, 8-, and 10-digit widths.
 """
 from __future__ import annotations
 
@@ -23,6 +24,9 @@ RELPATH = "data/corpus/provisions/us/statute/2026-08-04-usitc-hts-2026-rev15-not
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "us/policies/usitc/us-tariff-incidence/generated"
 HTS = re.compile(r"(?<![\d.])(\d{4}\.\d{2}\.\d{2}(?:\d{2})?)(?![\d.])")
+PRINTED_WIDTH_HTS = re.compile(
+    r"(?<![\d.])(\d{4}(?:\.\d{2}(?:\.\d{2}(?:\d{2})?)?)?)(?!\d|\.\d)"
+)
 
 @dataclass(frozen=True)
 class Production:
@@ -34,6 +38,7 @@ class Production:
     membership_class: str = "membership"
     after_compiler: bool = True
     include_prefixes: tuple[str,...] = ()
+    widths: tuple[int, ...] = (8, 10)
 
 # Exact anchors intentionally include operative heading language, not bare labels.
 GRAMMAR = (
@@ -46,12 +51,12 @@ GRAMMAR = (
     Production("122", "s122_aa_ii_membership", "2(aa)(ii)", "(ii) As provided in heading 9903.03.03", "(iii) As provided in heading 9903.03.04"),
     Production("122", "s122_aa_iii_membership", "2(aa)(iii)", "(iii) As provided in heading 9903.03.04", "(iv) As provided in heading 9903.03.05", after_compiler=False),
     Production("122", "s122_gn6_conditional_membership", "2(aa)(iv)", "(iv) As provided in heading 9903.03.05", "(v) As provided in heading 9903.03.06", "conditional"),
-    Production("232-steel", "s232_steel_primary_membership", "16(c)(iii)", "(iii) Articles of steel:", "(iv) Derivative steel articles:", after_compiler=False),
+    Production("232-steel", "s232_steel_primary_membership", "16(c)(iii)", "(iii) Articles of steel:", "(iv) Derivative steel articles:", after_compiler=False, include_prefixes=("72", "73"), widths=(4, 6, 8)),
     Production("232-steel", "s232_steel_derivative_legacy_membership", "16(c)(iv)", "(iv) Derivative steel articles:", "(v) Articles of copper:", after_compiler=False),
     Production("232-steel", "s232_steel_derivative_april_membership", "16(c)(vii)", "(vii) Derivative steel articles:", "(viii) Articles of copper:", after_compiler=True),
     Production("232-steel", "s232_steel_derivative_equipment_membership", "16(c)(x)", "(x) Derivative steel articles:", "(xi) Derivative steel articles:", after_compiler=False),
     Production("232-steel", "s232_steel_derivative_mobile_membership", "16(c)(xi)", "(xi) Derivative steel articles:", "(d) Headings 9903.82.04", after_compiler=False),
-    Production("232-aluminum", "s232_aluminum_primary_membership", "19(b)", "(b) The rates of duty set forth in heading 9903.85.01", "(c) The Secretary of Commerce", after_compiler=False),
+    Production("232-aluminum", "s232_aluminum_primary_membership", "19(b)", "(b) The rates of duty set forth in heading 9903.85.01", "(c) The Secretary of Commerce", after_compiler=False, include_prefixes=("76",), widths=(4, 8)),
     Production("232-aluminum", "s232_aluminum_derivative_membership", "19(j)", "(j) The rates of duty set forth in heading 9903.85.07", "(k) The rates of duty in heading 9903.85.08", after_compiler=False),
 )
 
@@ -91,9 +96,11 @@ def segments(all_pages: list[dict], p: Production):
 def extract(all_pages: list[dict], p: Production) -> list[dict]:
     found=[]
     for page, lo, hi in segments(all_pages,p):
-        for m in HTS.finditer(page["body"],lo,hi):
+        tokenizer = PRINTED_WIDTH_HTS if any(width < 8 for width in p.widths) else HTS
+        for m in tokenizer.finditer(page["body"],lo,hi):
             code=m.group(1)
             if code.startswith("99"): continue
+            if len(code.replace(".", "")) not in p.widths: continue
             if p.include_prefixes and not code.startswith(p.include_prefixes): continue
             found.append({"code":code,"page":page["citation_path"],"excerpt":code,"subdivision":p.subdivision})
     # A duplicated printed atom is legal-text ambiguity, not something to hide.
@@ -106,9 +113,18 @@ def extract(all_pages: list[dict], p: Production) -> list[dict]:
 def q(s): return json.dumps(s,ensure_ascii=False)
 def key(code): return int(code.replace(".",""))
 
+def table_suffix(width: int) -> str:
+    return {4: "_heading_membership", 6: "_subheading6_membership", 8: "_membership", 10: "_membership_hts10"}[width]
+
+
+def table_name(p: Production, width: int) -> str:
+    base = p.table.removesuffix("_membership")
+    return base + table_suffix(width)
+
+
 def table_lines(p: Production, atoms: list[dict]) -> list[str]:
-    suffix="_hts10" if atoms and len(atoms[0]["code"].replace('.',''))==10 else ""
-    name=p.table+suffix
+    width = len(atoms[0]["code"].replace(".", ""))
+    name=table_name(p, width)
     out=[f"  - name: {name}","    kind: parameter","    dtype: Count","    indexed_by: hts_line",f"    source: USITC HTS Revision 15 U.S. note {p.subdivision}","    metadata:","      proof:","        atoms:"]
     for a in atoms:
         out += ["          - path: versions[0].values","            kind: parameter","            source:",f"              corpus_citation_path: {a['page']}",f"              excerpt: {q(a['excerpt'])}","            context:",f"              subdivision: {q(a['subdivision'])}"]
@@ -135,10 +151,10 @@ def render(action: str, productions: list[tuple[Production,list[dict]]]) -> tupl
     out=["format: rulespec/v1","module:","  proof_validation:","    required: true","  source_verification:","    corpus_citation_paths:"]+[f"      - {c}" for c in cited]+["  summary: |-",f"    {summary}","rules:"]
     tests=[]; module=f"us:policies/usitc/us-tariff-incidence/generated/{slug}"
     for p,atoms in productions:
-        for width in (8,10):
+        for width in (4,6,8,10):
             group=[a for a in atoms if len(a['code'].replace('.',''))==width]
             if not group: continue
-            name=p.table+("_hts10" if width==10 else "")
+            name=table_name(p, width)
             out += table_lines(p,group)
             present=group[0]
             tests += [f"- name: {q(name+' membership-present')}","  period:","    period_kind: custom","    name: day","    start: '2026-08-03'","    end: '2026-08-03'","  input:",f"    {module}#input.hts_line: {key(present['code'])}","  output:",f"    {module}#{name}: 1"]

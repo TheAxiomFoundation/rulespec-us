@@ -32,3 +32,13 @@ Deferred, disclosed: section 338 (note 51 not in the 2026-08-04 notes
 ingest; corpus ingest follow-up); the four partial-value provisions'
 value-share estimation inputs (entry-prep/Microcosm side); historical
 vintages (Rev-15 state only).
+
+Round-2 section 232 primary-scope repair: the tokenizer and independent
+differential scanner now preserve the 4-, 6-, and 8-digit widths printed in
+notes 16(c)(iii) and 19(b). The generated model keeps headings and six-digit
+subheadings in separate `*_heading_membership` and
+`*_subheading6_membership` tables; entry preparation performs the prefix
+fan-out to statistical lines. The notes enumerate individual provisions, so
+no range or prose-class output was deferred. This adds 26 steel-heading, two
+steel-six-digit, and seven aluminum-heading rows, while retaining 11 steel and
+one aluminum 8-digit primary rows.
