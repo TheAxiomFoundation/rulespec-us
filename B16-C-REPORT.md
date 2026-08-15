@@ -20,4 +20,7 @@ The task's 9903.81.x locator is stale for this corpus vintage: Rev. 15 contains 
 - G4 PASS: ch72/ch76/ch95 plus ch01/ch22/ch99a.
 - Flag tests PASS: 7/7. German HTS 0203.29.20.00 is list123 TRUE, section-122-exempt FALSE, and section-232-covered FALSE, so the existing section-122 window/rate machinery now applies.
 
-Implementation commit: `c27e3d99fbb61b311fd47de1fd53969ef1c63dfb`. Evidence/report commit is recorded by the final handoff.
+Commits:
+
+- `c27e3d99fbb61b311fd47de1fd53969ef1c63dfb` — generated formula/input implementation and flag tool/tests.
+- `2ceacee21c09afc0b75f6f5b55c1658cf05bdc6c` — final Rev. 15 steel proof correction, replay evidence, journal, and report.
