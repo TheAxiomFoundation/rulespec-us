@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.3-schedule-compositions-1"
+GENERATOR_VERSION = "b1.6-schedule-compositions-2"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
 WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
@@ -66,6 +66,7 @@ EXPECTED_CHAPTERS = tuple(
 )
 CHAPTER_99_WITHOUT_COLUMN2_RATE = {"99a", "99b"}
 PILOT_CHAPTER = "72"
+ENTRY_FLAG_RULES = tuple(f"entry_is_line_{suffix}" for suffix in "abcde")
 
 # These are the public component surfaces named by the B1.3 contract.  Their
 # rule objects are deep-copied from the witness, including every formula,
@@ -638,6 +639,11 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
     table_import = f"us:policies/usitc/us-tariff-duty/lines/generated/ch{chapter}"
     overlay_imports = witness["imports"][3:]
     selected = copied_rule_names(witness)
+    # Referenced-but-undefined identifiers are composition inputs by repository
+    # convention.  Entry preparation now supplies the five witness-compatible
+    # incidence flags; generated compositions must not derive them from the five
+    # hand-built witness HTS exemplars.
+    selected.difference_update(ENTRY_FLAG_RULES)
     if chapter == "76":
         selected.add("russia_heading_9903_90_09_rate_of_duty")
     witness_rules = {rule["name"]: rule for rule in witness["rules"]}
@@ -734,6 +740,14 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
             "70-percent Russian rate in lieu of ordinary column 2 before stacking "
             "the separate section 232 aluminum component."
         )
+    structural_note += (
+        " The identifiers entry_is_line_a, entry_is_line_b, entry_is_line_c, "
+        "entry_is_line_d, and entry_is_line_e are caller inputs supplied by entry "
+        "preparation from incidence classification. They are intentionally "
+        "referenced without local derived rules under the repository's "
+        "referenced-implies-input convention. The chapter 72 pilot uses this same "
+        "input surface; its earlier byte freeze ends with this generator version."
+    )
     if chapter != PILOT_CHAPTER:
         depth, use_effective_from = placement_variant(chapter)
         temporal_spelling = "effective_from" if use_effective_from else "from"
@@ -856,11 +870,11 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
     explicit: dict[str, tuple[str, dict[str, object]]] = {
         "entry_is_reciprocal_annex_excluded": (
             WITNESS_EFFECTIVE_FROM,
-            {"hts_number": "7202.11.10.00"},
+            {"entry_is_line_a": True},
         ),
         "entry_is_reciprocal_metals_excluded": (
             WITNESS_EFFECTIVE_FROM,
-            {"hts_number": "7601.10.30.00"},
+            {"entry_is_line_b": True},
         ),
         "entry_is_energy_resource": (
             WITNESS_EFFECTIVE_FROM,
@@ -884,7 +898,7 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
         ),
         "beer_section_232_aluminum_content_basis_duty_applies": (
             WITNESS_EFFECTIVE_FROM,
-            {"hts_number": "2203.00.00.30"},
+            {"entry_is_line_d": True},
         ),
         "section_338_chapter_98_exclusion_applies": (
             "2026-08-19",
@@ -898,7 +912,7 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
         "section_338_reduced_duty_base_applies": (
             "2026-08-19",
             {
-                "hts_number": "2203.00.00.30",
+                "entry_is_line_d": True,
                 "country_of_origin": "CA",
                 "entry_is_personal_use_accompanied_baggage": False,
                 "entry_is_properly_claimed_chapter_98_entry": True,
@@ -984,6 +998,8 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
     }
     for name in DECLARED_BOOLEAN_INPUTS:
         inputs[f"{module_path}#input.{name}"] = False
+    for name in ENTRY_FLAG_RULES:
+        inputs[f"{module_path}#input.{name}"] = False
 
     holds: set[str] = set()
     rate_values = {
@@ -1027,7 +1043,9 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
                 "hts_number": "7202.11.10.00",
                 "country_of_origin": "CN",
                 **{name: False for name in DECLARED_BOOLEAN_INPUTS},
+                **{name: False for name in ENTRY_FLAG_RULES},
                 "entry_is_humanitarian_donation_article": True,
+                "entry_is_line_a": True,
             },
         ),
         "output": {f"{module_path}#ieepa_component_rate_with_declared_exceptions": 0},
