@@ -67,6 +67,11 @@ EXPECTED_CHAPTERS = tuple(
 CHAPTER_99_WITHOUT_COLUMN2_RATE = {"99a", "99b"}
 PILOT_CHAPTER = "72"
 ENTRY_FLAG_RULES = tuple(f"entry_is_line_{suffix}" for suffix in "abcde")
+# After the C-stage decoupling only these exemplar flags remain referenced by
+# generated formulas (a/b: reciprocal-exclusion judgments; d: beer/338
+# machinery). Only referenced identifiers are valid caller-input slots, so
+# companion tests must feed exactly this retained subset.
+RETAINED_ENTRY_FLAGS = ("entry_is_line_a", "entry_is_line_b", "entry_is_line_d")
 
 # These are the public component surfaces named by the B1.3 contract.  Their
 # rule objects are deep-copied from the witness, including every formula,
@@ -543,7 +548,7 @@ def steel_component_rule() -> dict:
         "name": "section_232_steel_component_rate", "kind": "derived",
         "entity": "CustomsEntry", "dtype": "Rate", "period": "Day",
         "source": "Section 232 primary and derivative steel overlay; 2026 Rev. 15 single-version surface",
-        "metadata": {"proof": copy.deepcopy(steel_parameter_rule()["metadata"])},
+        "metadata": copy.deepcopy(steel_parameter_rule()["metadata"]),
         "versions": [{"effective_from": WITNESS_EFFECTIVE_FROM,
                       "formula": "if entry_is_section_232_steel: s232_steel_heading_rate\nelse: 0"}],
     }
@@ -810,6 +815,11 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
                 )
 
     source_verification = copy.deepcopy(witness["module"]["source_verification"])
+    steel_citation = "us/statute/hts/9903.82.02"
+    if steel_citation not in source_verification["corpus_citation_paths"]:
+        source_verification["corpus_citation_paths"] = sorted(
+            set(source_verification["corpus_citation_paths"]) | {steel_citation}
+        )
     structural_note = ""
     if chapter == "76":
         structural_note += (
@@ -1081,7 +1091,7 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
     }
     for name in DECLARED_BOOLEAN_INPUTS:
         inputs[f"{module_path}#input.{name}"] = False
-    for name in ENTRY_FLAG_RULES:
+    for name in RETAINED_ENTRY_FLAGS:
         inputs[f"{module_path}#input.{name}"] = False
     for name in GENERATED_MEMBERSHIP_INPUTS:
         inputs[f"{module_path}#input.{name}"] = False
@@ -1128,7 +1138,7 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
                 "hts_number": "7202.11.10.00",
                 "country_of_origin": "CN",
                 **{name: False for name in DECLARED_BOOLEAN_INPUTS},
-                **{name: False for name in ENTRY_FLAG_RULES},
+                **{name: False for name in RETAINED_ENTRY_FLAGS},
                 **{name: False for name in GENERATED_MEMBERSHIP_INPUTS},
                 "entry_is_humanitarian_donation_article": True,
                 "entry_is_line_a": True,
