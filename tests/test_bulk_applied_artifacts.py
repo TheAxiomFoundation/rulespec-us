@@ -617,6 +617,10 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     assert toolchain["axiom_encode_version"] == "0.2.1690"
     assert toolchain["axiom_encode_ref"] == "29b30fb7855c7306d9ead9ddba020dea40f938cc"
+    assert toolchain["validation_axiom_encode_version"] == "0.2.1683"
+    assert toolchain["validation_axiom_encode_ref"] == (
+        "40009d295e74784f45bb98e3d3f0f20b73df7561"
+    )
     assert toolchain["axiom_artifact_rules_engine_ref"] == (
         "ffd8213271947b0189a9dd61a055c1e0e78908a0"
     )
@@ -635,6 +639,7 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert "data.get(\"source_staleness_axiom_encode_ref\"" in staleness
     assert 'scanner = runpy.run_path(sys.argv[1])' in staleness
     assert "pip install -e _axiom/axiom-encode" not in staleness
+    assert "needs.workflow-toolchain.outputs.validation_axiom_encode_ref" in validation
     assert "needs.workflow-toolchain.outputs.axiom_rules_engine_ref" in validation
 
 
