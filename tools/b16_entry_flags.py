@@ -87,6 +87,28 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
         "s122_gn6_conditional": ("s122_gn6_conditional_membership",),
     }
     result.update({name: any(_member(table, rate_line, hts) for table in tables) for name, tables in groups.items()})
+    result.update({
+        "entry_is_china_301_list123": any(result[f"china_301_list{i}"] for i in (1, 2, 3)),
+        "entry_is_china_301_list4a": result["china_301_list4a"],
+        "entry_is_section_232_aluminum": result["s232_aluminum_primary"] or result["s232_aluminum_derivative"],
+        "entry_is_section_232_steel": any(result[name] for name in (
+            "s232_steel_primary", "s232_steel_derivative_legacy",
+            "s232_steel_derivative_april", "s232_steel_derivative_equipment",
+            "s232_steel_derivative_mobile",
+        )),
+        "entry_is_section_201_cspv": result["s201_cspv"],
+        "entry_is_section_122_exempt": result["s122_unconditional_exempt"],
+    })
+    result["entry_is_section_232_covered"] = (
+        result["entry_is_section_232_aluminum"] or result["entry_is_section_232_steel"]
+    )
+    # Follow-up incidence tables are not yet entry-preparable; declared booleans default false.
+    result.update({
+        "entry_is_brazil_301_listed": False,
+        "entry_is_forced_labor_301_listed": False,
+        "entry_is_china_301_2024_action": False,
+        "entry_is_china_301_solar": False,
+    })
     return result
 
 
