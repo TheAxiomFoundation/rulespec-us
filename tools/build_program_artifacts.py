@@ -121,31 +121,31 @@ def composer_version() -> str:
 
 
 def validation_toolchain(root: Path) -> dict:
-    """Read the pinned *validation* toolchain from .axiom/toolchain.toml.
+    """Read immutable validation and generation checkout identities.
 
-    IMPORTANT: these are the pins the org validate-rulespec workflow uses to
-    revalidate the repo — they are NOT, in general, the build provenance of
-    these artifacts. Composition here loads only the rulespec-us root (the
-    encoded modules already carry their corpus provisions inline with per-module
-    source_verification pins); the program-artifacts workflow does not check out
-    axiom-corpus. So the corpus pin below describes what the artifacts are
-    *validated against*, not what compiled them. Reading only — never modifies
-    the pin. Empty dict if absent, so local builds still produce a manifest.
+    These pins describe what validated the repository, not necessarily what
+    compiled an artifact. The artifact workflow independently resolves the
+    execution pins from the same protected file before it builds.
     """
-    path = root / ".axiom" / "toolchain.toml"
+    path = root / ".axiom" / "workflow-toolchain.toml"
     if not path.exists():
         return {}
     try:
         import tomllib
 
-        data = tomllib.loads(path.read_text()).get("toolchain", {})
+        data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
     except Exception:
         return {}
     return {
+        "axiom_compose_ref": str(data.get("axiom_compose_ref", "")),
+        "axiom_artifact_rules_engine_ref": str(
+            data.get("axiom_artifact_rules_engine_ref", "")
+        ),
         "axiom_rules_engine_ref": str(data.get("axiom_rules_engine_ref", "")),
         "axiom_corpus_ref": str(data.get("axiom_corpus_ref", "")),
         "axiom_encode_ref": str(data.get("axiom_encode_ref", "")),
         "axiom_encode_version": str(data.get("axiom_encode_version", "")),
+        "rulespec_us_ref": str(data.get("rulespec_us_ref", "")),
     }
 
 

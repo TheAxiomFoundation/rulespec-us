@@ -9,8 +9,8 @@ declaration needed to keep new-state PRs out of the unmapped coverage state.
 
 Two decisions matter and are baked in here so PRs go green:
 
-* **Generation uses the toolchain-pinned encoder** (``.axiom/toolchain.toml``
-  ``axiom_encode_version``, currently 0.2.1200). The required ``validate /
+* **Generation uses the toolchain-pinned encoder** (``.axiom/workflow-toolchain.toml``
+  ``axiom_encode_version``, currently 0.2.1690). The required ``validate /
   validate`` check validates with that same pin, so generating with anything
   newer risks schema/manifest skew. Do NOT "upgrade" the generation encoder to
   match a brief that says ">=0.2.1190" -- that number refers only to the
@@ -80,6 +80,10 @@ DRAIN_BASE = Path(
     os.environ.get("DRAIN_BASE", Path.home() / "TheAxiomFoundation" / "_bulk_drain")
 ).resolve()
 GEN_AE = Path(os.environ.get("DRAIN_GEN_AE", DRAIN_BASE / ".venv/bin/axiom-encode"))
+GEN_PY = GEN_AE.parent / "python"
+GEN_CHECKOUT = Path(
+    os.environ.get("DRAIN_GEN_CHECKOUT", DRAIN_BASE / "axiom-encode")
+).resolve()
 COV_AE = Path(os.environ.get("DRAIN_COV_AE", DRAIN_BASE / ".venv-cov/bin/axiom-encode"))
 COV_PY = Path(os.environ.get("DRAIN_COV_PY", DRAIN_BASE / ".venv-cov/bin/python"))
 COV_CHECKOUT = Path(
@@ -175,8 +179,73 @@ def signing_key() -> str:
 
 
 def pinned_toolchain() -> dict:
-    data = tomllib.loads((CHECKOUT / ".axiom/toolchain.toml").read_text())
-    return data.get("toolchain", data)
+    path = CHECKOUT / ".axiom/workflow-toolchain.toml"
+    data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
+    for key in ("axiom_encode_ref", "axiom_rules_engine_ref", "axiom_corpus_ref"):
+        value = data.get(key, "")
+        if not re.fullmatch(r"[0-9a-f]{40}", value):
+            raise SystemExit(f"{path}: {key} must be a full lowercase commit SHA")
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){2,}", data.get("axiom_encode_version", "")):
+        raise SystemExit(f"{path}: axiom_encode_version must be an exact version")
+    return data
+
+
+def checkout_sha(path: Path) -> str:
+    try:
+        rc, output = run(["git", "rev-parse", "HEAD"], cwd=path,
+                         merge_stderr=False)
+    except FileNotFoundError:
+        return "unavailable"
+    return output.strip() if rc == 0 else "unavailable"
+
+
+def generation_toolchain_status(toolchain: dict) -> tuple[bool, list[str]]:
+    checks, ok = [], True
+    for label, path, key in (
+        ("encoder checkout", GEN_CHECKOUT, "axiom_encode_ref"),
+        ("engine checkout", ENGINE, "axiom_rules_engine_ref"),
+        ("corpus checkout", CORPUS, "axiom_corpus_ref"),
+    ):
+        actual = checkout_sha(path)
+        expected = toolchain[key]
+        checks.append(f"{label}: {actual} (want {expected})")
+        ok = ok and actual == expected
+        if actual == "unavailable":
+            checks.append(f"{label} cleanliness: unavailable")
+            continue
+        rc, dirty = run(["git", "status", "--porcelain", "--untracked-files=all"],
+                        cwd=path, merge_stderr=False)
+        clean = rc == 0 and not dirty.strip()
+        checks.append(f"{label} cleanliness: {'clean' if clean else 'dirty/unavailable'}")
+        ok = ok and clean
+    if not GEN_PY.is_file() or not GEN_AE.is_file():
+        checks.append(f"encoder environment: missing {GEN_PY} or {GEN_AE}")
+        return False, checks
+    rc, version = run(
+        [str(GEN_PY), "-c",
+         "import importlib.metadata; print(importlib.metadata.version('axiom-encode'))"],
+        env={"AXIOM_ENCODE_APPLY_SIGNING_KEY": None}, merge_stderr=False,
+    )
+    actual_version = version.strip() if rc == 0 else "unavailable"
+    checks.append(f"encoder version: {actual_version} "
+                  f"(want {toolchain['axiom_encode_version']})")
+    ok = ok and actual_version == toolchain["axiom_encode_version"]
+    rc, module_file = run(
+        [str(GEN_PY), "-c", "import axiom_encode; print(axiom_encode.__file__)"],
+        env={"AXIOM_ENCODE_APPLY_SIGNING_KEY": None}, merge_stderr=False,
+    )
+    imported = Path(module_file.strip()).resolve() if rc == 0 else None
+    expected = (GEN_CHECKOUT / "src/axiom_encode/__init__.py").resolve()
+    checks.append(f"encoder import: {imported} (want {expected})")
+    return ok and imported == expected, checks
+
+
+def require_generation_toolchain() -> dict:
+    toolchain = pinned_toolchain()
+    ok, checks = generation_toolchain_status(toolchain)
+    if not ok:
+        raise SystemExit("generation toolchain mismatch:\n" + "\n".join(checks))
+    return toolchain
 
 
 def citation_slug(citation: str) -> str:
@@ -928,8 +997,11 @@ def cmd_doctor(_args) -> int:
     print(f"coverage encoder ref: {'OK' if cov_ref_ok else 'CHECK'} "
           f"({actual_cov_ref}; want {COV_ENCODER_REF})")
     print(f"pinned encoder ver   : {tc.get('axiom_encode_version')}")
-    engine_ok = ENGINE_BIN.exists()
-    corpus_ok = CORPUS.exists()
+    toolchain_ok, toolchain_checks = generation_toolchain_status(tc)
+    for check in toolchain_checks:
+        print(f"toolchain checkout   : {check}")
+    engine_ok = ENGINE_BIN.exists() and toolchain_ok
+    corpus_ok = CORPUS.exists() and toolchain_ok
     print(f"engine bin           : {'OK' if engine_ok else 'MISSING'} {ENGINE_BIN}")
     print(f"corpus               : {'OK' if corpus_ok else 'MISSING'} {CORPUS}")
     try:
@@ -968,6 +1040,7 @@ def cmd_unstick(args) -> int:
 
 
 def cmd_drain(args) -> int:
+    require_generation_toolchain()
     require_coverage_ref()
     matrix = json.loads(subprocess.run(
         [str(COV_PY), str(CHECKOUT / "bulk/compute_matrix.py"),
