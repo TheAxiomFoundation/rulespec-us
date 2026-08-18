@@ -607,3 +607,59 @@ def test_local_runner_requires_review_before_merge() -> None:
     assert '"program-scope-sync", "--help"' in local_drain
     assert "COV_ORACLES_REF = \"9901e2479ac39bba865b8232e1c7d879ba447d8d\"" in local_drain
     assert local_drain.count("require_coverage_ref()") >= 5
+
+
+def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.setattr(_local_drain, "CHECKOUT", root)
+
+    toolchain = _local_drain.pinned_toolchain()
+
+    assert toolchain["axiom_encode_version"] == "0.2.1690"
+    assert toolchain["axiom_encode_ref"] == "29b30fb7855c7306d9ead9ddba020dea40f938cc"
+    assert toolchain["axiom_artifact_rules_engine_ref"] == (
+        "ffd8213271947b0189a9dd61a055c1e0e78908a0"
+    )
+    assert toolchain["source_staleness_axiom_encode_ref"] == (
+        "ab702bf59ffa7123c9e24c3ae77b63c2b95ef9ab"
+    )
+
+
+def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
+    root = Path(__file__).resolve().parents[1]
+    artifacts = (root / ".github/workflows/program-artifacts.yml").read_text()
+    staleness = (root / ".github/workflows/source-staleness.yml").read_text()
+    validation = (root / ".github/workflows/repository-checks.yml").read_text()
+
+    assert "steps.toolchain.outputs.axiom_artifact_rules_engine_ref" in artifacts
+    assert "data.get(\"source_staleness_axiom_encode_ref\"" in staleness
+    assert 'scanner = runpy.run_path(sys.argv[1])' in staleness
+    assert "pip install -e _axiom/axiom-encode" not in staleness
+    assert "needs.workflow-toolchain.outputs.axiom_rules_engine_ref" in validation
+
+
+def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
+    assert _local_drain.checkout_sha(tmp_path / "missing") == "unavailable"
+
+
+def test_local_runner_toolchain_status_handles_missing_checkouts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    missing = tmp_path / "missing"
+    monkeypatch.setattr(_local_drain, "GEN_CHECKOUT", missing)
+    monkeypatch.setattr(_local_drain, "ENGINE", missing)
+    monkeypatch.setattr(_local_drain, "CORPUS", missing)
+    monkeypatch.setattr(_local_drain, "GEN_PY", missing / "python")
+    monkeypatch.setattr(_local_drain, "GEN_AE", missing / "axiom-encode")
+
+    ok, checks = _local_drain.generation_toolchain_status(
+        {
+            "axiom_encode_ref": "a" * 40,
+            "axiom_rules_engine_ref": "b" * 40,
+            "axiom_corpus_ref": "c" * 40,
+            "axiom_encode_version": "0.2.1682",
+        }
+    )
+
+    assert not ok
+    assert any("unavailable" in check for check in checks)

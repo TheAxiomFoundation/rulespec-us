@@ -76,18 +76,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          encode_ref="main"
-          if [ -f .axiom/toolchain.toml ]; then
-            encode_ref="$(python - <<'PY'
+          encode_ref="$(python - <<'PY'
+          import re
           import tomllib
           from pathlib import Path
 
-          data = tomllib.loads(Path(".axiom/toolchain.toml").read_text())
-          table = data.get("toolchain", data)
-          print(table.get("axiom_encode_ref", "main"))
+          path = Path(".axiom/workflow-toolchain.toml")
+          data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
+          value = data.get("source_staleness_axiom_encode_ref", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", value):
+              raise SystemExit(
+                  f"{path}: source_staleness_axiom_encode_ref must be a full lowercase commit SHA"
+              )
+          print(value)
           PY
           )"
-          fi
           echo "axiom_encode_ref=$encode_ref" >> "$GITHUB_OUTPUT"
           echo "Pinned axiom-encode ref: $encode_ref"
 
@@ -113,10 +116,8 @@ jobs:
           ref: ${{ steps.toolchain.outputs.axiom_encode_ref }}
           path: _axiom/axiom-encode
 
-      - name: Install axiom-encode
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e _axiom/axiom-encode
+      - name: Install scanner dependency
+        run: python -m pip install --upgrade pip pyyaml
 
       - name: Report unpinned-module counts
         id: pins
@@ -196,17 +197,36 @@ jobs:
           echo '## check-source-staleness output' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           set +e
-          axiom-encode check-source-staleness \
-            --rulespec-root "$GITHUB_WORKSPACE" \
-            --corpus-root "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+          python - \
+            "$GITHUB_WORKSPACE/_axiom/axiom-encode/src/axiom_encode/source_hash.py" \
+            "$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/_axiom/axiom-corpus" <<'PY' \
             | tee -a "$RUNNER_TEMP/staleness-report.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          import runpy
+          import sys
+
+          scanner = runpy.run_path(sys.argv[1])
+          raise SystemExit(
+              scanner["run_check_source_staleness"](
+                  [
+                      "--rulespec-root",
+                      sys.argv[2],
+                      "--corpus-root",
+                      sys.argv[3],
+                  ]
+              )
+          )
+          PY
           status=${PIPESTATUS[0]}
           set -e
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "check-source-staleness exit status: $status"
           # Surface the status for humans, but do not fail the job: this is the
-          # report-only phase. The job-level continue-on-error also guards this.
-          exit "$status"
+          # report-only phase. The uploaded report preserves the full finding.
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::check-source-staleness reported findings (exit $status); see the job summary and artifact."
+          fi
+          exit 0
 
       - name: Upload staleness report artifact
         if: ${{ always() }}
