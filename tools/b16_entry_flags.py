@@ -33,10 +33,17 @@ def _digits(value: str) -> str:
 @lru_cache(maxsize=1)
 def _tables() -> dict[str, set[int]]:
     tables: dict[str, set[int]] = {}
-    for filename in MODULES:
-        module = yaml.safe_load((INCIDENCE_DIR / filename).read_text())
+    paths = [INCIDENCE_DIR / filename for filename in MODULES]
+    paths += sorted((INCIDENCE_DIR / "note50").glob("page-*.yaml"))
+    paths += sorted((INCIDENCE_DIR / "note52").glob("page-*.yaml"))
+    for path in paths:
+        if path.name.endswith(".test.yaml"):
+            continue
+        module = yaml.safe_load(path.read_text())
         for rule in module["rules"]:
             if "membership" not in rule["name"]:
+                continue
+            if rule.get("indexed_by") != "hts_line":
                 continue
             tables[rule["name"]] = {
                 int(key)
@@ -57,6 +64,25 @@ def _member(table: str, rate_line: int, hts_digits: str) -> bool:
     else:
         key = int(f"{rate_line:010d}"[:8])
     return key in _tables().get(table, set())
+
+
+def _fragment_member(prefix: str, rate_line: int, hts_digits: str) -> bool:
+    """Union all per-page fragments of one legal table family."""
+    for table in _tables():
+        if not table.startswith(prefix) or not re.search(r"_p\d+$", table):
+            continue
+        shape = re.sub(r"_p\d+$", "", table)
+        if shape.endswith("_membership_hts10"):
+            key = int(hts_digits)
+        elif shape.endswith("_subheading6_membership"):
+            key = int(hts_digits[:6])
+        elif shape.endswith("_heading_membership"):
+            key = int(hts_digits[:4])
+        else:
+            key = int(f"{rate_line:010d}"[:8])
+        if key in _tables()[table]:
+            return True
+    return False
 
 
 def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool]:
@@ -102,13 +128,35 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
     result["entry_is_section_232_covered"] = (
         result["entry_is_section_232_aluminum"] or result["entry_is_section_232_steel"]
     )
-    # Follow-up incidence tables are not yet entry-preparable; declared booleans default false.
+    brazil_unconditional_exempt = any(
+        _fragment_member(prefix, rate_line, hts)
+        for prefix in (
+            "brazil_301_unconditional_exemption_",
+            "brazil_301_particular_exemption_",
+        )
+    )
+    forced_common_exempt = any(
+        _fragment_member(prefix, rate_line, hts)
+        for prefix in (
+            "forced_labor_301_common_exemption_",
+            "forced_labor_301_particular_exemption_",
+        )
+    )
+    country_code = country.strip().upper()
+    eu = {"AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"}
+    origin_table = ({"GB":"united_kingdom","CH":"switzerland","MY":"malaysia","KH":"cambodia","GT":"guatemala","SV":"el_salvador","AR":"argentina","BD":"bangladesh","TW":"taiwan","ID":"indonesia","EC":"ecuador","JO":"jordan"}.get(country_code) or ("european_union" if country_code in eu else None))
+    forced_country_exempt = bool(origin_table) and _fragment_member(
+        f"note52_{origin_table}_exemption_", rate_line, hts
+    )
+    forced_origins = {"AE","AO","AR","AT","AU","BD","BE","BG","BH","BR","BS","CA","CH","CL","CN","CO","CR","CY","CZ","DE","DK","DO","DZ","EC","EE","EG","ES","FI","FR","GB","GR","GT","GY","HK","HN","HR","HU","ID","IE","IL","IN","IQ","IT","JO","JP","KH","KR","KW","KZ","LK","LT","LU","LV","LY","MA","MT","MX","MY","NG","NI","NL","NO","NZ","OM","PE","PH","PK","PL","PT","QA","RO","RU","SA","SE","SG","SI","SK","SV","TH","TR","TT","TW","UY","VE","VN","ZA"}
     result.update({
-        "entry_is_brazil_301_listed": False,
-        "entry_is_forced_labor_301_listed": False,
+        "entry_is_brazil_301_listed": country_code == "BR" and not brazil_unconditional_exempt,
+        "entry_is_forced_labor_301_listed": country_code in forced_origins and not forced_common_exempt and not forced_country_exempt,
         "entry_is_china_301_2024_action": False,
         "entry_is_china_301_solar": False,
     })
+    result["entry_is_brazil_301"] = result["entry_is_brazil_301_listed"]
+    result["entry_is_forced_labor_301"] = result["entry_is_forced_labor_301_listed"]
     return result
 
 
