@@ -32,7 +32,9 @@ def test_five_witness_lines_emit_complete_new_vector():
         )
         assert vector == expected[line_name]
         assert not flags["entry_is_brazil_301_listed"]
-        assert not flags["entry_is_forced_labor_301_listed"]
+        assert flags["entry_is_forced_labor_301"] == flags["entry_is_forced_labor_301_listed"]
+        assert flags["entry_is_brazil_301"] == flags["entry_is_brazil_301_listed"]
+        assert not any("claimed" in name for name in flags)
         assert not flags["entry_is_china_301_2024_action"]
         assert not flags["entry_is_china_301_solar"]
 
@@ -64,3 +66,14 @@ def test_noncovered_chapter_76_line_is_not_primary():
 
 def test_eight_digit_membership_uses_rate_line_prefix():
     assert entry_flags(2203000000, "2203.00.00.30", "CN")["china_301_list3"]
+
+
+def test_unconditional_page_fragments_suppress_new_actions():
+    assert not entry_flags(901120000, "0901.12.00.00", "BR")["entry_is_brazil_301"]
+    assert not entry_flags(901120000, "0901.12.00.00", "CN")["entry_is_forced_labor_301"]
+
+
+def test_conditional_fragments_do_not_emit_or_apply_claim_inputs():
+    flags = entry_flags(8504320000, "8504.32.00.00", "BR")
+    assert flags["entry_is_brazil_301"]
+    assert not any("aircraft" in name or "pharma" in name or "claimed" in name for name in flags)

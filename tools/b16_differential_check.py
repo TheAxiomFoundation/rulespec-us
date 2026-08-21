@@ -12,10 +12,13 @@ import argparse
 import hashlib
 import json
 import sys
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+from b16_entry_flags import entry_flags
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "us/policies/usitc/us-tariff-incidence/generated"
@@ -25,6 +28,11 @@ RATE_RELPATH = Path(
     "sources/us/statute/2026-08-09-usitc-hts-2026-rev15-full-schedule/"
     "usitc-hts/hts_2026_revision_15_json.json"
 )
+
+EU_CODES = {"AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"}
+COUNTRY_NAME_CODES = {
+    "Algeria":"DZ", "Angola":"AO", "Argentina":"AR", "Australia":"AU", "the Bahamas":"BS", "Bahrain":"BH", "Bangladesh":"BD", "Brazil":"BR", "Cambodia":"KH", "Canada":"CA", "Chile":"CL", "China":"CN", "Colombia":"CO", "Costa Rica":"CR", "Dominican Republic":"DO", "Ecuador":"EC", "Egypt":"EG", "El Salvador":"SV", "Guatemala":"GT", "Guyana":"GY", "Honduras":"HN", "Hong Kong, China":"HK", "India":"IN", "Indonesia":"ID", "Iraq":"IQ", "Israel":"IL", "Japan":"JP", "Jordan":"JO", "Kazakhstan":"KZ", "Kuwait":"KW", "Libya":"LY", "Malaysia":"MY", "Mexico":"MX", "Morocco":"MA", "New Zealand":"NZ", "Nicaragua":"NI", "Nigeria":"NG", "Norway":"NO", "Oman":"OM", "Pakistan":"PK", "Peru":"PE", "the Philippines":"PH", "Qatar":"QA", "Russia":"RU", "Saudi Arabia":"SA", "Singapore":"SG", "South Africa":"ZA", "South Korea":"KR", "Sri Lanka":"LK", "Switzerland":"CH", "Taiwan":"TW", "Thailand":"TH", "Trinidad and Tobago":"TT", "Türkiye":"TR", "the United Arab Emirates":"AE", "the United Kingdom":"GB", "Uruguay":"UY", "Venezuela":"VE", "Vietnam":"VN",
+}
 
 
 @dataclass(frozen=True)
@@ -57,6 +65,14 @@ LEGAL_TABLES = (
     LegalTable("s232_steel_derivative_mobile_membership", 16, ("c", "xi")),
     LegalTable("s232_aluminum_primary_membership", 19, ("b",), "76", widths=(4, 8)),
     LegalTable("s232_aluminum_derivative_membership", 19, ("j",)),
+    LegalTable("brazil_301_unconditional_exemption_membership", 50, ("a", "ii")),
+    LegalTable("brazil_301_particular_exemption_membership", 50, ("a", "iii")),
+    LegalTable("brazil_301_aircraft_conditional_membership", 50, ("a", "iv")),
+    LegalTable("brazil_301_pharma_conditional_membership", 50, ("a", "v")),
+    LegalTable("forced_labor_301_common_exemption_membership", 52, ("b",)),
+    LegalTable("forced_labor_301_particular_exemption_membership", 52, ("c",)),
+    LegalTable("forced_labor_301_aircraft_conditional_membership", 52, ("d",)),
+    LegalTable("forced_labor_301_pharma_conditional_membership", 52, ("e",)),
 )
 
 
@@ -264,7 +280,7 @@ def page_receipts(pages: list[Page], lo: int, hi: int) -> list[str]:
     return [p.citation for p in pages if p.stream_start < hi and p.stream_start + len(p.body) >= lo]
 
 
-def verify_rate_associations(corpus: Path) -> None:
+def load_rate_descriptions(corpus: Path) -> dict[str, str]:
     # The notes path is .../data/corpus/provisions/...; RATE is another pinned
     # corpus artifact, used only to validate table-to-subdivision association.
     corpus_dir = next((p for p in corpus.parents if p.name == "corpus"), None)
@@ -273,7 +289,10 @@ def verify_rate_associations(corpus: Path) -> None:
     rate_path = corpus_dir / RATE_RELPATH
     if hashlib.sha256(rate_path.read_bytes()).hexdigest() != RATE_SHA256:
         raise ValueError("RATE snapshot sha mismatch")
-    descriptions = {row.get("htsno"): row.get("description", "") for row in json.loads(rate_path.read_text())}
+    return {row.get("htsno"): row.get("description", "") for row in json.loads(rate_path.read_text())}
+
+
+def verify_rate_associations(descriptions: dict[str, str]) -> None:
     for spec in LEGAL_TABLES:
         if not spec.rate_heading:
             continue
@@ -283,9 +302,39 @@ def verify_rate_associations(corpus: Path) -> None:
             raise ValueError(f"RATE heading {spec.rate_heading} does not name note {spec.note}{path_text}")
 
 
+def note52_countries_from_rate(descriptions: dict[str, str]) -> set[str]:
+    """Independently expand the note-52 charging headings to ISO alpha-2."""
+    countries: set[str] = set()
+    for number in range(20, 85):
+        description = descriptions.get(f"9903.05.{number:02d}", "")
+        if "U.S. note 52" not in description:
+            raise ValueError(f"note 52 charging heading absent: 9903.05.{number:02d}")
+        if "member state of the European Union" in description:
+            countries.update(EU_CODES)
+            continue
+        matches = [code for name, code in COUNTRY_NAME_CODES.items() if f"product of {name}" in description]
+        if len(matches) != 1:
+            raise ValueError(f"cannot independently resolve note 52 country at 9903.05.{number:02d}")
+        countries.add(matches[0])
+    if len(countries) != 86:
+        raise ValueError(f"note 52 country set expected 86, got {len(countries)}")
+    return countries
+
+
+def generated_note52_formula_countries() -> set[str]:
+    """Observe the action union at the entry-flag boundary on a nonexempt line."""
+    return {
+        code
+        for code in set(COUNTRY_NAME_CODES.values()) | EU_CODES
+        if entry_flags(99_999_999_99, "9999.99.99.99", code)[
+            "entry_is_forced_labor_301"
+        ]
+    }
+
+
 def generated_tables() -> dict[str, set[str]]:
     tables: dict[str, set[str]] = {}
-    for path in OUT.glob("*.yaml"):
+    for path in OUT.rglob("*.yaml"):
         if path.name.endswith(".test.yaml"):
             continue
         for rule in yaml.safe_load(path.read_text()).get("rules", []):
@@ -301,13 +350,43 @@ def main() -> int:
     args = parser.parse_args()
     try:
         stream, pages = load_pages(args.corpus)
-        verify_rate_associations(args.corpus)
+        descriptions = load_rate_descriptions(args.corpus)
+        verify_rate_associations(descriptions)
+        expected_countries = note52_countries_from_rate(descriptions)
+        generated_countries = generated_note52_formula_countries()
+        if generated_countries != expected_countries:
+            raise ValueError(
+                "note 52 formula country mismatch: "
+                f"missing={sorted(expected_countries-generated_countries)}, "
+                f"extra={sorted(generated_countries-expected_countries)}"
+            )
         starts = note_starts(stream)
         note_ranges: dict[int, tuple[int, int]] = {}
         for index, (number, start) in enumerate(starts):
             note_ranges[number] = (start, starts[index + 1][1] if index + 1 < len(starts) else len(stream))
         generated = generated_tables()
         report: dict[str, dict] = {}
+        report["origin_is_note52_covered"] = {
+            "expected": len(expected_countries),
+            "generated": len(generated_countries),
+            "only_expected": [],
+            "only_generated": [],
+        }
+        brazil_generated = {
+            code
+            for code in set(COUNTRY_NAME_CODES.values()) | EU_CODES
+            if entry_flags(99_999_999_99, "9999.99.99.99", code)[
+                "entry_is_brazil_301"
+            ]
+        }
+        report["entry_is_brazil_301_country_coverage"] = {
+            "expected": 1,
+            "generated": len(brazil_generated),
+            "only_expected": sorted({"BR"} - brazil_generated),
+            "only_generated": sorted(brazil_generated - {"BR"}),
+        }
+        if brazil_generated != {"BR"}:
+            failed = True
         failed = False
         for spec in LEGAL_TABLES:
             if spec.note not in note_ranges:
@@ -323,10 +402,46 @@ def main() -> int:
                 suffix = {4: "_heading_membership", 6: "_subheading6_membership", 8: "_membership", 10: "_membership_hts10"}[width]
                 table = base + suffix
                 expected = {str(int(code)) for code in codes if len(code) == width}
-                got = generated.get(table, set())
+                if spec.note in {50, 52}:
+                    fragments = {
+                        name: values
+                        for name, values in generated.items()
+                        if re.fullmatch(re.escape(table) + r"_p\d+", name)
+                    }
+                    got = set().union(*fragments.values()) if fragments else set()
+                    for fragment, fragment_got in sorted(fragments.items()):
+                        page_number = int(fragment.rsplit("_p", 1)[1])
+                        page = next(item for item in pages if item.number == page_number)
+                        page_lo = max(lo, page.stream_start)
+                        page_hi = min(hi, page.stream_start + len(page.body))
+                        fragment_codes = scan_hts(
+                            stream, page_lo, page_hi, 4 in spec.widths
+                        )
+                        fragment_expected = {
+                            str(int(code))
+                            for code in fragment_codes
+                            if not code.startswith("99") and len(code) == width
+                        }
+                        if spec.include_prefix:
+                            fragment_expected = {
+                                code for code in fragment_expected
+                                if code.zfill(width).startswith(spec.include_prefix)
+                            }
+                        report[fragment] = {
+                            "expected": len(fragment_expected),
+                            "generated": len(fragment_got),
+                            "only_expected": sorted(fragment_expected - fragment_got),
+                            "only_generated": sorted(fragment_got - fragment_expected),
+                        }
+                        if fragment_expected != fragment_got:
+                            failed = True
+                            print(f"FINDING {fragment}: page {page.citation}", file=sys.stderr)
+                else:
+                    got = generated.get(table, set())
                 if not expected and not got:
                     continue
-                report[table] = {
+                union_name = table + ("_union" if spec.note in {50, 52} else "")
+                report[union_name] = {
                     "expected": len(expected),
                     "generated": len(got),
                     "only_expected": sorted(expected - got),
@@ -334,7 +449,7 @@ def main() -> int:
                 }
                 if expected != got:
                     failed = True
-                    print(f"FINDING {table}: pages {', '.join(page_receipts(pages, lo, hi))}", file=sys.stderr)
+                    print(f"FINDING {union_name}: pages {', '.join(page_receipts(pages, lo, hi))}", file=sys.stderr)
         text = json.dumps(report, indent=2) + "\n"
         args.output.write_text(text) if args.output else sys.stdout.write(text)
         return int(failed)
