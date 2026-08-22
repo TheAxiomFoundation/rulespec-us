@@ -14,11 +14,12 @@ from test_repository_layout import (
     jurisdiction_dirs,
 )
 
-KNOWN_ORPHANED_ENCODING_MANIFESTS = [
-    # The module moved to us-ca/policies/cdss/snap/standard-utility-allowance.yaml
-    # during subtree absorption; its manifest stayed at the old guidance path.
-    "us-ca/guidance/cdss/acin-2025-i-46-25/standard-utility-allowance.yaml",
-]
+# The one entry this list carried — a manifest left at us-ca/guidance/... by
+# the subtree absorption, whose attested content appears in no reachable
+# commit here or in the pre-absorption rulespec-us-ca history — was deleted by
+# axiom-encode#1282. Keep this list empty: an orphaned manifest is a record
+# with no subject, and `axiom-encode manifest-audit` now rejects one outright.
+KNOWN_ORPHANED_ENCODING_MANIFESTS: list[str] = []
 
 # Manifest-sync guard: axiom-encode writes an applied-rulespec manifest
 # (schema axiom-encode/applied-rulespec/v1) next to every encoding run,
@@ -37,9 +38,15 @@ KNOWN_ORPHANED_ENCODING_MANIFESTS = [
 #   us-ct/.axiom/encoding-manifests/statutes/....json
 #       trees absorbed from the standalone state repos; applied paths
 #       relative to the jurisdiction directory
-# A module re-encoded after the consolidation can therefore be covered by
-# manifests in two locations; the entry with the newest generated_at is
-# authoritative and older ones are superseded history.
+# A module re-encoded after the consolidation could therefore be covered by
+# manifests in two locations, and this file used to treat the newest
+# generated_at as authoritative and the rest as superseded history. They were
+# not history: nothing retired them, so hundreds of files accumulated a second
+# record still asserting a hash the file no longer had, and reading only the
+# newest is what hid them (axiom-encode#1282). Superseded records are now
+# pruned when a rule is re-encoded, and `axiom-encode manifest-audit` requires
+# EVERY committed record to match — the newest-wins resolution below no longer
+# has anything to paper over.
 
 
 def manifest_roots() -> list[tuple[Path, Path]]:
