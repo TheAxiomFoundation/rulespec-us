@@ -31,6 +31,20 @@ ANNEX_PAGE_PREFIX = (
     "us/rulemaking/federal-register/2026-07-23/2026-14991/annex-ii/page-"
 )
 SUSPENSION_PATH = "us/rulemaking/white-house/2026-08-18/canada-338-suspension/clause-1"
+SUSPENSION_EXCERPTS = {
+    "Accordingly, the chapeau of Annex II of each of Proclamations 11046, "
+    "11047, and 11048, is amended by deleting the effective date “August 19, "
+    "2026” and inserting “August 22, 2026” in lieu thereof.",
+    "The effective date of the additional ad valorem duties imposed in "
+    "Proclamations 11046, 11047, and 11048 shall be 12:01 a.m. eastern time "
+    "on August 22, 2026.",
+}
+TEMPORAL_RULES = {
+    "section_338_component_rate": "0",
+    "section_338_chapter_98_exclusion_applies": "false",
+    "section_338_reduced_duty_base_applies": "false",
+    "section_338_entry_component_rate": "0",
+}
 MEMBERSHIP_START = (
     "1. Heading 9903.03.12 applies to articles classifiable in the following "
     "provisions of the tariff schedule:"
@@ -186,6 +200,173 @@ def check_component(records: dict[str, dict]) -> None:
     ]
 
 
+def temporal_lower(version: dict) -> str | None:
+    return version.get("effective_from", version.get("from"))
+
+
+def temporal_upper(version: dict) -> str | None:
+    return version.get("effective_to", version.get("to"))
+
+
+def assert_temporal_rules(module: dict, records: dict[str, dict]) -> None:
+    rules = {rule["name"]: rule for rule in module["rules"]}
+    for name, inert_formula in TEMPORAL_RULES.items():
+        rule = rules[name]
+        versions = rule["versions"]
+        assert len(versions) == 3
+        assert (temporal_lower(versions[0]), temporal_upper(versions[0])) == (
+            "2026-02-15",
+            "2026-08-18",
+        )
+        assert (temporal_lower(versions[1]), temporal_upper(versions[1])) == (
+            "2026-08-19",
+            "2026-08-21",
+        )
+        assert temporal_lower(versions[2]) == "2026-08-22"
+        assert temporal_upper(versions[2]) is None
+        assert versions[1]["formula"].strip() == inert_formula
+
+        clause_atoms = []
+        for atom in rule["metadata"]["proof"]["atoms"]:
+            source = atom["source"]
+            citation = source["corpus_citation_path"]
+            excerpt = source["excerpt"]
+            assert excerpt in records[citation]["body"]
+            if citation == SUSPENSION_PATH:
+                clause_atoms.append(atom)
+        assert len(clause_atoms) == 2
+        assert {atom["source"]["excerpt"] for atom in clause_atoms} == (
+            SUSPENSION_EXCERPTS
+        )
+        assert {atom["path"] for atom in clause_atoms} == {
+            "versions[1].formula",
+            "versions[2].formula",
+        }
+
+
+def check_witness_and_generated(records: dict[str, dict]) -> tuple[int, int]:
+    witness_relative = "us/policies/cbp/us-tariff-duty/composition.yaml"
+    witness = load_yaml(witness_relative)
+    assert isinstance(witness, dict)
+    verification = witness["module"]["source_verification"]
+    assert SUSPENSION_PATH in verification["corpus_citation_paths"]
+    assert SUSPENSION_PATH in verification["upstream_source_check"]["checked_paths"]
+    assert_temporal_rules(witness, records)
+
+    cases = load_yaml(witness_relative.replace(".yaml", ".test.yaml"))
+    assert isinstance(cases, list)
+    by_name = {case["name"]: case for case in cases}
+    expected_boundary = {
+        "line_d_canada_day_before_original_section_338_start_has_forced_labor_only": (
+            "2026-08-18",
+            0,
+            0.10,
+        ),
+        "line_d_canada_original_section_338_start_is_suspended": (
+            "2026-08-19",
+            0,
+            0.10,
+        ),
+        "line_d_canada_last_section_338_suspension_day_has_forced_labor_only": (
+            "2026-08-21",
+            0,
+            0.10,
+        ),
+        "line_d_canada_delayed_section_338_start_stacks_forced_labor": (
+            "2026-08-22",
+            0.50,
+            0.60,
+        ),
+    }
+    witness_id = witness_relative.removesuffix(".yaml").replace("us/", "us:", 1)
+    expected_input_suffixes = {
+        "customs_value",
+        "shipment_value",
+        "hts_number",
+        "country_of_origin",
+        "is_postal_shipment",
+        "article_is_potash",
+        "cbp_agrees_chapter_98_entry_is_appropriate",
+        "entry_is_9802_excepted_entry",
+        "entry_is_chapter_98_subchapter_xxiii_entry",
+        "entry_is_entered_free_of_duty_under_usmca",
+        "entry_is_humanitarian_donation_article",
+        "entry_is_informational_material_article",
+        "entry_is_personal_use_accompanied_baggage",
+        "entry_is_properly_claimed_chapter_98_entry",
+        "entry_is_usmca_duty_free_entry",
+        "entry_loaded_and_in_transit_before_july_24_2026",
+    }
+    expected_inputs = {
+        f"{witness_id}#input.{suffix}" for suffix in expected_input_suffixes
+    }
+    for name, (date, component, total) in expected_boundary.items():
+        case = by_name[name]
+        assert case["period"]["start"] == case["period"]["end"] == date
+        assert set(case["input"]) == expected_inputs
+        assert case["output"][f"{witness_id}#section_338_component_rate"] == component
+        assert (
+            case["output"][f"{witness_id}#section_338_entry_component_rate"]
+            == component
+        )
+        assert case["output"][f"{witness_id}#us_tariff_total_ad_valorem_rate"] == total
+
+    generated_paths = sorted(
+        path
+        for path in (ROOT / "us/policies/cbp/us-tariff-schedule/generated").glob(
+            "ch*/ch*.yaml"
+        )
+        if not path.name.endswith(".test.yaml")
+    )
+    assert len(generated_paths) == 100
+    generated_case_count = 0
+    generated_input_suffixes = {
+        "entry_is_line_d",
+        "country_of_origin",
+        "entry_is_personal_use_accompanied_baggage",
+        "entry_is_properly_claimed_chapter_98_entry",
+        "cbp_agrees_chapter_98_entry_is_appropriate",
+        "entry_is_chapter_98_subchapter_xxiii_entry",
+        "entry_is_9802_excepted_entry",
+    }
+    for path in generated_paths:
+        module = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert (
+            SUSPENSION_PATH
+            in module["module"]["source_verification"]["corpus_citation_paths"]
+        )
+        assert_temporal_rules(module, records)
+
+        module_id = path.relative_to(ROOT).as_posix().removesuffix(".yaml")
+        module_id = module_id.replace("us/", "us:", 1)
+        generated_cases = yaml.safe_load(
+            path.with_name(f"{path.stem}.test.yaml").read_text(encoding="utf-8")
+        )
+        generated_by_name = {case["name"]: case for case in generated_cases}
+        for name, date, component in (
+            ("section 338 remains suspended on August 21", "2026-08-21", 0),
+            (
+                "section 338 starts on delayed August 22 boundary",
+                "2026-08-22",
+                0.5,
+            ),
+        ):
+            case = generated_by_name[name]
+            assert case["period"]["start"] == case["period"]["end"] == date
+            assert set(case["input"]) == {
+                f"{module_id}#input.{suffix}" for suffix in generated_input_suffixes
+            }
+            assert (
+                case["output"][f"{module_id}#section_338_component_rate"] == component
+            )
+            assert (
+                case["output"][f"{module_id}#section_338_entry_component_rate"]
+                == component
+            )
+            generated_case_count += 1
+    return len(generated_paths), generated_case_count
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -220,7 +401,12 @@ def main() -> int:
     for page, codes in membership.items():
         check_incidence(page, codes)
     check_component(records)
-    print("check OK: 2 pages, 63 incidence atoms, 2 component rules, 6 cases")
+    generated_modules, generated_cases = check_witness_and_generated(records)
+    print(
+        "check OK: 2 pages, 63 incidence atoms, 2 atomic component rules, "
+        f"4 witness temporal rules, {generated_modules} generated modules, "
+        f"{generated_cases} generated boundary cases"
+    )
     return 0
 
 

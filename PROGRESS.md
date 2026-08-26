@@ -5,7 +5,7 @@
 - Branch: `b1/section-338-canada`
 - Worktree: `/Users/maxghenis/TheAxiomFoundation/_b1wt/rulespec-us/.worktrees/rulespec-us-338`
 - Base: cached `origin/main` at `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`
-- Status: grounded alcohol incidence/component complete; witness correction in progress. The branch will remain unmerged and unpushed pending the toolchain rebind.
+- Status: grounded build and local validation complete; final report in progress. The branch remains unmerged and unpushed pending corpus completion, toolchain rebind, and brokered provenance refresh.
 - Constraint: refreshing `origin/main` failed because this sandbox cannot resolve `github.com`; no remote ref changed.
 
 ## Done
@@ -23,9 +23,14 @@
 - Grounded the Section 232 carveout with the Annex I sentence expressly naming Section 232, in addition to the U.S. note 51 exception context.
 - Recorded four semantic deferrals for dairy/motor membership and components. They require citable Proclamation 11047/11048 Annex II page provisions in a newly signed corpus successor.
 - Passed deterministic generation, the independent 63-atom check, Ruff, repository layout tests, eight pure-function companion cases, and pinned-engine compilation of all three new modules.
+- Corrected all four witness applicability/entry rules to retain the pre-window version, encode an explicit zero/false August 19–21 successor, and activate the existing formulas on August 22; each rule carries both verbatim clause-1 successor atoms.
+- Replaced the stale August 19 positive witness with fully assigned August 18, 19, 21, and 22 boundaries. The witness pure harness passes all 137 cases.
+- Bumped and repinned the deterministic schedule-composition generator, propagated the successor through all 100 generated modules and tests, and verified all 100 ProgramSpecs are byte-identical.
+- Independently checked 400 generated delayed rules, 1,200 temporal versions, 800 clause-1 proof atoms, and 200 generated boundary cases. The full generated pure harness passes 9,400 cases across 100 compiled programs.
+- Pinned-engine compilation passes for the witness (727 derived outputs) and a representative generated shard. Legacy proof validation passes all 70 new atomic proof atoms against the hash-pinned extracted successor snapshots.
+- Confirmed the parked merge-time failures are exact: 101 existing applied manifests are stale and the reverse index is stale. No manifest, reverse-index, waiver, fingerprint, pin, workflow, or ProgramSpec file was edited.
 
 ## Next
 
-- Correct the witness family and companion boundaries, then regenerate dependent schedule compositions through the committed generator.
-- Run deterministic, structural, pure-function, and pinned-engine checks; record expected successor-pin resolver failures.
 - Write the build report with exact merge-time corpus, rebind, provenance, index, and validation steps.
+- Keep the branch parked until the missing Proclamation 11047/11048 Annex II pages are ingested and the broker performs the successor rebind and applied-file refresh.

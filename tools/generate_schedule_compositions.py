@@ -40,10 +40,10 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-3"
+GENERATOR_VERSION = "b1.6-schedule-compositions-4"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
-WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
+WITNESS_SHA256 = "19c7330cdbe3730c953f6d68b972ce3bfcdd2ab71e20e676e78d82ea7c721c71"
 TABLE_DIR = REPO_ROOT / "us/policies/usitc/us-tariff-duty/lines/generated"
 TABLE_MANIFEST_PATH = TABLE_DIR / "GENERATED-MANIFEST.json"
 TABLE_MANIFEST_SHA256 = "0ab7aa9d757661fd488893af038a70ebdd916c555304962b9f93badb0e711f77"
@@ -835,7 +835,8 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
         "entry preparation cannot yet populate those lists; both actions are outside the "
         "April-June window (effective 2026-07-22 and 2026-07-24). China 2024-action and "
         "solar inputs also default FALSE pending note-31 membership tables. Beer/section-338 "
-        "keeps entry_is_line_d because no membership module exists. Steel uses the Rev. 15 "
+        "keeps entry_is_line_d because the generated alcohol incidence tables remain an "
+        "atomic surface and entry-preparation aggregation is deferred. Steel uses the Rev. 15 "
         "50-percent single-version rate, and the April-June window is wholly post-escalation. "
         "The witness's 7202.11.10.00 steel exemplar is a ferroalloy outside note 16(c), so "
         "the untouched witness correctly has no steel component slot. These identifiers are "
@@ -994,7 +995,7 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
             {"entry_is_line_d": True},
         ),
         "section_338_chapter_98_exclusion_applies": (
-            "2026-08-19",
+            "2026-08-22",
             {
                 "entry_is_properly_claimed_chapter_98_entry": True,
                 "cbp_agrees_chapter_98_entry_is_appropriate": True,
@@ -1003,7 +1004,7 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
             },
         ),
         "section_338_reduced_duty_base_applies": (
-            "2026-08-19",
+            "2026-08-22",
             {
                 "entry_is_line_d": True,
                 "country_of_origin": "CA",
@@ -1146,7 +1147,47 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
         ),
         "output": {f"{module_path}#ieepa_component_rate_with_declared_exceptions": 0},
     }
-    cases = [case, declared_exception_zero, *positive_judgment_cases(module_path, module)]
+    section_338_inputs = _qualified_inputs(
+        module_path,
+        {
+            "entry_is_line_d": True,
+            "country_of_origin": "CA",
+            "entry_is_personal_use_accompanied_baggage": False,
+            "entry_is_properly_claimed_chapter_98_entry": False,
+            "cbp_agrees_chapter_98_entry_is_appropriate": False,
+            "entry_is_chapter_98_subchapter_xxiii_entry": False,
+            "entry_is_9802_excepted_entry": False,
+        },
+    )
+    section_338_suspended = {
+        "name": "section 338 remains suspended on August 21",
+        "period": _day("2026-08-21"),
+        "input": copy.deepcopy(section_338_inputs),
+        "output": {
+            f"{module_path}#section_338_component_rate": 0,
+            f"{module_path}#section_338_chapter_98_exclusion_applies": "not_holds",
+            f"{module_path}#section_338_reduced_duty_base_applies": "not_holds",
+            f"{module_path}#section_338_entry_component_rate": 0,
+        },
+    }
+    section_338_active = {
+        "name": "section 338 starts on delayed August 22 boundary",
+        "period": _day("2026-08-22"),
+        "input": copy.deepcopy(section_338_inputs),
+        "output": {
+            f"{module_path}#section_338_component_rate": 0.5,
+            f"{module_path}#section_338_chapter_98_exclusion_applies": "not_holds",
+            f"{module_path}#section_338_reduced_duty_base_applies": "not_holds",
+            f"{module_path}#section_338_entry_component_rate": 0.5,
+        },
+    }
+    cases = [
+        case,
+        declared_exception_zero,
+        *positive_judgment_cases(module_path, module),
+        section_338_suspended,
+        section_338_active,
+    ]
     return dump_yaml(cases)
 
 
