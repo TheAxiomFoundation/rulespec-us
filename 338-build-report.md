@@ -1,9 +1,13 @@
 # Section 338 Canada build-and-park report
 
-Date: 2026-08-26  
-Branch: `b1/section-338-canada`  
-Implementation head: `8653074163d3fe8b6546d179b12271e791a23fde`  
-Worktree: `/Users/maxghenis/TheAxiomFoundation/_b1wt/rulespec-us/.worktrees/rulespec-us-338`  
+Date: 2026-08-26
+
+Branch: `b1/section-338-canada`
+
+Implementation head: `8653074163d3fe8b6546d179b12271e791a23fde`
+
+Worktree: `/Users/maxghenis/TheAxiomFoundation/_b1wt/rulespec-us/.worktrees/rulespec-us-338`
+
 Base: cached `origin/main` at `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`
 
 ## Executive status
