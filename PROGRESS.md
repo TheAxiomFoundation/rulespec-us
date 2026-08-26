@@ -5,7 +5,7 @@
 - Branch: `b1/section-338-canada`
 - Worktree: `/Users/maxghenis/TheAxiomFoundation/_b1wt/rulespec-us/.worktrees/rulespec-us-338`
 - Base: cached `origin/main` at `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`
-- Status: grounded build and local validation complete; final report in progress. The branch remains unmerged and unpushed pending corpus completion, toolchain rebind, and brokered provenance refresh.
+- Status: grounded build, local validation, and committed build report complete. The branch remains unmerged and unpushed pending corpus completion, toolchain rebind, and brokered provenance refresh.
 - Constraint: refreshing `origin/main` failed because this sandbox cannot resolve `github.com`; no remote ref changed.
 
 ## Done
@@ -29,8 +29,9 @@
 - Independently checked 400 generated delayed rules, 1,200 temporal versions, 800 clause-1 proof atoms, and 200 generated boundary cases. The full generated pure harness passes 9,400 cases across 100 compiled programs.
 - Pinned-engine compilation passes for the witness (727 derived outputs) and a representative generated shard. Legacy proof validation passes all 70 new atomic proof atoms against the hash-pinned extracted successor snapshots.
 - Confirmed the parked merge-time failures are exact: 101 existing applied manifests are stale and the reverse index is stale. No manifest, reverse-index, waiver, fingerprint, pin, workflow, or ProgramSpec file was edited.
+- Wrote the complete build report to `338-build-report.md`. The requested external path is outside this session's writable roots; its pre-existing zero-byte file could not be updated because the sandbox rejected the write.
 
 ## Next
 
-- Write the build report with exact merge-time corpus, rebind, provenance, index, and validation steps.
 - Keep the branch parked until the missing Proclamation 11047/11048 Annex II pages are ingested and the broker performs the successor rebind and applied-file refresh.
+- Copy the committed report to `/Users/maxghenis/PolicyEngine/_tariff-p5/burndown/338-build-report.md` from a session with write access to that directory.
