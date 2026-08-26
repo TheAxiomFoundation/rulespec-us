@@ -73,6 +73,10 @@ MEMBERSHIP_EXCERPT = (
 SECTION_232_EXCEPTION_EXCERPT = (
     "the additional duties imposed by heading 9903.03.12 shall not apply to:"
 )
+SECTION_232_SCOPE_EXCERPT = (
+    "unless they are subject to import restrictions imposed pursuant to section "
+    "232 of the Trade Expansion Act of 1962, as amended (18 U.S.C. 1862)"
+)
 SUSPENSION_EXCERPT = (
     "The effective date of the additional ad valorem duties imposed in "
     "Proclamations 11046, 11047, and 11048 shall be 12:01 a.m. eastern time "
@@ -305,6 +309,9 @@ def deferred_outputs() -> list[dict]:
 
 
 def component_module() -> bytes:
+    annex_i_page_1 = (
+        "us/rulemaking/federal-register/2026-07-23/2026-14991/annex-i/page-1"
+    )
     page_1 = f"{ANNEX_PAGE_PREFIX}1"
     page_2 = f"{ANNEX_PAGE_PREFIX}2"
     page_6 = f"{ANNEX_PAGE_PREFIX}6"
@@ -314,6 +321,7 @@ def component_module() -> bytes:
             "proof_validation": {"required": True},
             "source_verification": {
                 "corpus_citation_paths": [
+                    annex_i_page_1,
                     page_1,
                     page_2,
                     page_6,
@@ -394,6 +402,12 @@ def component_module() -> bytes:
                                 kind="condition",
                                 citation_path=page_1,
                                 excerpt=MEMBERSHIP_EXCERPT,
+                            ),
+                            source_atom(
+                                path="versions[1].formula",
+                                kind="exception",
+                                citation_path=annex_i_page_1,
+                                excerpt=SECTION_232_SCOPE_EXCERPT,
                             ),
                             source_atom(
                                 path="versions[1].formula",
@@ -531,6 +545,7 @@ def render(corpus_root: Path) -> dict[Path, bytes]:
     }
 
     required_paths = {
+        "us/rulemaking/federal-register/2026-07-23/2026-14991/annex-i/page-1",
         *(f"{ANNEX_PAGE_PREFIX}{number}" for number in range(1, 8)),
         SUSPENSION_CLAUSE_PATH,
     }
@@ -539,6 +554,10 @@ def render(corpus_root: Path) -> dict[Path, bytes]:
         raise SystemExit(f"successor corpus paths missing: {missing}")
 
     for path, excerpt in (
+        (
+            "us/rulemaking/federal-register/2026-07-23/2026-14991/annex-i/page-1",
+            SECTION_232_SCOPE_EXCERPT,
+        ),
         (f"{ANNEX_PAGE_PREFIX}1", ORIGINAL_DATE_EXCERPT),
         (f"{ANNEX_PAGE_PREFIX}1", MEMBERSHIP_EXCERPT),
         (f"{ANNEX_PAGE_PREFIX}2", SECTION_232_EXCEPTION_EXCERPT),

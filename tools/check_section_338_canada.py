@@ -125,6 +125,7 @@ def check_component(records: dict[str, dict]) -> None:
     module = load_yaml(relative)
     assert isinstance(module, dict)
     expected_sources = [
+        "us/rulemaking/federal-register/2026-07-23/2026-14991/annex-i/page-1",
         f"{ANNEX_PAGE_PREFIX}1",
         f"{ANNEX_PAGE_PREFIX}2",
         f"{ANNEX_PAGE_PREFIX}6",

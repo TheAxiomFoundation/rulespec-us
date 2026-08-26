@@ -20,6 +20,7 @@
 - Added a hash-pinned deterministic generator and an independent structural/source checker for the groundable family.
 - Generated two singular-source Proclamation 11046 Annex II incidence modules with 63 unique HTS-8 membership atoms (12 on page 1 and 51 on page 2), one verbatim proof atom per value, and companion cases.
 - Added the plural-source alcohol 50-percent scalar/component pair: the scalar retains the July-proclaimed August 19 boundary, the component is explicitly zero August 19–21, and the active successor starts August 22 with the Section 232 carveout.
+- Grounded the Section 232 carveout with the Annex I sentence expressly naming Section 232, in addition to the U.S. note 51 exception context.
 - Recorded four semantic deferrals for dairy/motor membership and components. They require citable Proclamation 11047/11048 Annex II page provisions in a newly signed corpus successor.
 - Passed deterministic generation, the independent 63-atom check, Ruff, repository layout tests, eight pure-function companion cases, and pinned-engine compilation of all three new modules.
 
