@@ -40,10 +40,10 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-3"
+GENERATOR_VERSION = "b1.6-schedule-compositions-4"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
-WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
+WITNESS_SHA256 = "9a7c29f7c918355cce1c5fd969719c1dd62f8e2478d89ed7b209dd95f3574f96"
 TABLE_DIR = REPO_ROOT / "us/policies/usitc/us-tariff-duty/lines/generated"
 TABLE_MANIFEST_PATH = TABLE_DIR / "GENERATED-MANIFEST.json"
 TABLE_MANIFEST_SHA256 = "0ab7aa9d757661fd488893af038a70ebdd916c555304962b9f93badb0e711f77"
@@ -171,7 +171,9 @@ DECLARED_BOOLEAN_INPUTS = (
     "cbp_agrees_chapter_98_entry_is_appropriate",
     "entry_is_9802_excepted_entry",
     "entry_is_chapter_98_subchapter_xxiii_entry",
+    "entry_is_entered_free_of_duty_under_dr_cafta",
     "entry_is_entered_free_of_duty_under_usmca",
+    "entry_is_general_note_29_d_v_textile_or_apparel_good",
     "entry_is_humanitarian_donation_article",
     "entry_is_informational_material_article",
     "entry_is_personal_use_accompanied_baggage",
@@ -922,7 +924,7 @@ def statutory_stack_rule() -> dict:
                     "+ section_338_component_rate\n"
                     "+ china_section_301_component_rate\n"
                     "+ brazil_section_301_component_rate\n"
-                    "+ forced_labor_section_301_component_rate"
+                    "+ forced_labor_section_301_entry_component_rate"
                 ),
             }
         ],
@@ -1140,8 +1142,10 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
         "must query it only after an ad_valorem/free disposition, and a missing "
         "rate-table key intentionally raises a lookup error rather than becoming "
         "zero. schedule_statutory_stack selects General or column 2 under General "
-        "Note 3 and adds the same panel-projection component sequence as the witness "
-        "total. Special-subcolumn selection and non-ad-valorem duty application are "
+        "Note 3 and adds the copied authority components, using the legally complete "
+        "entry-level forced-labor component so transaction-dependent U.S. note 52 "
+        "exceptions remain operative. Special-subcolumn selection and non-ad-valorem "
+        "duty application are "
         "outside this pilot surface. Chapter and rate-line routing occur in entry "
         "preparation, never through cross-chapter RuleSpec dispatch."
         + structural_note
@@ -1278,6 +1282,14 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
             {
                 "country_of_origin": "CA",
                 "entry_is_entered_free_of_duty_under_usmca": True,
+            },
+        ),
+        "forced_labor_dr_cafta_exception_applies": (
+            "2026-07-24",
+            {
+                "country_of_origin": "CR",
+                "entry_is_general_note_29_d_v_textile_or_apparel_good": True,
+                "entry_is_entered_free_of_duty_under_dr_cafta": True,
             },
         ),
         "forced_labor_chapter_98_exclusion_applies": (
@@ -1571,10 +1583,80 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
                     },
                 }
             )
+    dr_cafta_cases: list[dict] = []
+    if chapter == PILOT_CHAPTER:
+        for name, country, textile_good, duty_free, expected_exception, expected_rate in (
+            (
+                "DR-CAFTA textile free entry exercises Note 52(i)",
+                "CR", True, True, "holds", 0,
+            ),
+            (
+                "DR-CAFTA textile without free-entry claim remains subject",
+                "CR", True, False, "not_holds", 0.125,
+            ),
+            (
+                "DR-CAFTA free entry without GN29 textile fact remains subject",
+                "CR", False, True, "not_holds", 0.125,
+            ),
+            (
+                "non-DR-CAFTA origin cannot use Note 52(i)",
+                "IN", True, True, "not_holds", 0.10,
+            ),
+        ):
+            dr_cafta_cases.append(
+                {
+                    "name": name,
+                    "period": _day("2026-08-01"),
+                    "input": _qualified_inputs(
+                        module_path,
+                        {
+                            **{name: False for name in DECLARED_BOOLEAN_INPUTS},
+                            **_note50_52_precedence_inputs(),
+                            "country_of_origin": country,
+                            "entry_is_forced_labor_301_listed": True,
+                            "entry_is_general_note_29_d_v_textile_or_apparel_good": textile_good,
+                            "entry_is_entered_free_of_duty_under_dr_cafta": duty_free,
+                        },
+                    ),
+                    "output": {
+                        f"{module_path}#forced_labor_dr_cafta_exception_applies": expected_exception,
+                        f"{module_path}#forced_labor_section_301_entry_component_rate": expected_rate,
+                    },
+                }
+            )
+        dr_cafta_stack_inputs = dict(inputs)
+        dr_cafta_stack_inputs.update(
+            _qualified_inputs(
+                module_path,
+                {
+                    "country_of_origin": "CR",
+                    "entry_is_forced_labor_301_listed": True,
+                    "entry_is_general_note_29_d_v_textile_or_apparel_good": True,
+                    "entry_is_entered_free_of_duty_under_dr_cafta": True,
+                },
+            )
+        )
+        dr_cafta_cases.append(
+            {
+                "name": (
+                    "DR-CAFTA Note 52(i) zero flows through the complete "
+                    "statutory stack"
+                ),
+                "period": _day("2026-08-01"),
+                "input": dr_cafta_stack_inputs,
+                "output": {
+                    f"{module_path}#forced_labor_dr_cafta_exception_applies": "holds",
+                    f"{module_path}#forced_labor_section_301_component_rate": 0.125,
+                    f"{module_path}#forced_labor_section_301_entry_component_rate": 0,
+                    f"{module_path}#schedule_statutory_stack": sample_general_rate,
+                },
+            }
+        )
     cases = [
         case,
         declared_exception_zero,
         *note50_52_precedence_cases,
+        *dr_cafta_cases,
         *positive_judgment_cases(module_path, module),
     ]
     return dump_yaml(cases)
