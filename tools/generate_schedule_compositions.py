@@ -40,10 +40,10 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-4"
+GENERATOR_VERSION = "b1.6-schedule-compositions-5"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
-WITNESS_SHA256 = "9a7c29f7c918355cce1c5fd969719c1dd62f8e2478d89ed7b209dd95f3574f96"
+WITNESS_SHA256 = "0dafe611b0680a64c7b20364bf0f9d2fd71c6e58036f30f088f8d07653d66a56"
 TABLE_DIR = REPO_ROOT / "us/policies/usitc/us-tariff-duty/lines/generated"
 TABLE_MANIFEST_PATH = TABLE_DIR / "GENERATED-MANIFEST.json"
 TABLE_MANIFEST_SHA256 = "0ab7aa9d757661fd488893af038a70ebdd916c555304962b9f93badb0e711f77"
@@ -1585,28 +1585,110 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
             )
     dr_cafta_cases: list[dict] = []
     if chapter == PILOT_CHAPTER:
-        for name, country, textile_good, duty_free, expected_exception, expected_rate in (
+        for (
+            name,
+            period,
+            country,
+            textile_good,
+            duty_free,
+            expected_exception,
+            expected_rate,
+        ) in (
             (
-                "DR-CAFTA textile free entry exercises Note 52(i)",
-                "CR", True, True, "holds", 0,
+                "Costa Rica textile free entry exercises Note 52(i)",
+                "2026-08-01",
+                "CR",
+                True,
+                True,
+                "holds",
+                0,
+            ),
+            (
+                "Dominican Republic textile free entry exercises Note 52(i)",
+                "2026-08-01",
+                "DO",
+                True,
+                True,
+                "holds",
+                0,
+            ),
+            (
+                "El Salvador textile free entry exercises Note 52(i)",
+                "2026-08-01",
+                "SV",
+                True,
+                True,
+                "holds",
+                0,
+            ),
+            (
+                "Guatemala textile free entry exercises Note 52(i)",
+                "2026-08-01",
+                "GT",
+                True,
+                True,
+                "holds",
+                0,
+            ),
+            (
+                "Honduras textile free entry exercises Note 52(i)",
+                "2026-08-01",
+                "HN",
+                True,
+                True,
+                "holds",
+                0,
+            ),
+            (
+                "Nicaragua textile free entry exercises Note 52(i)",
+                "2026-08-01",
+                "NI",
+                True,
+                True,
+                "holds",
+                0,
             ),
             (
                 "DR-CAFTA textile without free-entry claim remains subject",
-                "CR", True, False, "not_holds", 0.125,
+                "2026-08-01",
+                "CR",
+                True,
+                False,
+                "not_holds",
+                0.125,
             ),
             (
                 "DR-CAFTA free entry without GN29 textile fact remains subject",
-                "CR", False, True, "not_holds", 0.125,
+                "2026-08-01",
+                "CR",
+                False,
+                True,
+                "not_holds",
+                0.125,
             ),
             (
                 "non-DR-CAFTA origin cannot use Note 52(i)",
-                "IN", True, True, "not_holds", 0.10,
+                "2026-08-01",
+                "IN",
+                True,
+                True,
+                "not_holds",
+                0.10,
+            ),
+            (
+                "DR-CAFTA exception is false before July 24 effectiveness",
+                "2026-07-23",
+                "CR",
+                True,
+                True,
+                "not_holds",
+                0,
             ),
         ):
             dr_cafta_cases.append(
                 {
                     "name": name,
-                    "period": _day("2026-08-01"),
+                    "period": _day(period),
                     "input": _qualified_inputs(
                         module_path,
                         {
