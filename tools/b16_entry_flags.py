@@ -15,11 +15,61 @@ MODULES = (
     "note16-232-steel.yaml", "note18-201-solar.yaml",
     "note19-232-aluminum.yaml", "note20-china-301.yaml",
     "note2aa-122-exemptions.yaml",
+    "note50-52-232-sector-precedence.yaml",
 )
 WITNESS_LINES = {
     "entry_is_line_a": "7202111000", "entry_is_line_b": "7601103000",
     "entry_is_line_c": "9506624040", "entry_is_line_d": "2203000030",
     "entry_is_line_e": "8541420010",
+}
+
+# These facts cannot be inferred from an HTS number.  Each name states the
+# legal determination entry preparation must supply, and each source points to
+# the official Rev. 15 note that makes code incidence alone insufficient.
+S232_PRECEDENCE_DECLARED_FACT_SOURCES = {
+    "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52":
+        "us/statute/hts/chapter-99/page-519 (note 33(b)-(e))",
+    "entry_is_note33_g_automobile_part":
+        "us/statute/hts/chapter-99/page-520 and page-521 (note 33(f)-(h))",
+    "entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52":
+        "us/statute/hts/chapter-99/page-525 and page-526 (note 33(p)-(r))",
+    "entry_is_note33_auto_part_subject_to_import_adjustment_offset":
+        "us/statute/hts/chapter-99/page-553 (note 50(a)(vi)(3))",
+    "entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part":
+        "us/statute/hts/chapter-99/page-532 (note 37(f)-(g))",
+    "entry_is_note38_i_medium_or_heavy_duty_vehicle_part":
+        "us/statute/hts/chapter-99/page-535 through page-537 (note 38(h)-(l))",
+    "entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52":
+        "us/statute/hts/chapter-99/page-536 (note 38(j))",
+    "entry_is_note38_mhd_part_subject_to_import_adjustment_offset":
+        "us/statute/hts/chapter-99/page-566 (note 52(f)(6))",
+    "entry_qualifies_for_note39_heading_9903_79_01":
+        "us/statute/hts/chapter-99/page-537 and page-538 (note 39(b)-(d))",
+    "entry_is_note40_patented_pharmaceutical_article":
+        "us/statute/hts/chapter-99/page-539 and page-540 (note 40(c)(ii), (d)-(h))",
+}
+
+# Public RuleSpec input -> local generated-table classification.  The Python
+# adapter resolves only these incidence facts; generated RuleSpec derives the
+# final Note 50/52 legal precedence Judgment from them and the declared facts
+# above.
+S232_PRECEDENCE_MEMBERSHIP_FLAGS = {
+    "entry_is_s232_copper_primary_member": "s232_copper_primary",
+    "entry_is_s232_copper_additional_member": "s232_copper_additional",
+    "entry_is_s232_note33_vehicle_candidate": "s232_note33_vehicle_candidate",
+    "entry_is_s232_note33_auto_part_candidate": "s232_note33_auto_part_candidate",
+    "entry_is_s232_note37_softwood_member": "s232_note37_softwood",
+    "entry_is_s232_note37_upholstered_wood_furniture_member":
+        "s232_note37_upholstered_wood_furniture",
+    "entry_is_s232_note37_cabinet_vanity_candidate":
+        "s232_note37_cabinet_vanity_candidate",
+    "entry_is_s232_note38_mhd_vehicle_member": "s232_note38_mhd_vehicle",
+    "entry_is_s232_note38_bus_member": "s232_note38_bus",
+    "entry_is_s232_note38_mhd_part_candidate": "s232_note38_mhd_part_candidate",
+    "entry_is_s232_note39_semiconductor_candidate":
+        "s232_note39_semiconductor_candidate",
+    "entry_is_s232_note40_pharmaceutical_candidate":
+        "s232_note40_pharmaceutical_candidate",
 }
 
 
@@ -85,7 +135,22 @@ def _fragment_member(prefix: str, rate_line: int, hts_digits: str) -> bool:
     return False
 
 
-def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool]:
+def entry_flags(
+    rate_line: int,
+    hts_number: str,
+    country: str,
+    *,
+    entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52: bool = False,
+    entry_is_note33_g_automobile_part: bool = False,
+    entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52: bool = False,
+    entry_is_note33_auto_part_subject_to_import_adjustment_offset: bool = False,
+    entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part: bool = False,
+    entry_is_note38_i_medium_or_heavy_duty_vehicle_part: bool = False,
+    entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52: bool = False,
+    entry_is_note38_mhd_part_subject_to_import_adjustment_offset: bool = False,
+    entry_qualifies_for_note39_heading_9903_79_01: bool = False,
+    entry_is_note40_patented_pharmaceutical_article: bool = False,
+) -> dict[str, bool]:
     if not 0 <= rate_line <= 9_999_999_999:
         raise ValueError("rate_line must be a nonnegative, at-most-10-digit integer")
     hts = _digits(hts_number)
@@ -104,6 +169,37 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
         "s232_steel_derivative_mobile": ("s232_steel_derivative_mobile_membership",),
         "s232_aluminum_primary": ("s232_aluminum_primary_heading_membership", "s232_aluminum_primary_membership"),
         "s232_aluminum_derivative": ("s232_aluminum_derivative_membership", "s232_aluminum_derivative_membership_hts10"),
+        "s232_copper_primary": ("s232_copper_primary_membership",),
+        "s232_copper_additional": ("s232_copper_additional_membership",),
+        "s232_note33_vehicle_candidate": ("s232_note33_vehicle_candidate_membership",),
+        "s232_note33_auto_part_candidate": (
+            "s232_note33_auto_part_candidate_heading_membership",
+            "s232_note33_auto_part_candidate_subheading6_membership",
+            "s232_note33_auto_part_candidate_membership",
+            "s232_note33_auto_part_candidate_membership_hts10",
+        ),
+        "s232_note37_softwood": ("s232_note37_softwood_membership",),
+        "s232_note37_upholstered_wood_furniture": (
+            "s232_note37_upholstered_wood_furniture_membership_hts10",
+        ),
+        "s232_note37_cabinet_vanity_candidate": (
+            "s232_note37_cabinet_vanity_candidate_membership_hts10",
+        ),
+        "s232_note38_mhd_vehicle": (
+            "s232_note38_mhd_vehicle_membership",
+            "s232_note38_mhd_vehicle_membership_hts10",
+        ),
+        "s232_note38_bus": ("s232_note38_bus_membership",),
+        "s232_note38_mhd_part_candidate": (
+            "s232_note38_mhd_part_candidate_membership",
+            "s232_note38_mhd_part_candidate_membership_hts10",
+        ),
+        "s232_note39_semiconductor_candidate": (
+            "s232_note39_semiconductor_candidate_subheading6_membership",
+        ),
+        "s232_note40_pharmaceutical_candidate": (
+            "s232_note40_pharmaceutical_candidate_membership_hts10",
+        ),
         "s201_cspv": ("s201_cspv_membership", "s201_cspv_membership_hts10"),
         "china_301_list1": ("china_301_list1_membership",),
         "china_301_list2": ("china_301_list2_membership",),
@@ -113,6 +209,12 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
         "s122_gn6_conditional": ("s122_gn6_conditional_membership",),
     }
     result.update({name: any(_member(table, rate_line, hts) for table in tables) for name, tables in groups.items()})
+    result.update(
+        {
+            public_name: result[local_name]
+            for public_name, local_name in S232_PRECEDENCE_MEMBERSHIP_FLAGS.items()
+        }
+    )
     result.update({
         "entry_is_china_301_list123": any(result[f"china_301_list{i}"] for i in (1, 2, 3)),
         "entry_is_china_301_list4a": result["china_301_list4a"],
@@ -128,6 +230,28 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
     result["entry_is_section_232_covered"] = (
         result["entry_is_section_232_aluminum"] or result["entry_is_section_232_steel"]
     )
+    declared_s232_precedence_facts = {
+        "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52":
+            entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52,
+        "entry_is_note33_g_automobile_part": entry_is_note33_g_automobile_part,
+        "entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52":
+            entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52,
+        "entry_is_note33_auto_part_subject_to_import_adjustment_offset":
+            entry_is_note33_auto_part_subject_to_import_adjustment_offset,
+        "entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part":
+            entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part,
+        "entry_is_note38_i_medium_or_heavy_duty_vehicle_part":
+            entry_is_note38_i_medium_or_heavy_duty_vehicle_part,
+        "entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52":
+            entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52,
+        "entry_is_note38_mhd_part_subject_to_import_adjustment_offset":
+            entry_is_note38_mhd_part_subject_to_import_adjustment_offset,
+        "entry_qualifies_for_note39_heading_9903_79_01":
+            entry_qualifies_for_note39_heading_9903_79_01,
+        "entry_is_note40_patented_pharmaceutical_article":
+            entry_is_note40_patented_pharmaceutical_article,
+    }
+    result.update(declared_s232_precedence_facts)
     brazil_unconditional_exempt = any(
         _fragment_member(prefix, rate_line, hts)
         for prefix in (
@@ -163,6 +287,8 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("rate_line", type=int); parser.add_argument("hts_number"); parser.add_argument("country")
+    parser.add_argument("rate_line", type=int)
+    parser.add_argument("hts_number")
+    parser.add_argument("country")
     args = parser.parse_args()
     print(json.dumps(entry_flags(args.rate_line, args.hts_number, args.country), sort_keys=True))

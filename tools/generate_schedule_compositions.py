@@ -90,6 +90,50 @@ COMPONENT_RULES = (
     "forced_labor_section_301_entry_component_rate",
 )
 
+NOTE50_52_PRECEDENCE_MEMBERSHIP_INPUTS = (
+    "entry_is_s232_copper_primary_member",
+    "entry_is_s232_copper_additional_member",
+    "entry_is_s232_note33_vehicle_candidate",
+    "entry_is_s232_note33_auto_part_candidate",
+    "entry_is_s232_note37_softwood_member",
+    "entry_is_s232_note37_upholstered_wood_furniture_member",
+    "entry_is_s232_note37_cabinet_vanity_candidate",
+    "entry_is_s232_note38_mhd_vehicle_member",
+    "entry_is_s232_note38_bus_member",
+    "entry_is_s232_note38_mhd_part_candidate",
+    "entry_is_s232_note39_semiconductor_candidate",
+    "entry_is_s232_note40_pharmaceutical_candidate",
+)
+
+NOTE50_52_PRECEDENCE_DECLARED_INPUTS = (
+    "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52",
+    "entry_is_note33_g_automobile_part",
+    "entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52",
+    "entry_is_note33_auto_part_subject_to_import_adjustment_offset",
+    "entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part",
+    "entry_is_note38_i_medium_or_heavy_duty_vehicle_part",
+    "entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52",
+    "entry_is_note38_mhd_part_subject_to_import_adjustment_offset",
+    "entry_qualifies_for_note39_heading_9903_79_01",
+    "entry_is_note40_patented_pharmaceutical_article",
+)
+
+NOTE50_52_PRECEDENCE_CITATIONS = {
+    "us/statute/hts/chapter-99/page-237",
+    "us/statute/hts/chapter-99/page-241",
+    "us/statute/hts/chapter-99/page-519",
+    "us/statute/hts/chapter-99/page-521",
+    "us/statute/hts/chapter-99/page-525",
+    "us/statute/hts/chapter-99/page-531",
+    "us/statute/hts/chapter-99/page-532",
+    "us/statute/hts/chapter-99/page-534",
+    "us/statute/hts/chapter-99/page-536",
+    "us/statute/hts/chapter-99/page-537",
+    "us/statute/hts/chapter-99/page-539",
+    "us/statute/hts/chapter-99/page-553",
+    "us/statute/hts/chapter-99/page-566",
+}
+
 GENERATED_MEMBERSHIP_INPUTS = (
     "entry_is_china_301_list123", "entry_is_china_301_list4a",
     "entry_is_section_232_aluminum", "entry_is_section_232_steel",
@@ -97,6 +141,7 @@ GENERATED_MEMBERSHIP_INPUTS = (
     "entry_is_section_232_covered", "entry_is_brazil_301_listed",
     "entry_is_forced_labor_301_listed", "entry_is_china_301_2024_action",
     "entry_is_china_301_solar",
+    *NOTE50_52_PRECEDENCE_MEMBERSHIP_INPUTS,
 )
 
 # Exact witness substrings: every other gate and effective window is preserved.
@@ -112,9 +157,9 @@ COMPONENT_FORMULA_REPLACEMENTS = {
         ("entry_is_line_c", "entry_is_china_301_list4a"),
         ("entry_is_line_e", "entry_is_china_301_solar"),
     ),
-    "brazil_section_301_component_rate": (("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_brazil:", "if entry_is_brazil_301_listed and origin_is_brazil:"),),
+    "brazil_section_301_component_rate": (("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_brazil:", "if entry_is_note50_52_section_232_precedence_exempt: 0\nelif entry_is_brazil_301_listed and origin_is_brazil:"),),
     "forced_labor_section_301_component_rate": (
-        ("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_forced_labor_ten_percent_country:", "if entry_is_forced_labor_301_listed and origin_is_forced_labor_ten_percent_country:"),
+        ("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_forced_labor_ten_percent_country:", "if entry_is_note50_52_section_232_precedence_exempt: 0\nelif entry_is_forced_labor_301_listed and origin_is_forced_labor_ten_percent_country:"),
         ("elif origin_is_eu or origin_is_taiwan:", "elif entry_is_forced_labor_301_listed and (origin_is_eu or origin_is_taiwan):"),
         ("elif origin_is_forced_labor_twelve_and_one_half_percent_country:", "elif entry_is_forced_labor_301_listed and origin_is_forced_labor_twelve_and_one_half_percent_country:"),
         ("elif origin_is_japan or origin_is_korea or origin_is_switzerland:", "elif entry_is_forced_labor_301_listed and (origin_is_japan or origin_is_korea or origin_is_switzerland):"),
@@ -133,6 +178,7 @@ DECLARED_BOOLEAN_INPUTS = (
     "entry_is_properly_claimed_chapter_98_entry",
     "entry_is_usmca_duty_free_entry",
     "entry_loaded_and_in_transit_before_july_24_2026",
+    *NOTE50_52_PRECEDENCE_DECLARED_INPUTS,
 )
 
 
@@ -554,6 +600,177 @@ def steel_component_rule() -> dict:
     }
 
 
+def note50_52_section_232_precedence_rule() -> dict:
+    """Derive the shared sector-precedence exclusion inside RuleSpec.
+
+    Entry preparation supplies only incidence booleans and transaction facts.
+    This rule owns the legal OR/AND structure, so a caller cannot override the
+    final Judgment with a pre-computed value.
+    """
+
+    def atom(citation: str, excerpt: str, branch: str) -> dict:
+        return {
+            "path": "versions[0].formula",
+            "kind": "condition",
+            "source": {
+                "corpus_citation_path": citation,
+                "excerpt": excerpt,
+            },
+            "context": {"branch": branch},
+        }
+
+    atoms = [
+        atom(
+            "us/statute/hts/chapter-99/page-553",
+            "the additional duty imposed by heading 9903.05.01 shall not apply to:",
+            "Note 50(a)(vi) controlling exclusion",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-566",
+            "the additional duties imposed by headings 9903.05.20–9903.05.84 shall not apply to:",
+            "Note 52(f) controlling exclusion",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-553",
+            "articles of aluminum, of steel or of copper",
+            "existing steel or aluminum membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-237",
+            "7406.10.00",
+            "Note 16(c)(v) copper membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-241",
+            "8544.42.10",
+            "Note 16(c)(viii) copper membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-531",
+            "all imported softwood timber and lumber products",
+            "Note 37(b) softwood membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-532",
+            "all imported upholstered wooden furniture products",
+            "Note 37(d) upholstered-wood membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-534",
+            "The rate of duty set forth in heading 9903.74.01 applies to imported products classifiable in the provisions of the HTSUS enumerated in this subdivision",
+            "Note 38(b) MHD-vehicle membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-534",
+            "applies to buses and other vehicles",
+            "Note 38(c) bus membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-519",
+            "apply to all imported products classifiable in the provisions of the HTSUS enumerated in this subdivision",
+            "Note 33(b) vehicle candidate AND listed-heading qualification",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-521",
+            "applies to parts of passenger vehicles",
+            "Note 33(g) auto-part candidate AND actual auto-part status",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-525",
+            "when certified by the importer of record that such parts will be used for automobile production or repair activity in the United States",
+            "Note 33(p) certified-auto-part qualification",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-553",
+            "parts of light trucks subject to an import adjustment offset pursuant to Proclamation 10925",
+            "automobile-part import-adjustment offset",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-532",
+            "completed kitchen cabinets and vanities and parts of kitchen cabinets and vanities",
+            "Note 37(f) candidate AND cabinet-or-vanity status",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-536",
+            "applies to parts of medium- and heavy-duty vehicles classifiable in the provisions of the HTSUS enumerated in this subdivision",
+            "Note 38(i) candidate AND MHD-part status",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-536",
+            "when certified by the importer of record that such parts will be used for medium- or heavy-duty vehicle production or repair activity in the United States",
+            "Note 38(j) certified-MHD-part qualification",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-566",
+            "parts of medium- and heavy-duty vehicles subject to an import adjustment offset pursuant to Proclamation 10984",
+            "MHD-part import-adjustment offset",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-537",
+            "imported products meeting certain technical parameters",
+            "Note 39(b)-(d) candidate AND heading-9903.79.01 qualification",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-539",
+            "subject to a valid, unexpired U.S. patent",
+            "Note 40(c)(ii) candidate AND patented-pharmaceutical status",
+        ),
+    ]
+    formula = """entry_is_section_232_covered
+or entry_is_s232_copper_primary_member
+or entry_is_s232_copper_additional_member
+or entry_is_s232_note37_softwood_member
+or entry_is_s232_note37_upholstered_wood_furniture_member
+or entry_is_s232_note38_mhd_vehicle_member
+or entry_is_s232_note38_bus_member
+or (
+  entry_is_s232_note33_vehicle_candidate
+  and entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52
+)
+or (
+  entry_is_s232_note33_auto_part_candidate
+  and entry_is_note33_g_automobile_part
+)
+or entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52
+or entry_is_note33_auto_part_subject_to_import_adjustment_offset
+or (
+  entry_is_s232_note37_cabinet_vanity_candidate
+  and entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part
+)
+or (
+  entry_is_s232_note38_mhd_part_candidate
+  and entry_is_note38_i_medium_or_heavy_duty_vehicle_part
+)
+or entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52
+or entry_is_note38_mhd_part_subject_to_import_adjustment_offset
+or (
+  entry_is_s232_note39_semiconductor_candidate
+  and entry_qualifies_for_note39_heading_9903_79_01
+)
+or (
+  entry_is_s232_note40_pharmaceutical_candidate
+  and entry_is_note40_patented_pharmaceutical_article
+)"""
+    return {
+        "name": "entry_is_note50_52_section_232_precedence_exempt",
+        "kind": "derived",
+        "entity": "CustomsEntry",
+        "dtype": "Judgment",
+        "period": "Day",
+        "source": (
+            "HTS chapter 99 U.S. notes 50(a)(vi) and 52(f) shared "
+            "Section 232 sector-precedence exclusions"
+        ),
+        "metadata": {"proof": {"atoms": atoms}},
+        "versions": [
+            {
+                "effective_from": "2026-07-22",
+                "formula": formula,
+            }
+        ],
+    }
+
+
 def normalize_instance_rule(rule: dict, chapter: str) -> dict:
     """Undo lossless placement serialization for witness equality checks."""
     normalized = copy.deepcopy(rule)
@@ -758,6 +975,13 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
             copied_from_witness=False,
         ),
     ]
+    rules.append(
+        serialize_rule_for_chapter(
+            note50_52_section_232_precedence_rule(),
+            chapter,
+            copied_from_witness=False,
+        )
+    )
 
     for witness_rule in witness["rules"]:
         name = witness_rule["name"]
@@ -815,11 +1039,11 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
                 )
 
     source_verification = copy.deepcopy(witness["module"]["source_verification"])
-    steel_citation = "us/statute/hts/9903.82.02"
-    if steel_citation not in source_verification["corpus_citation_paths"]:
-        source_verification["corpus_citation_paths"] = sorted(
-            set(source_verification["corpus_citation_paths"]) | {steel_citation}
-        )
+    source_verification["corpus_citation_paths"] = sorted(
+        set(source_verification["corpus_citation_paths"])
+        | {"us/statute/hts/9903.82.02"}
+        | NOTE50_52_PRECEDENCE_CITATIONS
+    )
     structural_note = ""
     if chapter == "76":
         structural_note += (
@@ -830,7 +1054,13 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
     structural_note += (
         " Membership-semantic China-301 list123/list4A, section-232 aluminum/steel, "
         "section-201 CSPV, section-122 exemption, and section-232-covered identifiers "
-        "are caller inputs supplied by entry preparation. Brazil-301 and forced-labor-301 "
+        "are caller inputs supplied by entry preparation. Entry preparation also supplies "
+        "the primitive Note-50/52 unconditional memberships, candidate memberships, and "
+        "precisely named declared legal-eligibility facts. This composition derives the "
+        "entry_is_note50_52_section_232_precedence_exempt Judgment locally from those "
+        "primitives; callers cannot feed or override it. That Judgment applies only the "
+        "sector precedence exclusions enumerated by U.S. notes 50(a)(vi) and 52(f); it is "
+        "not the section-232-covered input consumed by section 122. Brazil-301 and forced-labor-301 "
         "membership inputs currently default to the declared-boolean FALSE pattern because "
         "entry preparation cannot yet populate those lists; both actions are outside the "
         "April-June window (effective 2026-07-22 and 2026-07-24). China 2024-action and "
@@ -937,6 +1167,17 @@ def _qualified_inputs(module_path: str, values: dict[str, object]) -> dict[str, 
     return {f"{module_path}#input.{name}": value for name, value in values.items()}
 
 
+def _note50_52_precedence_inputs(**overrides: bool) -> dict[str, bool]:
+    """Return a complete primitive-input baseline for the local Judgment."""
+    values = {
+        "entry_is_section_232_covered": False,
+        **{name: False for name in NOTE50_52_PRECEDENCE_MEMBERSHIP_INPUTS},
+        **{name: False for name in NOTE50_52_PRECEDENCE_DECLARED_INPUTS},
+    }
+    values.update(overrides)
+    return values
+
+
 def chapter_sample(chapter: str, table: dict) -> tuple[int, str, object, str, str]:
     """Select a stable General-rate cell outside the five witness line predicates."""
     general_rates = table["general_rates"]
@@ -961,6 +1202,21 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
     """Emit executable positive witnesses for every non-constant Judgment rule."""
     cases: list[dict] = []
     explicit: dict[str, tuple[str, dict[str, object]]] = {
+        "entry_is_note50_52_section_232_precedence_exempt": (
+            "2026-07-22",
+            {
+                "entry_is_section_232_covered": False,
+                **{
+                    name: False
+                    for name in NOTE50_52_PRECEDENCE_MEMBERSHIP_INPUTS
+                },
+                **{
+                    name: False
+                    for name in NOTE50_52_PRECEDENCE_DECLARED_INPUTS
+                },
+                "entry_is_s232_copper_primary_member": True,
+            },
+        ),
         "entry_is_reciprocal_annex_excluded": (
             WITNESS_EFFECTIVE_FROM,
             {"entry_is_line_a": True},
@@ -1146,7 +1402,181 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
         ),
         "output": {f"{module_path}#ieepa_component_rate_with_declared_exceptions": 0},
     }
-    cases = [case, declared_exception_zero, *positive_judgment_cases(module_path, module)]
+    note50_52_precedence_cases: list[dict] = []
+    if chapter == PILOT_CHAPTER:
+        for (
+            name,
+            country,
+            listed_input,
+            output,
+            candidate_input,
+            qualification_input,
+            qualified,
+        ) in (
+            (
+                "Brazil pharmaceutical candidate remains charged without patent status",
+                "BR",
+                "entry_is_brazil_301_listed",
+                "brazil_section_301_component_rate",
+                "entry_is_s232_note40_pharmaceutical_candidate",
+                "entry_is_note40_patented_pharmaceutical_article",
+                False,
+            ),
+            (
+                "Brazil patented pharmaceutical branch triggers Note 50 precedence",
+                "BR",
+                "entry_is_brazil_301_listed",
+                "brazil_section_301_component_rate",
+                "entry_is_s232_note40_pharmaceutical_candidate",
+                "entry_is_note40_patented_pharmaceutical_article",
+                True,
+            ),
+            (
+                "forced-labor semiconductor candidate remains charged without technical qualification",
+                "IN",
+                "entry_is_forced_labor_301_listed",
+                "forced_labor_section_301_component_rate",
+                "entry_is_s232_note39_semiconductor_candidate",
+                "entry_qualifies_for_note39_heading_9903_79_01",
+                False,
+            ),
+            (
+                "forced-labor qualified semiconductor branch triggers Note 52 precedence",
+                "IN",
+                "entry_is_forced_labor_301_listed",
+                "forced_labor_section_301_component_rate",
+                "entry_is_s232_note39_semiconductor_candidate",
+                "entry_qualifies_for_note39_heading_9903_79_01",
+                True,
+            ),
+        ):
+            expected = 0 if qualified else (0.25 if country == "BR" else 0.10)
+            note50_52_precedence_cases.append(
+                {
+                    "name": name,
+                    "period": _day(COMPANION_EFFECTIVE_DATE),
+                    "input": _qualified_inputs(
+                        module_path,
+                        {
+                            "country_of_origin": country,
+                            **_note50_52_precedence_inputs(),
+                            listed_input: True,
+                            candidate_input: True,
+                            qualification_input: qualified,
+                        },
+                    ),
+                    "output": {
+                        f"{module_path}#entry_is_note50_52_section_232_precedence_exempt":
+                            "holds" if qualified else "not_holds",
+                        f"{module_path}#{output}": expected,
+                    },
+                }
+            )
+        note50_52_precedence_cases.append(
+            {
+                "name": (
+                    "nonmetal Note 50 sector branch does not broaden the section 122 "
+                    "covered-entry exception"
+                ),
+                "period": _day("2026-07-22"),
+                "input": _qualified_inputs(
+                    module_path,
+                    {
+                        "entry_is_section_122_exempt": False,
+                        **_note50_52_precedence_inputs(),
+                        "entry_is_s232_note37_softwood_member": True,
+                    },
+                ),
+                "output": {
+                    f"{module_path}#entry_is_note50_52_section_232_precedence_exempt":
+                        "holds",
+                    f"{module_path}#section_122_component_rate": 0.10,
+                },
+            }
+        )
+        for label, candidate_input, qualification_input in (
+            (
+                "Note 33 vehicle",
+                "entry_is_s232_note33_vehicle_candidate",
+                "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52",
+            ),
+            (
+                "Note 33 automobile-part",
+                "entry_is_s232_note33_auto_part_candidate",
+                "entry_is_note33_g_automobile_part",
+            ),
+            (
+                "Note 37 cabinet-and-vanity",
+                "entry_is_s232_note37_cabinet_vanity_candidate",
+                "entry_is_note37_f_completed_kitchen_cabinet_vanity_or_part",
+            ),
+            (
+                "Note 38 MHD-part",
+                "entry_is_s232_note38_mhd_part_candidate",
+                "entry_is_note38_i_medium_or_heavy_duty_vehicle_part",
+            ),
+        ):
+            for qualified in (False, True):
+                note50_52_precedence_cases.append(
+                    {
+                        "name": (
+                            f"{label} candidate "
+                            f"{'qualifies' if qualified else 'does not qualify'}"
+                        ),
+                        "period": _day(COMPANION_EFFECTIVE_DATE),
+                        "input": _qualified_inputs(
+                            module_path,
+                            _note50_52_precedence_inputs(
+                                **{
+                                    candidate_input: True,
+                                    qualification_input: qualified,
+                                }
+                            ),
+                        ),
+                        "output": {
+                            f"{module_path}#entry_is_note50_52_section_232_precedence_exempt":
+                                "holds" if qualified else "not_holds"
+                        },
+                    }
+                )
+        for label, direct_fact in (
+            (
+                "Note 33 certified automobile-part",
+                "entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52",
+            ),
+            (
+                "Note 33 automobile-part offset",
+                "entry_is_note33_auto_part_subject_to_import_adjustment_offset",
+            ),
+            (
+                "Note 38 certified MHD-part",
+                "entry_qualifies_for_note38_certified_mhd_part_heading_listed_in_notes_50_52",
+            ),
+            (
+                "Note 38 MHD-part offset",
+                "entry_is_note38_mhd_part_subject_to_import_adjustment_offset",
+            ),
+        ):
+            note50_52_precedence_cases.append(
+                {
+                    "name": f"{label} direct eligibility fact qualifies",
+                    "period": _day(COMPANION_EFFECTIVE_DATE),
+                    "input": _qualified_inputs(
+                        module_path,
+                        _note50_52_precedence_inputs(**{direct_fact: True}),
+                    ),
+                    "output": {
+                        f"{module_path}#entry_is_note50_52_section_232_precedence_exempt":
+                            "holds"
+                    },
+                }
+            )
+    cases = [
+        case,
+        declared_exception_zero,
+        *note50_52_precedence_cases,
+        *positive_judgment_cases(module_path, module),
+    ]
     return dump_yaml(cases)
 
 

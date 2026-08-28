@@ -18,7 +18,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSION = "b1.6-incidence-1"
+VERSION = "b1.6-incidence-2"
 SHA256 = "0f3ed7ef2efb64383825db65e615959200770e8511c8d4834b16e02892cb9ec8"
 RELPATH = "data/corpus/provisions/us/statute/2026-08-04-usitc-hts-2026-rev15-notes.jsonl"
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +58,23 @@ GRAMMAR = (
     Production("232-steel", "s232_steel_derivative_mobile_membership", "16(c)(xi)", "(xi) Derivative steel articles:", "(d) Headings 9903.82.04", after_compiler=False),
     Production("232-aluminum", "s232_aluminum_primary_membership", "19(b)", "(b) The rates of duty set forth in heading 9903.85.01", "(c) The Secretary of Commerce", after_compiler=False, include_prefixes=("76",), widths=(4, 8)),
     Production("232-aluminum", "s232_aluminum_derivative_membership", "19(j)", "(j) The rates of duty set forth in heading 9903.85.07", "(k) The rates of duty in heading 9903.85.08", after_compiler=False),
+    # Notes 50(a)(vi) and 52(f) exclude the sector programs named below from
+    # their additional duties.  Some program notes define an unconditional
+    # HTS list; others print only a candidate list and require a product/use
+    # determination.  Candidate tables are deliberately named as such so
+    # entry preparation cannot confuse code incidence with legal eligibility.
+    Production("232-note50-52", "s232_copper_primary_membership", "16(c)(v)", "(v) Articles of copper:", "(vi) Derivative aluminum articles:", after_compiler=False),
+    Production("232-note50-52", "s232_copper_additional_membership", "16(c)(viii)", "(viii) Articles of copper:", "(ix) Derivative aluminum articles:", after_compiler=False),
+    Production("232-note50-52", "s232_note33_vehicle_candidate_membership", "33(b)", "(b) The rates of duty set forth in headings 9903.94.01", "(c) Heading 9903.94.02 applies", after_compiler=False),
+    Production("232-note50-52", "s232_note33_auto_part_candidate_membership", "33(g)", "(g) Subject to a manufacturer's import adjustment offset amount", "(h) Heading 9903.94.06 applies", after_compiler=False, include_prefixes=("40", "70", "73", "83", "84", "85", "87", "90", "94"), widths=(4, 6, 8, 10)),
+    Production("232-note50-52", "s232_note37_softwood_membership", "37(b)", "(b) The rates of duty set forth in heading 9903.76.01", "(c) Heading 9903.76.02 provides", after_compiler=False),
+    Production("232-note50-52", "s232_note37_upholstered_wood_furniture_membership", "37(d)", "(d) The rates of duty set forth in headings 9903.76.02", "(e) Except for as provided by heading 9903.76.04", after_compiler=False, widths=(10,)),
+    Production("232-note50-52", "s232_note37_cabinet_vanity_candidate_membership", "37(f)", "(f) Except for as provided by heading 9903.76.04", "(g) Heading 9903.76.04 applies", after_compiler=False, widths=(10,)),
+    Production("232-note50-52", "s232_note38_mhd_vehicle_membership", "38(b)", "(b) The rate of duty set forth in heading 9903.74.01", "(c) Heading 9903.74.02 applies", after_compiler=False),
+    Production("232-note50-52", "s232_note38_bus_membership", "38(c)", "(c) Heading 9903.74.02 applies", "(d) Heading 9903.74.03", after_compiler=False),
+    Production("232-note50-52", "s232_note38_mhd_part_candidate_membership", "38(i)", "(i) Subject to a manufacturer’s import adjustment offset amount", "(j) Heading 9903.74.09 applies", after_compiler=False, include_prefixes=("40", "70", "73", "83", "84", "85", "87", "90", "94")),
+    Production("232-note50-52", "s232_note39_semiconductor_candidate_membership", "39(b)", "(b) For the purposes of this note, “semiconductor articles” refers", "To be included within the definition of semiconductor articles", after_compiler=False, widths=(6,)),
+    Production("232-note50-52", "s232_note40_pharmaceutical_candidate_membership", "40(c)", "(c) The headings provided in subdivision (a) of this note", "For the purposes of this note:", after_compiler=True, widths=(10,)),
     Production("brazil-301", "brazil_301_unconditional_exemption_membership", "50(a)(ii)", "(ii) As provided in heading 9903.05.03", "(iii) As provided in heading 9903.05.04"),
     Production("brazil-301", "brazil_301_particular_exemption_membership", "50(a)(iii)", "(iii) As provided in heading 9903.05.04", "(iv) As provided in heading 9903.05.05", after_compiler=False),
     Production("brazil-301", "brazil_301_aircraft_conditional_membership", "50(a)(iv)", "(iv) As provided in heading 9903.05.05", "(v) As provided in heading 9903.05.06", "conditional"),
@@ -91,6 +108,7 @@ FILES = {
     "301": "note20-china-301", "201": "note18-201-solar",
     "122": "note2aa-122-exemptions", "232-steel": "note16-232-steel",
     "232-aluminum": "note19-232-aluminum",
+    "232-note50-52": "note50-52-232-sector-precedence",
     "brazil-301": "note50-brazil-301",
     "forced-labor-301": "note52-forced-labor-301",
 }
