@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,6 +18,7 @@ MODULES = (
     "note2aa-122-exemptions.yaml",
     "note50-52-232-sector-precedence.yaml",
 )
+NOTE16_ALUMINUM_PRECEDENCE_MODULE = "note16-232-aluminum-precedence.yaml"
 WITNESS_LINES = {
     "entry_is_line_a": "7202111000", "entry_is_line_b": "7601103000",
     "entry_is_line_c": "9506624040", "entry_is_line_d": "2203000030",
@@ -27,6 +29,8 @@ WITNESS_LINES = {
 # legal determination entry preparation must supply, and each source points to
 # the official Rev. 15 note that makes code incidence alone insufficient.
 S232_PRECEDENCE_DECLARED_FACT_SOURCES = {
+    "entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight":
+        "us/statute/hts/chapter-99/page-236 (note 16(c))",
     "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52":
         "us/statute/hts/chapter-99/page-519 (note 33(b)-(e))",
     "entry_is_note33_g_automobile_part":
@@ -54,6 +58,13 @@ S232_PRECEDENCE_DECLARED_FACT_SOURCES = {
 # final Note 50/52 legal precedence Judgment from them and the declared facts
 # above.
 S232_PRECEDENCE_MEMBERSHIP_FLAGS = {
+    "entry_is_s232_note16_c_ii_derivative_aluminum_member":
+        "s232_note16_c_ii_derivative_aluminum",
+    "entry_is_s232_note16_c_vi_derivative_aluminum_candidate":
+        "s232_note16_c_vi_derivative_aluminum_candidate",
+    "entry_is_s232_note16_c_ix_derivative_aluminum_candidate":
+        "s232_note16_c_ix_derivative_aluminum_candidate",
+    "entry_is_s232_note16_metal_chapter": "s232_note16_metal_chapter",
     "entry_is_s232_copper_primary_member": "s232_copper_primary",
     "entry_is_s232_copper_additional_member": "s232_copper_additional",
     "entry_is_s232_note33_vehicle_candidate": "s232_note33_vehicle_candidate",
@@ -70,6 +81,20 @@ S232_PRECEDENCE_MEMBERSHIP_FLAGS = {
         "s232_note39_semiconductor_candidate",
     "entry_is_s232_note40_pharmaceutical_candidate":
         "s232_note40_pharmaceutical_candidate",
+}
+
+# Section 484(f) statistical changes effective 2026-07-01 split three exact
+# 10-digit Note 16 atoms.  The official transfer source is the USITC's
+# ``484f_2026-07.pdf`` (pages 61 and 69); each successor below exhausts its
+# predecessor's split.  Keeping this mapping at the adapter boundary preserves
+# the printed legal table while classifying the current HTS statistical lines.
+S232_NOTE16_484F_PREDECESSOR_BY_SUCCESSOR = {
+    "8479899510": "8479899599",
+    "8479899597": "8479899599",
+    "8479909510": "8479909596",
+    "8479909591": "8479909596",
+    "8708295150": "8708295160",
+    "8708295190": "8708295160",
 }
 
 
@@ -103,6 +128,29 @@ def _tables() -> dict[str, set[int]]:
     return tables
 
 
+@lru_cache(maxsize=None)
+def _note16_aluminum_precedence_tables(entry_day: date) -> dict[str, set[int]]:
+    """Select the latest Note-16 aluminum list version active on entry_day."""
+    path = INCIDENCE_DIR / NOTE16_ALUMINUM_PRECEDENCE_MODULE
+    module = yaml.safe_load(path.read_text())
+    tables: dict[str, set[int]] = {}
+    for rule in module["rules"]:
+        if "membership" not in rule["name"]:
+            continue
+        active = [
+            version
+            for version in rule.get("versions", [])
+            if date.fromisoformat(version["effective_from"]) <= entry_day
+            and (
+                not version.get("effective_to")
+                or entry_day <= date.fromisoformat(version["effective_to"])
+            )
+        ]
+        if active:
+            tables[rule["name"]] = {int(key) for key in active[-1]["values"]}
+    return tables
+
+
 def _member(table: str, rate_line: int, hts_digits: str) -> bool:
     """Match exact 10, rate-line 8, HTS prefix 6, or heading prefix 4."""
     if table.endswith("_membership_hts10"):
@@ -114,6 +162,30 @@ def _member(table: str, rate_line: int, hts_digits: str) -> bool:
     else:
         key = int(f"{rate_line:010d}"[:8])
     return key in _tables().get(table, set())
+
+
+def _note16_member(
+    table: str, rate_line: int, hts_digits: str, entry_day: date
+) -> bool:
+    """Apply a Note-16 table after the official July 2026 statistical splits."""
+    tables = _note16_aluminum_precedence_tables(entry_day)
+    if table.endswith("_membership_hts10"):
+        key = int(hts_digits)
+    else:
+        key = int(f"{rate_line:010d}"[:8])
+    if key in tables.get(table, set()):
+        return True
+    if entry_day < date(2026, 7, 1):
+        return False
+    predecessor = S232_NOTE16_484F_PREDECESSOR_BY_SUCCESSOR.get(hts_digits)
+    if not predecessor:
+        return False
+    predecessor_key = (
+        int(predecessor)
+        if table.endswith("_membership_hts10")
+        else int(predecessor[:8])
+    )
+    return predecessor_key in tables.get(table, set())
 
 
 def _fragment_member(prefix: str, rate_line: int, hts_digits: str) -> bool:
@@ -140,6 +212,8 @@ def entry_flags(
     hts_number: str,
     country: str,
     *,
+    entry_date: str | date,
+    entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight: bool = False,
     entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52: bool = False,
     entry_is_note33_g_automobile_part: bool = False,
     entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52: bool = False,
@@ -154,6 +228,11 @@ def entry_flags(
     if not 0 <= rate_line <= 9_999_999_999:
         raise ValueError("rate_line must be a nonnegative, at-most-10-digit integer")
     hts = _digits(hts_number)
+    entry_day = (
+        entry_date
+        if isinstance(entry_date, date)
+        else date.fromisoformat(entry_date)
+    )
     if not country.strip():
         raise ValueError("country must be nonempty")
     result = {name: hts == digits for name, digits in WITNESS_LINES.items()}
@@ -209,6 +288,30 @@ def entry_flags(
         "s122_gn6_conditional": ("s122_gn6_conditional_membership",),
     }
     result.update({name: any(_member(table, rate_line, hts) for table in tables) for name, tables in groups.items()})
+    note16_aluminum_groups = {
+        "s232_note16_c_ii_derivative_aluminum": (
+            "s232_note16_c_ii_derivative_aluminum_membership",
+            "s232_note16_c_ii_derivative_aluminum_membership_hts10",
+        ),
+        "s232_note16_c_vi_derivative_aluminum_candidate": (
+            "s232_note16_c_vi_derivative_aluminum_candidate_membership",
+            "s232_note16_c_vi_derivative_aluminum_candidate_membership_hts10",
+        ),
+        "s232_note16_c_ix_derivative_aluminum_candidate": (
+            "s232_note16_c_ix_derivative_aluminum_candidate_membership",
+            "s232_note16_c_ix_derivative_aluminum_candidate_membership_hts10",
+        ),
+    }
+    result.update(
+        {
+            name: any(
+                _note16_member(table, rate_line, hts, entry_day)
+                for table in tables
+            )
+            for name, tables in note16_aluminum_groups.items()
+        }
+    )
+    result["s232_note16_metal_chapter"] = hts[:2] in {"72", "73", "74", "76"}
     result.update(
         {
             public_name: result[local_name]
@@ -231,6 +334,8 @@ def entry_flags(
         result["entry_is_section_232_aluminum"] or result["entry_is_section_232_steel"]
     )
     declared_s232_precedence_facts = {
+        "entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight":
+            entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight,
         "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52":
             entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52,
         "entry_is_note33_g_automobile_part": entry_is_note33_g_automobile_part,
@@ -290,5 +395,16 @@ if __name__ == "__main__":
     parser.add_argument("rate_line", type=int)
     parser.add_argument("hts_number")
     parser.add_argument("country")
+    parser.add_argument("--entry-date", required=True)
     args = parser.parse_args()
-    print(json.dumps(entry_flags(args.rate_line, args.hts_number, args.country), sort_keys=True))
+    print(
+        json.dumps(
+            entry_flags(
+                args.rate_line,
+                args.hts_number,
+                args.country,
+                entry_date=args.entry_date,
+            ),
+            sort_keys=True,
+        )
+    )

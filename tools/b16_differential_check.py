@@ -65,6 +65,21 @@ LEGAL_TABLES = (
     LegalTable("s232_steel_derivative_mobile_membership", 16, ("c", "xi")),
     LegalTable("s232_aluminum_primary_membership", 19, ("b",), "76", widths=(4, 8)),
     LegalTable("s232_aluminum_derivative_membership", 19, ("j",)),
+    LegalTable(
+        "s232_note16_c_ii_derivative_aluminum_membership",
+        16,
+        ("c", "ii"),
+    ),
+    LegalTable(
+        "s232_note16_c_vi_derivative_aluminum_candidate_membership",
+        16,
+        ("c", "vi"),
+    ),
+    LegalTable(
+        "s232_note16_c_ix_derivative_aluminum_candidate_membership",
+        16,
+        ("c", "ix"),
+    ),
     LegalTable("brazil_301_unconditional_exemption_membership", 50, ("a", "ii")),
     LegalTable("brazil_301_particular_exemption_membership", 50, ("a", "iii")),
     LegalTable("brazil_301_aircraft_conditional_membership", 50, ("a", "iv")),
@@ -235,7 +250,12 @@ def scan_hts(text: str, lo: int, hi: int, allow_terminal_period: bool = False) -
             i >= hi
             or (
                 not is_ascii_digit(text[i])
-                and (text[i] != "." or allow_terminal_period)
+                and (
+                    text[i] != "."
+                    or allow_terminal_period
+                    or i + 1 >= hi
+                    or not is_ascii_digit(text[i + 1])
+                )
             )
         ):
             out.add("".join(groups))
@@ -326,7 +346,12 @@ def generated_note52_formula_countries() -> set[str]:
     return {
         code
         for code in set(COUNTRY_NAME_CODES.values()) | EU_CODES
-        if entry_flags(99_999_999_99, "9999.99.99.99", code)[
+        if entry_flags(
+            99_999_999_99,
+            "9999.99.99.99",
+            code,
+            entry_date="2026-08-03",
+        )[
             "entry_is_forced_labor_301"
         ]
     }
@@ -339,7 +364,9 @@ def generated_tables() -> dict[str, set[str]]:
             continue
         for rule in yaml.safe_load(path.read_text()).get("rules", []):
             if rule.get("kind") == "parameter" and "membership" in rule["name"]:
-                tables[rule["name"]] = {str(key) for key in rule["versions"][0]["values"]}
+                tables[rule["name"]] = {
+                    str(key) for key in rule["versions"][-1]["values"]
+                }
     return tables
 
 
@@ -375,7 +402,12 @@ def main() -> int:
         brazil_generated = {
             code
             for code in set(COUNTRY_NAME_CODES.values()) | EU_CODES
-            if entry_flags(99_999_999_99, "9999.99.99.99", code)[
+            if entry_flags(
+                99_999_999_99,
+                "9999.99.99.99",
+                code,
+                entry_date="2026-08-03",
+            )[
                 "entry_is_brazil_301"
             ]
         }

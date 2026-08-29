@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-5"
+GENERATOR_VERSION = "b1.6-schedule-compositions-6"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
 WITNESS_SHA256 = "0dafe611b0680a64c7b20364bf0f9d2fd71c6e58036f30f088f8d07653d66a56"
@@ -91,6 +91,10 @@ COMPONENT_RULES = (
 )
 
 NOTE50_52_PRECEDENCE_MEMBERSHIP_INPUTS = (
+    "entry_is_s232_note16_c_ii_derivative_aluminum_member",
+    "entry_is_s232_note16_c_vi_derivative_aluminum_candidate",
+    "entry_is_s232_note16_c_ix_derivative_aluminum_candidate",
+    "entry_is_s232_note16_metal_chapter",
     "entry_is_s232_copper_primary_member",
     "entry_is_s232_copper_additional_member",
     "entry_is_s232_note33_vehicle_candidate",
@@ -106,6 +110,7 @@ NOTE50_52_PRECEDENCE_MEMBERSHIP_INPUTS = (
 )
 
 NOTE50_52_PRECEDENCE_DECLARED_INPUTS = (
+    "entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight",
     "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52",
     "entry_is_note33_g_automobile_part",
     "entry_qualifies_for_note33_certified_auto_part_heading_listed_in_notes_50_52",
@@ -119,7 +124,9 @@ NOTE50_52_PRECEDENCE_DECLARED_INPUTS = (
 )
 
 NOTE50_52_PRECEDENCE_CITATIONS = {
+    "us/statute/hts/chapter-99/page-236",
     "us/statute/hts/chapter-99/page-237",
+    "us/statute/hts/chapter-99/page-238",
     "us/statute/hts/chapter-99/page-241",
     "us/statute/hts/chapter-99/page-519",
     "us/statute/hts/chapter-99/page-521",
@@ -638,6 +645,26 @@ def note50_52_section_232_precedence_rule() -> dict:
             "existing steel or aluminum membership",
         ),
         atom(
+            "us/statute/hts/chapter-99/page-236",
+            "(ii) Derivative aluminum articles",
+            "Note 16(c)(ii) derivative-aluminum membership",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-238",
+            "(vi) Derivative aluminum articles",
+            "Note 16(c)(vi) derivative-aluminum candidate",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-241",
+            "(ix) Derivative aluminum articles",
+            "Note 16(c)(ix) derivative-aluminum candidate",
+        ),
+        atom(
+            "us/statute/hts/chapter-99/page-236",
+            "only apply where the weight of the applicable metal is at least 15 percent of the weight of the imported article",
+            "Note 16(c)(vi)/(ix) candidate AND metal-chapter-or-weight qualification",
+        ),
+        atom(
             "us/statute/hts/chapter-99/page-237",
             "7406.10.00",
             "Note 16(c)(v) copper membership",
@@ -719,6 +746,21 @@ def note50_52_section_232_precedence_rule() -> dict:
         ),
     ]
     formula = """entry_is_section_232_covered
+or entry_is_s232_note16_c_ii_derivative_aluminum_member
+or (
+  entry_is_s232_note16_c_vi_derivative_aluminum_candidate
+  and (
+    entry_is_s232_note16_metal_chapter
+    or entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight
+  )
+)
+or (
+  entry_is_s232_note16_c_ix_derivative_aluminum_candidate
+  and (
+    entry_is_s232_note16_metal_chapter
+    or entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight
+  )
+)
 or entry_is_s232_copper_primary_member
 or entry_is_s232_copper_additional_member
 or entry_is_s232_note37_softwood_member
@@ -1508,6 +1550,16 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
         )
         for label, candidate_input, qualification_input in (
             (
+                "Note 16(c)(vi) derivative-aluminum weight",
+                "entry_is_s232_note16_c_vi_derivative_aluminum_candidate",
+                "entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight",
+            ),
+            (
+                "Note 16(c)(ix) derivative-aluminum weight",
+                "entry_is_s232_note16_c_ix_derivative_aluminum_candidate",
+                "entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight",
+            ),
+            (
                 "Note 33 vehicle",
                 "entry_is_s232_note33_vehicle_candidate",
                 "entry_qualifies_for_note33_vehicle_heading_listed_in_notes_50_52",
@@ -1551,6 +1603,42 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
                         },
                     }
                 )
+        note50_52_precedence_cases.extend(
+            [
+                {
+                    "name": "Note 16(c)(ii) derivative-aluminum member qualifies directly",
+                    "period": _day(COMPANION_EFFECTIVE_DATE),
+                    "input": _qualified_inputs(
+                        module_path,
+                        _note50_52_precedence_inputs(
+                            entry_is_s232_note16_c_ii_derivative_aluminum_member=True
+                        ),
+                    ),
+                    "output": {
+                        f"{module_path}#entry_is_note50_52_section_232_precedence_exempt":
+                            "holds"
+                    },
+                },
+                {
+                    "name": (
+                        "Note 16(c)(vi) metal-chapter member does not need the "
+                        "15-percent fact"
+                    ),
+                    "period": _day(COMPANION_EFFECTIVE_DATE),
+                    "input": _qualified_inputs(
+                        module_path,
+                        _note50_52_precedence_inputs(
+                            entry_is_s232_note16_c_vi_derivative_aluminum_candidate=True,
+                            entry_is_s232_note16_metal_chapter=True,
+                        ),
+                    ),
+                    "output": {
+                        f"{module_path}#entry_is_note50_52_section_232_precedence_exempt":
+                            "holds"
+                    },
+                },
+            ]
+        )
         for label, direct_fact in (
             (
                 "Note 33 certified automobile-part",

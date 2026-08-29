@@ -1,13 +1,22 @@
 from pathlib import Path
 import sys
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from b16_entry_flags import (
     S232_PRECEDENCE_DECLARED_FACT_SOURCES,
     S232_PRECEDENCE_MEMBERSHIP_FLAGS,
+    S232_NOTE16_484F_PREDECESSOR_BY_SUCCESSOR,
     WITNESS_LINES,
-    entry_flags,
+    entry_flags as _entry_flags,
 )
+from generate_incidence_tables import PROCLAMATION_11021_CITATION
+
+
+def entry_flags(*args, **kwargs):
+    kwargs.setdefault("entry_date", "2026-08-03")
+    return _entry_flags(*args, **kwargs)
 
 
 def dotted(digits: str) -> str:
@@ -106,6 +115,156 @@ def test_note50_52_unconditional_sector_memberships_are_code_derived():
         flags = entry_flags(rate_line, hts_number, "BR")
         assert flags[membership]
         assert "entry_is_note50_52_section_232_precedence_exempt" not in flags
+
+
+def test_note16_derivative_aluminum_lists_are_effective_dated():
+    before = entry_flags(
+        3701300000,
+        "3701.30.00.00",
+        "CA",
+        entry_date="2026-06-07",
+    )
+    after = entry_flags(
+        3701300000,
+        "3701.30.00.00",
+        "CA",
+        entry_date="2026-06-08",
+    )
+    candidate = "entry_is_s232_note16_c_vi_derivative_aluminum_candidate"
+    assert not before[candidate]
+    assert after[candidate]
+    assert not after["entry_is_s232_note16_metal_chapter"]
+    assert not after[
+        "entry_has_at_least_fifteen_percent_aggregate_applicable_listed_metal_weight"
+    ]
+
+
+def test_note16_c_ii_uses_the_april_legal_effect_correction():
+    corrected = entry_flags(
+        7612100000,
+        "7612.10.00.00",
+        "BR",
+        entry_date="2026-04-06",
+    )
+    archived_typo = entry_flags(
+        7612101000,
+        "7612.10.10.00",
+        "BR",
+        entry_date="2026-04-06",
+    )
+    member = "entry_is_s232_note16_c_ii_derivative_aluminum_member"
+    assert corrected[member]
+    assert corrected["entry_is_s232_note16_metal_chapter"]
+    assert not archived_typo[member]
+
+
+def test_note16_april_source_proof_is_targeted_and_does_not_truncate_c_ii():
+    module_path = (
+        Path(__file__).resolve().parents[1]
+        / "us/policies/usitc/us-tariff-incidence/generated/"
+        "note16-232-aluminum-precedence.yaml"
+    )
+    payload = yaml.safe_load(module_path.read_text())
+    module = payload["module"]
+    assert (
+        PROCLAMATION_11021_CITATION
+        in module["source_verification"]["corpus_citation_paths"]
+    )
+    assert "c(ii) continues beyond that retained page" in module["summary"]
+
+    c_ii_rules = [
+        rule
+        for rule in payload["rules"]
+        if rule["name"].startswith(
+            "s232_note16_c_ii_derivative_aluminum_membership"
+        )
+    ]
+    assert sum(len(rule["versions"][0]["values"]) for rule in c_ii_rules) == 17
+    official_atoms = [
+        atom
+        for rule in c_ii_rules
+        for atom in rule["metadata"]["proof"]["atoms"]
+        if atom["source"]["corpus_citation_path"]
+        == PROCLAMATION_11021_CITATION
+    ]
+    assert len(official_atoms) == 1
+    assert official_atoms[0]["source"]["excerpt"] == "7612.10.00"
+    assert (
+        official_atoms[0]["context"]["evidence_role"]
+        == "targeted official confirmation"
+    )
+
+    for subdivision in ("c_vi", "c_ix"):
+        april_atoms = [
+            atom
+            for rule in payload["rules"]
+            if rule["name"].startswith(f"s232_note16_{subdivision}_")
+            for atom in rule["metadata"]["proof"]["atoms"]
+            if atom["path"] == "versions[0].values"
+        ]
+        assert april_atoms
+        assert all(
+            atom["context"]["release"] == "USITC HTS Revision 5"
+            for atom in april_atoms
+        )
+
+
+def test_note16_candidate_in_a_metal_chapter_is_code_qualified():
+    flags = entry_flags(
+        7615103025,
+        "7615.10.30.25",
+        "BR",
+        entry_date="2026-07-24",
+    )
+    assert flags["entry_is_s232_note16_c_vi_derivative_aluminum_candidate"]
+    assert flags["entry_is_s232_note16_metal_chapter"]
+
+
+def test_note16_july_statistical_successors_inherit_exact_predecessors():
+    assert S232_NOTE16_484F_PREDECESSOR_BY_SUCCESSOR == {
+        "8479899510": "8479899599",
+        "8479899597": "8479899599",
+        "8479909510": "8479909596",
+        "8479909591": "8479909596",
+        "8708295150": "8708295160",
+        "8708295190": "8708295160",
+    }
+    cases = (
+        (
+            "8479.89.95.10",
+            "entry_is_s232_note16_c_ix_derivative_aluminum_candidate",
+        ),
+        (
+            "8479.89.95.97",
+            "entry_is_s232_note16_c_ix_derivative_aluminum_candidate",
+        ),
+        (
+            "8479.90.95.10",
+            "entry_is_s232_note16_c_ix_derivative_aluminum_candidate",
+        ),
+        (
+            "8479.90.95.91",
+            "entry_is_s232_note16_c_ix_derivative_aluminum_candidate",
+        ),
+        (
+            "8708.29.51.50",
+            "entry_is_s232_note16_c_vi_derivative_aluminum_candidate",
+        ),
+        (
+            "8708.29.51.90",
+            "entry_is_s232_note16_c_vi_derivative_aluminum_candidate",
+        ),
+    )
+    for hts_number, candidate in cases:
+        digits = hts_number.replace(".", "")
+        before = entry_flags(
+            int(digits), hts_number, "BR", entry_date="2026-06-30"
+        )
+        after = entry_flags(
+            int(digits), hts_number, "BR", entry_date="2026-07-01"
+        )
+        assert not before[candidate]
+        assert after[candidate]
 
 
 def test_note50_52_flag_does_not_broaden_section_232_covered():
@@ -235,7 +394,7 @@ def test_python_emits_only_primitive_precedence_inputs_not_the_final_judgment():
 
 
 def test_every_declared_sector_fact_has_an_official_note_source():
-    assert len(S232_PRECEDENCE_DECLARED_FACT_SOURCES) == 10
+    assert len(S232_PRECEDENCE_DECLARED_FACT_SOURCES) == 11
     assert all(
         source.startswith("us/statute/hts/chapter-99/page-")
         for source in S232_PRECEDENCE_DECLARED_FACT_SOURCES.values()

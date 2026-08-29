@@ -16,14 +16,59 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
-VERSION = "b1.6-incidence-2"
+VERSION = "b1.6-incidence-3"
 SHA256 = "0f3ed7ef2efb64383825db65e615959200770e8511c8d4834b16e02892cb9ec8"
 RELPATH = "data/corpus/provisions/us/statute/2026-08-04-usitc-hts-2026-rev15-notes.jsonl"
+REV10_SHA256 = "87774d2023f02954b1723bdf0b20b890d148fba4474c5422acc77d98dadefba3"
+REV10_RELPATH = (
+    "data/corpus/provisions/us/statute/"
+    "2026-08-01-usitc-hts-2026-rev10-notes.jsonl"
+)
+REV5_SHA256 = "ee8889aa9fe24c5330b103dada5eb270037c1038149eea614c85421d92011214"
+REV5_RELPATH = (
+    "data/corpus/provisions/us/statute/"
+    "2026-08-01-usitc-hts-2026-rev5-notes.jsonl"
+)
+PROCLAMATION_11021_SHA256 = (
+    "92a7aa2ca28779965dafc471e4f7d288527eb87a62c4e8c7903efcf85a9460cf"
+)
+PROCLAMATION_11021_BODY_SHA256 = (
+    "8bb8ff988becea34d3e4331b35350f023e68750419a62c724b36311870218d57"
+)
+PROCLAMATION_11021_RELPATH = (
+    "data/corpus/provisions/us/rulemaking/"
+    "2026-08-29-tariff-232-proclamation-11021-annex-iv-page-43.jsonl"
+)
+PROCLAMATION_11021_CITATION = (
+    "us/rulemaking/federal-register/2026-04-09/2026-06960/annex-iv/page-43"
+)
+REV6_SHA256 = "77b1a7ea0f038d436ae002545e6a057e04869da3e41d29e04bcc7e88631ae27f"
+REV6_RELPATH = (
+    "data/corpus/provisions/us/statute/"
+    "2026-08-01-usitc-hts-2026-rev6-notes.jsonl"
+)
+REV12_SHA256 = "c42ed5322255c3c3db900b4cf5f751200a12f986fdb0be433fae67c48ddbefac"
+REV12_RELPATH = (
+    "data/corpus/provisions/us/statute/"
+    "2026-08-01-usitc-hts-2026-rev12-notes.jsonl"
+)
+NOTE16_ALUMINUM_VINTAGES = (
+    (
+        "2026-04-06",
+        REV5_RELPATH,
+        REV5_SHA256,
+        "USITC HTS Revision 5",
+    ),
+    ("2026-06-08", REV10_RELPATH, REV10_SHA256, "USITC HTS Revision 10"),
+)
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "us/policies/usitc/us-tariff-incidence/generated"
-HTS = re.compile(r"(?<![\d.])(\d{4}\.\d{2}\.\d{2}(?:\d{2})?)(?![\d.])")
+HTS = re.compile(
+    r"(?<![\d.])(\d{4}\.\d{2}\.\d{2}(?:\d{2})?)(?!\d|\.\d)"
+)
 PRINTED_WIDTH_HTS = re.compile(
     r"(?<![\d.])(\d{4}(?:\.\d{2}(?:\.\d{2}(?:\d{2})?)?)?)(?!\d|\.\d)"
 )
@@ -39,6 +84,8 @@ class Production:
     after_compiler: bool = True
     include_prefixes: tuple[str,...] = ()
     widths: tuple[int, ...] = (8, 10)
+    effective_from: str = "2026-08-03"
+    source_label: str = "USITC HTS Revision 15"
 
 # Exact anchors intentionally include operative heading language, not bare labels.
 GRAMMAR = (
@@ -58,6 +105,41 @@ GRAMMAR = (
     Production("232-steel", "s232_steel_derivative_mobile_membership", "16(c)(xi)", "(xi) Derivative steel articles:", "(d) Headings 9903.82.04", after_compiler=False),
     Production("232-aluminum", "s232_aluminum_primary_membership", "19(b)", "(b) The rates of duty set forth in heading 9903.85.01", "(c) The Secretary of Commerce", after_compiler=False, include_prefixes=("76",), widths=(4, 8)),
     Production("232-aluminum", "s232_aluminum_derivative_membership", "19(j)", "(j) The rates of duty set forth in heading 9903.85.07", "(k) The rates of duty in heading 9903.85.08", after_compiler=False),
+    # Proclamation 11021 moved the operative aluminum-derivative program into
+    # note 16(c).  These three lists are the primitive incidence surface for
+    # the later notes 50/52 sector-precedence exclusions.  Revision 10 is the
+    # first snapshot needed by those exclusions and is independently checked
+    # below to be byte-for-byte equal at the extracted-atom level to Rev. 15.
+    Production(
+        "232-note16-aluminum-precedence",
+        "s232_note16_c_ii_derivative_aluminum_membership",
+        "16(c)(ii)",
+        "(ii) Derivative aluminum articles:",
+        "(iii) Articles of steel:",
+        after_compiler=False,
+        effective_from="2026-06-08",
+        source_label="USITC HTS Revision 10, unchanged through Revision 15",
+    ),
+    Production(
+        "232-note16-aluminum-precedence",
+        "s232_note16_c_vi_derivative_aluminum_candidate_membership",
+        "16(c)(vi)",
+        "(vi) Derivative aluminum articles:",
+        "(vii) Derivative steel articles",
+        after_compiler=False,
+        effective_from="2026-06-08",
+        source_label="USITC HTS Revision 10, unchanged through Revision 15",
+    ),
+    Production(
+        "232-note16-aluminum-precedence",
+        "s232_note16_c_ix_derivative_aluminum_candidate_membership",
+        "16(c)(ix)",
+        "(ix) Derivative aluminum articles:",
+        "(x) Derivative steel articles:",
+        after_compiler=False,
+        effective_from="2026-06-08",
+        source_label="USITC HTS Revision 10, unchanged through Revision 15",
+    ),
     # Notes 50(a)(vi) and 52(f) exclude the sector programs named below from
     # their additional duties.  Some program notes define an unconditional
     # HTS list; others print only a candidate list and require a product/use
@@ -108,6 +190,7 @@ FILES = {
     "301": "note20-china-301", "201": "note18-201-solar",
     "122": "note2aa-122-exemptions", "232-steel": "note16-232-steel",
     "232-aluminum": "note19-232-aluminum",
+    "232-note16-aluminum-precedence": "note16-232-aluminum-precedence",
     "232-note50-52": "note50-52-232-sector-precedence",
     "brazil-301": "note50-brazil-301",
     "forced-labor-301": "note52-forced-labor-301",
@@ -147,6 +230,51 @@ def pages(path: Path) -> list[dict]:
         if d.get("kind")=="page" and d.get("parent_citation_path")=="us/statute/hts/chapter-99": out.append(d)
     return sorted(out, key=lambda d:int(d["metadata"]["page_number"]))
 
+
+def proclamation_11021_page(path: Path) -> dict:
+    """Load the targeted April-effect, proviso, and c(ii)-code witness."""
+    records = [json.loads(raw) for raw in path.read_text().splitlines() if raw]
+    if len(records) != 1:
+        raise ValueError(
+            "Proclamation 11021 Annex IV page-43 artifact must contain one record"
+        )
+    page = records[0]
+    if page.get("kind") != "page":
+        raise ValueError("Proclamation 11021 Annex IV record is not a page")
+    if page.get("citation_path") != PROCLAMATION_11021_CITATION:
+        raise ValueError("Proclamation 11021 Annex IV citation path changed")
+    if page.get("metadata", {}).get("effective_date") != "2026-04-06":
+        raise ValueError("Proclamation 11021 Annex IV effective date changed")
+    if (
+        hashlib.sha256((page.get("body") or "").encode()).hexdigest()
+        != PROCLAMATION_11021_BODY_SHA256
+    ):
+        raise ValueError("Proclamation 11021 Annex IV page body changed")
+    body = page["body"]
+    required_excerpts = (
+        "on or after 12:01 a.m. eastern time on April 6, 2026",
+        (
+            "only apply where the weight of the applicable metal is at least 15 "
+            "percent of the weight of the imported article"
+        ),
+        "(ii) Derivative aluminum articles:",
+        "7612.10.00",
+    )
+    for excerpt in required_excerpts:
+        if excerpt not in body:
+            raise ValueError(
+                "Proclamation 11021 Annex IV page missing required excerpt: "
+                f"{excerpt}"
+            )
+    if "7612.10.10" in body:
+        raise ValueError(
+            "Proclamation 11021 Annex IV page contains superseded HTS 7612.10.10"
+        )
+    selection_scope = page.get("metadata", {}).get("selection_scope", "")
+    if "page-43 portion of subdivision (c)(ii)" not in selection_scope:
+        raise ValueError("Proclamation page scope no longer marks c(ii) as partial")
+    return page
+
 def segments(all_pages: list[dict], p: Production):
     active=False
     for page in all_pages:
@@ -184,6 +312,7 @@ def extract(all_pages: list[dict], p: Production) -> list[dict]:
         seen[atom["code"]]=atom
     return sorted(found,key=lambda a:(len(a["code"].replace('.','')),int(a["code"].replace('.',''))))
 
+
 def q(s): return json.dumps(s,ensure_ascii=False)
 def key(code): return int(code.replace(".",""))
 
@@ -201,12 +330,177 @@ def table_lines(p: Production, atoms: list[dict], page_number: int | None = None
     name=table_name(p, width)
     if page_number is not None:
         name += f"_p{page_number}"
-    out=[f"  - name: {name}","    kind: parameter","    dtype: Count","    indexed_by: hts_line",f"    source: USITC HTS Revision 15 U.S. note {p.subdivision}","    metadata:","      proof:","        atoms:"]
+    out=[f"  - name: {name}","    kind: parameter","    dtype: Count","    indexed_by: hts_line",f"    source: {p.source_label} U.S. note {p.subdivision}","    metadata:","      proof:","        atoms:"]
     for a in atoms:
         out += ["          - path: versions[0].values","            kind: parameter","            source:",f"              corpus_citation_path: {a['page']}",f"              excerpt: {q(a['excerpt'])}","            context:",f"              subdivision: {q(a['subdivision'])}"]
-    out += ["    versions:","      - effective_from: '2026-08-03'","        values:"]
+    out += ["    versions:",f"      - effective_from: '{p.effective_from}'","        values:"]
     out += [f"          {key(a['code'])}: 1" for a in atoms]
     return out
+
+
+def versioned_table_lines(
+    production: Production,
+    width: int,
+    vintages: list[tuple[str, str, list[dict]]],
+) -> list[str]:
+    """Render one table whose legal list changes across pinned HTS releases."""
+    name = table_name(production, width)
+    source_labels: list[str] = []
+    for _effective_from, release, atoms in vintages:
+        for atom in atoms:
+            labels = [
+                atom.get("release", release),
+                *[
+                    confirmation["release"]
+                    for confirmation in atom.get("confirmations", [])
+                ],
+            ]
+            for label in labels:
+                if label not in source_labels:
+                    source_labels.append(label)
+    out = [
+        f"  - name: {name}",
+        "    kind: parameter",
+        "    dtype: Count",
+        "    indexed_by: hts_line",
+        f"    source: {' and '.join(source_labels)} U.S. note "
+        f"{production.subdivision}",
+        "    metadata:",
+        "      proof:",
+        "        atoms:",
+    ]
+    for version_index, (effective_from, release, atoms) in enumerate(vintages):
+        for atom in atoms:
+            out += [
+                f"          - path: versions[{version_index}].values",
+                "            kind: parameter",
+                "            source:",
+                f"              corpus_citation_path: {atom['page']}",
+                f"              excerpt: {q(atom['excerpt'])}",
+                "            context:",
+                f"              subdivision: {q(atom['subdivision'])}",
+                f"              release: {q(atom.get('release', release))}",
+                f"              effective_from: {q(effective_from)}",
+            ]
+            for confirmation in atom.get("confirmations", []):
+                out += [
+                    f"          - path: versions[{version_index}].values",
+                    "            kind: parameter",
+                    "            source:",
+                    (
+                        "              corpus_citation_path: "
+                        f"{confirmation['page']}"
+                    ),
+                    f"              excerpt: {q(confirmation['excerpt'])}",
+                    "            context:",
+                    f"              subdivision: {q(atom['subdivision'])}",
+                    f"              release: {q(confirmation['release'])}",
+                    f"              effective_from: {q(effective_from)}",
+                    "              evidence_role: targeted official confirmation",
+                ]
+    out.append("    versions:")
+    for index, (effective_from, _release, atoms) in enumerate(vintages):
+        out.append(f"      - effective_from: '{effective_from}'")
+        if index + 1 < len(vintages):
+            effective_to = (
+                date.fromisoformat(vintages[index + 1][0]) - timedelta(days=1)
+            ).isoformat()
+            out.append(f"        effective_to: '{effective_to}'")
+        out += [
+            "        values:",
+            *[f"          {key(atom['code'])}: 1" for atom in atoms],
+        ]
+    return out
+
+
+def render_note16_aluminum_precedence(
+    vintage_pairs: list[
+        tuple[str, str, list[tuple[Production, list[dict]]]]
+    ],
+) -> tuple[str, str]:
+    """Render the effective-dated Note-16 aluminum precedence module."""
+    action = "232-note16-aluminum-precedence"
+    slug = FILES[action]
+    cited_set = {
+        atom["page"]
+        for _date, _release, pairs in vintage_pairs
+        for _production, atoms in pairs
+        for atom in atoms
+    }
+    cited_set.update(
+        confirmation["page"]
+        for _date, _release, pairs in vintage_pairs
+        for _production, atoms in pairs
+        for atom in atoms
+        for confirmation in atom.get("confirmations", [])
+    )
+    cited = sorted(cited_set, key=lambda path: int(path.rsplit("-", 1)[1]))
+    summary = (
+        f"Generated by {VERSION} deterministically from corpus-pinned USITC "
+        "Revision 6 for the complete April-6 subdivision (ii) list, Revision 5 "
+        "for the April-6 subdivision (vi)/(ix) lists, and Revision 10 for the "
+        "June-8 lists. The official Proclamation 11021 Annex IV page-43 witness "
+        "directly confirms the April-6 effective date, the note 16(c) aggregate "
+        "15-percent listed-metal-weight proviso, and corrected HTS 7612.10.00; "
+        "c(ii) continues beyond that retained page. Revision-10 atoms are "
+        "checked unchanged in the Revision-12 campaign vintage and Revision 15; "
+        "hand edits prohibited. Code incidence is unconditional for subdivision "
+        "(ii). Subdivisions (vi) and (ix) remain candidates outside chapters 72, "
+        "73, 74, and 76 because of the Proclamation's proviso."
+    )
+    out = [
+        "format: rulespec/v1",
+        "module:",
+        "  proof_validation:",
+        "    required: true",
+        "  source_verification:",
+        "    corpus_citation_paths:",
+        *[f"      - {citation}" for citation in cited],
+        "  summary: |-",
+        f"    {summary}",
+        "rules:",
+    ]
+    tests: list[str] = []
+    module = f"us:policies/usitc/us-tariff-incidence/generated/{slug}"
+    productions = [production for production, _atoms in vintage_pairs[-1][2]]
+    for production in productions:
+        for width in (8, 10):
+            versions: list[tuple[str, str, list[dict]]] = []
+            for effective_from, release, pairs in vintage_pairs:
+                atoms = next(
+                    atoms
+                    for candidate, atoms in pairs
+                    if candidate.table == production.table
+                )
+                versions.append(
+                    (
+                        effective_from,
+                        release,
+                        [
+                            atom
+                            for atom in atoms
+                            if len(atom["code"].replace(".", "")) == width
+                        ],
+                    )
+                )
+            if not any(atoms for _date, _release, atoms in versions):
+                continue
+            out += versioned_table_lines(production, width, versions)
+            present = versions[-1][2][0]
+            name = table_name(production, width)
+            tests += [
+                f"- name: {q(name + ' current-vintage membership-present')}",
+                "  period:",
+                "    period_kind: custom",
+                "    name: day",
+                "    start: '2026-07-24'",
+                "    end: '2026-07-24'",
+                "  input:",
+                f"    {module}#input.hts_line: {key(present['code'])}",
+                "  output:",
+                f"    {module}#{name}: 1",
+            ]
+    return "\n".join(out) + "\n", "\n".join(tests) + "\n"
 
 
 def page_render(
@@ -293,7 +587,25 @@ def render(action: str, productions: list[tuple[Production,list[dict]]]) -> tupl
     cited=sorted({a['page'] for _,atoms in productions for a in atoms},key=lambda x:int(x.rsplit('-',1)[1]))
     if action == "301": cited = sorted(set(cited)|{"us/statute/hts/chapter-99/page-260"},key=lambda x:int(x.rsplit('-',1)[1]))
     if action == "122": cited = sorted(set(cited)|{"us/statute/hts/chapter-99/page-221"},key=lambda x:int(x.rsplit('-',1)[1]))
-    slug=FILES[action]; summary=f"Generated by {VERSION} deterministically from the corpus-pinned USITC Rev-15 chapter-99 notes; hand edits prohibited. This is the codified state effective 2026-08-03 and therefore post-dates the analysis window; it is not a historical-vintage panel."
+    slug=FILES[action]
+    if action == "232-note16-aluminum-precedence":
+        summary = (
+            f"Generated by {VERSION} deterministically from the corpus-pinned "
+            "USITC Revision-15 chapter-99 notes after an exact extracted-atom "
+            "equality check against Revision 10; hand edits prohibited. These "
+            "note 16(c)(ii), (vi), and (ix) lists are unchanged from the "
+            "2026-06-08 snapshot through 2026-08-03. Code incidence is "
+            "unconditional for subdivision (ii); subdivisions (vi) and (ix) "
+            "remain candidates because note 16(c) requires at least 15-percent "
+            "aggregate listed-metal weight outside chapters 72, 73, 74, and 76."
+        )
+    else:
+        summary = (
+            f"Generated by {VERSION} deterministically from the corpus-pinned "
+            "USITC Rev-15 chapter-99 notes; hand edits prohibited. This is the "
+            "codified state effective 2026-08-03 and therefore post-dates the "
+            "analysis window; it is not a historical-vintage panel."
+        )
     out=["format: rulespec/v1","module:","  proof_validation:","    required: true","  source_verification:","    corpus_citation_paths:"]+[f"      - {c}" for c in cited]
     out += ["  summary: |-",f"    {summary}","rules:"]
     tests=[]; module=f"us:policies/usitc/us-tariff-incidence/generated/{slug}"
@@ -323,6 +635,86 @@ def generate(
     all_pages=pages(source); hashes={}; dest.mkdir(parents=True,exist_ok=True)
     for action,slug in FILES.items():
         if selected and action not in selected: continue
+        if action == "232-note16-aluminum-precedence":
+            vintage_pairs = []
+            corpus = source.parents[5]
+            proclamation_source = corpus / PROCLAMATION_11021_RELPATH
+            if (
+                hashlib.sha256(proclamation_source.read_bytes()).hexdigest()
+                != PROCLAMATION_11021_SHA256
+            ):
+                raise SystemExit(
+                    "Proclamation 11021 Annex IV page-43 snapshot sha mismatch"
+                )
+            proclamation_page = proclamation_11021_page(proclamation_source)
+            revision6_source = corpus / REV6_RELPATH
+            if (
+                hashlib.sha256(revision6_source.read_bytes()).hexdigest()
+                != REV6_SHA256
+            ):
+                raise SystemExit("USITC HTS Revision 6 notes snapshot sha mismatch")
+            revision6_pages = pages(revision6_source)
+            for effective_from, relpath, expected_sha, release in NOTE16_ALUMINUM_VINTAGES:
+                vintage_source = corpus / relpath
+                if hashlib.sha256(vintage_source.read_bytes()).hexdigest() != expected_sha:
+                    raise SystemExit(f"{release} notes snapshot sha mismatch")
+                vintage_pages = pages(vintage_source)
+                pairs = []
+                for production in GRAMMAR:
+                    if production.action != action:
+                        continue
+                    atom_release = release
+                    if (
+                        effective_from == "2026-04-06"
+                        and production.subdivision == "16(c)(ii)"
+                    ):
+                        atoms = extract(revision6_pages, production)
+                        atom_release = "USITC HTS Revision 6"
+                    else:
+                        atoms = extract(vintage_pages, production)
+                    annotated_atoms = []
+                    for atom in atoms:
+                        annotated = {**atom, "release": atom_release}
+                        if (
+                            effective_from == "2026-04-06"
+                            and production.subdivision == "16(c)(ii)"
+                            and atom["code"] == "7612.10.00"
+                        ):
+                            annotated["confirmations"] = [
+                                {
+                                    "page": proclamation_page["citation_path"],
+                                    "excerpt": "7612.10.00",
+                                    "release": (
+                                        "Official Proclamation 11021 Annex IV "
+                                        "page 43"
+                                    ),
+                                }
+                            ]
+                        annotated_atoms.append(annotated)
+                    if (
+                        effective_from == "2026-04-06"
+                        and production.subdivision == "16(c)(ii)"
+                        and not any(
+                            atom.get("confirmations")
+                            for atom in annotated_atoms
+                        )
+                    ):
+                        raise SystemExit(
+                            "Revision 6 c(ii) lacks officially confirmed HTS "
+                            "7612.10.00"
+                        )
+                    pairs.append(
+                        (
+                            production,
+                            annotated_atoms,
+                        )
+                    )
+                vintage_pairs.append((effective_from, release, pairs))
+            module, test = render_note16_aluminum_precedence(vintage_pairs)
+            for name, text in [(slug + ".yaml", module), (slug + ".test.yaml", test)]:
+                (dest / name).write_text(text)
+                hashes[name] = hashlib.sha256(text.encode()).hexdigest()
+            continue
         pairs=[]
         for p in GRAMMAR:
             if p.action==action:
@@ -359,9 +751,78 @@ def generate(
                 (dest/name).write_text(text); hashes[name]=hashlib.sha256(text.encode()).hexdigest()
     return hashes
 
+
+def verify_note16_aluminum_precedence_history(
+    corpus: Path, rev15_source: Path
+) -> None:
+    """Prove the new precedence lists existed before notes 50/52 took effect."""
+    rev10_source = corpus / REV10_RELPATH
+    rev12_source = corpus / REV12_RELPATH
+    rev6_source = corpus / REV6_RELPATH
+    proclamation_source = corpus / PROCLAMATION_11021_RELPATH
+    if hashlib.sha256(rev10_source.read_bytes()).hexdigest() != REV10_SHA256:
+        raise SystemExit("Revision-10 notes snapshot sha mismatch")
+    if hashlib.sha256(rev12_source.read_bytes()).hexdigest() != REV12_SHA256:
+        raise SystemExit("Revision-12 notes snapshot sha mismatch")
+    if hashlib.sha256(rev6_source.read_bytes()).hexdigest() != REV6_SHA256:
+        raise SystemExit("Revision-6 notes snapshot sha mismatch")
+    if (
+        hashlib.sha256(proclamation_source.read_bytes()).hexdigest()
+        != PROCLAMATION_11021_SHA256
+    ):
+        raise SystemExit(
+            "Proclamation 11021 Annex IV page-43 snapshot sha mismatch"
+        )
+    proclamation_page = proclamation_11021_page(proclamation_source)
+    proclamation_body = proclamation_page["body"]
+    rev10_pages = pages(rev10_source)
+    rev12_pages = pages(rev12_source)
+    rev6_pages = pages(rev6_source)
+    rev15_pages = pages(rev15_source)
+    threshold = (
+        "only apply where the weight of the applicable metal is at least 15 "
+        "percent of the weight of the imported article"
+    )
+    for label, snapshot_pages in (
+        ("Revision 10", rev10_pages),
+        ("Revision 12", rev12_pages),
+        ("Revision 15", rev15_pages),
+    ):
+        stream = "\n".join(page.get("body") or "" for page in snapshot_pages)
+        if threshold not in stream:
+            raise SystemExit(f"note 16(c) metal-weight threshold absent in {label}")
+    if threshold not in proclamation_body:
+        raise SystemExit(
+            "note 16(c) metal-weight threshold absent in Proclamation 11021"
+        )
+    for production in GRAMMAR:
+        if production.action != "232-note16-aluminum-precedence":
+            continue
+        rev10_codes = [atom["code"] for atom in extract(rev10_pages, production)]
+        rev12_codes = [atom["code"] for atom in extract(rev12_pages, production)]
+        rev15_codes = [atom["code"] for atom in extract(rev15_pages, production)]
+        if not rev10_codes == rev12_codes == rev15_codes:
+            raise SystemExit(
+                f"{production.subdivision} changed between Revision 10, 12, and 15"
+            )
+        if production.subdivision == "16(c)(ii)":
+            rev6_codes = [
+                atom["code"] for atom in extract(rev6_pages, production)
+            ]
+            if rev6_codes != rev10_codes:
+                raise SystemExit(
+                    "Revision-6 c(ii) differs from the later pinned snapshots"
+                )
+            if "7612.10.00" not in rev6_codes or "7612.10.10" in rev6_codes:
+                raise SystemExit(
+                    "Revision-6 c(ii) does not carry the official 7612.10.00 "
+                    "correction"
+                )
+
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--corpus",type=Path,default=Path(os.environ.get("AXIOM_CORPUS_REPO",Path.home()/"TheAxiomFoundation/axiom-corpus-b1-full"))); ap.add_argument("--check",action="store_true"); ap.add_argument("--actions",default=""); ap.add_argument("--pages", default="")
     a=ap.parse_args(); selected={x for x in a.actions.split(',') if x} or None; selected_pages={int(x) for x in a.pages.split(',') if x} or None; source=a.corpus/RELPATH
+    verify_note16_aluminum_precedence_history(a.corpus, source)
     with tempfile.TemporaryDirectory(prefix="b16-incidence-") as td:
         first=generate(Path(td)/"a",source,selected,selected_pages); second=generate(Path(td)/"b",source,selected,selected_pages)
         if first!=second: raise SystemExit("determinism FAILED")
