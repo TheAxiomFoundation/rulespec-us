@@ -10,10 +10,11 @@ In progress: source and toolchain discovery for the narrow 42 U.S.C. § 19235 pe
 - Verified the local `origin/main` reference resolves to the required commit.
 - Attempted a fresh network fetch; the sandbox could not resolve `github.com`, so no remote reference changed.
 - Left the canonical checkout and all pre-existing candidate/accepted worktrees untouched.
+- Moved this audit file under `bulk/19235-tip-person/` because the repository layout permits Markdown there, not at the repository root.
 
 ## Next
 
 - Verify official USC corpus custody and exact provision structure.
 - Run signed generated-only `axiom-encode` apply.
 - Validate proof roots, generated adversarial fixtures, and the required direct-Rust decision matrix.
-- Write the final accept/reject report to `OUTPUT.md`.
+- Write the final accept/reject report to `bulk/19235-tip-person/OUTPUT.md`.
