@@ -10,7 +10,7 @@
 - Required safe output: a positive limitation judgment such as `subsection_a_certification_is_nonretroactively_inapplicable`; do not decide the underlying subsection (a) certification obligation.
 - Required case facts: external identifiers for the evaluated Federal research agency and the actual policy-establishing Federal research agency, whether that policy was actually established, its actual establishment date, and availability of that date. Compare the agency identifiers in the formula; do not replace identity with an assumed universal agency or universal policy date.
 - Required logic: after actual-establishment, date-availability, same-agency, and R&D-scope guards, preserve the OR between `(application stage AND application submission date < policy establishment date)` and `(award stage AND award-made date < policy establishment date)`.
-- Required temporal versions: an exact neutral `false` sentinel from `0001-01-01`, followed by the operative formula at `2022-08-09`; never backdate the operative formula, start the sentinel only one day before enactment, or drop either version. The pre-enactment fixture must exercise `2022-08-08`.
+- Required temporal versions: an exact source-grounded `false` sentinel at `2022-08-08`, followed by the operative formula at `2022-08-09`; never backdate a version to year 1 or drop either version. The pre-enactment fixture must exercise the sentinel date.
 - Required generated fixtures and direct Rust states: policy date minus/equal/plus one day, application-before, award-before, neither-before, different-agency policy, unavailable/missing establishment date, non-R&D scope, and pre-enactment.
 
 ## Done
@@ -23,15 +23,17 @@
 - Verified § 19232(e) at `us/statute/42/19232/e`: body SHA-256 `16e0b4bbf48ef9bc1621dff32d3084f3b7b3b7498f8063e305b654efeee81fb6`; canonical JSONL record SHA-256 `7baff4dbf398a587db4a833bdc8c191fef7c49098a13ef3d3349d1e722596be4`.
 - Verified inherited § 19232(a) at `us/statute/42/19232/a`: body SHA-256 `ea3241a54755a3f0669c8d7bf16150900d1a4b1f8f2bd5ddf03f6e74d65487a8`; canonical JSONL record SHA-256 `715a8cd0f5effd7978d76c6f1c62592fd3355b80fb67a555cc3f4fb85353c92a`.
 - Verified the full source JSONL SHA-256 `566a513343f88d5a4944c591ef86464dcd27ea8dce8a4dd730f05efec4f69aa4`.
-- Inspected the unchanged signed § 19232(f) sibling at commit `94160652eb3d4a148d3c632677da8c42818853fa`; it confirms canonical `us/` placement and a two-version false/operative pattern. This task tightens the sentinel to `0001-01-01` so dates earlier than 2022-08-08 do not lose the rule version.
-- Rejected the prior unaccepted § 19232(e) attempt in `rulespec-us-19232-base-20260830`: it wrote to singular `statutes/`, encoded the complement (`not_barred`), replaced actual date comparisons with booleans, and began its false sentinel only on 2022-08-08.
+- Inspected the unchanged signed § 19232(f) sibling at commit `94160652eb3d4a148d3c632677da8c42818853fa`; it confirms canonical `us/` placement and the exact 2022-08-08 false / 2022-08-09 operative version pattern.
+- Rejected the prior unaccepted § 19232(e) attempt in `rulespec-us-19232-base-20260830`: it wrote to singular `statutes/`, encoded the complement (`not_barred`), and replaced actual date comparisons with booleans. Its two temporal versions were preserved and provide corroborating sentinel evidence, but the artifact is otherwise unacceptable.
 - Verified a canonical accepted formula pattern at `us-co/statutes/39/39-22-111.yaml` for comparing two external Text identifiers directly; the generated § 19232(e) formula must use this pattern for same-agency identity.
 - Materialized the inherited § 19232(a) body as an untracked encoder-only primary-source continuation at `.axiom/encoding-context/42-19232-a-primary-source.txt`; its parsed continuation body exactly matches the official body SHA-256 `ea3241a54755a3f0669c8d7bf16150900d1a4b1f8f2bd5ddf03f6e74d65487a8`. It will not be retained as a source payload.
+- Located the section source credit in the same pinned official USLM file: `(Pub. L. 117–167, div. B, title VI, § 10632, Aug. 9, 2022, 136 Stat. 1665.)`, including machine date `2022-08-09`; this grounds the one-day-prior false sentinel and operative date.
 - Queried `agent-secret` for the required apply credential. The helper is present, but its login-keychain unlock-password record is currently unavailable; encoding and unsigned validation can proceed while signed apply remains pending.
+- Rejected actual encoder run `90482d0b`: it resolved the canonical policy root as this worktree's `us/`, but the Codex response stream disconnected before producing RuleSpec. Its repair manifest and trace remain output evidence only and will not be applied.
+- Moved this mandated progress file into the repository-approved `bulk/PROGRESS.md` location before RuleSpec application; its earlier commits preserve that it existed from the start.
 
 ## Next
 
-- Inspect accepted RuleSpec patterns and the exact encoder/apply/proof/Rust workflow.
-- Run actual `axiom-encode` with this progress/acceptance record as context, inspect generated-only candidates, and apply only with the signing key supplied through `agent-secret`.
+- Retry actual `axiom-encode` with the inherited source, official source credit, and this progress/acceptance record as context; inspect generated-only candidates and apply only with the signing key supplied through `agent-secret`.
 - Validate source hashes, exact temporal false sentinel, proof, generated fixtures, and direct Rust outcomes at all required boundary and negative cases.
-- Maintain this file after each coherent step and write the final committed report to `FINAL_REPORT.md`.
+- Maintain this file after each coherent step and write the final committed report to `bulk/FINAL_REPORT.md`.
