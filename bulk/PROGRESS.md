@@ -6,6 +6,7 @@
 - Worktree is detached at the required base `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`.
 - A live `git fetch --no-tags origin main` was attempted on 2026-08-30 but failed because DNS could not resolve `github.com`; the pre-existing `origin/main` ref exactly matches the required base.
 - No accepted proposal-security branch has been checked out or modified.
+- The progress ledger lives under `bulk/` because the canonical repository structure permits Markdown there but not as an arbitrary root file.
 
 ## Done
 
