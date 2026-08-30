@@ -6,7 +6,7 @@
 - Mode: detached HEAD
 - Verified base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`
 - Target: narrow generated 31 U.S.C. § 1352 anti-lobbying base module
-- Status: source scope mapped; first generated candidate pending; no RuleSpec has been applied
+- Status: first encoder attempt failed before generation on blocked network; retry context prepared; no RuleSpec has been applied
 - Final report output: `FINAL_REPORT.md`
 
 ## Done
@@ -23,11 +23,14 @@
 - Confirmed subsection (a)'s appropriated-fund prohibition has no transaction-amount threshold.
 - Confirmed subsection (d)(2)(B)'s reporting exemption makes the non-loan contract/grant/cooperative-agreement/subcontract/subgrant filing boundary strictly greater than `$100,000`; Federal loans instead use subsection (d)(2)(C)'s separate threshold.
 - Confirmed subsection (b)(2) separates the no-prohibited-payment certification from disclosure of an LDA registrant who made lobbying contacts, while subsection (b)(5) assigns downstream filers separately.
+- Ran no-apply attempt `3cda0862` with the specified corpus, encoder, policy checkout, and real Rust engine; Codex exhausted reconnects because this sandbox could not resolve/reach `chatgpt.com`.
+- Verified attempt `3cda0862` produced no RuleSpec candidate and made no target-repository changes. Trace SHA-256 is `7f6a01a8ce7eca887c80bab212058509387598226dccf4de0344b2cb32bc88c8`; context-manifest SHA-256 is `04e6001f463bc66b481a2ab8a4e23c23985a78fbb6218c42a109889b38c994da`; run-log SHA-256 is `7610bde504edfbc115ab68f71494552fc2d19ed9c545d89739075dc5e6956737`.
+- Added an ephemeral primary-source continuation from the official USLM effective-date/amendment notes so a retry can distinguish the base `1989-12-23` instrument boundary, the current `1996-01-01` LDA disclosure/subsection provenance, and the `2026-07-12` normalized fallback.
 
 ## Next
 
-1. Create and hash a task-specific encoder context that preserves the audited rejection gates.
-2. Run scoped encoder attempts with explicit corpus, policy-repo, and Rust-engine paths.
+1. Retry generation with the hashed official primary-source continuation and a task-local run-log directory.
+2. If generation succeeds, audit the unchanged candidate and generated fixtures against every atomic rejection gate.
 3. Reject any candidate with wrong scope/date, missing filing or supported flow-down, collapsed certification/disclosure, or non-fail-closed missing facts.
 4. Resolve the signing-key access blocker through `agent-secret` before any apply.
 5. Apply only an unchanged signed generated candidate, then run proof, fixture, and direct Rust checks.
