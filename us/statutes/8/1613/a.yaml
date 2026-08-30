@@ -1,0 +1,198 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/statute/8/1613/a
+    authority_level: statute
+    unsupported_period_behavior: missing_dated_snapshot_support_parameter
+    runtime_validity_guard:
+      parameter: statute_8_1613_a_snapshot_supported
+      reason: pinned_compiler_discards_single_derived_version_dates
+      engineering_support_marker_not_legal_condition: true
+    supported_snapshot_from: '2025-07-04'
+    validity_basis: supported_post_obbb_snapshot_not_original_enactment_date
+    historical_amendment_versions_encoded: false
+    runtime_input_contract:
+      month_index_convention: year_times_12_plus_month_minus_1
+      evaluation_month_index_source: materialization_period
+      exact_start_date_module: us:statutes/8/1613/a-dates
+      imputed_start_month_is_explicitly_flagged: true
+  summary: |-
+    A qualified alien who enters the United States on or after August 22,
+    1996 is within subsection (a)'s five-year period until five completed
+    years have elapsed from the first date the alien obtained qualified-alien
+    status or entered the United States in a qualifying status. That clock is
+    distinct from a person's earlier physical entry in a nonqualifying status.
+    The executable monthly clock is derived from evaluation and start month
+    indexes inside Axiom, while the exact start Date remains observable in the
+    separate a-dates module and out of the dense eligibility dependency graph.
+    This module deliberately computes the statutory clock before the exceptions
+    in subsections (b), (c), and (d).
+    Only the post-July 4, 2025 snapshot is supported. This version boundary
+    does not represent the original enactment of the five-year limitation.
+  deferred_outputs:
+    - output: us:statutes/8/1613/a#exact_day_five_year_anniversary_determination
+      blocked_by:
+        - axiom-rules-engine#calendar-year-date-addition-and-dense-date-inputs
+      reason: |-
+        Monthly execution uses a 60-month boundary. Exact within-month
+        anniversary evaluation requires calendar-year date addition plus dense
+        Date input binding; the exact start date is retained rather than
+        replacing it with a frozen caller-computed elapsed-years input.
+imports:
+  - us:statutes/8/1613#subsection_a_ineligibility_period_years
+  - us:statutes/8/1641/qualified-alien#qualified_alien_under_subsections_b_or_c
+rules:
+  - name: statute_8_1613_a_snapshot_supported
+    kind: parameter
+    dtype: Count
+    source: Encoding support boundary for the post-OBBB snapshot; not a statutory eligibility condition
+    metadata:
+      private: true
+      engineering_support_marker: true
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+    versions:
+      - effective_from: '2025-07-04'
+        formula: |-
+          1
+
+  - name: months_since_first_qualified_alien_status_start
+    kind: derived
+    entity: Person
+    dtype: Count
+    period: Month
+    source: 8 USC 1613(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+              excerpt: "for a period of 5 years beginning on the date of the alien’s entry into the United States with a status within the meaning of the term “qualified alien”"
+    versions:
+      - effective_from: '2025-07-04'
+        formula: |-
+          statute_8_1613_a_snapshot_supported * (
+            benefit_evaluation_month_index - first_qualified_alien_status_start_month_index
+          )
+
+  - name: subsection_a_wait_is_at_sixtieth_month_boundary
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 8 USC 1613(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+              excerpt: "for a period of 5 years"
+    versions:
+      - effective_from: '2025-07-04'
+        formula: |-
+          statute_8_1613_a_snapshot_supported == 1
+          and (
+            months_since_first_qualified_alien_status_start == 60
+          )
+
+  - name: subsection_a_wait_timing_uses_imputed_start_month
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 8 USC 1613(a); data-provenance diagnostic
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+              excerpt: "beginning on the date of the alien’s entry into the United States with a status within the meaning of the term “qualified alien”"
+    versions:
+      - effective_from: '2025-07-04'
+        formula: |-
+          statute_8_1613_a_snapshot_supported == 1
+          and (
+            first_qualified_alien_status_start_month_is_imputed
+          )
+
+  - name: qualified_alien_entry_is_on_or_after_subsection_a_cutoff
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 8 USC 1613(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+              excerpt: "enters the United States on or after August 22, 1996"
+    versions:
+      - effective_from: '2025-07-04'
+        formula: |-
+          statute_8_1613_a_snapshot_supported == 1
+          and (
+            alien_entered_united_states_on_or_after_august_22_1996
+          )
+
+  - name: qualified_alien_within_subsection_a_five_year_period_before_exceptions
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 8 USC 1613(a)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+              excerpt: "an alien who is a qualified alien"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/8/1613/a
+              excerpt: "for a period of 5 years beginning on the date of the alien’s entry into the United States with a status within the meaning of the term “qualified alien”"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/8/1641/qualified-alien#qualified_alien_under_subsections_b_or_c
+              output: qualified_alien_under_subsections_b_or_c
+              hash: sha256:57b44e6f05c8c4e15bff9ffc018dab7b6f2a60c8fa4c82e8015692fe99f9b91b
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/8/1613#subsection_a_ineligibility_period_years
+              output: subsection_a_ineligibility_period_years
+              hash: sha256:519586d55e7cc601858bd2d35126980d5d82f2af00561f6382420468686c34dd
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/8/1613/a#qualified_alien_entry_is_on_or_after_subsection_a_cutoff
+              output: qualified_alien_entry_is_on_or_after_subsection_a_cutoff
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-07-04'
+        formula: |-
+          statute_8_1613_a_snapshot_supported == 1
+          and (
+            qualified_alien_under_subsections_b_or_c
+            and qualified_alien_entry_is_on_or_after_subsection_a_cutoff
+            and months_since_first_qualified_alien_status_start >= 0
+            and months_since_first_qualified_alien_status_start < subsection_a_ineligibility_period_years * 12
+          )
