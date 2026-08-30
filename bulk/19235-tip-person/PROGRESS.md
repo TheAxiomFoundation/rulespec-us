@@ -14,7 +14,7 @@ In progress: preparing the signed generated-only apply for the narrow 42 U.S.C. 
 - Verified the clean official corpus worktree at `129dae01c6f7a4787bc7678d4a97a478f3934d9f`.
 - Verified the controlling root/chapeau `us/statute/42/19235` and children `/1`, `/2`, and `/3` in the Title 42 provisions JSONL.
 - Reproduced custody hashes for the official Title 42 ZIP/member, derived statute records, four exact provision records, the NSF dynamic-list source/records, manifest, and ingest report.
-- Confirmed the source credit supports activation on `2022-08-09`; the pre-activation branch must be explicitly false.
+- Confirmed the provision body states no operative date; under the governing snapshot-boundary contract the executable rule must use a neutral `0001-01-01: false` sentinel and activate on the retained USC snapshot date `2026-07-12`, not backdate to enactment.
 - Confirmed live § 1237(b) and § 1260H membership must remain two external boolean facts combined with OR; no list contents or discretionary identification logic may be encoded.
 
 ## Next
