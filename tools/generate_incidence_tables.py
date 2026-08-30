@@ -5,6 +5,20 @@ The grammar below is data: each production is an action, exact subdivision
 anchor, exact peer stop anchor, and membership class.  The single parser carries
 subdivision state across physical pages and preserves atoms at their printed
 4-, 6-, 8-, and 10-digit widths.
+
+Where a subdivision prints its own census of enumerated subheadings, the
+extraction is checked against it.  U.S. note 31 does this two different ways,
+so its dispatch refuses to emit any subdivision it has no census rule for:
+31(b)'s member count is printed in a compiler's note that the codes themselves
+do not carry, so it is quoted into the module as a labelled census atom, while
+31(c)'s census is the printed ordinal enumeration of its own two codes and
+gates generation without contributing a separate atom.
+
+Companion cases witness each generated table through its first printed member.
+A production may instead ask for one case per enumerated member, which is only
+honest where the printed list is short enough that a single member cannot
+stand for the rest: U.S. note 31(c) prints exactly two subheadings, and the
+second of them is the one a single-witness placeholder previously missed.
 """
 from __future__ import annotations
 
@@ -72,6 +86,21 @@ HTS = re.compile(
 PRINTED_WIDTH_HTS = re.compile(
     r"(?<![\d.])(\d{4}(?:\.\d{2}(?:\.\d{2}(?:\d{2})?)?)?)(?!\d|\.\d)"
 )
+# U.S. note 31(b) and 31(c) each print their own operative effective-date
+# clause and their own census of enumerated subheadings.  Both are read out of
+# the pinned body rather than restated as constants here, so a list that
+# changes without its printed census changing fails generation instead of
+# passing quietly.
+NOTE31_EFFECTIVE_CLAUSE = (
+    "effective with respect to goods entered for consumption, or withdrawn "
+    "from warehouse for consumption, on or after 12:01 a.m. eastern daylight "
+    "time on September 27, 2024"
+)
+NOTE31_COMPILER_CENSUS = re.compile(
+    r"numbered in the implementing notice as numbers \((\d+)\) through "
+    r"\((\d+)\), inclusive"
+)
+NOTE31_PRINTED_ORDINAL = re.compile(r"\((\d+)\)\s+\d{4}\.\d{2}\.\d{2}")
 
 @dataclass(frozen=True)
 class Production:
@@ -86,6 +115,11 @@ class Production:
     widths: tuple[int, ...] = (8, 10)
     effective_from: str = "2026-08-03"
     source_label: str = "USITC HTS Revision 15"
+    # Emit one companion membership case per enumerated member instead of one
+    # for the first printed member.  Set only where the printed list is short
+    # enough to state in full: on a long list a per-member case set would
+    # restate the table in its own test instead of witnessing it.
+    exhaustive_membership_tests: bool = False
 
 # Exact anchors intentionally include operative heading language, not bare labels.
 GRAMMAR = (
@@ -93,6 +127,33 @@ GRAMMAR = (
     Production("301", "china_301_list2_membership", "20(d)", "(d) Heading 9903.88.02 applies", "(e) For the purposes of heading 9903.88.03"),
     Production("301", "china_301_list3_membership", "20(f)", "(f) Heading 9903.88.03 applies", "(g) For the purposes of heading 9903.88.04"),
     Production("301", "china_301_list4a_membership", "20(s)", "(s) Heading 9903.88.15 applies", "(t) For the purposes of heading 9903.88.16"),
+    # U.S. note 31 carries the September 27, 2024 four-year-review actions.
+    # Only subdivisions (b) and (c) have downstream entry-preparation inputs
+    # (entry_is_china_301_2024_action, entry_is_china_301_solar).  Subdivisions
+    # (d) through (l) back headings 9903.91.03 through 9903.91.14, have no
+    # consumer in this repository, and are deliberately not extracted; the
+    # census dispatch below refuses to emit any Note 31 list it cannot gate.
+    Production(
+        "301-note31",
+        "china_301_2024_action_membership",
+        "31(b)",
+        "(b) Heading 9903.91.01 applies",
+        "(c) Heading 9903.91.02 applies",
+    ),
+    # 31(c) enumerates exactly two 8-digit subheadings, printed as ordinals
+    # (1) and (2).  The second, 8541.43.00, is precisely the member the retired
+    # single-witness placeholder did not recognise, so a first-member companion
+    # case would leave the defect fix unexercised by the RuleSpec test while
+    # the module carried it.  Both printed members get a case.
+    Production(
+        "301-note31",
+        "china_301_solar_membership",
+        "31(c)",
+        "(c) Heading 9903.91.02 applies",
+        "(d) Heading 9903.91.03 applies",
+        after_compiler=False,
+        exhaustive_membership_tests=True,
+    ),
     Production("201", "s201_cspv_membership", "18(c)(i)", "(c) (i) For the purposes of subheadings 9903.45.21", "(ii) Subheadings 9903.45.21", after_compiler=False),
     Production("122", "s122_aa_i_ch98_membership", "2(aa)(i)", "(aa) [Compiler’s note: Subdivisions (aa)(i)", "(ii) As provided in heading 9903.03.03", after_compiler=False, include_prefixes=("9818.",)),
     Production("122", "s122_aa_ii_membership", "2(aa)(ii)", "(ii) As provided in heading 9903.03.03", "(iii) As provided in heading 9903.03.04"),
@@ -187,7 +248,8 @@ COUNTRY_PRODUCTIONS = (
 )
 
 FILES = {
-    "301": "note20-china-301", "201": "note18-201-solar",
+    "301": "note20-china-301", "301-note31": "note31-china-301",
+    "201": "note18-201-solar",
     "122": "note2aa-122-exemptions", "232-steel": "note16-232-steel",
     "232-aluminum": "note19-232-aluminum",
     "232-note16-aluminum-precedence": "note16-232-aluminum-precedence",
@@ -313,6 +375,116 @@ def extract(all_pages: list[dict], p: Production) -> list[dict]:
     return sorted(found,key=lambda a:(len(a["code"].replace('.','')),int(a["code"].replace('.',''))))
 
 
+def note31_chapeau(all_pages: list[dict], p: Production) -> tuple[dict, int, int]:
+    """Locate a Note 31 chapeau and gate its printed effective-date clause.
+
+    The subdivision's coverage sentence and its effective date are one printed
+    clause; extracting the list without proving that clause is still printed
+    would let a reworded or redated subdivision pass as the same law.
+    """
+    for page in all_pages:
+        body = page.get("body") or ""
+        start = body.find(p.start)
+        if start < 0:
+            continue
+        stop = body.find(p.stop, start)
+        clause = body.find(
+            NOTE31_EFFECTIVE_CLAUSE, start, stop if stop >= 0 else len(body)
+        )
+        if clause < 0:
+            raise SystemExit(
+                f"note {p.subdivision} printed effective-date clause absent"
+            )
+        end = clause + len(NOTE31_EFFECTIVE_CLAUSE)
+        if body[end:end + 1] != ":":
+            raise SystemExit(
+                f"note {p.subdivision} chapeau does not close with a colon"
+            )
+        return page, start, end + 1
+    raise SystemExit(f"missing chapeau for {p.subdivision}: {p.start}")
+
+
+def note31_compiler_census(
+    page: dict, p: Production, chapeau_end: int
+) -> tuple[int, dict]:
+    """Read an unnumbered subdivision's member count from its compiler's note."""
+    body = page["body"]
+    stop = body.find(p.stop, chapeau_end)
+    match = NOTE31_COMPILER_CENSUS.search(
+        body, chapeau_end, stop if stop >= 0 else len(body)
+    )
+    if match is None:
+        raise SystemExit(f"note {p.subdivision} printed census absent")
+    low, high = int(match.group(1)), int(match.group(2))
+    if high < low:
+        raise SystemExit(f"note {p.subdivision} printed census range is inverted")
+    return high - low + 1, {
+        "page": page["citation_path"],
+        "excerpt": match.group(0),
+        "subdivision": p.subdivision,
+        "evidence_role": "printed census",
+    }
+
+
+def note31_ordinal_census(all_pages: list[dict], p: Production) -> int:
+    """Count a numbered subdivision's printed ``(n)`` enumeration."""
+    ordinals = [
+        int(match.group(1))
+        for page, lo, hi in segments(all_pages, p)
+        for match in NOTE31_PRINTED_ORDINAL.finditer(page["body"], lo, hi)
+    ]
+    if ordinals != list(range(1, len(ordinals) + 1)):
+        raise SystemExit(
+            f"note {p.subdivision} printed ordinals are not 1..n: {ordinals}"
+        )
+    return len(ordinals)
+
+
+def note31_pairs(
+    all_pages: list[dict], action: str
+) -> tuple[list[tuple[Production, list[dict]]], dict[str, list[dict]]]:
+    """Extract Note 31 lists, each gated against the census printed with it.
+
+    Returns the usual (production, atoms) pairs plus the lead evidence, so the
+    module quotes the operative subdivision language rather than only the
+    codes.  The lead evidence is deliberately asymmetric: only 31(b) yields a
+    census atom, because its member count lives in a compiler's note that no
+    value atom reproduces.  31(c) prints its census as the ordinals attached
+    to the codes it enumerates, so note31_ordinal_census enforces it here at
+    generation time and no census atom is added.
+    """
+    pairs: list[tuple[Production, list[dict]]] = []
+    lead_atoms: dict[str, list[dict]] = {}
+    for p in GRAMMAR:
+        if p.action != action:
+            continue
+        atoms = extract(all_pages, p)
+        page, start, end = note31_chapeau(all_pages, p)
+        leads = [{
+            "page": page["citation_path"],
+            "excerpt": page["body"][start:end],
+            "subdivision": p.subdivision,
+            "evidence_role": "printed subdivision chapeau",
+        }]
+        if p.subdivision == "31(b)":
+            expected, census_atom = note31_compiler_census(page, p, end)
+            leads.append(census_atom)
+        elif p.subdivision == "31(c)":
+            expected = note31_ordinal_census(all_pages, p)
+        else:
+            raise SystemExit(
+                f"no printed census rule for U.S. note {p.subdivision}"
+            )
+        if not atoms or len(atoms) != expected:
+            raise SystemExit(
+                f"note {p.subdivision} census mismatch: printed {expected}, "
+                f"extracted {len(atoms)}"
+            )
+        pairs.append((p, atoms))
+        lead_atoms[p.table] = leads
+    return pairs, lead_atoms
+
+
 def q(s): return json.dumps(s,ensure_ascii=False)
 def key(code): return int(code.replace(".",""))
 
@@ -325,14 +497,29 @@ def table_name(p: Production, width: int) -> str:
     return base + table_suffix(width)
 
 
-def table_lines(p: Production, atoms: list[dict], page_number: int | None = None) -> list[str]:
+def table_lines(
+    p: Production,
+    atoms: list[dict],
+    page_number: int | None = None,
+    lead_atoms: tuple[dict, ...] = (),
+) -> list[str]:
+    """Render one membership table.
+
+    ``lead_atoms`` carry non-value evidence for the same table — the printed
+    subdivision chapeau and any printed census the extraction was gated
+    against — ahead of the per-code atoms.  They are labelled with an
+    ``evidence_role`` so a reader cannot mistake scope language for a listed
+    article.
+    """
     width = len(atoms[0]["code"].replace(".", ""))
     name=table_name(p, width)
     if page_number is not None:
         name += f"_p{page_number}"
     out=[f"  - name: {name}","    kind: parameter","    dtype: Count","    indexed_by: hts_line",f"    source: {p.source_label} U.S. note {p.subdivision}","    metadata:","      proof:","        atoms:"]
-    for a in atoms:
+    for a in (*lead_atoms, *atoms):
         out += ["          - path: versions[0].values","            kind: parameter","            source:",f"              corpus_citation_path: {a['page']}",f"              excerpt: {q(a['excerpt'])}","            context:",f"              subdivision: {q(a['subdivision'])}"]
+        if a.get("evidence_role"):
+            out.append(f"              evidence_role: {q(a['evidence_role'])}")
     out += ["    versions:",f"      - effective_from: '{p.effective_from}'","        values:"]
     out += [f"          {key(a['code'])}: 1" for a in atoms]
     return out
@@ -547,6 +734,16 @@ def page_render(
             ]
     out += ["  summary: |-", f"    {summary}", "rules:"]
     tests: list[str] = []
+    # A page module holds one printed page of a list, so "a case for every
+    # enumerated member" cannot be honoured here: the members live across
+    # sibling page modules.  Refuse rather than silently falling back to the
+    # first-member case the production asked not to rely on.
+    for production, _atoms in productions:
+        if production.exhaustive_membership_tests:
+            raise SystemExit(
+                f"{production.table} asks for exhaustive membership cases, "
+                "which page-fragment rendering cannot provide"
+            )
     for production, atoms in productions:
         for width in (4, 6, 8, 10):
             group = [
@@ -583,8 +780,13 @@ def partial_rules(action: str) -> list[str]:
 
 PARTIAL_CODES=[("9802_00_40","foreign_repair_value_share"),("9802_00_50","foreign_repair_value_share"),("9802_00_60","foreign_processing_value_share"),("9802_00_80","foreign_assembly_value_share")]
 
-def render(action: str, productions: list[tuple[Production,list[dict]]]) -> tuple[str,str]:
-    cited=sorted({a['page'] for _,atoms in productions for a in atoms},key=lambda x:int(x.rsplit('-',1)[1]))
+def render(
+    action: str,
+    productions: list[tuple[Production,list[dict]]],
+    lead_atoms: dict[str, list[dict]] | None = None,
+) -> tuple[str,str]:
+    leads = lead_atoms or {}
+    cited=sorted({a['page'] for _,atoms in productions for a in atoms}|{a['page'] for atoms in leads.values() for a in atoms},key=lambda x:int(x.rsplit('-',1)[1]))
     if action == "301": cited = sorted(set(cited)|{"us/statute/hts/chapter-99/page-260"},key=lambda x:int(x.rsplit('-',1)[1]))
     if action == "122": cited = sorted(set(cited)|{"us/statute/hts/chapter-99/page-221"},key=lambda x:int(x.rsplit('-',1)[1]))
     slug=FILES[action]
@@ -598,6 +800,30 @@ def render(action: str, productions: list[tuple[Production,list[dict]]]) -> tupl
             "unconditional for subdivision (ii); subdivisions (vi) and (ix) "
             "remain candidates because note 16(c) requires at least 15-percent "
             "aggregate listed-metal weight outside chapters 72, 73, 74, and 76."
+        )
+    elif action == "301-note31":
+        summary = (
+            f"Generated by {VERSION} deterministically from the corpus-pinned "
+            "USITC Rev-15 chapter-99 notes; hand edits prohibited. U.S. note "
+            "31(b) and 31(c) enumerate the article coverage of headings "
+            "9903.91.01 and 9903.91.02, which apply to products of China "
+            "classified in the enumerated subheadings, effective with respect "
+            "to goods entered for consumption, or withdrawn from warehouse for "
+            "consumption, on or after 12:01 a.m. eastern daylight time on "
+            "September 27, 2024. Each list is gated against the census printed "
+            "with it: subdivision (b) against its compiler's-note numbering "
+            "range, subdivision (c) against its printed ordinal enumeration. "
+            "Each table leads with its printed chapeau as an evidence_role "
+            "atom; only the (b) census is additionally quoted as an "
+            "evidence_role atom, because (c)'s census is the printed ordinals "
+            "on its own enumerated codes and is enforced at generation time "
+            "rather than restated in the proof. These tables are "
+            "code incidence only - the products-of-China origin condition "
+            "remains an entry-preparation fact. effective_from is the Rev-15 "
+            "codification date rather than the 2024 statutory effective date, "
+            "because a single pinned Rev-15 snapshot cannot attest a "
+            "historical vintage. Note 31(a)'s chapter 98 and 9802 partial-value "
+            "treatment and note 31(d) through 31(l) are outside this slice."
         )
     else:
         summary = (
@@ -614,9 +840,17 @@ def render(action: str, productions: list[tuple[Production,list[dict]]]) -> tupl
             group=[a for a in atoms if len(a['code'].replace('.',''))==width]
             if not group: continue
             name=table_name(p, width)
-            out += table_lines(p,group)
-            present=group[0]
-            tests += [f"- name: {q(name+' membership-present')}","  period:","    period_kind: custom","    name: day","    start: '2026-08-03'","    end: '2026-08-03'","  input:",f"    {module}#input.hts_line: {key(present['code'])}","  output:",f"    {module}#{name}: 1"]
+            out += table_lines(p,group,lead_atoms=tuple(leads.get(p.table,())))
+            # A first-member case witnesses that the table exists and answers.
+            # Where the production declares the printed list short enough to
+            # state in full, every enumerated member gets its own case and each
+            # case is named by the member it exercises.
+            witnesses = group if p.exhaustive_membership_tests else group[:1]
+            for present in witnesses:
+                case = name + " membership-present"
+                if p.exhaustive_membership_tests:
+                    case += f" {key(present['code'])}"
+                tests += [f"- name: {q(case)}","  period:","    period_kind: custom","    name: day","    start: '2026-08-03'","    end: '2026-08-03'","  input:",f"    {module}#input.hts_line: {key(present['code'])}","  output:",f"    {module}#{name}: 1"]
     out += partial_rules(action)
     if action in {"301","122"}:
         pprefix="china_301" if action=="301" else "s122"
@@ -716,9 +950,13 @@ def generate(
                 hashes[name] = hashlib.sha256(text.encode()).hexdigest()
             continue
         pairs=[]
-        for p in GRAMMAR:
-            if p.action==action:
-                pairs.append((p,extract(all_pages,p)))
+        lead_atoms: dict[str, list[dict]] = {}
+        if action == "301-note31":
+            pairs, lead_atoms = note31_pairs(all_pages, action)
+        else:
+            for p in GRAMMAR:
+                if p.action==action:
+                    pairs.append((p,extract(all_pages,p)))
         if action == "forced-labor-301": pairs.extend(country_pairs(all_pages))
         if action in PAGE_ACTION_DIRS:
             by_page: dict[str, list[tuple[Production, list[dict]]]] = {}
@@ -746,7 +984,7 @@ def generate(
                     target.write_text(text)
                     hashes[name] = hashlib.sha256(text.encode()).hexdigest()
         else:
-            module,test=render(action,pairs)
+            module,test=render(action,pairs,lead_atoms)
             for name,text in [(slug+".yaml",module),(slug+".test.yaml",test)]:
                 (dest/name).write_text(text); hashes[name]=hashlib.sha256(text.encode()).hexdigest()
     return hashes

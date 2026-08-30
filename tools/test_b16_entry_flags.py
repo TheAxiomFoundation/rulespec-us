@@ -1,6 +1,9 @@
+from dataclasses import replace
 from pathlib import Path
+import re
 import sys
 
+import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -11,7 +14,18 @@ from b16_entry_flags import (
     WITNESS_LINES,
     entry_flags as _entry_flags,
 )
-from generate_incidence_tables import PROCLAMATION_11021_CITATION
+from generate_incidence_tables import (
+    GRAMMAR,
+    PROCLAMATION_11021_CITATION,
+    page_render,
+    render,
+)
+
+NOTE31_MODULE = "us:policies/usitc/us-tariff-incidence/generated/note31-china-301"
+GENERATED = (
+    Path(__file__).resolve().parents[1]
+    / "us/policies/usitc/us-tariff-incidence/generated"
+)
 
 
 def entry_flags(*args, **kwargs):
@@ -49,8 +63,15 @@ def test_five_witness_lines_emit_complete_new_vector():
         assert flags["entry_is_forced_labor_301"] == flags["entry_is_forced_labor_301_listed"]
         assert flags["entry_is_brazil_301"] == flags["entry_is_brazil_301_listed"]
         assert not any("claimed" in name for name in flags)
-        assert not flags["entry_is_china_301_2024_action"]
-        assert not flags["entry_is_china_301_solar"]
+        # The two retired placeholders were exactly these witness lines:
+        # 7601.10.30 is enumerated in U.S. note 31(b) and 8541.42.00 in
+        # 31(c), so the generated tables must reproduce them and only them.
+        assert flags["entry_is_china_301_2024_action"] == (
+            line_name == "entry_is_line_b"
+        )
+        assert flags["entry_is_china_301_solar"] == (
+            line_name == "entry_is_line_e"
+        )
 
 
 def test_aluminum_heading_primary_fans_out_to_witness_line():
@@ -80,6 +101,205 @@ def test_noncovered_chapter_76_line_is_not_primary():
 
 def test_eight_digit_membership_uses_rate_line_prefix():
     assert entry_flags(2203000000, "2203.00.00.30", "CN")["china_301_list3"]
+
+
+def test_note31_memberships_replace_the_single_witness_placeholders():
+    # U.S. note 31(c) enumerates two 8-digit subheadings. The retired
+    # placeholder recognised only 8541.42.00.10, so every entry classified in
+    # 8541.43.00 was scored outside the heading 9903.91.02 action.
+    for hts_number in ("8541.42.00.10", "8541.43.00.00"):
+        digits = hts_number.replace(".", "")
+        assert entry_flags(int(digits), hts_number, "CN")["entry_is_china_301_solar"]
+    adjacent = entry_flags(8541410000, "8541.41.00.00", "CN")
+    assert not adjacent["entry_is_china_301_solar"]
+    assert not adjacent["entry_is_china_301_2024_action"]
+
+    # U.S. note 31(b): lowest-keyed, first-printed, retired-placeholder, and
+    # last-printed enumerated subheadings.
+    for hts_number in (
+        "2602.00.00.00",
+        "2608.00.00.00",
+        "7601.10.30.00",
+        "8103.20.00.00",
+    ):
+        digits = hts_number.replace(".", "")
+        assert entry_flags(int(digits), hts_number, "CN")[
+            "entry_is_china_301_2024_action"
+        ]
+    # 7202.11.10 is enumerated by note 30(d) for Russian products, not by
+    # note 31(b); 8541.42.00 belongs to 31(c) and must not leak into 31(b).
+    for hts_number in ("7202.11.10.00", "8541.42.00.10"):
+        digits = hts_number.replace(".", "")
+        assert not entry_flags(int(digits), hts_number, "CN")[
+            "entry_is_china_301_2024_action"
+        ]
+
+
+def test_note31_membership_is_code_incidence_not_origin():
+    # china_section_301_component_rate gates every branch on origin_is_china,
+    # so these inputs must stay pure HTS coverage.
+    for country in ("CN", "DE"):
+        assert entry_flags(7601103000, "7601.10.30.00", country)[
+            "entry_is_china_301_2024_action"
+        ]
+        assert entry_flags(8541430000, "8541.43.00.00", country)[
+            "entry_is_china_301_solar"
+        ]
+
+
+def test_note31_tables_carry_their_printed_chapeau_and_census():
+    module_path = (
+        Path(__file__).resolve().parents[1]
+        / "us/policies/usitc/us-tariff-incidence/generated/note31-china-301.yaml"
+    )
+    payload = yaml.safe_load(module_path.read_text())
+    # Page 511 carries the 31(b) chapeau and compiler's note but no HTS atom.
+    # Without it the operative scope and effective date would be unanchored.
+    assert (
+        "us/statute/hts/chapter-99/page-511"
+        in payload["module"]["source_verification"]["corpus_citation_paths"]
+    )
+
+    rules = {rule["name"]: rule for rule in payload["rules"]}
+    assert set(rules) == {
+        "china_301_2024_action_membership",
+        "china_301_solar_membership",
+    }
+
+    action = rules["china_301_2024_action_membership"]
+    atoms = action["metadata"]["proof"]["atoms"]
+    roles = [atom["context"].get("evidence_role") for atom in atoms]
+    assert roles[:2] == ["printed subdivision chapeau", "printed census"]
+    assert all(role is None for role in roles[2:])
+    chapeau = atoms[0]["source"]["excerpt"]
+    assert chapeau.startswith("(b) Heading 9903.91.01 applies")
+    assert chapeau.endswith(
+        "on or after 12:01 a.m. eastern daylight time on September 27, 2024:"
+    )
+    low, high = (
+        int(value) for value in re.findall(r"\((\d+)\)", atoms[1]["source"]["excerpt"])
+    )
+    # Checked against the range the compiler's note prints, not a count
+    # restated here.
+    assert len(action["versions"][0]["values"]) == high - low + 1
+
+    solar = rules["china_301_solar_membership"]
+    solar_atoms = solar["metadata"]["proof"]["atoms"]
+    solar_roles = [atom["context"].get("evidence_role") for atom in solar_atoms]
+    assert (
+        solar_atoms[0]["context"]["evidence_role"] == "printed subdivision chapeau"
+    )
+    # The two subdivisions carry different lead evidence, and the module
+    # summary says so. 31(b)'s member count is printed in a compiler's note no
+    # value atom reproduces, so it is quoted as a census atom; 31(c)'s census
+    # is the printed ordinals on its own codes, gated at generation time and
+    # never restated in the proof. The chapeau is (c)'s only labelled atom.
+    assert all(role is None for role in solar_roles[1:])
+    assert solar_atoms[0]["source"]["excerpt"].startswith(
+        "(c) Heading 9903.91.02 applies"
+    )
+    assert set(solar["versions"][0]["values"]) == {85414200, 85414300}
+
+
+def test_note31_companion_cases_exercise_every_enumerated_solar_subheading():
+    rules = {
+        rule["name"]: rule
+        for rule in yaml.safe_load(
+            (GENERATED / "note31-china-301.yaml").read_text()
+        )["rules"]
+    }
+    cases = yaml.safe_load((GENERATED / "note31-china-301.test.yaml").read_text())
+
+    def exercised(table: str) -> set[int]:
+        return {
+            case["input"][f"{NOTE31_MODULE}#input.hts_line"]
+            for case in cases
+            if case["output"].get(f"{NOTE31_MODULE}#{table}") == 1
+        }
+
+    # The retired placeholder recognised only 8541.42.00, so a companion test
+    # that exercised the first enumerated member alone would leave the
+    # 8541.43.00 defect fix witnessed by the Python adapter test but not by the
+    # RuleSpec test the engine runs, even though the module carries it.
+    solar = set(rules["china_301_solar_membership"]["versions"][0]["values"])
+    assert solar == {85414200, 85414300}
+    assert exercised("china_301_solar_membership") == solar
+    # 31(b)'s printed census runs to hundreds of subheadings. Restating it case
+    # by case would duplicate the table rather than witness it, so that family
+    # keeps one case on its lowest-keyed printed member.
+    action_values = rules["china_301_2024_action_membership"]["versions"][0]["values"]
+    assert exercised("china_301_2024_action_membership") == {min(action_values)}
+
+
+def test_only_exhaustive_productions_emit_a_case_for_every_member():
+    grammar = {production.table: production for production in GRAMMAR}
+    solar = grammar["china_301_solar_membership"]
+    listed = grammar["china_301_2024_action_membership"]
+    assert solar.exhaustive_membership_tests
+    assert not listed.exhaustive_membership_tests
+    assert not any(
+        production.exhaustive_membership_tests
+        for production in GRAMMAR
+        if production.table != solar.table
+    )
+
+    def atoms(production, codes):
+        return [
+            {
+                "code": code,
+                "page": "us/statute/hts/chapter-99/page-513",
+                "excerpt": code,
+                "subdivision": production.subdivision,
+            }
+            for code in codes
+        ]
+
+    _module, solar_tests = render(
+        "301-note31", [(solar, atoms(solar, ["8541.42.00", "8541.43.00"]))]
+    )
+    assert [case["name"] for case in yaml.safe_load(solar_tests)] == [
+        "china_301_solar_membership membership-present 85414200",
+        "china_301_solar_membership membership-present 85414300",
+    ]
+
+    # The same two-member shape under a production that did not ask for
+    # exhaustive cases still yields exactly one, so no other generated
+    # companion test moves.
+    _module, listed_tests = render(
+        "301-note31", [(listed, atoms(listed, ["2602.00.00", "2605.00.00"]))]
+    )
+    assert [case["name"] for case in yaml.safe_load(listed_tests)] == [
+        "china_301_2024_action_membership membership-present"
+    ]
+
+
+def test_page_fragment_rendering_refuses_an_exhaustive_production():
+    # A page module holds part of a printed list, so it cannot honour a
+    # per-member case set. It must refuse rather than quietly emit the
+    # first-member case the production asked not to rely on.
+    fragment = replace(
+        next(
+            production
+            for production in GRAMMAR
+            if production.action == "forced-labor-301"
+        ),
+        exhaustive_membership_tests=True,
+    )
+    pairs = [
+        (
+            fragment,
+            [
+                {
+                    "code": "0901.12.00",
+                    "page": "us/statute/hts/chapter-99/page-580",
+                    "excerpt": "0901.12.00",
+                    "subdivision": fragment.subdivision,
+                }
+            ],
+        )
+    ]
+    with pytest.raises(SystemExit):
+        page_render("forced-labor-301", "us/statute/hts/chapter-99/page-580", pairs)
 
 
 def test_unconditional_page_fragments_suppress_new_actions():

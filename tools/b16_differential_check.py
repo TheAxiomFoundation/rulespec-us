@@ -53,6 +53,8 @@ LEGAL_TABLES = (
     LegalTable("china_301_list2_membership", 20, ("d",), rate_heading="9903.88.02"),
     LegalTable("china_301_list3_membership", 20, ("f",), rate_heading="9903.88.03"),
     LegalTable("china_301_list4a_membership", 20, ("s",), rate_heading="9903.88.15"),
+    LegalTable("china_301_2024_action_membership", 31, ("b",), rate_heading="9903.91.01"),
+    LegalTable("china_301_solar_membership", 31, ("c",), rate_heading="9903.91.02"),
     LegalTable("s201_cspv_membership", 18, ("c", "i")),
     LegalTable("s122_aa_i_ch98_membership", 2, ("aa", "i"), "9818"),
     LegalTable("s122_aa_ii_membership", 2, ("aa", "ii"), rate_heading="9903.03.03"),

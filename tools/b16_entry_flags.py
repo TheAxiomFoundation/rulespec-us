@@ -16,6 +16,7 @@ MODULES = (
     "note16-232-steel.yaml", "note18-201-solar.yaml",
     "note19-232-aluminum.yaml", "note20-china-301.yaml",
     "note2aa-122-exemptions.yaml",
+    "note31-china-301.yaml",
     "note50-52-232-sector-precedence.yaml",
 )
 NOTE16_ALUMINUM_PRECEDENCE_MODULE = "note16-232-aluminum-precedence.yaml"
@@ -284,6 +285,17 @@ def entry_flags(
         "china_301_list2": ("china_301_list2_membership",),
         "china_301_list3": ("china_301_list3_membership",),
         "china_301_list4a": ("china_301_list4a_membership", "china_301_list4a_membership_hts10"),
+        # U.S. note 31(b) covers products of China "classified in the 8-digit
+        # subheadings, or described in the 10-digit statistical reporting
+        # numbers, enumerated in this subdivision"; the Rev-15 body prints only
+        # 8-digit atoms, so the statistical-level table is read as well and a
+        # future 10-digit addition cannot be silently dropped.
+        "china_301_2024_action": (
+            "china_301_2024_action_membership",
+            "china_301_2024_action_membership_hts10",
+        ),
+        # U.S. note 31(c) covers only "the following 8-digit subheadings".
+        "china_301_solar": ("china_301_solar_membership",),
         "s122_unconditional_exempt": ("s122_aa_ii_membership", "s122_aa_ii_membership_hts10", "s122_aa_iii_membership"),
         "s122_gn6_conditional": ("s122_gn6_conditional_membership",),
     }
@@ -381,8 +393,11 @@ def entry_flags(
     result.update({
         "entry_is_brazil_301_listed": country_code == "BR" and not brazil_unconditional_exempt,
         "entry_is_forced_labor_301_listed": country_code in forced_origins and not forced_common_exempt and not forced_country_exempt,
-        "entry_is_china_301_2024_action": False,
-        "entry_is_china_301_solar": False,
+        # Heading 9903.91.01 / 9903.91.02 article coverage, from the generated
+        # U.S. note 31(b) and 31(c) membership tables. Code incidence only: the
+        # products-of-China origin condition is applied downstream.
+        "entry_is_china_301_2024_action": result["china_301_2024_action"],
+        "entry_is_china_301_solar": result["china_301_solar"],
     })
     result["entry_is_brazil_301"] = result["entry_is_brazil_301_listed"]
     result["entry_is_forced_labor_301"] = result["entry_is_forced_labor_301_listed"]
