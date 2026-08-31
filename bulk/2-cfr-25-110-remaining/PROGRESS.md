@@ -5,7 +5,7 @@
 - Worktree: `/Users/maxghenis/TheAxiomFoundation/_axiom-worktrees/rulespec-us-2cfr25-110-remaining-20260830-codex-001`
 - Detached base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`
 - Scope: remaining atomic 2 CFR 25.110(a)(2) exceptions, excluding accepted paragraph (iii).
-- Status: paragraph (ii) first isolated generation attempt failed before YAML; a fresh retry is next.
+- Status: paragraph (ii) rejected after two isolated pre-YAML transport failures; paragraph (iv) is next.
 - Output report: `bulk/2-cfr-25-110-remaining/FINAL_REPORT.md`.
 
 ## Done
@@ -27,10 +27,12 @@
 - Brief custody hashes: paragraph (ii) `1a19c77ba94d227514c0dd54704745b813739b13e5379ad1aeb3c9a4f16031b8`; paragraph (iv) `4f00459d6a37c06a8aac4b29f44da4bf9253a97649bbd5e4f078f0fa360c4d18`; paragraph (i) `ee8e67146d47af6fee68d14693a3a5d1607deca78dff1f492f9273e2126f5a1c`.
 - Ran paragraph (ii) independently at `/private/tmp/axiom-2cfr25-110-remaining-codex-001/runs/paragraph-ii-v1` with run ID `f73770ac`. The Codex transport exhausted its reconnects and failed before producing YAML, so `--apply` reported `blocked_generation` and made no live rules/manifests changes.
 - Paragraph (ii) v1 custody: trace `20457ce2091f897ed59b603f1b2680dde56b9db465e5bdd25df3f1bea0549e44`; context manifest `87251e6ef66806c6ed526fc2fd2e98d75d9d827b607d325e89a99bc30e93130c`; repair manifest `da4e3bd4b851cbd4517b3213717729b66ea3b5110e942b5f7f855a55944a649c`; normalized source `ec120f62589f7d2098b909355d4f9660c659d8c857f17714eaf500799024a834`.
+- Retried paragraph (ii) independently at `/private/tmp/axiom-2cfr25-110-remaining-codex-001/runs/paragraph-ii-v2`, run ID `8ce533fa`. It likewise produced zero model tokens and no YAML before the Codex transport exhausted reconnects; `--apply` was blocked at generation.
+- Paragraph (ii) v2 custody: trace `58753047d6ada1ade89a78d4e9804d4c49828dbb8f84e762942940eba392a768`; context manifest `87251e6ef66806c6ed526fc2fd2e98d75d9d827b607d325e89a99bc30e93130c`; repair manifest `c9742852f1ce61273b14a7939471a72f2535a5850cd8000279d48085b22c972e`; normalized source `ec120f62589f7d2098b909355d4f9660c659d8c857f17714eaf500799024a834`.
+- Rejected paragraph (ii): no generated RuleSpec/test existed to prove or execute; fixture count is zero; no signed manifest was created; exact live main/test/manifest target paths remain absent and clean.
 
 ## Next
 
-- Retry paragraph (a)(2)(ii) at a fresh output/database path; validate proof/fixtures with the real Rust engine if generation succeeds, and retain or reject unchanged signed output.
 - Run paragraph (a)(2)(iv) independently and apply the same acceptance gates.
 - Run paragraph (a)(2)(i) independently with all protected-interest judgment facts external.
 - Retry signed apply only through `agent-secret`; reject and restore any candidate that cannot be signed unchanged.
