@@ -21,12 +21,12 @@
 - Verified the required base has no section 19233 or section 19234 RuleSpec module and recorded explicit fail-closed prerequisite boundaries.
 - Recorded two target adapters, atomic duties, temporal treatment, proof rules, and the full generated-fixture acceptance matrix in `ENCODING_BRIEF.md`.
 - Confirmed the Rust runtime has Date comparisons but no calendar-month subtraction; the brief therefore requires actual dates plus an explicit external twelve-month-window-start date and forbids a 365/366-day substitute.
+- Materialized the ten exact FAQ/statutory primary-source continuation files, matched every continuation body to its normalized corpus body hash, and recorded full custody in `SOURCE_CUSTODY.md`.
 
 ## Next
 
-1. Materialize exact primary-source continuation files from the authorized corpus records and verify their body hashes.
-2. Generate disposable candidates through the pinned `axiom-encode`.
-3. Audit candidates without hand-editing and reject any invented statutory semantics, frozen training vendor, NSF risk conclusion, grace period, or IHE-only duty.
-4. Restore signer access through `agent-secret`, then apply only unchanged accepted generation.
-5. Run proof, generated fixtures, repository gates, and direct Rust adversaries.
-6. Record custody hashes, files, fixtures/states, proof, Rust results, and final accept/reject in the output file.
+1. Generate disposable candidates through the pinned `axiom-encode`.
+2. Audit candidates without hand-editing and reject any invented statutory semantics, frozen training vendor, NSF risk conclusion, grace period, or IHE-only duty.
+3. Restore signer access through `agent-secret`, then apply only unchanged accepted generation.
+4. Run proof, generated fixtures, repository gates, and direct Rust adversaries.
+5. Record custody hashes, files, fixtures/states, proof, Rust results, and final accept/reject in the output file.
