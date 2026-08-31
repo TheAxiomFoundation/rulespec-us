@@ -13,6 +13,7 @@
 - Pinned encoder: clean detached checkout at `3869d66d009f52258be35901edbef370e65a399c`.
 - Pinned Rust engine: clean detached checkout at `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
 - Signed apply is blocked before generation: `agent-secret get agent/axiom-encode-apply-signing-key` cannot unlock the existing agent keychain because the login-keychain unlock-password record is missing; the signing environment variable is unset.
+- Final state: rejected and restored clean; only this ledger and `FINAL_REPORT.md` differ from the required base.
 - Paragraph (3) disposition: reject; no candidate, test, apply manifest, proof result, fixture result, or route-level Rust result exists.
 - Paragraph (1) disposition: not attempted after the priority paragraph failed both signing and model-connectivity prerequisites; reject/no retained output.
 
@@ -34,9 +35,13 @@
 - Verified the failed run produced no candidate YAML, companion test, applied rule, applied test, or signed apply manifest.
 - Recorded failed-run custody: trace `2ceef221ad8042c3831eee337b823e352239d343316d2bf39ed33c1eda8fe454`; context manifest `f4a668dd0375cbabf441745d56cd09c1caeb735c6e681a84cde470d079cc9cba`; repair manifest `dc263df886ca389b904101f172c25c09a17c5a5faf76310a0c38ef93919b1539`; workspace source `0d010ba525a99b0e39266add08db454beb07d3e492844194218e1c77cf93b189`; workspace source metadata `639cd6b83b93f692920be56ba1e2ea02037b8f22b13fc10abcf7df711d3b0ecb`; canonical run-row export `f5b9bb3ba0da5174ceed256c5deb43a0eb9e0ae8c28de9cbec923aa8dd922218`; session export `d38baba475d8aa1468b39259f4c7f8eda9f724893269b43ab570bb4e1ce0e9e7`.
 - Verified encoder executable SHA-256 `6d134a9820f10826d3cb56e1a0df755636cad8543051811acc2f0be102af0173` and current real Rust binary SHA-256 `ea9ba72582a92ac5f7b38fee0c6e30924669e5f2b8d1158f9162187776bd8efb`.
+- Moved the exact failed encoder-output and operator-context directories out of the worktree to the Trash after hashing them; neither contained a RuleSpec candidate.
+- Reverified that both definitions' canonical rule, companion test, current apply-manifest, and legacy-root manifest paths are absent.
+- Ran the existing accepted OR-definition baseline `us/statutes/8/1641/b.test.yaml` through the selected real Rust engine: 4/4 cases passed, one compiled program, zero failures. This is runtime evidence only, not target-definition evidence.
+- Wrote the complete accept/reject and custody report to `FINAL_REPORT.md`; SHA-256 `c120942e3c605f89d3b51241434bd90ed241ee04bd36304ea0091db913029b28`.
 
 ## Next
 
-- Remove the failed untracked encoder workspace and operator-context files after their hashes are recorded, preserving no generated output.
-- Verify the canonical paragraph (3) and paragraph (1) rule/test/manifest paths are absent and the detached worktree contains only committed progress/report evidence.
-- Write and commit the final report to `FINAL_REPORT.md`, the selected output file because no output-file environment variable or repository convention is defined.
+- User restores the missing `agent-secrets/keychain-password` record for the existing dedicated keychain and restores Codex backend DNS/connectivity.
+- A future agent performs a fresh signed `encode --apply --no-sync` run; the failed dry run cannot be promoted or copied.
+- Retain a definition only after unchanged signed output passes the full generated fixtures, exact proof audit, signature guard, source staleness, and every required direct Rust check.
