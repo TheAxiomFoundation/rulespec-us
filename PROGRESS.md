@@ -2,7 +2,7 @@
 
 ## State
 
-- Active: running fresh unsigned preflight generations for A and B before any unchanged signed apply.
+- Active: retrying A sequentially after both initial unsigned preflights failed before generation on DNS/transport; no candidate exists yet.
 - Worktree: `/Users/maxghenis/TheAxiomFoundation/_axiom-worktrees/42usc19234-a1ab-certifications-20260830-codex-r1/rulespec-us`.
 - Base: detached `d58cc0ce67ad891fde4c9061c86a2091bfdd524f` from local `origin/main`.
 - Acceptance posture: reject unless unchanged signed generated output has complete parent-plus-child and enactment-date proof, adversarial fixtures, and direct checks in the required Rust engine.
@@ -20,10 +20,13 @@
 - Verified encoder `0.2.1200` at `3869d66d009f52258be35901edbef370e65a399c` and required Rust engine `ffd8213271947b0189a9dd61a055c1e0e78908a0` with binary SHA-256 `ea9ba72582a92ac5f7b38fee0c6e30924669e5f2b8d1158f9162187776bd8efb`.
 - Rejected prior runs `5e164202` and `91f8b7e4`: both had child-only proof, opaque recency, and duplicate deadline-date versions; B also collapsed employee/linkage content into one aggregate fact.
 - Prepared hashed parent/A primary-source continuations, enactment audit context, and separate A/B encoding briefs outside the repository. RuleSpec and fixtures will remain generator-only.
+- Verified generated source custody before model execution: A source metadata contains child A plus the chapeau; B contains child B, the chapeau, and child A for “such training.”
+- A run `4214c33a` and B run `6b03c8b6` each failed with zero tokens after Codex WebSocket retries and HTTPS fallback could not resolve/reach `chatgpt.com`; neither emitted a RuleSpec candidate or test and neither requested apply.
+- Preserved the failed-run traces, repair manifests, context manifests, task-local databases, and hashes under the task's `run-assets` directory. The policy repository remained unchanged.
 
 ## Next
 
-- Run fresh A and B preflight generations with explicit inherited chapeau and enactment-date provenance.
+- Complete the sequential A retry; if transport recovers, retry B separately.
 - Review generated output without manual alteration; reject and restore clean if any mandatory distinction or proof is absent.
 - Restore `agent-secret` access to `agent/axiom-encode-apply-signing-key` without exposing the key.
 - If accepted, rerun signed apply, verify unchanged output custody, run generated fixtures and direct Rust adversaries, and record hashes/results.
