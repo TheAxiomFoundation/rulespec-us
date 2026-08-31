@@ -7,7 +7,7 @@
 - A fresh `git fetch --no-tags origin main` was attempted on 2026-08-30 but the sandbox could not resolve `github.com`; the existing `origin/main` ref and commit object exactly match the required immutable hash.
 - The pre-existing NSF UEI/SAM worktree and axiom-corpus PR #631 remain untouched.
 - Official-source and exact-base dependency audits are complete.
-- The first real generation attempt failed upstream before producing a candidate; generation will be retried.
+- Two real generation attempts failed upstream before producing a candidate; one final unchanged-input retry remains.
 - Signed apply and real-Rust proof work remain pending; `agent-secret` currently reports that the existing dedicated keychain lacks its stored unlock password.
 
 ## Done
@@ -24,10 +24,11 @@
 - Queried the required `agent-secret` interface without exposing values; signed apply cannot proceed unless its existing keychain unlock record is restored.
 - Created a hash-pinned acceptance contract (SHA-256 `b4729c29609f51d9db1bb2f8df8d9a9e7b7a967a8d22e1f13cff3c627d49fd28`) carrying the mechanically verified effective date and actor/linkage matrix omitted by the encoder's source-metadata projection.
 - Ran actual `axiom-encode` `0.2.1200` at `3869d66d009f52258be35901edbef370e65a399c` with Codex GPT-5.5, the official corpus, canonical `us/` root, and Rust engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`. Run `1b930e20` failed after 40,189 ms with a disconnected ChatGPT response stream, zero tokens, and no RuleSpec candidate.
+- Repeated the identical pinned generation in a separate output root and database. Run `3bcec6f8` failed after 48,960 ms at the same ChatGPT response-stream boundary, again with zero tokens and no RuleSpec candidate.
 
 ## Next
 
-- Retry actual `axiom-encode` generation from a new isolated output root with the same pinned inputs.
+- Make one final actual `axiom-encode` generation attempt from a third isolated output root with the same pinned inputs.
 - Retry `agent-secret`; only perform signed apply if the required key can be retrieved through that interface.
 - Retain only unchanged generated artifacts that satisfy all requested proof, fixture, and direct Rust cases.
 - Commit `OUTPUT.md`, finalize this file, and leave the detached worktree clean without pushing or opening a PR.
