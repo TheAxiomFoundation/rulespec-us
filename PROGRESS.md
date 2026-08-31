@@ -22,11 +22,12 @@
 - Verified the source credit is Pub. L. 117-167, div. B, title VI, § 10632, Aug. 9, 2022, with no delayed effective date; `2022-08-08` is therefore the exact pre-enactment sentinel.
 - Verified clean detached toolchain commits: `axiom-encode` `3869d66d009f52258be35901edbef370e65a399c` and `axiom-rules-engine` `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
 - Queried `agent-secret` for the signed-apply credential; the dedicated keychain exists, but its login-keychain unlock-password record is unavailable, so signed apply is currently blocked while generation and validation can proceed.
+- Materialized the exact subsection (a) body as an encoder-only primary-source continuation; the encoder parsed body SHA-256 is exactly `ea3241a54755a3f0669c8d7bf16150900d1a4b1f8f2bd5ddf03f6e74d65487a8`.
+- Rejected encoder run `4145fe8f`: the Codex response stream disconnected before any RuleSpec was produced. Trace SHA-256 is `c1cf60e5f124d30e9ebba776fd02d43ec29a29411b798f2922af3ca5e60678cd`; the target worktree remained clean.
 
 ## Next
 
-- Materialize the exact subsection (a) body as an encoder-only primary-source continuation.
-- Run `axiom-encode` from the specified toolchain against the canonical `us/` root.
+- Retry `axiom-encode` from the specified toolchain against the canonical `us/` root.
 - Accept only an unchanged signed apply with proof and generated fixtures.
 - Validate the required date, stage, agency, R&D, and pre-enactment cases with the specified Rust engine.
 - Write the final report to the required output file and leave the worktree clean.
