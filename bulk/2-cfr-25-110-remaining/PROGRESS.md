@@ -5,7 +5,7 @@
 - Worktree: `/Users/maxghenis/TheAxiomFoundation/_axiom-worktrees/rulespec-us-2cfr25-110-remaining-20260830-codex-001`
 - Detached base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`
 - Scope: remaining atomic 2 CFR 25.110(a)(2) exceptions, excluding accepted paragraph (iii).
-- Status: source/workflow custody audited; paragraph-specific generation briefs are next.
+- Status: source/workflow custody audited; paragraph-specific generation briefs created for independent runs.
 - Output report: `bulk/2-cfr-25-110-remaining/FINAL_REPORT.md`.
 
 ## Done
@@ -23,10 +23,11 @@
 - Confirmed paragraph (i) is attemptable only with `agency_determines_must_protect` and the national-security, foreign-policy, or personal-safety route supplied as external facts.
 - Confirmed the requested `2024-10-01` effective gate is a task-specific fail-closed narrowing; the local eCFR XML cites the final rule but does not itself state that date.
 - Checked the signing handle `agent/axiom-encode-apply-signing-key` / `axiom-foundation`; `agent-secret` is currently blocked because the existing dedicated keychain's login-keychain unlock record is missing. No bypass was attempted.
+- Added separate generation briefs under `bulk/2-cfr-25-110-remaining/briefs/` for paragraphs (ii), (iv), and optional (i), including actor/transaction pairings, scope-specific grants, explicit pre-effective false versions, and Rust-executed adversarial boundaries.
+- Brief custody hashes: paragraph (ii) `1a19c77ba94d227514c0dd54704745b813739b13e5379ad1aeb3c9a4f16031b8`; paragraph (iv) `4f00459d6a37c06a8aac4b29f44da4bf9253a97649bbd5e4f078f0fa360c4d18`; paragraph (i) `ee8e67146d47af6fee68d14693a3a5d1607deca78dff1f492f9273e2126f5a1c`.
 
 ## Next
 
-- Create and hash three paragraph-specific generation briefs outside the rules repository.
 - Run paragraph (a)(2)(ii) independently, validate proof/fixtures with the real Rust engine, and retain or reject unchanged signed output.
 - Run paragraph (a)(2)(iv) independently and apply the same acceptance gates.
 - Run paragraph (a)(2)(i) independently with all protected-interest judgment facts external.
