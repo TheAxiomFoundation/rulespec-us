@@ -22,10 +22,11 @@
 - Recorded two target adapters, atomic duties, temporal treatment, proof rules, and the full generated-fixture acceptance matrix in `ENCODING_BRIEF.md`.
 - Confirmed the Rust runtime has Date comparisons but no calendar-month subtraction; the brief therefore requires actual dates plus an explicit external twelve-month-window-start date and forbids a 365/366-day substitute.
 - Materialized the ten exact FAQ/statutory primary-source continuation files, matched every continuation body to its normalized corpus body hash, and recorded full custody in `SOURCE_CUSTODY.md`.
+- Recorded exact rules-base, encoder, Codex CLI, and Rust-engine custody in `TOOLCHAIN_CUSTODY.md`; no signing secret was accessed.
 
 ## Next
 
-1. Generate disposable candidates through the pinned `axiom-encode`.
+1. Complete the two in-flight disposable generations through the pinned `axiom-encode`.
 2. Audit candidates without hand-editing and reject any invented statutory semantics, frozen training vendor, NSF risk conclusion, grace period, or IHE-only duty.
 3. Restore signer access through `agent-secret`, then apply only unchanged accepted generation.
 4. Run proof, generated fixtures, repository gates, and direct Rust adversaries.
