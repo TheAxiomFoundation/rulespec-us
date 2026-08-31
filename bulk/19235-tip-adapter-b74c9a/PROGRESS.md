@@ -19,6 +19,7 @@ its unlock password, so the required signed apply cannot start safely.
 - Pinned actual `axiom-encode` `0.2.1200` at `3869d66d009f52258be35901edbef370e65a399c` and actual Rust `axiom-rules-engine` at `ffd8213271947b0189a9dd61a055c1e0e78908a0`; both tool worktrees are clean.
 - Added `ENCODING_BRIEF.md` to preserve the user-authorized narrow scope and exact source/effective-date custody that the encoder's corpus metadata handoff otherwise omits.
 - Ran `agent-secret search axiom` and the prescribed `agent-secret init`; the existing keychain reports that its stored unlock password is missing. No alternate key was read, created, rotated, or substituted.
+- Wrote the required final blocker/decision report to `OUTPUT.md`; no generated or runtime artifact exists to retain.
 
 ## Next
 
