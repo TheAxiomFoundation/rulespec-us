@@ -615,22 +615,22 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.1764"
-    assert toolchain["axiom_encode_ref"] == "1daadad265dc9eaa1ab737df87b453a5e5e0cb46"
+    assert toolchain["axiom_encode_version"] == "0.2.1973"
+    assert toolchain["axiom_encode_ref"] == "b041b6b5a0e39f2c05c93669f354f8a54e9a84c3"
     assert toolchain["axiom_rules_engine_ref"] == (
-        "d142c645917817cf590e036fb99f99b2d4780e1a"
+        "f6b0d15246a7db1403836628576f11e0d334348c"
     )
     assert toolchain["axiom_artifact_rules_engine_ref"] == (
         "ffd8213271947b0189a9dd61a055c1e0e78908a0"
     )
     assert toolchain["source_staleness_axiom_encode_ref"] == (
-        "1daadad265dc9eaa1ab737df87b453a5e5e0cb46"
+        "b041b6b5a0e39f2c05c93669f354f8a54e9a84c3"
     )
     assert toolchain["axiom_corpus_ref"] == (
-        "620527d7ad55adc19e05aa71cecea1d5bd0a6b2f"
+        "8f7d60aaced28ee4252b9237f9d6e02360dc34bc"
     )
     assert toolchain["rulespec_us_ref"] == (
-        "da4cd7e6d9eadabb08e46372cf3c7ac3ab4e6924"
+        "38d5c8c516f9243cedf8e07a22f96dde9ac66fe3"
     )
 
 
