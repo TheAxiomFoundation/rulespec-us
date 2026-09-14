@@ -11,6 +11,10 @@ def issues(value, path=""):
         for index, child in enumerate(value):
             found.extend(issues(child, f"{path}[{index}]"))
     elif isinstance(value, dict):
+        if path == "module" and "source_claims" in value:
+            found.append("module.source_claims: unsupported; use direct corpus citations in proof source atoms")
+        if ".proof.atoms[" in path and "claim" in value:
+            found.append(f"{path}.claim: unsupported; retain direct proof source evidence")
         if "corpus_citation_paths" in value:
             found.append(f"{path}: plural corpus_citation_paths is unsupported; preserve each citation in a separate source record")
         if "source_verification" in value:

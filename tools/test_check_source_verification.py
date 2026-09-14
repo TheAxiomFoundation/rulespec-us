@@ -2,6 +2,9 @@ import unittest
 from check_source_verification import issues
 
 class SourceVerificationTests(unittest.TestCase):
+    def test_deprecated_claims_are_rejected_even_with_direct_source(self):
+        self.assertTrue(issues({"module": {"source_claims": ["claims:source#claim"]}}))
+        self.assertTrue(issues({"rules": [{"metadata": {"proof": {"atoms": [{"claim": {"id": "claims:source#claim"}, "source": {"corpus_citation_path": "source"}}]}}}]}))
     def test_supplemental_values_and_multiple_source_records_are_preserved(self):
         self.assertEqual(issues({"module": {"source_verification": {"corpus_citation_path": "us/guidance/irs/rev-proc-2025-32"}, "source_values": {"limit": 42}, "source_documents": [{"corpus_citation_path": "page-14"}, {"corpus_citation_path": "page-15"}]}}), [])
     def test_snap_values_are_rejected_in_verification(self):
