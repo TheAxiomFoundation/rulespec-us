@@ -1,0 +1,29 @@
+name: Source metadata compatibility
+on:
+  pull_request:
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+      - 'tools/check_source_verification.py'
+      - 'tools/test_check_source_verification.py'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install PyYAML==6.0.2
+      - run: python -m unittest discover -s tools -p test_check_source_verification.py
+      - name: Validate changed encoding metadata
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only --diff-filter=ACMR -z "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-encodings
+          python tools/check_source_verification.py --paths-file /tmp/changed-encodings

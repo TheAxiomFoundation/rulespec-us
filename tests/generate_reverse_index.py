@@ -112,6 +112,15 @@ def citation_paths_for_module(payload: Any) -> dict[str, set[str]]:
                 if citation is not None:
                     references.setdefault(citation, set()).add(MODULE_REFERENCE)
 
+        documents = module.get("source_documents")
+        if isinstance(documents, list):
+            for document in documents:
+                if not isinstance(document, dict):
+                    continue
+                citation = _clean_citation_path(document.get("corpus_citation_path"))
+                if citation is not None:
+                    references.setdefault(citation, set()).add(MODULE_REFERENCE)
+
     rules = payload.get("rules")
     if isinstance(rules, list):
         for rule in rules:
