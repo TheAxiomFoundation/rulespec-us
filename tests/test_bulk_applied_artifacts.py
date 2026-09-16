@@ -615,10 +615,10 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.1985"
-    assert toolchain["axiom_encode_ref"] == "3151e8beed9056c41919d74fc353ed052735c5ed"
+    assert toolchain["axiom_encode_version"] == "0.2.1999"
+    assert toolchain["axiom_encode_ref"] == "f66c96cae27fe02f4a755fdf36c9d2862b5904fb"
     assert toolchain["axiom_rules_engine_ref"] == (
-        "f6b0d15246a7db1403836628576f11e0d334348c"
+        "af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca"
     )
     assert toolchain["axiom_artifact_rules_engine_ref"] == (
         "ffd8213271947b0189a9dd61a055c1e0e78908a0"
