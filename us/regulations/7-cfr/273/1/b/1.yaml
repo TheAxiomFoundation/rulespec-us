@@ -1,0 +1,219 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/1
+  summary: |-
+    7 CFR 273.1(b)(1) overrides actual food-purchase and meal-preparation
+    practice for three co-resident combinations: spouses; a person under age
+    22 living with a natural or adoptive parent or stepparent; and a non-foster
+    child under age 18 living with and under the parental control of a
+    nonparent candidate household member. Financial or other dependency deems
+    the under-18 child to be under parental control unless State law defines
+    the person as an adult. There is no minimum age for the paragraph (a)(1)
+    living-alone household form.
+rules:
+  - name: snap_parent_co_residence_age_limit
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.1(b)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: A person under 22 years of age who is living with his or her natural or adoptive parent(s) or step-parent(s)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          22
+
+  - name: snap_nonparental_control_child_age_limit
+    kind: parameter
+    dtype: Count
+    source: 7 CFR 273.1(b)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: A child (other than a foster child) under 18 years of age who lives with and is under the parental control of a household member other than his or her parent
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          18
+
+  - name: snap_co_resident_spouse_required_same_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(1)(i)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_has_spouse
+          and person_lives_with_spouse
+
+  - name: snap_under_22_person_with_parent_required_same_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: A person under 22 years of age who is living with his or her natural or adoptive parent(s) or step-parent(s)
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/1#snap_parent_co_residence_age_limit
+              output: snap_parent_co_residence_age_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_age < snap_parent_co_residence_age_limit
+          and person_lives_with_natural_adoptive_or_step_parent
+
+  - name: snap_under_18_child_deemed_under_parental_control
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: financially or otherwise dependent on a member of the household, unless State law defines such a person as an adult
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/1#snap_nonparental_control_child_age_limit
+              output: snap_nonparental_control_child_age_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_age < snap_nonparental_control_child_age_limit
+          and (
+              person_is_financially_dependent_on_candidate_household_member
+              or person_is_otherwise_dependent_on_candidate_household_member
+          )
+          and not state_law_defines_person_as_adult
+
+  - name: snap_nonfoster_under_18_child_with_nonparent_controller_required_same_household
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(1)(iii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: A child (other than a foster child) under 18 years of age who lives with and is under the parental control of a household member other than his or her parent
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/1#snap_nonparental_control_child_age_limit
+              output: snap_nonparental_control_child_age_limit
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_age < snap_nonparental_control_child_age_limit
+          and not person_is_foster_child
+          and person_lives_with_candidate_household_member_other_than_parent
+          and (
+              person_is_under_parental_control_of_candidate_nonparent_household_member
+              or snap_under_18_child_deemed_under_parental_control
+          )
+
+  - name: snap_person_subject_to_required_household_combination
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: must be considered as customarily purchasing food and preparing meals with the others, even if they do not do so, and thus must be included in the same household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_co_resident_spouse_required_same_household
+          or snap_under_22_person_with_parent_required_same_household
+          or snap_nonfoster_under_18_child_with_nonparent_controller_required_same_household
+
+  - name: snap_individual_household_definition_after_required_combinations
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(a)(1)-(2), (b)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: An individual living alone
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: An individual living with others, but customarily purchasing food and preparing meals for home consumption separate and apart from others
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: must be considered as customarily purchasing food and preparing meals with the others, even if they do not do so, and thus must be included in the same household
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/1#snap_person_subject_to_required_household_combination
+              output: snap_person_subject_to_required_household_combination
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          (
+              person_lives_alone
+              or (
+                  person_lives_with_others
+                  and person_customarily_purchases_food_separate_and_apart
+                  and person_customarily_prepares_meals_for_home_consumption_separate_and_apart
+              )
+          )
+          and not snap_person_subject_to_required_household_combination

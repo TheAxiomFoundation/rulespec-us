@@ -1,0 +1,362 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/7/273/1
+  summary: |-
+    7 CFR 273.1(b)(7) identifies people who are excluded from SNAP
+    participation as either a separate household or a participating member of
+    any household. It includes nonexcepted institution residents whose
+    institution supplies over half of three daily meals through normal
+    services. Five listed living arrangements are excepted from that
+    institution-residence bar and receive default separate-household
+    treatment, subject to paragraph (b)(1)'s mandatory combinations and the
+    source's “unless otherwise stated” qualifier. Boarders remain
+    noninstitution residents under paragraph (b)(3)(iii). These ineligible
+    household members are distinct from roomers, attendants, and unselected
+    boarders at a host-unit boundary: downstream rules, including
+    7 CFR 273.11(c) where applicable, govern how an excluded member affects
+    remaining members. The retained source calls the institution exceptions
+    (b)(7)(vii)(A)-(E), although A-E appear under (vi) and the next standalone
+    paragraph is also labeled (vii); this module maps A-E to the institution
+    exception without silently changing the source text.
+imports:
+  - us:regulations/7-cfr/273/1/b/1#snap_person_subject_to_required_household_combination
+rules:
+  - name: snap_institution_majority_meal_share_threshold
+    kind: parameter
+    dtype: Rate
+    source: 7 CFR 273.1(b)(7)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: over 50 percent of three meals daily
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          0.5
+
+  - name: snap_person_meets_institution_majority_meal_service_test
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals must be considered residents of an institution when the institution provides them with the majority of their meals (over 50 percent of three meals daily) as part of the institution's normal services
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/7#snap_institution_majority_meal_share_threshold
+              output: snap_institution_majority_meal_share_threshold
+              hash: sha256:local
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          institution_normal_services_share_of_three_daily_meals
+              > snap_institution_majority_meal_share_threshold
+
+  - name: snap_institution_participation_exception_applies
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)(vi)(A)-(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals who are residents of federally subsidized housing for the elderly
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals who are narcotic addicts or alcoholics and reside at a facility or treatment center for the purpose of regular participation in a drug or alcohol treatment and rehabilitation program
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: This includes the children but not the spouses of such persons who live with them at the treatment center or facility
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals who are disabled or blind and are residents of group living arrangements
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individual women or women with their children who are temporarily residing in a shelter for battered women and children
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals who are residents of public or private nonprofit shelters for homeless persons
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_resides_in_federally_subsidized_housing_for_elderly
+          or person_is_narcotic_addict_or_alcoholic_residing_at_treatment_facility_for_regular_program_participation
+          or (
+              person_is_child_living_with_narcotic_or_alcohol_treatment_resident_at_facility
+              and not person_is_spouse_of_narcotic_or_alcohol_treatment_resident_at_facility
+          )
+          or person_is_disabled_or_blind_resident_of_group_living_arrangement
+          or person_is_woman_temporarily_residing_in_battered_women_and_children_shelter
+          or person_is_child_living_with_woman_at_battered_women_and_children_shelter
+          or person_resides_in_public_or_private_nonprofit_homeless_shelter
+
+  - name: snap_person_is_nonexcepted_institution_resident
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)(vi)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Residents of an institution, with some exceptions
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Exceptions to this requirement include only the individuals listed in paragraphs (b)(7)(vii)(A) through (b)(7)(vii)(E) of this section
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Boarders must not be considered to be residents of an institution
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_person_meets_institution_majority_meal_service_test
+          and not snap_institution_participation_exception_applies
+          and not person_treated_as_boarder_under_paragraph_b_3_or_b_4
+
+  - name: snap_institution_exception_not_barred_by_institution_residence
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)(vi)(A)-(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Exceptions to this requirement include only the individuals listed in paragraphs (b)(7)(vii)(A) through (b)(7)(vii)(E) of this section
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_institution_participation_exception_applies
+
+  - name: snap_institution_exception_default_separate_household_treatment
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)(vi)(A)-(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: must be treated as separate households from the others with whom they reside, subject to the mandatory household combination requirements of paragraph (b)(1) of this section
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: unless otherwise stated
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/1#snap_person_subject_to_required_household_combination
+              output: snap_person_subject_to_required_household_combination
+              hash: sha256:ffef0283116c859f60e9dc127ed5b444cb821b9ce64c9cf1da175f2562495e7b
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_institution_participation_exception_applies
+          and not snap_person_subject_to_required_household_combination
+          and not snap_person_has_noninstitution_b7_participation_bar
+          and not another_applicable_rule_overrides_default_institution_exception_household_treatment
+
+  - name: snap_institution_exception_subject_to_mandatory_household_combination
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)(vi)(A)-(E)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: subject to the mandatory household combination requirements of paragraph (b)(1) of this section
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/1/b/1#snap_person_subject_to_required_household_combination
+              output: snap_person_subject_to_required_household_combination
+              hash: sha256:ffef0283116c859f60e9dc127ed5b444cb821b9ce64c9cf1da175f2562495e7b
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_institution_participation_exception_applies
+          and not snap_person_has_noninstitution_b7_participation_bar
+          and snap_person_subject_to_required_household_combination
+
+  - name: snap_person_has_noninstitution_b7_participation_bar
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Ineligible aliens and students as specified in §§ 273.4 and 273.5, respectively
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: SSI recipients in “cash-out” States as specified in § 273.20
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals disqualified for noncompliance with the work requirements of § 273.7
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals disqualified for failure to provide an SSN as specified in § 273.6
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals disqualified for an intentional Program violation as specified in § 273.16
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Residents of an institution, with some exceptions
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals who are ineligible under § 273.11(m) because of a drug-related felony conviction
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: At State agency option, individuals who are disqualified in another assistance program in accordance with § 273.11(k)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals who are fleeing to avoid prosecution or custody for a crime, or an attempt to commit a crime, or who are violating a condition of probation or parole who are ineligible under § 273.11(n)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals disqualified for failure to cooperate with child support enforcement agencies in accordance with § 273.11(o) or (p), or for being delinquent in any court-ordered child support obligation in accordance with § 273.11(q)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Persons ineligible under § 273.24, the time limit for able-bodied adults
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Individuals convicted of certain crimes and who are out of compliance with the terms of their sentence and ineligible under § 273.11(s)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          person_is_ineligible_alien
+          or person_is_ineligible_student_under_section_273_5
+          or person_is_ssi_recipient_in_cash_out_state
+          or person_disqualified_for_noncompliance_with_section_273_7_work_requirements
+          or person_disqualified_for_failure_to_provide_ssn
+          or person_disqualified_for_intentional_program_violation
+          or person_ineligible_under_section_273_11_m_for_drug_related_felony_conviction
+          or (
+              state_agency_uses_section_273_11_k_cross_program_disqualification_option
+              and person_disqualified_in_another_assistance_program_under_section_273_11_k
+          )
+          or person_ineligible_under_section_273_11_n_for_fleeing_or_probation_or_parole_violation
+          or person_disqualified_for_child_support_enforcement_noncooperation_under_section_273_11_o_or_p
+          or person_disqualified_for_child_support_delinquency_under_section_273_11_q
+          or person_ineligible_under_section_273_24_abawd_time_limit
+          or person_ineligible_under_section_273_11_s_for_sentence_noncompliance_after_certain_crime
+
+  - name: snap_person_is_ineligible_household_member_under_273_1_b_7
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: The following persons are not eligible to participate as separate households or as a member of any household
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: Residents of an institution, with some exceptions
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_person_has_noninstitution_b7_participation_bar
+          or snap_person_is_nonexcepted_institution_resident
+
+  - name: snap_person_excluded_from_participating_unit_under_273_1_b_7
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: 7 CFR 273.1(b)(7)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/regulation/7/273/1
+              excerpt: The following persons are not eligible to participate as separate households or as a member of any household
+    versions:
+      - effective_from: '2025-10-01'
+        formula: snap_person_is_ineligible_household_member_under_273_1_b_7
