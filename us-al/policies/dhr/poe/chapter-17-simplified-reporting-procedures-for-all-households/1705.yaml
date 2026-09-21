@@ -1,0 +1,159 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us/regulation/7/273/9
+        - us:regulations/7-cfr/273/9
+      rationale: |-
+        The copied federal SNAP income/deduction context provides general SNAP income eligibility and utility-allowance delegation rules, but it does not define Alabama DHR six-month report completion, verification, incomplete-report, shelter-change, address-change, or child-support-deduction handling. The state manual source is therefore used for these simplified-reporting procedural rules.
+  summary: |-
+    Section 1705 requires households to complete and sign the six-month report, provide verification according to policy, and have IEVS information reviewed. It specifies when missing address, earned income, unearned income, household-composition, signature, early-submission, and verification items make the report incomplete; states that missing shelter/utility verification and unanswered child-support questions do not make the report incomplete; requires $100 income-change reporting/verification thresholds; allows 10 days for shelter-change verification; and directs when shelter/utility costs and child-support deductions are or are not included.
+rules:
+  - name: income_change_reporting_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: AL DHR POE Chapter 17, Section 1705, Earned Income and Unearned Income
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+              excerpt: "changed by more than $100.00"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          100
+
+  - name: shelter_verification_response_period_days
+    kind: parameter
+    dtype: Count
+    source: AL DHR POE Chapter 17, Section 1705, Change in Shelter/Household Did Not Move
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+              excerpt: "allow the household 10 days to provide the requested verification"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+
+  - name: six_month_report_incomplete
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: AL DHR POE Chapter 17, Section 1705, Month Report
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          address_change_question_unanswered
+          or earned_income_questions_unaddressed
+          or (
+            earned_income_change_amount > income_change_reporting_threshold
+            and not earned_income_change_verified
+            and not earned_income_change_verification_obtained_from_other_source
+          )
+          or (
+            household_reports_job_start_stop_or_change
+            and not job_change_verified
+          )
+          or unearned_income_question_unaddressed
+          or (
+            unearned_income_change_amount > income_change_reporting_threshold
+            and not unearned_income_change_verified
+            and not unearned_income_change_verification_obtained_from_other_source
+          )
+          or household_composition_question_unaddressed
+          or (
+            household_composition_changed
+            and not household_composition_change_information_completed
+          )
+          or (
+            new_household_member_has_income
+            and not new_household_member_income_verified
+            and not new_household_member_income_verification_obtained_from_other_source
+          )
+          or report_not_signed
+          or report_submitted_before_last_day_of_report_month
+
+  - name: reported_move_shelter_or_utility_costs_included_in_budget
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: AL DHR POE Chapter 17, Section 1705, Address Change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_reported_move
+          and shelter_or_utility_costs_verified
+
+  - name: shelter_verification_timely_for_initial_six_month_report_action
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: AL DHR POE Chapter 17, Section 1705, Change in Shelter/Household Did Not Move
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          household_reports_shelter_expense_change
+          and shelter_expense_verification_days <= shelter_verification_response_period_days
+
+  - name: child_support_deduction_allowed_for_last_six_months
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: AL DHR POE Chapter 17, Section 1705, Child Support Payments/Deductions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-al/manual/dhr/poe/chapter-17-simplified-reporting-procedures-for-all-households/1705
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (
+            child_support_questions_answered_no
+            and child_support_deduction_currently_budgeted
+          )
+          or (
+            child_support_questions_answered_yes
+            and child_support_obligation_or_change_verified
+          )
