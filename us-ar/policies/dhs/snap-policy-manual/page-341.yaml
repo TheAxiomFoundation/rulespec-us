@@ -1,0 +1,204 @@
+format: rulespec/v1
+imports:
+  - us:regulations/7-cfr/273/9/d/6/iii#liheaa_or_similar_energy_assistance_annual_payment_threshold
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9/d/6/iii
+      rationale: |-
+        Federal SNAP utility-allowance authority was checked for the LIHEAP annual payment threshold and heating/cooling standard framework. The Arkansas manual is used for the state administrative rules in this source unit, including changing standards during certification, verification-related disallowance, unoccupied-home disallowance, and the Arkansas formulation of SUA eligibility and deductible reimbursed expenses.
+  summary: |-
+    "Households may change standards at any point during the certification." If BUA, SUA, HLA, or Telephone Standard is chosen but required verification is not furnished, "the deduction will be disallowed." "All unverified utility costs will be disallowed" if verification is not provided by the request/notice date. To be eligible for the SUA, households must incur and be billed for, or expect to incur during the next heating and cooling season, actual heating or cooling costs, or receive/expect LIHEAP energy assistance during the next season. "The household must receive energy assistance of at least twenty dollars ($20.00) per year under federal law." Reimbursed or vendor-paid utility expenses allow the SUA only when heating or cooling costs exceed the excluded payment; only the remainder is deductible.
+rules:
+  - name: utility_standard_change_allowed_during_certification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "Households may change standards at any point during the certification"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_is_during_certification_period
+
+  - name: chosen_utility_standard_deduction_disallowed_for_missing_verification
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "If the Basic Utility Allowance (BUA), Standard Utility Allowance (SUA,) Homeless Living Allowance (HLA), or the Telephone Standard is chosen for a deduction, but required verification is not furnished, the deduction will be disallowed."
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_chose_bua_sua_hla_or_telephone_standard_for_deduction
+          and required_verification_for_chosen_utility_standard_not_furnished
+
+  - name: unverified_utility_costs_disallowed_after_verification_due_date
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "All unverified utility costs will be disallowed if the household fails to provide verification by the date shown"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_has_unverified_utility_costs
+          and household_failed_to_provide_verification_by_request_or_notice_due_date
+
+  - name: unoccupied_home_utility_standard_disallowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "If the household wishes to claim expenses for an unoccupied home, the utility standard will be disallowed for an unoccupied home."
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_wishes_to_claim_expenses_for_unoccupied_home
+
+  - name: standard_utility_allowance_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "incur and be billed for or expect to incur during the next heating and cooling season, the actual cost of heating or cooling"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "receives or expects to receive low-income energy assistance payments from the Low-Income Home Energy Assistance Program (LIHEAP)"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "at least twenty dollars ($20.00) per year"
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:regulations/7-cfr/273/9/d/6/iii#liheaa_or_similar_energy_assistance_annual_payment_threshold
+              output: liheaa_or_similar_energy_assistance_annual_payment_threshold
+              hash: sha256:80e41b5400958b9133f1702fd5250c6982264a1680997eddd469264d36e3cf62
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          (
+            household_incurs_and_is_billed_for_actual_heating_or_cooling_cost
+            or household_expects_to_incur_actual_heating_or_cooling_cost_during_next_heating_and_cooling_season
+            or (
+              household_receives_or_expects_liheap_payments_during_next_heating_and_cooling_season
+              and household_liheap_or_energy_assistance_annual_payment_amount >= liheaa_or_similar_energy_assistance_annual_payment_threshold
+            )
+            or household_billed_less_than_monthly_for_heating_costs_between_billing_months
+          )
+          and not chosen_utility_standard_deduction_disallowed_for_missing_verification
+          and not unoccupied_home_utility_standard_disallowed
+
+  - name: standard_must_change_to_basic_or_telephone_standard
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "If the household reports a change in eligibility for the SUA, but still has a utility expense, the standard must be changed to the Basic Utility Allowance or Telephone Standard."
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_reports_change_in_sua_eligibility
+          and household_still_has_utility_expense
+
+  - name: reimbursed_expense_standard_utility_allowance_may_be_used
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6620.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "the Standard Utility Allowance may be used when the heating or cooling costs exceed the excluded payment amount"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_receives_reimbursement_or_excluded_vendor_payment_for_utility_expenses
+          and household_heating_or_cooling_costs > household_excluded_utility_payment_amount
+
+  - name: deductible_utility_expense_after_excluded_payment
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Certification Manual section 6620.1
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "The portion of the expenses paid by an excluded reimbursement or vendor payment is not deductible. The amount left after deducting the excluded payment is deductible"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-341
+              excerpt: "Expenses are only deductible if the service is provided by someone outside of the household and the household makes a monetary payment"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          if utility_service_provided_by_someone_outside_household and household_makes_monetary_payment_for_utility_service: max(0, household_total_utility_expenses - household_excluded_utility_payment_amount) else: 0
