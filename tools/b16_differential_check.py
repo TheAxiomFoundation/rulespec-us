@@ -57,7 +57,28 @@ LEGAL_TABLES = (
     LegalTable("s232_steel_derivative_mobile_membership", 16, ("c", "xi")),
     LegalTable("s232_aluminum_primary_membership", 19, ("b",), "76", widths=(4, 8)),
     LegalTable("s232_aluminum_derivative_membership", 19, ("j",)),
+    # U.S. note 50(a), Brazil exclusions from heading 9903.05.01.  (a)(vi) is
+    # omitted: it cites only chapter-99 headings, so it has no HTS atoms on
+    # either side and no table to differentiate.
+    LegalTable("note50_brazil_a_ii_membership", 50, ("a", "ii"), rate_heading="9903.05.03"),
+    LegalTable("note50_brazil_a_iii_membership", 50, ("a", "iii"), rate_heading="9903.05.04"),
+    LegalTable("note50_brazil_gn6_conditional_membership", 50, ("a", "iv"), rate_heading="9903.05.05"),
+    LegalTable("note50_brazil_pharmaceutical_conditional_membership", 50, ("a", "v"), rate_heading="9903.05.06"),
+    # U.S. note 52, reciprocal-annex exclusions from headings 9903.05.20 through
+    # 9903.05.84.  (f) omitted for the same reason as 50(a)(vi).
+    LegalTable("note52_reciprocal_b_membership", 52, ("b",), rate_heading="9903.05.86"),
+    LegalTable("note52_reciprocal_c_membership", 52, ("c",), rate_heading="9903.05.87"),
+    LegalTable("note52_reciprocal_gn6_conditional_membership", 52, ("d",), rate_heading="9903.05.88"),
+    LegalTable("note52_reciprocal_pharmaceutical_conditional_membership", 52, ("e",), rate_heading="9903.05.89"),
 )
+
+
+WIDTH_SUFFIX = {
+    4: "_heading_membership",
+    6: "_subheading6_membership",
+    8: "_membership",
+    10: "_membership_hts10",
+}
 
 
 @dataclass(frozen=True)
@@ -307,6 +328,15 @@ def main() -> int:
         for index, (number, start) in enumerate(starts):
             note_ranges[number] = (start, starts[index + 1][1] if index + 1 < len(starts) else len(stream))
         generated = generated_tables()
+        # A generated table with no legal coordinate here is never differenced:
+        # it would pass this check by being invisible to it.  Fail instead.
+        orphans = sorted(set(generated) - {
+            spec.table.removesuffix("_membership") + WIDTH_SUFFIX[width]
+            for spec in LEGAL_TABLES
+            for width in spec.widths
+        })
+        if orphans:
+            raise ValueError(f"generated membership tables with no legal coordinate: {orphans}")
         report: dict[str, dict] = {}
         failed = False
         for spec in LEGAL_TABLES:
@@ -319,9 +349,7 @@ def main() -> int:
             if spec.include_prefix:
                 codes = {code for code in codes if code.startswith(spec.include_prefix)}
             for width in spec.widths:
-                base = spec.table.removesuffix("_membership")
-                suffix = {4: "_heading_membership", 6: "_subheading6_membership", 8: "_membership", 10: "_membership_hts10"}[width]
-                table = base + suffix
+                table = spec.table.removesuffix("_membership") + WIDTH_SUFFIX[width]
                 expected = {str(int(code)) for code in codes if len(code) == width}
                 got = generated.get(table, set())
                 if not expected and not got:
