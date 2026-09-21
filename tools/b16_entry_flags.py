@@ -15,6 +15,7 @@ MODULES = (
     "note16-232-steel.yaml", "note18-201-solar.yaml",
     "note19-232-aluminum.yaml", "note20-china-301.yaml",
     "note2aa-122-exemptions.yaml",
+    "note50-brazil-exemptions.yaml", "note52-reciprocal-exemptions.yaml",
 )
 WITNESS_LINES = {
     "entry_is_line_a": "7202111000", "entry_is_line_b": "7601103000",
@@ -47,7 +48,28 @@ def _tables() -> dict[str, set[int]]:
 
 
 def _member(table: str, rate_line: int, hts_digits: str) -> bool:
-    """Match exact 10, rate-line 8, HTS prefix 6, or heading prefix 4."""
+    """Match exact 10, rate-line 8, HTS prefix 6, or heading prefix 4.
+
+    The exact-10 branch is load-bearing and deliberate, not an oversight to be
+    relaxed into an 8-digit prefix match.  These notes print a code at the width
+    they mean: where a list names a 10-digit statistical reporting number it
+    names that article and not its siblings under the same subheading, and in
+    every such case in notes 50(a)(ii) and 52(b) the enclosing 8-digit
+    subheading is NOT separately printed.  U.S. note 52 demonstrates the intent
+    internally -- subdivision (b) lists the 10-digit sowing-seed lines
+    (1204.00.0010, 1205.10.0010, 1205.90.0010, 1206.00.0031, 0712.90.8550)
+    where the HTSUS breaks sowing out as a statistical suffix, while
+    subdivision (c) falls back to an 8-digit subheading plus the prose
+    qualifier ("Castor oil seeds, for sowing ... subheading 1207.30.00")
+    exactly where it does not.  Widening would exempt articles no list names:
+    all honey rather than certified-organic honey under 0409.00.00, oil-stock
+    and food-grade seed rather than planting seed, alnico and ceramic magnets
+    rather than sintered neodymium-iron-boron under 8505.11.00.  It would also
+    silently rewrite five already-validated families, including the section 232
+    derivative tables that feed entry_is_section_232_covered and the section 201
+    table whose only atom is the witness line 8541.42.0010.
+    test_sibling_statistical_suffixes_are_not_carved_out enforces this.
+    """
     if table.endswith("_membership_hts10"):
         key = int(hts_digits)
     elif table.endswith("_subheading6_membership"):
@@ -85,6 +107,24 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
         "china_301_list4a": ("china_301_list4a_membership", "china_301_list4a_membership_hts10"),
         "s122_unconditional_exempt": ("s122_aa_ii_membership", "s122_aa_ii_membership_hts10", "s122_aa_iii_membership"),
         "s122_gn6_conditional": ("s122_gn6_conditional_membership",),
+        # U.S. note 50(a) and U.S. note 52 have the same four-limb shape: two
+        # unconditional exclusion lists readable off the printed HTS line, then a
+        # general note 6 civil-aircraft list and a pharmaceutical-use list whose
+        # operative condition is not a panel fact.  The conditional groups are
+        # published so an entry preparer can see them; they are deliberately not
+        # part of any scope derivation below.
+        "note50_brazil_unconditional_exempt": (
+            "note50_brazil_a_ii_membership", "note50_brazil_a_ii_membership_hts10",
+            "note50_brazil_a_iii_membership",
+        ),
+        "note50_brazil_gn6_conditional": ("note50_brazil_gn6_conditional_membership",),
+        "note50_brazil_pharmaceutical_conditional": ("note50_brazil_pharmaceutical_conditional_membership",),
+        "note52_reciprocal_unconditional_exempt": (
+            "note52_reciprocal_b_membership", "note52_reciprocal_b_membership_hts10",
+            "note52_reciprocal_c_membership",
+        ),
+        "note52_reciprocal_gn6_conditional": ("note52_reciprocal_gn6_conditional_membership",),
+        "note52_reciprocal_pharmaceutical_conditional": ("note52_reciprocal_pharmaceutical_conditional_membership",),
     }
     result.update({name: any(_member(table, rate_line, hts) for table in tables) for name, tables in groups.items()})
     result.update({
@@ -102,10 +142,56 @@ def entry_flags(rate_line: int, hts_number: str, country: str) -> dict[str, bool
     result["entry_is_section_232_covered"] = (
         result["entry_is_section_232_aluminum"] or result["entry_is_section_232_steel"]
     )
-    # Follow-up incidence tables are not yet entry-preparable; declared booleans default false.
+    # Scope of the two overlay charges, on panel-observable facts alone.
+    #
+    # Both notes are written as exclusion lists against a charging heading, so
+    # the generated formulas read "...301_listed and origin_is_X: rate".  The
+    # flag therefore has to mean "this HTS line is NOT carved out", which is the
+    # complement of the exclusions this repository can actually evaluate:
+    #
+    #   in scope  <=>  not (unconditional exclusion list  or  section 232 metals)
+    #
+    # Netted in: note 50(a)(ii) and (a)(iii) / note 52(b) and (c), which turn on
+    # the printed HTS line; and the aluminum and steel part of note 50(a)(vi)(1)
+    # / note 52(f)(1), reached through the section 232 membership tables that
+    # already exist.  That reproduces the witness composition exactly -- it
+    # zeroed both charges for lines a (7202.11.10, printed in both notes' own
+    # lists) and b (7601.10.30, aluminum) and for no other witness line.
+    #
+    # Deliberately NOT netted in: the general note 6 civil-aircraft lists
+    # (50(a)(iv), 52(d)) and the pharmaceutical-use lists (50(a)(v), 52(e)),
+    # because their conditions are entry facts, not line facts -- zeroing a
+    # charge for every line that could be an aircraft part would over-exempt.
+    # Also not netted in, for want of any membership table: the copper, vehicle,
+    # vehicle-part, wood, medium- and heavy-duty vehicle, semiconductor, and
+    # patented-pharmaceutical limbs of 50(a)(vi) / 52(f).  Entries covered by
+    # those chapter-99 headings are scored in scope here and are a known
+    # overstatement, not a claim of coverage.  The precise defect is
+    # consumption, not absence: those sector headings are published as
+    # chapter-99 rate cells (us/policies/usitc/us-tariff-duty/lines/generated/
+    # ch99c.yaml carries 9903.94.01, 9903.76.01, 9903.74.01 and 9903.79.01),
+    # and 52(f) additionally has an overlay module for heading 9903.05.90
+    # defining forced_labor_metals_heading_applies.  The CBP composition
+    # imports neither, and neither is hts_line-keyed, so there is nothing here
+    # for this classifier to read.
+    #
+    # ``country`` is intentionally unused: origin gating (origin_is_brazil,
+    # origin_is_forced_labor_*) is applied by the composition, and duplicating it
+    # here would double-gate the charge.
+    #
+    # Naming: entry_is_forced_labor_301_listed carries a frozen misnomer.  It
+    # gates U.S. note 52, the reciprocal country annex; the phrase "forced labor"
+    # appears nowhere in that note.  The identifier is kept because the
+    # composition contract binds to it.
     result.update({
-        "entry_is_brazil_301_listed": False,
-        "entry_is_forced_labor_301_listed": False,
+        "entry_is_brazil_301_listed": not (
+            result["note50_brazil_unconditional_exempt"] or result["entry_is_section_232_covered"]
+        ),
+        "entry_is_forced_labor_301_listed": not (
+            result["note52_reciprocal_unconditional_exempt"] or result["entry_is_section_232_covered"]
+        ),
+        # Still not entry-preparable: no membership table exists for the 2024
+        # China 301 action or its solar lines.  Declared false, not derived.
         "entry_is_china_301_2024_action": False,
         "entry_is_china_301_solar": False,
     })
