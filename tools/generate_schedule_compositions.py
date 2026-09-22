@@ -43,7 +43,7 @@ import yaml
 GENERATOR_VERSION = "b1.6-schedule-compositions-3"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
-WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
+WITNESS_SHA256 = "6045b247a359dd5c3bd8612c0e25c57a06098a942a9f4ceedd1175412a887a3c"
 TABLE_DIR = REPO_ROOT / "us/policies/usitc/us-tariff-duty/lines/generated"
 TABLE_MANIFEST_PATH = TABLE_DIR / "GENERATED-MANIFEST.json"
 TABLE_MANIFEST_SHA256 = "0ab7aa9d757661fd488893af038a70ebdd916c555304962b9f93badb0e711f77"
@@ -51,6 +51,10 @@ COMPOSITION_DIR = REPO_ROOT / "us/policies/cbp/us-tariff-schedule/generated"
 PROGRAM_DIR = REPO_ROOT / "programs/us/us-tariff-schedule"
 TABLE_EFFECTIVE_FROM = "2025-01-01"
 WITNESS_EFFECTIVE_FROM = "2026-02-15"
+# Heading 9903.03.12 start date: clause 1 of the August 18, 2026 suspension
+# proclamation (us/rulemaking/white-house/2026-08-18/canada-338-suspension)
+# moved Proclamation 11046 from August 19 to August 22, 2026.
+SECTION_338_EFFECTIVE_FROM = "2026-08-22"
 COMPANION_EFFECTIVE_DATE = "2026-08-01"
 WITNESS_LINE_KEYS = {
     2203000030,
@@ -994,7 +998,7 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
             {"entry_is_line_d": True},
         ),
         "section_338_chapter_98_exclusion_applies": (
-            "2026-08-19",
+            SECTION_338_EFFECTIVE_FROM,
             {
                 "entry_is_properly_claimed_chapter_98_entry": True,
                 "cbp_agrees_chapter_98_entry_is_appropriate": True,
@@ -1003,7 +1007,7 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
             },
         ),
         "section_338_reduced_duty_base_applies": (
-            "2026-08-19",
+            SECTION_338_EFFECTIVE_FROM,
             {
                 "entry_is_line_d": True,
                 "country_of_origin": "CA",
