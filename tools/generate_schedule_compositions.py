@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-3"
+GENERATOR_VERSION = "b1.6-schedule-compositions-4"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
 WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
@@ -72,6 +72,20 @@ ENTRY_FLAG_RULES = tuple(f"entry_is_line_{suffix}" for suffix in "abcde")
 # machinery). Only referenced identifiers are valid caller-input slots, so
 # companion tests must feed exactly this retained subset.
 RETAINED_ENTRY_FLAGS = ("entry_is_line_a", "entry_is_line_b", "entry_is_line_d")
+# The only rules allowed to keep a retained exemplar flag, each for an
+# authority with no membership input to double count against. Generation
+# fails closed on any other reference: an exemplar term that survives beside
+# its membership replacement charges the same duty twice for the exemplar
+# line (the chapter 22 beer defect below).
+RETAINED_ENTRY_FLAG_REFERENCES = {
+    "entry_is_reciprocal_annex_excluded": {"entry_is_line_a"},
+    "entry_is_reciprocal_metals_excluded": {"entry_is_line_b"},
+    "beer_section_232_aluminum_content_basis_duty_applies": {"entry_is_line_d"},
+    "section_338_component_rate": {"entry_is_line_d"},
+    "section_338_reduced_duty_base_applies": {"entry_is_line_d"},
+}
+# Chapter 76's base selector keeps the witness's 9903.90.09 Russian branch.
+CHAPTER_76_BASE_ENTRY_FLAG_REFERENCES = {"mfn_ad_valorem_rate": {"entry_is_line_b"}}
 
 # These are the public component surfaces named by the B1.3 contract.  Their
 # rule objects are deep-copied from the witness, including every formula,
@@ -110,6 +124,10 @@ COMPONENT_FORMULA_REPLACEMENTS = {
         ("entry_is_line_a", "entry_is_china_301_list123"),
         ("entry_is_line_b", "entry_is_china_301_2024_action"),
         ("entry_is_line_c", "entry_is_china_301_list4a"),
+        # Dropped, not replaced: the witness's beer exemplar (2203.00.00.30)
+        # is a note 20 List 3 member, so entry_is_china_301_list123 already
+        # charges it. Keeping this term charged the 25 percent twice.
+        ("\n+ (if entry_is_line_d and origin_is_china: list_1_additional_ad_valorem_rate else: 0)", ""),
         ("entry_is_line_e", "entry_is_china_301_solar"),
     ),
     "brazil_section_301_component_rate": (("if entry_is_line_a or entry_is_line_b: 0\nelif origin_is_brazil:", "if entry_is_brazil_301_listed and origin_is_brazil:"),),
@@ -574,6 +592,36 @@ def normalize_instance_rule(rule: dict, chapter: str) -> dict:
     return normalized
 
 
+def check_retained_entry_flag_references(rules: list[dict], chapter: str) -> None:
+    """Fail closed on exemplar flags outside the sanctioned reference map."""
+    allowed = dict(RETAINED_ENTRY_FLAG_REFERENCES)
+    if chapter == "76":
+        allowed.update(CHAPTER_76_BASE_ENTRY_FLAG_REFERENCES)
+    referenced: set[str] = set()
+    stray: list[str] = []
+    for rule in rules:
+        flags = {
+            token
+            for version in rule.get("versions") or []
+            if isinstance(version.get("formula"), str)
+            for token in re.findall(r"\bentry_is_line_[a-e]\b", version["formula"])
+        }
+        referenced |= flags
+        unexpected = flags - allowed.get(rule["name"], set())
+        if unexpected:
+            stray.append(f"{rule['name']} -> {sorted(unexpected)}")
+    if stray:
+        raise SystemExit(
+            f"chapter {chapter}: exemplar flags outside "
+            f"RETAINED_ENTRY_FLAG_REFERENCES: {stray}"
+        )
+    if referenced != set(RETAINED_ENTRY_FLAGS):
+        raise SystemExit(
+            f"chapter {chapter}: referenced exemplar flags {sorted(referenced)} "
+            f"differ from RETAINED_ENTRY_FLAGS {list(RETAINED_ENTRY_FLAGS)}"
+        )
+
+
 def pass_through_rule(name: str, dtype: str, formula: str, source: str) -> dict:
     return {
         "name": name,
@@ -813,6 +861,7 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
                     "internal error: scalar-parameter rename altered component "
                     f"{name} beyond prefixed references"
                 )
+    check_retained_entry_flag_references(rules, chapter)
 
     source_verification = copy.deepcopy(witness["module"]["source_verification"])
     steel_citation = "us/statute/hts/9903.82.02"
@@ -835,7 +884,9 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
         "entry preparation cannot yet populate those lists; both actions are outside the "
         "April-June window (effective 2026-07-22 and 2026-07-24). China 2024-action and "
         "solar inputs also default FALSE pending note-31 membership tables. Beer/section-338 "
-        "keeps entry_is_line_d because no membership module exists. Steel uses the Rev. 15 "
+        "keeps entry_is_line_d because no membership module exists; the witness's separate "
+        "beer China-301 term is dropped because HTS 2203.00.00 is a List 3 member already "
+        "charged through entry_is_china_301_list123. Steel uses the Rev. 15 "
         "50-percent single-version rate, and the April-June window is wholly post-escalation. "
         "The witness's 7202.11.10.00 steel exemplar is a ferroalloy outside note 16(c), so "
         "the untouched witness correctly has no steel component slot. These identifiers are "
@@ -1146,8 +1197,54 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
         ),
         "output": {f"{module_path}#ieepa_component_rate_with_declared_exceptions": 0},
     }
-    cases = [case, declared_exception_zero, *positive_judgment_cases(module_path, module)]
+    cases = [
+        case,
+        declared_exception_zero,
+        *china_301_exemplar_regression_cases(chapter, module_path),
+        *positive_judgment_cases(module_path, module),
+    ]
     return dump_yaml(cases)
+
+
+def china_301_exemplar_regression_cases(chapter: str, module_path: str) -> list[dict]:
+    """Chapter 22: the witness beer exemplar pays China section 301 once.
+
+    Entry preparation (tools/b16_entry_flags.py) sets both entry_is_line_d and
+    entry_is_china_301_list123 for HTS 2203.00.00.30, because heading
+    2203.00.00 is a note 20 List 3 member. The witness charges 25 percent;
+    the generated chapter once charged it twice (0.5). Every other input
+    stays false, including entry_is_forced_labor_301_listed, so the stack is
+    the base plus this component alone.
+    """
+    if chapter != "22":
+        return []
+    return [
+        {
+            "name": (
+                "China-origin 2203.00.00.30 beer flagged as both the witness "
+                "exemplar and a List 3 member pays section 301 once"
+            ),
+            "period": _day("2026-08-19"),
+            "input": _qualified_inputs(
+                module_path,
+                {
+                    "hts_line": 2203000000,
+                    "hts_number": "2203.00.00.30",
+                    "country_of_origin": "CN",
+                    **{name: False for name in DECLARED_BOOLEAN_INPUTS},
+                    **{name: False for name in RETAINED_ENTRY_FLAGS},
+                    **{name: False for name in GENERATED_MEMBERSHIP_INPUTS},
+                    "entry_is_line_d": True,
+                    "entry_is_china_301_list123": True,
+                },
+            ),
+            "output": {
+                f"{module_path}#mfn_ad_valorem_rate": 0,
+                f"{module_path}#china_section_301_component_rate": 0.25,
+                f"{module_path}#schedule_statutory_stack": 0.25,
+            },
+        }
+    ]
 
 
 def program_spec(chapter: str, imports: list[str], has_column2_rate: bool) -> bytes:
