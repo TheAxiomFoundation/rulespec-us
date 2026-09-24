@@ -72,11 +72,12 @@ ENTRY_FLAG_RULES = tuple(f"entry_is_line_{suffix}" for suffix in "abcde")
 # machinery). Only referenced identifiers are valid caller-input slots, so
 # companion tests must feed exactly this retained subset.
 RETAINED_ENTRY_FLAGS = ("entry_is_line_a", "entry_is_line_b", "entry_is_line_d")
-# The only rules allowed to keep a retained exemplar flag, each for an
-# authority with no membership input to double count against. Generation
-# fails closed on any other reference: an exemplar term that survives beside
-# its membership replacement charges the same duty twice for the exemplar
-# line (the chapter 22 beer defect below).
+# The only rules allowed to keep a retained exemplar flag. Each either can
+# only zero a charge (the reciprocal exclusions, the beer content-basis gate,
+# the section 338 reduced-base gate) or gates section 338, which has no
+# membership input. Generation fails closed on any other reference: an
+# exemplar term that survives beside its membership replacement charges the
+# same duty twice for the exemplar line (the chapter 22 beer defect below).
 RETAINED_ENTRY_FLAG_REFERENCES = {
     "entry_is_reciprocal_annex_excluded": {"entry_is_line_a"},
     "entry_is_reciprocal_metals_excluded": {"entry_is_line_b"},
