@@ -627,7 +627,7 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
         "b041b6b5a0e39f2c05c93669f354f8a54e9a84c3"
     )
     assert toolchain["axiom_corpus_ref"] == (
-        "8f7d60aaced28ee4252b9237f9d6e02360dc34bc"
+        "9b0641afc055f9d43c6e3f5d7840e2dee120c7df"
     )
     assert toolchain["rulespec_us_ref"] == (
         "38d5c8c516f9243cedf8e07a22f96dde9ac66fe3"
