@@ -14,6 +14,7 @@ active.
 
 from __future__ import annotations
 
+import functools
 import re
 import sys
 from pathlib import Path
@@ -33,11 +34,23 @@ def chapter_modules() -> list[Path]:
     )
 
 
+@functools.cache
+def module_rules(module: Path) -> list[dict]:
+    return yaml.load(module.read_text(), Loader=LOADER)["rules"]
+
+
+def import_tool(name: str):
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        return __import__(name)
+    finally:
+        sys.path.remove(str(ROOT / "tools"))
+
+
 def china_301_formulas(module: Path) -> list[str]:
-    payload = yaml.load(module.read_text(), Loader=LOADER)
     rules = [
         rule
-        for rule in payload["rules"]
+        for rule in module_rules(module)
         if rule.get("name") == "china_section_301_component_rate"
     ]
     assert len(rules) == 1, f"{module.name}: expected one China section 301 rule"
@@ -66,6 +79,22 @@ def test_china_301_component_has_no_exemplar_term() -> None:
     )
 
 
+def test_exemplar_flags_stay_inside_the_generator_allow_list() -> None:
+    # The generator runs this check only when chapters are regenerated; run it
+    # over the committed bytes too.
+    generator = import_tool("generate_schedule_compositions")
+    offenders: list[str] = []
+    for module in chapter_modules():
+        chapter = module.stem.removeprefix("ch")
+        try:
+            generator.check_retained_entry_flag_references(
+                module_rules(module), chapter
+            )
+        except SystemExit as error:
+            offenders.append(str(error))
+    assert offenders == [], "\n".join(offenders)
+
+
 def test_chapter_22_companion_pins_a_single_list_3_charge() -> None:
     module_path = "us:policies/cbp/us-tariff-schedule/generated/ch22/ch22"
     cases = yaml.load(
@@ -86,12 +115,10 @@ def test_chapter_22_companion_pins_a_single_list_3_charge() -> None:
 
 
 def test_entry_preparation_sets_both_flags_for_the_beer_exemplar() -> None:
-    sys.path.insert(0, str(ROOT / "tools"))
-    try:
-        from b16_entry_flags import entry_flags
-    finally:
-        sys.path.remove(str(ROOT / "tools"))
-    flags = entry_flags(2203000000, "2203.00.00.30", "CN")
-    # The chapter 22 regression case models exactly this entry-prep state.
+    flags = import_tool("b16_entry_flags").entry_flags(
+        2203000000, "2203.00.00.30", "CN"
+    )
+    # The chapter 22 case sets this flag pair; its other inputs are explicit
+    # falses so the expected stack isolates the China 301 charge.
     assert flags["entry_is_line_d"]
     assert flags["entry_is_china_301_list123"]

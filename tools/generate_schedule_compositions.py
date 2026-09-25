@@ -1210,12 +1210,13 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
 def china_301_exemplar_regression_cases(chapter: str, module_path: str) -> list[dict]:
     """Chapter 22: the witness beer exemplar pays China section 301 once.
 
-    Entry preparation (tools/b16_entry_flags.py) sets both entry_is_line_d and
-    entry_is_china_301_list123 for HTS 2203.00.00.30, because heading
-    2203.00.00 is a note 20 List 3 member. The witness charges 25 percent;
-    the generated chapter once charged it twice (0.5). Every other input
-    stays false, including entry_is_forced_labor_301_listed, so the stack is
-    the base plus this component alone.
+    Entry preparation (tools/b16_entry_flags.py) sets entry_is_line_d for HTS
+    2203.00.00.30 by exact match on the witness line, and sets
+    entry_is_china_301_list123 because subheading 2203.00.00 is a note 20
+    List 3 member. The witness charges 25 percent; the generated chapter once
+    charged it twice (0.5). Every other input stays false, including
+    entry_is_forced_labor_301_listed, so the stack is the base plus this
+    component alone.
     """
     if chapter != "22":
         return []
