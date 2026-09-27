@@ -205,6 +205,17 @@ def test_compare_treats_a_changed_class_as_new_and_stale():
     assert verdict.new == {after} and verdict.stale == {before}
 
 
+def test_a_listed_module_may_change_class_but_not_surface():
+    # Fixing a module's first error can expose another it already had; the
+    # line changes class. A new surface for the same module is a new failure.
+    before = erl.Failure("atomic", "plural-corpus-citation-paths", "us/policies/a.yaml")
+    after = erl.Failure("atomic", "module-kind-on-atomic-surface", "us/policies/a.yaml")
+    assert erl.compare({after}, {after}, {before}).ok
+    composed = erl.Failure("composed", "plural-corpus-citation-paths", "us/policies/a.yaml")
+    verdict = erl.compare({after, composed}, {after, composed}, {before})
+    assert verdict.added == {composed}
+
+
 def test_check_coverage_requires_one_atomic_result_per_module():
     modules = ["us/a.yaml", "us/b.yaml"]
     results = _results(

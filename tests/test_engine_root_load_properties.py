@@ -5,9 +5,11 @@ Invariants, for every input:
 1. Baseline round trip: parse(render(S)) == S, and render is canonical
    (sorted, idempotent), so the committed file has exactly one spelling.
 2. The gate passes iff the observed failures equal the baseline and, when a
-   protected base baseline is given, the baseline is a subset of it.
+   protected base baseline is given, every failing (surface, module) in the
+   baseline was already failing in the base.
 3. Monotonicity: an unlisted failure always fails the gate; a listed module
-   that stops failing always fails the gate; an added line always fails it.
+   that stops failing always fails the gate; a newly failing module always
+   fails it; a listed module changing class alone never does.
 4. Classification ignores machine-specific prefixes: the class of an engine
    message does not depend on where the checkout or scratch directory lives.
 
@@ -57,10 +59,14 @@ def test_baseline_round_trip(entries):
     assert erl.render_baseline(erl.parse_baseline(text)) == text
 
 
+def _keys(entries):
+    return {(entry.surface, entry.module) for entry in entries}
+
+
 @given(failure_sets, failure_sets, st.one_of(st.none(), failure_sets))
 def test_gate_passes_iff_equal_and_shrinking(observed, baseline, base):
     verdict = erl.compare(observed, baseline, base)
-    expected = observed == baseline and (base is None or baseline <= base)
+    expected = observed == baseline and (base is None or _keys(baseline) <= _keys(base))
     assert verdict.ok == expected
 
 
@@ -80,12 +86,22 @@ def test_fixed_but_listed_module_always_fails(baseline, data):
 
 
 @given(failure_sets, failures)
-def test_added_line_always_fails(base, extra):
-    if extra in base:
+def test_newly_failing_module_always_fails(base, extra):
+    if (extra.surface, extra.module) in _keys(base):
         return
     grown = base | {extra}
     verdict = erl.compare(grown, grown, base)
     assert not verdict.ok and verdict.added == {extra}
+
+
+@given(failure_sets.filter(bool), st.data())
+def test_class_change_of_listed_module_passes(base, data):
+    entry = data.draw(st.sampled_from(sorted(base)))
+    new_class = data.draw(st.sampled_from(sorted(erl.KNOWN_CLASSES)))
+    changed = erl.Failure(entry.surface, new_class, entry.module)
+    rest = {e for e in base if (e.surface, e.module) != (entry.surface, entry.module)}
+    current = rest | {changed}
+    assert erl.compare(current, current, base).ok
 
 
 prefixes = st.builds(

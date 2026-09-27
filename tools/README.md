@@ -60,8 +60,10 @@ Failures must equal `tools/known-engine-load-failures.txt`
 - a module that fails and is not listed fails the check;
 - a listed module that no longer fails that way fails the check, so a fix
   deletes its line in the same change;
-- a pull request may not add lines, unless it moves `axiom_rules_engine_ref`
-  (a newer engine may reject more, and the pin bump is where that is listed).
+- a pull request may not add a failing module, unless it moves
+  `axiom_rules_engine_ref` (a newer engine may reject more, and the pin bump
+  is where that is listed). A listed module may change class: the engine
+  reports only a module's first error, so fixing one can expose another.
 
 Run locally from a checkout whose directory is named exactly `rulespec-us`:
 
