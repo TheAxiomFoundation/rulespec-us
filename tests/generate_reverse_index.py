@@ -3,8 +3,8 @@
 Every RuleSpec module grounds to legal text through corpus citation paths in
 two places:
 
-- ``module.source_verification.corpus_citation_path`` or
-  ``module.source_verification.corpus_citation_paths`` (module-level grounding);
+- ``module.source_verification.corpus_citation_path`` and every
+  ``module.source_documents[].corpus_citation_path`` (module-level grounding);
 - ``rules[].metadata.proof.atoms[].source.corpus_citation_path`` (per-atom
   proof grounding).
 
@@ -101,16 +101,21 @@ def citation_paths_for_module(payload: Any) -> dict[str, set[str]]:
 
     module = payload.get("module")
     if isinstance(module, dict):
+        citations = []
         verification = module.get("source_verification")
         if isinstance(verification, dict):
-            citations = [verification.get("corpus_citation_path")]
-            plural_citations = verification.get("corpus_citation_paths")
-            if isinstance(plural_citations, list):
-                citations.extend(plural_citations)
-            for value in citations:
-                citation = _clean_citation_path(value)
-                if citation is not None:
-                    references.setdefault(citation, set()).add(MODULE_REFERENCE)
+            citations.append(verification.get("corpus_citation_path"))
+        documents = module.get("source_documents")
+        if isinstance(documents, list):
+            citations.extend(
+                document.get("corpus_citation_path")
+                for document in documents
+                if isinstance(document, dict)
+            )
+        for value in citations:
+            citation = _clean_citation_path(value)
+            if citation is not None:
+                references.setdefault(citation, set()).add(MODULE_REFERENCE)
 
     rules = payload.get("rules")
     if isinstance(rules, list):
