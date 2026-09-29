@@ -17,7 +17,9 @@ commit. This script then:
    ``resolved_source_verification_block``, the function that stamps pins, so
    a pin matches exactly when the encoder would stamp the same digest today;
 4. runs the encoder's ``check-source-staleness`` entry point once per
-   jurisdiction root and records its fail-closed verdict.
+   jurisdiction root and records its fail-closed verdict;
+5. for every root whose encoder scan completed, checks that the encoder's
+   verdict and step 3 agree on every pin (a differential check).
 
 The encoder resolves only bytes listed in the signed release and hash-checks
 each provisions file against the release inventory, so drift is measured
@@ -220,13 +222,100 @@ def check_pins(pins: Iterable[Pin], resolve: Callable[[str], str]) -> list[PinRe
 
 
 def overall_exit_status(
-    pin_results: Sequence[PinResult], verdicts: Sequence[EncoderVerdict]
+    pin_results: Sequence[PinResult],
+    verdicts: Sequence[EncoderVerdict],
+    disagreements: Sequence[str] = (),
 ) -> int:
+    if disagreements:
+        return EXIT_FINDINGS
     if any(item.status != "match" for item in pin_results):
         return EXIT_FINDINGS
     if any(verdict.exit_status != 0 for verdict in verdicts):
         return EXIT_FINDINGS
     return EXIT_CLEAN
+
+
+NOT_FOUND = "<provision text not found>"
+
+
+def parse_encoder_findings(output: str, repo_root: Path) -> dict[str, tuple[str, str]]:
+    """Map each ``STALE`` module the encoder printed to ``(pinned, current)``."""
+    findings: dict[str, tuple[str, str]] = {}
+    current_path = None
+    fields: dict[str, str] = {}
+    for line in output.splitlines() + ["STALE <end>"]:
+        if line.startswith("STALE "):
+            if current_path is not None:
+                findings[current_path] = (fields.get("pinned", ""), fields.get("current", ""))
+            raw = line.removeprefix("STALE ").strip()
+            try:
+                current_path = Path(raw).relative_to(repo_root).as_posix()
+            except ValueError:
+                current_path = raw
+            fields = {}
+        elif current_path is not None and line.startswith("  "):
+            key, _, value = line.strip().partition(" ")
+            fields.setdefault(key, value.strip())
+    findings.pop("<end>", None)
+    return findings
+
+
+def scan_completed(verdict: EncoderVerdict) -> bool:
+    """True when the encoder scanned the whole root instead of refusing it."""
+    lines = [line for line in verdict.output.splitlines() if line.strip()]
+    if not lines:
+        return False
+    last = lines[-1]
+    return (
+        last.endswith("pinned module(s) are stale.")
+        or (last.startswith("All ") and "pinned module(s) match corpus release" in last)
+        or last.startswith("No RuleSpec modules found under")
+    )
+
+
+def differential(
+    verdicts: Sequence[EncoderVerdict],
+    pin_results: Sequence[PinResult],
+    repo_root: Path,
+) -> tuple[list[str], list[str]]:
+    """Compare this report's pin statuses with the encoder's own verdict.
+
+    Returns (roots compared, disagreements). Unpinned modules, which the
+    encoder also lists as STALE with a ``<missing>`` pin, are outside the
+    comparison; every module that declares ``source_sha256`` is inside it.
+    """
+    compared: list[str] = []
+    disagreements: list[str] = []
+    by_root: dict[str, list[PinResult]] = {}
+    for item in pin_results:
+        by_root.setdefault(item.path.split("/", 1)[0], []).append(item)
+    for verdict in verdicts:
+        if not scan_completed(verdict):
+            continue
+        compared.append(verdict.jurisdiction)
+        encoder = {
+            path: value
+            for path, value in parse_encoder_findings(verdict.output, repo_root).items()
+            if value[0] != "<missing>"
+        }
+        ours = {item.path: item for item in by_root.get(verdict.jurisdiction, [])}
+        for path in sorted(set(encoder) - set(ours)):
+            disagreements.append(f"{path}: encoder lists a pin this report did not find")
+        for path, item in sorted(ours.items()):
+            flagged = encoder.get(path)
+            if item.status == "match":
+                expected_ok = flagged is None
+            elif item.status == "stale":
+                expected_ok = flagged is not None and flagged[1] == item.current_sha
+            else:
+                expected_ok = flagged is not None and flagged[1] == NOT_FOUND
+            if not expected_ok:
+                ours_text = item.status + (
+                    f" (current {item.current_sha})" if item.current_sha else ""
+                )
+                theirs = "match" if flagged is None else f"stale (current {flagged[1]})"
+                disagreements.append(f"{path}: report says {ours_text}, encoder says {theirs}")
+    return compared, disagreements
 
 
 def _table_cell(value: object) -> str:
@@ -240,6 +329,8 @@ def render_report(
     scan: ScanResult,
     pin_results: Sequence[PinResult],
     verdicts: Sequence[EncoderVerdict],
+    compared: Sequence[str] = (),
+    disagreements: Sequence[str] = (),
 ) -> str:
     counts = Counter(item.status for item in pin_results)
     lines = [
@@ -318,6 +409,14 @@ def render_report(
             for verdict in failing
         ]
         lines += ["", "</details>"]
+    lines += [
+        "",
+        "## Differential (pin statuses above vs the encoder verdict)",
+        "",
+        f"- Roots compared (encoder scan completed): {len(compared)} of {len(verdicts)}",
+        f"- Disagreements: {len(disagreements)}",
+    ]
+    lines += [f"  - {_table_cell(item)}" for item in disagreements[:MAX_LISTED_ROWS]]
     return "\n".join(lines) + "\n"
 
 
@@ -450,6 +549,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     break
             verdicts.append(EncoderVerdict(root.name, int(status), output, attempt))
 
+    compared, disagreements = differential(verdicts, pin_results, repo_root)
     release_facts = {
         "name": release.name,
         "content_sha256": release.content_sha256,
@@ -458,7 +558,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "encoder_ref": args.encoder_ref,
     }
     report = render_report(
-        release=release_facts, scan=scan, pin_results=pin_results, verdicts=verdicts
+        release=release_facts,
+        scan=scan,
+        pin_results=pin_results,
+        verdicts=verdicts,
+        compared=compared,
+        disagreements=disagreements,
     )
     args.report.write_text(report, encoding="utf-8")
     args.json_path.write_text(
@@ -475,6 +580,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 },
                 "pins": [asdict(item) for item in pin_results],
                 "encoder_verdicts": [asdict(verdict) for verdict in verdicts],
+                "differential": {"compared": compared, "disagreements": disagreements},
             },
             indent=2,
             sort_keys=True,
@@ -483,7 +589,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         encoding="utf-8",
     )
     print(report)
-    return overall_exit_status(pin_results, verdicts)
+    return overall_exit_status(pin_results, verdicts, disagreements)
 
 
 def _release_commit(release_object_path: Path) -> str:

@@ -229,3 +229,66 @@ def test_labeled_key_parsing():
     for bad in ("", "LABEL", "=abc", "LABEL="):
         with pytest.raises(Exception):
             ssr._parse_labeled_key(bad)
+
+
+def _encoder_output(root: Path, entries: list[tuple[str, str, str]], total: int) -> str:
+    lines = []
+    for path, pinned, current in entries:
+        lines += [f"STALE {root / path}", f"  pinned  {pinned}", f"  current {current}"]
+    lines.append(f"{len(entries)} of {total} pinned module(s) are stale.")
+    return "\n".join(lines) + "\n"
+
+
+def test_parse_encoder_findings_and_scan_completion(tmp_path: Path):
+    output = _encoder_output(
+        tmp_path, [("us/a.yaml", SHA_A, SHA_B), ("us/b.yaml", "<missing>", ssr.NOT_FOUND)], 3
+    )
+    assert ssr.parse_encoder_findings(output, tmp_path) == {
+        "us/a.yaml": (SHA_A, SHA_B),
+        "us/b.yaml": ("<missing>", ssr.NOT_FOUND),
+    }
+    assert ssr.scan_completed(_verdict(1, output))
+    assert ssr.scan_completed(_verdict(0, "All 3 pinned module(s) match corpus release 'r'.\n"))
+    assert ssr.scan_completed(_verdict(0, f"No RuleSpec modules found under {tmp_path}.\n"))
+    assert not ssr.scan_completed(_verdict(1, SCAN_REFUSAL))
+    assert not ssr.scan_completed(_verdict(1, RELEASE_REFUSAL))
+    assert not ssr.scan_completed(_verdict(0, ""))
+
+
+def test_differential_agrees_and_disagrees(tmp_path: Path):
+    results = [
+        ssr.PinResult("us/match.yaml", "c", "match", SHA_A, SHA_A),
+        ssr.PinResult("us/stale.yaml", "c", "stale", SHA_A, SHA_B),
+        ssr.PinResult("us/gone.yaml", "c", "unresolved", SHA_A, None, "gone"),
+        ssr.PinResult("us-ca/x.yaml", "c", "stale", SHA_A, SHA_B),
+    ]
+    agreeing = _encoder_output(
+        tmp_path,
+        [
+            ("us/stale.yaml", SHA_A, SHA_B),
+            ("us/gone.yaml", SHA_A, ssr.NOT_FOUND),
+            ("us/unpinned.yaml", "<missing>", ssr.NOT_FOUND),
+        ],
+        4,
+    )
+    verdicts = [_verdict(1, agreeing, "us"), _verdict(1, SCAN_REFUSAL, "us-ca")]
+    assert ssr.differential(verdicts, results, tmp_path) == (["us"], [])
+
+    disagreeing = _encoder_output(
+        tmp_path,
+        [
+            ("us/match.yaml", SHA_A, SHA_B),
+            ("us/stale.yaml", SHA_A, SHA_A.replace("c", "d")),
+            ("us/extra.yaml", SHA_B, SHA_A),
+        ],
+        4,
+    )
+    compared, disagreements = ssr.differential([_verdict(1, disagreeing, "us")], results, tmp_path)
+    assert compared == ["us"]
+    assert [item.split(":")[0] for item in disagreements] == [
+        "us/extra.yaml",
+        "us/gone.yaml",
+        "us/match.yaml",
+        "us/stale.yaml",
+    ]
+    assert ssr.overall_exit_status(results[:1], [], disagreements) == ssr.EXIT_FINDINGS
