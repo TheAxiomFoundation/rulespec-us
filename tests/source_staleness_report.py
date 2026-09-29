@@ -51,9 +51,25 @@ except ImportError:  # pragma: no cover - PyYAML without libyaml
 
 
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
+# The encoder's _IGNORED_RULESPEC_SCAN_NAMES at the pinned ref, so both scans
+# see the same files and the differential cannot disagree over a skipped one.
 IGNORED_DIR_NAMES = frozenset(
-    {".git", ".pytest_cache", ".venv", "__pycache__", "_axiom", "node_modules"}
+    {
+        ".git",
+        ".mypy_cache",
+        ".nox",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "_axiom",
+        "__pycache__",
+        "node_modules",
+        "venv",
+    }
 )
+# The encoder skips a jurisdiction's ProgramSpec root (RULESPEC_COMPOSITION_SPEC_ROOT).
+COMPOSITION_SPEC_ROOT = "programs"
 TEST_SUFFIXES = (".test.yaml", ".test.yml")
 YAML_SUFFIXES = (".yaml", ".yml")
 PIN_STATUSES = ("match", "stale", "unresolved", "invalid")
@@ -139,6 +155,8 @@ def iter_module_files(jurisdiction_root: Path) -> Iterable[Path]:
     for path in sorted(jurisdiction_root.rglob("*")):
         relative = path.relative_to(jurisdiction_root)
         if any(part in IGNORED_DIR_NAMES for part in relative.parts):
+            continue
+        if relative.parts[0] == COMPOSITION_SPEC_ROOT:
             continue
         if not path.is_file() or path.is_symlink():
             continue
@@ -318,6 +336,22 @@ def differential(
     return compared, disagreements
 
 
+def summary_line(
+    pin_results: Sequence[PinResult],
+    verdicts: Sequence[EncoderVerdict],
+    compared: Sequence[str],
+    disagreements: Sequence[str],
+) -> str:
+    counts = Counter(item.status for item in pin_results)
+    clean = sum(1 for verdict in verdicts if verdict.exit_status == 0)
+    return (
+        f"{len(pin_results)} pins: "
+        + ", ".join(f"{counts.get(status, 0)} {status}" for status in PIN_STATUSES)
+        + f"; encoder verdict clean in {clean} of {len(verdicts)} roots"
+        + f"; differential compared {len(compared)} roots, {len(disagreements)} disagreements"
+    )
+
+
 def _table_cell(value: object) -> str:
     text = "" if value is None else str(value)
     return text.replace("|", "\\|").replace("\n", " ")
@@ -475,6 +509,44 @@ def _harness_error(args: argparse.Namespace, message: str) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        return _run(args)
+    except Exception as exc:  # noqa: BLE001 - any crash means no report
+        return _harness_error(args, f"The report crashed: {type(exc).__name__}: {exc}")
+
+
+def missing_provisions_hint(corpus_root: Path) -> str:
+    """Explain a binding failure caused by provisions absent from the checkout.
+
+    Reads the release object only to name missing paths; nothing here is
+    trusted, because binding already failed.
+    """
+    try:
+        objects = sorted((corpus_root / "releases").glob("*/*.json"))
+        payload = json.loads(objects[0].read_text(encoding="utf-8"))
+        paths = [
+            artifact["path"]
+            for artifact in payload["content"]["artifacts"]
+            if artifact.get("artifact_class") == "provisions"
+        ]
+    except (IndexError, OSError, ValueError, KeyError, TypeError):
+        return ""
+    missing = [path for path in paths if not (corpus_root / path).is_file()]
+    if not missing:
+        return ""
+    locks = (corpus_root / ".axiom" / "corpus-locks").is_dir()
+    return (
+        f"\n\n{len(missing)} of {len(paths)} provisions artifact(s) are not in the corpus "
+        f"checkout (first: `{missing[0]}`)"
+        + ("; the provenance commit carries `.axiom/corpus-locks/`" if locks else "")
+        + ". A release cut after corpus bytes left git needs a staleness encoder pin "
+        "that includes axiom-encode#1742 (it places provisions from git objects), and "
+        "scopes ingested after the switch also need `axiom-encode corpus-fetch` with "
+        "the read-only R2 credentials."
+    )
+
+
+def _run(args: argparse.Namespace) -> int:
+    try:
         from axiom_encode.source_hash import (
             resolved_source_verification_block,
             run_check_source_staleness,
@@ -509,7 +581,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             refusals.append(f"- `{key_label}`: {type(exc).__name__}: {exc}")
     if release is None:
         return _harness_error(
-            args, "No configured key bound the pinned release:\n\n" + "\n".join(refusals)
+            args,
+            "No configured key bound the pinned release:\n\n"
+            + "\n".join(refusals)
+            + missing_provisions_hint(corpus_root),
         )
 
     missing = [
@@ -581,6 +656,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "pins": [asdict(item) for item in pin_results],
                 "encoder_verdicts": [asdict(verdict) for verdict in verdicts],
                 "differential": {"compared": compared, "disagreements": disagreements},
+                "summary": summary_line(pin_results, verdicts, compared, disagreements),
             },
             indent=2,
             sort_keys=True,
@@ -589,6 +665,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         encoding="utf-8",
     )
     print(report)
+    stuck = [verdict.jurisdiction for verdict in verdicts if TRANSIENT_ROOT_REFUSAL in verdict.output]
+    if stuck:
+        print(
+            f"The encoder refused {len(stuck)} root(s) as noncanonical after "
+            f"{ENCODER_ATTEMPTS} attempts: {', '.join(stuck)}"
+        )
+        return EXIT_HARNESS_ERROR
     return overall_exit_status(pin_results, verdicts, disagreements)
 
 

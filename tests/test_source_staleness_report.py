@@ -62,6 +62,14 @@ def checkout(tmp_path: Path) -> Path:
         _module(f"  source_verification:\n    source_sha256: {SHA_A}\n"),
     )
     _write(root / "programs/x.yaml", _module(f"  source_verification:\n    source_sha256: {SHA_A}\n"))
+    _write(
+        root / "us/programs/spec.yaml",
+        _module(f"  source_verification:\n    source_sha256: {SHA_A}\n"),
+    )
+    _write(
+        root / "us/venv/lib/x.yaml",
+        _module(f"  source_verification:\n    source_sha256: {SHA_A}\n"),
+    )
     _write(root / "tests/t.yaml", "module: {}\n")
     (root / ".axiom").mkdir()
     return root
@@ -292,3 +300,52 @@ def test_differential_agrees_and_disagrees(tmp_path: Path):
         "us/stale.yaml",
     ]
     assert ssr.overall_exit_status(results[:1], [], disagreements) == ssr.EXIT_FINDINGS
+
+
+def test_main_turns_a_crash_into_a_harness_error(tmp_path: Path, monkeypatch):
+    def crash(args):
+        raise OSError("disk went away")
+
+    monkeypatch.setattr(ssr, "_run", crash)
+    report = tmp_path / "report.md"
+    status = ssr.main(
+        ["--rulespec-root", str(tmp_path), "--corpus-path", str(tmp_path),
+         "--report", str(report), "--json", str(tmp_path / "report.json")]
+    )
+    assert status == ssr.EXIT_HARNESS_ERROR
+    assert "OSError: disk went away" in report.read_text()
+
+
+def test_missing_provisions_hint(tmp_path: Path):
+    import json
+
+    corpus = tmp_path / "axiom-corpus"
+    assert ssr.missing_provisions_hint(corpus) == ""
+    release = corpus / "releases/r/abc.json"
+    release.parent.mkdir(parents=True)
+    artifacts = [
+        {"artifact_class": "provisions", "path": "data/corpus/provisions/us/statute/v.jsonl"},
+        {"artifact_class": "sources", "path": "data/corpus/sources/x.html"},
+    ]
+    release.write_text(json.dumps({"content": {"artifacts": artifacts}}))
+    hint = ssr.missing_provisions_hint(corpus)
+    assert "1 of 1 provisions artifact(s)" in hint and "axiom-encode#1742" in hint
+    assert "corpus-locks" not in hint
+    (corpus / ".axiom/corpus-locks").mkdir(parents=True)
+    assert "corpus-locks" in ssr.missing_provisions_hint(corpus)
+    placed = corpus / "data/corpus/provisions/us/statute/v.jsonl"
+    placed.parent.mkdir(parents=True)
+    placed.write_text("{}\n")
+    assert ssr.missing_provisions_hint(corpus) == ""
+
+
+def test_summary_line():
+    results = [
+        ssr.PinResult("a", "c", "match", SHA_A, SHA_A),
+        ssr.PinResult("b", "c", "stale", SHA_A, SHA_B),
+    ]
+    line = ssr.summary_line(results, [_verdict(1, SCAN_REFUSAL)], [], [])
+    assert line == (
+        "2 pins: 1 match, 1 stale, 0 unresolved, 0 invalid; encoder verdict clean in "
+        "0 of 1 roots; differential compared 0 roots, 0 disagreements"
+    )

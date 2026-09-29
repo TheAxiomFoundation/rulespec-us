@@ -67,17 +67,21 @@ jobs:
   source-staleness:
     name: source-staleness (report-only)
     runs-on: ubuntu-latest
-    # Report-only. Stale or unresolvable pins never fail this job. Steps that
-    # can fail on their own logic run with continue-on-error; the last step
-    # decides. On pull requests it only annotates, so a broken report cannot
-    # hold up a merge. On pushes to main, the weekly schedule and manual runs,
-    # a report that could not be produced fails the job, so the break shows.
+    timeout-minutes: 30
+    # Report-only. Stale or unresolvable pins never fail this job. Every step
+    # before the last runs with continue-on-error; the last step decides. On
+    # pull requests it only annotates, so a broken report cannot hold up a
+    # merge. On pushes to main, the weekly schedule and manual runs, a report
+    # that could not be produced fails the job, so the break shows.
     steps:
       - name: Checkout rules repository
+        id: rules_checkout
+        continue-on-error: true
         uses: actions/checkout@v6.0.2
 
       - name: Resolve pinned encoder and corpus release
         id: pins
+        if: ${{ steps.rules_checkout.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: |
@@ -111,6 +115,8 @@ jobs:
           cat "$GITHUB_OUTPUT"
 
       - name: Set up Python
+        id: setup_python
+        continue-on-error: true
         uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.14"
@@ -121,7 +127,7 @@ jobs:
       # the signature when it binds the release.
       - name: Fetch pinned signed corpus release object
         id: release
-        if: ${{ steps.pins.outcome == 'success' }}
+        if: ${{ steps.pins.outcome == 'success' && steps.setup_python.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         env:
@@ -141,6 +147,7 @@ jobs:
           response="$RUNNER_TEMP/release-response.json"
           url="${RELEASE_REGISTRY_URL%/}/rest/v1/release_objects?select=release_object&release_name=eq.${RELEASE_NAME}&content_sha256=eq.${RELEASE_CONTENT_SHA256}&limit=2"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --max-time 60 --retry 2 \
             --header "apikey: $RELEASE_REGISTRY_ANON_KEY" \
             --header "Authorization: Bearer $RELEASE_REGISTRY_ANON_KEY" \
             --header "Accept-Profile: corpus" \
@@ -214,14 +221,16 @@ jobs:
           git -C "$corpus" remote add origin https://github.com/TheAxiomFoundation/axiom-corpus.git
           git -C "$corpus" config remote.origin.promisor true
           git -C "$corpus" config remote.origin.partialclonefilter blob:none
-          git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
+          timeout 900 git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
           git -C "$corpus" sparse-checkout set --no-cone --stdin < "$RUNNER_TEMP/corpus-sparse.txt"
-          git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
+          timeout 900 git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
           test "$(git -C "$corpus" rev-parse HEAD)" = "$COMMIT"
           release_dir="$corpus/releases/$RELEASE_NAME"
           mkdir -p "$release_dir"
           cp "$RUNNER_TEMP/release-object.json" "$release_dir/$RELEASE_CONTENT_SHA256.json"
-          placed="$(find "$corpus/data" -type f 2>/dev/null | wc -l)"
+          # Zero files is possible (a release cut after corpus bytes left git);
+          # the report step diagnoses that, so this count must not abort.
+          placed="$( (find "$corpus/data" -type f 2>/dev/null || true) | wc -l)"
           echo "Checked out $placed provisions file(s) at $COMMIT"
 
       - name: Checkout axiom-encode (pinned)
@@ -267,6 +276,7 @@ jobs:
           if [ -n "$CORPUS_RELEASE_RETIRED_PUBLIC_KEY" ]; then
             keys+=(--corpus-release-public-key "AXIOM_CORPUS_RELEASE_RETIRED_PUBLIC_KEY=$CORPUS_RELEASE_RETIRED_PUBLIC_KEY")
           fi
+          rm -f "$RUNNER_TEMP/staleness-report.md" "$RUNNER_TEMP/staleness-report.json"
           set +e
           python tests/source_staleness_report.py \
             --rulespec-root "$GITHUB_WORKSPACE" \
@@ -277,15 +287,23 @@ jobs:
             "${keys[@]}"
           status=$?
           set -e
+          if [ ! -s "$RUNNER_TEMP/staleness-report.md" ]; then
+            echo "::error::The report script wrote no report (exit $status)."
+            exit 2
+          fi
           cat "$RUNNER_TEMP/staleness-report.md" >> "$GITHUB_STEP_SUMMARY"
+          summary="$(python -c 'import json, sys; print(json.load(open(sys.argv[1])).get("summary", ""))' \
+            "$RUNNER_TEMP/staleness-report.json" 2>/dev/null || true)"
           case "$status" in
-            0) echo "Every pin matches the pinned release." ;;
-            1) echo "::warning::Source staleness report lists findings; see the job summary and artifact." ;;
+            0) echo "Every pin matches the pinned release. $summary" ;;
+            1) echo "::warning::Source staleness findings: $summary. See the job summary and artifact." ;;
             *) echo "::error::The source staleness report could not be produced (exit $status)."; exit "$status" ;;
           esac
 
       - name: Upload staleness report artifact
+        id: upload
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4.6.2
         with:
           name: source-staleness-report
@@ -300,6 +318,8 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           OUTCOMES: >-
+            rules_checkout=${{ steps.rules_checkout.outcome }}
+            setup_python=${{ steps.setup_python.outcome }}
             pins=${{ steps.pins.outcome }}
             release=${{ steps.release.outcome }}
             corpus=${{ steps.corpus.outcome }}
@@ -307,10 +327,17 @@ jobs:
             install=${{ steps.install.outcome }}
             script_tests=${{ steps.script_tests.outcome }}
             report=${{ steps.report.outcome }}
+            upload=${{ steps.upload.outcome }}
         run: |
           set -euo pipefail
           echo "Step outcomes: $OUTCOMES"
-          if [[ " $OUTCOMES " != *"=failure"* && " $OUTCOMES " != *"=skipped"* ]]; then
+          # Require success; anything else (failure, skipped, cancelled, or an
+          # empty outcome from a renamed step id) means no clean report.
+          clean=true
+          for entry in $OUTCOMES; do
+            [[ "$entry" == *=success ]] || clean=false
+          done
+          if [ "$clean" = true ]; then
             echo "Report produced."
             exit 0
           fi

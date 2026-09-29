@@ -10,8 +10,11 @@ Invariants, checked for every input Hypothesis generates:
 2. A pin is ``match`` iff its pin is a canonical digest, it has a singular
    citation and no plural field, and the resolver returns exactly that digest.
 3. ``stale`` carries the resolver's digest, and it differs from the pin.
-4. The exit status is clean iff every pin matches and every verdict is 0.
+4. The exit status is clean iff every pin matches, every verdict is 0, and
+   there are no disagreements.
 5. ``render_report`` is deterministic and lists every non-match.
+6. ``differential`` finds no disagreement when the encoder output is built
+   from the same pin statuses, and exactly one when one entry is changed.
 """
 
 from __future__ import annotations
@@ -87,13 +90,18 @@ def test_property_classification(pins, table):
 @given(
     statuses=st.lists(st.sampled_from(ssr.PIN_STATUSES), max_size=10),
     verdict_codes=st.lists(st.sampled_from([0, 1]), max_size=5),
+    disagreements=st.lists(st.text(min_size=1, max_size=5), max_size=2),
 )
-def test_property_exit_status(statuses, verdict_codes):
+def test_property_exit_status(statuses, verdict_codes, disagreements):
     results = [ssr.PinResult(f"m{i}", "c", s, SHA_A) for i, s in enumerate(statuses)]
     verdicts = [ssr.EncoderVerdict("us", code, "") for code in verdict_codes]
-    clean = all(s == "match" for s in statuses) and all(c == 0 for c in verdict_codes)
+    clean = (
+        all(s == "match" for s in statuses)
+        and all(c == 0 for c in verdict_codes)
+        and not disagreements
+    )
     expected = ssr.EXIT_CLEAN if clean else ssr.EXIT_FINDINGS
-    assert ssr.overall_exit_status(results, verdicts) == expected
+    assert ssr.overall_exit_status(results, verdicts, disagreements) == expected
 
 
 @given(statuses=st.lists(st.sampled_from(ssr.PIN_STATUSES), max_size=40))
@@ -107,3 +115,48 @@ def test_property_render_lists_every_finding(statuses):
     for index, status in enumerate(statuses):
         listed = f"| module-{index}.yaml |" in report
         assert listed == (status != "match")
+
+
+def _encoder_output_for(root, results, unpinned):
+    """Render what the encoder prints for these pin statuses (see source_hash.py)."""
+    lines = []
+    for item in results:
+        if item.status == "match":
+            continue
+        current = item.current_sha if item.status == "stale" else ssr.NOT_FOUND
+        lines += [f"STALE {root / item.path}", f"  pinned  {item.pinned_sha}", f"  current {current}"]
+    for index in range(unpinned):
+        lines += [f"STALE {root / f'us/unpinned-{index}.yaml'}", "  pinned  <missing>",
+                  f"  current {ssr.NOT_FOUND}"]
+    flagged = sum(1 for item in results if item.status != "match") + unpinned
+    lines.append(f"{flagged} of {len(results) + unpinned} pinned module(s) are stale.")
+    return "\n".join(lines) + "\n"
+
+
+@given(
+    statuses=st.lists(st.sampled_from(ssr.PIN_STATUSES), min_size=1, max_size=15),
+    unpinned=st.integers(min_value=0, max_value=3),
+    victim=st.integers(min_value=0),
+)
+def test_property_differential(tmp_path_factory, statuses, unpinned, victim):
+    root = tmp_path_factory.getbasetemp() / "rulespec-us"
+    results = [
+        ssr.PinResult(
+            f"us/m{i}.yaml", "c", s, SHA_A, SHA_B if s == "stale" else (SHA_A if s == "match" else None)
+        )
+        for i, s in enumerate(statuses)
+    ]
+    verdict = ssr.EncoderVerdict("us", 1, _encoder_output_for(root, results, unpinned))
+    assert ssr.differential([verdict], results, root) == (["us"], [])
+
+    index = victim % len(results)
+    changed = list(results)
+    item = changed[index]
+    if item.status == "match":
+        flipped = ssr.PinResult(item.path, "c", "stale", SHA_A, SHA_B)
+    else:
+        flipped = ssr.PinResult(item.path, "c", "match", SHA_A, SHA_A)
+    changed[index] = flipped
+    compared, disagreements = ssr.differential([verdict], changed, root)
+    assert compared == ["us"]
+    assert len(disagreements) == 1 and disagreements[0].startswith(item.path + ":")
