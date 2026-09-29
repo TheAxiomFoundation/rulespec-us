@@ -11,12 +11,15 @@ name: Source staleness and reverse index
 #    cheap and deterministic.
 #
 # 2. source-staleness (REPORT-ONLY) - recompute every
-#    `module.source_verification.source_sha256` pin against axiom-corpus@main
-#    and report drift. No checked-in module pins a source hash yet (see the
-#    A5 follow-up: pin stamping is blocked by the guard-generated signed-apply
-#    gate), so this job would be vacuous as a required check. It runs with
-#    continue-on-error so the drift report is always visible without blocking
-#    merges. Flip `continue-on-error` to false once pins exist repo-wide.
+#    `module.source_verification.source_sha256` pin against the signed corpus
+#    release pinned in `.axiom/toolchain.toml` and report drift. The pinned
+#    encoder resolves only bytes the signed release lists, and hash-checks
+#    each provisions file against the release inventory, so drift is measured
+#    against that release, not corpus main. The job checks out only the
+#    release's provisions artifacts, at the release's provenance commit, so it
+#    does not depend on corpus main still tracking those bytes in its tree.
+#    tests/source_staleness_report.py does the binding and the report. Findings
+#    never fail the job. See the job's comment for when a broken report does.
 
 on:
   pull_request:
@@ -64,174 +67,256 @@ jobs:
   source-staleness:
     name: source-staleness (report-only)
     runs-on: ubuntu-latest
-    # Report-only: pins do not exist yet, so a failure here must not block
-    # merges. Remove this line once source_sha256 pins are stamped repo-wide.
-    continue-on-error: true
+    # Report-only. Stale or unresolvable pins never fail this job. Steps that
+    # can fail on their own logic run with continue-on-error; the last step
+    # decides. On pull requests it only annotates, so a broken report cannot
+    # hold up a merge. On pushes to main, the weekly schedule and manual runs,
+    # a report that could not be produced fails the job, so the break shows.
     steps:
       - name: Checkout rules repository
         uses: actions/checkout@v6.0.2
 
-      - name: Resolve pinned axiom-encode ref
-        id: toolchain
+      - name: Resolve pinned encoder and corpus release
+        id: pins
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          encode_ref="$(python - <<'PY'
+          python - <<'PY' >> "$GITHUB_OUTPUT"
           import re
           import tomllib
           from pathlib import Path
 
-          path = Path(".axiom/workflow-toolchain.toml")
-          data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
-          value = data.get("source_staleness_axiom_encode_ref", "")
-          if not re.fullmatch(r"[0-9a-f]{40}", value):
+          workflow_path = Path(".axiom/workflow-toolchain.toml")
+          workflow = tomllib.loads(workflow_path.read_text()).get("workflow_toolchain", {})
+          encode_ref = workflow.get("source_staleness_axiom_encode_ref", "")
+          if not isinstance(encode_ref, str) or not re.fullmatch(r"[0-9a-f]{40}", encode_ref):
               raise SystemExit(
-                  f"{path}: source_staleness_axiom_encode_ref must be a full lowercase commit SHA"
+                  f"{workflow_path}: source_staleness_axiom_encode_ref must be a full lowercase commit SHA"
               )
-          print(value)
+          toolchain_path = Path(".axiom/toolchain.toml")
+          toolchain = tomllib.loads(toolchain_path.read_text()).get("toolchain", {})
+          name = toolchain.get("axiom_corpus_release", "")
+          content = toolchain.get("axiom_corpus_release_content_sha256", "")
+          if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+              raise SystemExit(f"{toolchain_path}: axiom_corpus_release is not a release name")
+          if not isinstance(content, str) or not re.fullmatch(r"[0-9a-f]{64}", content):
+              raise SystemExit(
+                  f"{toolchain_path}: axiom_corpus_release_content_sha256 is not a sha256"
+              )
+          print(f"axiom_encode_ref={encode_ref}")
+          print(f"release_name={name}")
+          print(f"release_content_sha256={content}")
           PY
-          )"
-          echo "axiom_encode_ref=$encode_ref" >> "$GITHUB_OUTPUT"
-          echo "Pinned axiom-encode ref: $encode_ref"
+          cat "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.14"
 
-      # axiom-corpus is checked out at main on purpose: staleness detection
-      # must see the latest corpus text so it can flag pins that the corpus has
-      # since moved past.
-      - name: Checkout axiom-corpus @ main
-        uses: actions/checkout@v6.0.2
-        with:
-          repository: TheAxiomFoundation/axiom-corpus
-          ref: main
-          path: _axiom/axiom-corpus
-
-      - name: Checkout axiom-encode (pinned)
-        uses: actions/checkout@v6.0.2
-        with:
-          repository: TheAxiomFoundation/axiom-encode
-          ref: ${{ steps.toolchain.outputs.axiom_encode_ref }}
-          path: _axiom/axiom-encode
-
-      - name: Install scanner dependency
-        run: python -m pip install --upgrade pip pyyaml
-
-      - name: Report unpinned-module counts
-        id: pins
+      # Same acquisition and content check as the org validate-rulespec
+      # workflow: the registry row must hold exactly one release object whose
+      # canonical content hashes to the pinned digest. The encoder verifies
+      # the signature when it binds the release.
+      - name: Fetch pinned signed corpus release object
+        id: release
+        if: ${{ steps.pins.outcome == 'success' }}
+        continue-on-error: true
         shell: bash
+        env:
+          RELEASE_REGISTRY_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          RELEASE_REGISTRY_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          RELEASE_NAME: ${{ steps.pins.outputs.release_name }}
+          RELEASE_CONTENT_SHA256: ${{ steps.pins.outputs.release_content_sha256 }}
         run: |
           set -euo pipefail
-          report="$RUNNER_TEMP/staleness-report.txt"
-          python - "$report" <<'PY'
+          case "$RELEASE_REGISTRY_URL" in
+            https://*) ;;
+            *) echo "vars.NEXT_PUBLIC_SUPABASE_URL must be an https URL" >&2; exit 1 ;;
+          esac
+          test -n "$RELEASE_REGISTRY_ANON_KEY" || {
+            echo "vars.NEXT_PUBLIC_SUPABASE_ANON_KEY is required" >&2; exit 1;
+          }
+          response="$RUNNER_TEMP/release-response.json"
+          url="${RELEASE_REGISTRY_URL%/}/rest/v1/release_objects?select=release_object&release_name=eq.${RELEASE_NAME}&content_sha256=eq.${RELEASE_CONTENT_SHA256}&limit=2"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $RELEASE_REGISTRY_ANON_KEY" \
+            --header "Authorization: Bearer $RELEASE_REGISTRY_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$response" "$url"
+          python - "$response" "$RUNNER_TEMP" "$RELEASE_NAME" "$RELEASE_CONTENT_SHA256" <<'PY' >> "$GITHUB_OUTPUT"
+          import hashlib
+          import json
+          import re
           import sys
           from pathlib import Path
 
-          import yaml
-
-          repo = Path(".")
-          pinned = 0
-          unpinned = 0
-          grounded = 0
-          # Jurisdiction roots are top-level dirs like ``us`` and ``us-ca``.
-          module_paths = sorted(
-              {
-                  path
-                  for entry in repo.iterdir()
-                  if entry.is_dir() and entry.name.split("-")[0].isalpha()
-                  and len(entry.name.split("-")[0]) == 2
-                  and entry.name[0] != "."
-                  for pattern in ("*.yaml", "*.yml")
-                  for path in entry.rglob(pattern)
-              }
+          response, temp, expected_name, expected_sha = sys.argv[1:5]
+          rows = json.loads(Path(response).read_bytes())
+          if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+              raise SystemExit("registry did not return exactly one release row")
+          payload = rows[0].get("release_object")
+          if not isinstance(payload, dict) or payload.get("release") != expected_name:
+              raise SystemExit("registry row is not the pinned release")
+          content = payload.get("content")
+          if not isinstance(content, dict):
+              raise SystemExit("release object has no content object")
+          actual = hashlib.sha256(
+              json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+          ).hexdigest()
+          if payload.get("content_sha256") != actual or actual != expected_sha:
+              raise SystemExit(f"release content sha256 mismatch ({actual} != {expected_sha})")
+          commit = (content.get("git") or {}).get("commit")
+          if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+              raise SystemExit("release provenance commit is not a full lowercase SHA")
+          paths = sorted(
+              artifact["path"]
+              for artifact in content.get("artifacts", [])
+              if artifact.get("artifact_class") == "provisions"
           )
-          for path in module_paths:
-              name = path.name
-              if name.endswith((".test.yaml", ".test.yml")):
-                  continue
-              try:
-                  payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-              except (OSError, yaml.YAMLError):
-                  continue
-              if not isinstance(payload, dict):
-                  continue
-              module = payload.get("module")
-              if not isinstance(module, dict):
-                  continue
-              verification = module.get("source_verification")
-              if not isinstance(verification, dict):
-                  continue
-              grounded += 1
-              if str(verification.get("source_sha256") or "").strip():
-                  pinned += 1
-              else:
-                  unpinned += 1
-
-          lines = [
-              "# Source staleness report",
-              "",
-              f"- Modules with source_verification: {grounded}",
-              f"- Pinned (source_sha256 present): {pinned}",
-              f"- Unpinned (no source_sha256): {unpinned}",
-              "",
-          ]
-          if pinned == 0:
-              lines.append(
-                  "No modules pin source_sha256 yet, so the staleness check below "
-                  "is vacuous. Pin stamping is blocked by the guard-generated "
-                  "signed-apply gate; see the A5 follow-up issue."
-              )
-          Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
-          print("\n".join(lines))
+          if not paths or any(
+              not re.fullmatch(r"data/corpus/provisions/[A-Za-z0-9._/-]+\.jsonl", path)
+              or ".." in path.split("/")
+              for path in paths
+          ):
+              raise SystemExit("release lists no provisions artifacts, or an unsafe path")
+          Path(temp, "release-object.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n"
+          )
+          # Non-cone patterns: exactly the release's provisions files, plus
+          # the lock-file directory a post-switch corpus commit carries.
+          Path(temp, "corpus-sparse.txt").write_text(
+              "".join(f"/{path}\n" for path in paths) + "/.axiom/corpus-locks/\n"
+          )
+          print(f"commit={commit}")
+          print(f"provisions={len(paths)}")
           PY
-          cat "$report" >> "$GITHUB_STEP_SUMMARY"
-          echo "report_path=$report" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
 
-      - name: Run check-source-staleness (report-only)
+      # A blobless, sparse, depth-1 fetch of the provenance commit downloads
+      # only the release's provisions blobs (272 files, about 306 MB for
+      # us-rulespec-2026-08-08-obbb-alien-snap) instead of the 15 GB tree.
+      - name: Check out the release's provisions at its provenance commit
+        id: corpus
+        if: ${{ steps.release.outcome == 'success' }}
+        continue-on-error: true
         shell: bash
+        env:
+          COMMIT: ${{ steps.release.outputs.commit }}
+          RELEASE_NAME: ${{ steps.pins.outputs.release_name }}
+          RELEASE_CONTENT_SHA256: ${{ steps.pins.outputs.release_content_sha256 }}
         run: |
           set -euo pipefail
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '## check-source-staleness output' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          set +e
-          python - \
-            "$GITHUB_WORKSPACE/_axiom/axiom-encode/src/axiom_encode/source_hash.py" \
-            "$GITHUB_WORKSPACE" \
-            "$GITHUB_WORKSPACE/_axiom/axiom-corpus" <<'PY' \
-            | tee -a "$RUNNER_TEMP/staleness-report.txt" | tee -a "$GITHUB_STEP_SUMMARY"
-          import runpy
-          import sys
+          corpus="$GITHUB_WORKSPACE/_axiom/axiom-corpus"
+          rm -rf "$corpus"
+          git init --quiet "$corpus"
+          git -C "$corpus" remote add origin https://github.com/TheAxiomFoundation/axiom-corpus.git
+          git -C "$corpus" config remote.origin.promisor true
+          git -C "$corpus" config remote.origin.partialclonefilter blob:none
+          git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
+          git -C "$corpus" sparse-checkout set --no-cone --stdin < "$RUNNER_TEMP/corpus-sparse.txt"
+          git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
+          test "$(git -C "$corpus" rev-parse HEAD)" = "$COMMIT"
+          release_dir="$corpus/releases/$RELEASE_NAME"
+          mkdir -p "$release_dir"
+          cp "$RUNNER_TEMP/release-object.json" "$release_dir/$RELEASE_CONTENT_SHA256.json"
+          echo "Checked out $(git -C "$corpus" ls-files | wc -l) corpus file(s) at $COMMIT"
 
-          scanner = runpy.run_path(sys.argv[1])
-          raise SystemExit(
-              scanner["run_check_source_staleness"](
-                  [
-                      "--rulespec-root",
-                      sys.argv[2],
-                      "--corpus-root",
-                      sys.argv[3],
-                  ]
-              )
-          )
-          PY
-          status=${PIPESTATUS[0]}
-          set -e
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "check-source-staleness exit status: $status"
-          # Surface the status for humans, but do not fail the job: this is the
-          # report-only phase. The uploaded report preserves the full finding.
-          if [ "$status" -ne 0 ]; then
-            echo "::warning::check-source-staleness reported findings (exit $status); see the job summary and artifact."
+      - name: Checkout axiom-encode (pinned)
+        id: encode_checkout
+        if: ${{ steps.pins.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+          path: _axiom/axiom-encode
+          persist-credentials: false
+
+      - name: Install pinned axiom-encode
+        id: install
+        if: ${{ steps.encode_checkout.outcome == 'success' }}
+        continue-on-error: true
+        run: python -m pip install --quiet --upgrade pip ./_axiom/axiom-encode pytest hypothesis
+
+      - name: Test the report script
+        id: script_tests
+        if: ${{ steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: python -m pytest -q tests/test_source_staleness_report.py tests/test_source_staleness_report_properties.py
+
+      - name: Report source staleness
+        id: report
+        if: ${{ steps.corpus.outcome == 'success' && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          ENCODE_REF: ${{ steps.pins.outputs.axiom_encode_ref }}
+          CORPUS_RELEASE_PUBLIC_KEY: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+          CORPUS_RELEASE_RETIRED_PUBLIC_KEY: ${{ vars.AXIOM_CORPUS_RELEASE_RETIRED_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          # Verification-only public keys, current first. The retired key
+          # still verifies releases it signed, as the supervisor's keyring does.
+          keys=()
+          if [ -n "$CORPUS_RELEASE_PUBLIC_KEY" ]; then
+            keys+=(--corpus-release-public-key "AXIOM_CORPUS_RELEASE_PUBLIC_KEY=$CORPUS_RELEASE_PUBLIC_KEY")
           fi
-          exit 0
+          if [ -n "$CORPUS_RELEASE_RETIRED_PUBLIC_KEY" ]; then
+            keys+=(--corpus-release-public-key "AXIOM_CORPUS_RELEASE_RETIRED_PUBLIC_KEY=$CORPUS_RELEASE_RETIRED_PUBLIC_KEY")
+          fi
+          set +e
+          python tests/source_staleness_report.py \
+            --rulespec-root "$GITHUB_WORKSPACE" \
+            --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+            --encoder-ref "$ENCODE_REF" \
+            --report "$RUNNER_TEMP/staleness-report.md" \
+            --json "$RUNNER_TEMP/staleness-report.json" \
+            "${keys[@]}"
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/staleness-report.md" >> "$GITHUB_STEP_SUMMARY"
+          case "$status" in
+            0) echo "Every pin matches the pinned release." ;;
+            1) echo "::warning::Source staleness report lists findings; see the job summary and artifact." ;;
+            *) echo "::error::The source staleness report could not be produced (exit $status)."; exit "$status" ;;
+          esac
 
       - name: Upload staleness report artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v4.6.2
         with:
           name: source-staleness-report
-          path: ${{ runner.temp }}/staleness-report.txt
+          path: |
+            ${{ runner.temp }}/staleness-report.md
+            ${{ runner.temp }}/staleness-report.json
           if-no-files-found: warn
+
+      - name: Decide the job result
+        if: ${{ always() }}
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          OUTCOMES: >-
+            pins=${{ steps.pins.outcome }}
+            release=${{ steps.release.outcome }}
+            corpus=${{ steps.corpus.outcome }}
+            encode_checkout=${{ steps.encode_checkout.outcome }}
+            install=${{ steps.install.outcome }}
+            script_tests=${{ steps.script_tests.outcome }}
+            report=${{ steps.report.outcome }}
+        run: |
+          set -euo pipefail
+          echo "Step outcomes: $OUTCOMES"
+          if [[ " $OUTCOMES " != *"=failure"* && " $OUTCOMES " != *"=skipped"* ]]; then
+            echo "Report produced."
+            exit 0
+          fi
+          message="The source staleness report was not produced cleanly ($OUTCOMES)."
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "::error::$message Report-only on pull requests, so this job still passes."
+            exit 0
+          fi
+          echo "::error::$message"
+          exit 1
