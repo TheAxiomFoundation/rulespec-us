@@ -349,3 +349,120 @@ def test_summary_line():
         "2 pins: 1 match, 1 stale, 0 unresolved, 0 invalid; encoder verdict clean in "
         "0 of 1 roots; differential compared 0 roots, 0 disagreements"
     )
+
+
+class _FakeEncoder:
+    """Stand-in for the axiom_encode functions _run imports, for end-to-end tests."""
+
+    def __init__(self, corpus: Path, *, good_key: str, refusals: dict[str, int], digest: str):
+        import contextlib
+        import types
+
+        self.active_key = None
+        self.calls: dict[str, int] = {}
+        artifact = types.SimpleNamespace(
+            artifact_class="provisions", path="data/corpus/provisions/us/statute/v.jsonl"
+        )
+        release_object = corpus / "releases/r/abc.json"
+        release_object.parent.mkdir(parents=True, exist_ok=True)
+        release_object.write_text('{"content": {"git": {"commit": "' + "c" * 40 + '"}}}')
+        release = types.SimpleNamespace(
+            name="r", content_sha256=SHA_A, artifacts=[artifact], root=corpus,
+            release_object_path=release_object,
+        )
+
+        @contextlib.contextmanager
+        def verification(key):
+            self.active_key = key
+            try:
+                yield
+            finally:
+                self.active_key = None
+
+        def load(repo_root, corpus_root):
+            if self.active_key != good_key:
+                raise ValueError("release object signature is invalid")
+            return release
+
+        def run_check(argv):
+            root = Path(argv[1]).name
+            self.calls[root] = self.calls.get(root, 0) + 1
+            if self.calls[root] <= refusals.get(root, 0):
+                print(f"ERROR {argv[1]}")
+                print(f"  error   {ssr.TRANSIENT_ROOT_REFUSAL} country checkout")
+                return 1
+            if root == "us-ca":
+                # The real encoder refuses a root holding the retired plural field.
+                print(SCAN_REFUSAL, end="")
+                return 1
+            print("All 1 pinned module(s) match corpus release 'r'.")
+            return 0
+
+        self.modules = {
+            "axiom_encode": types.ModuleType("axiom_encode"),
+            "axiom_encode.source_hash": types.SimpleNamespace(
+                resolved_source_verification_block=lambda rel, c: {"source_sha256": digest},
+                run_check_source_staleness=run_check,
+            ),
+            "axiom_encode.toolchain": types.SimpleNamespace(
+                load_rulespec_local_corpus_release=load,
+                local_corpus_release_verification=verification,
+            ),
+        }
+
+
+def _run_main(tmp_path, checkout, monkeypatch, *, refusals=None, digest=SHA_A, place=True):
+    import json
+    import sys
+
+    corpus = tmp_path / "axiom-corpus"
+    fake = _FakeEncoder(corpus, good_key="GOOD", refusals=refusals or {}, digest=digest)
+    for name, module in fake.modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    if place:
+        provisions = corpus / "data/corpus/provisions/us/statute/v.jsonl"
+        provisions.parent.mkdir(parents=True, exist_ok=True)
+        provisions.write_text("{}\n")
+    report, json_path = tmp_path / "report.md", tmp_path / "report.json"
+    status = ssr.main(
+        ["--rulespec-root", str(checkout), "--corpus-path", str(corpus),
+         "--corpus-release-public-key", "RETIRED=BAD",
+         "--corpus-release-public-key", "CURRENT=GOOD",
+         "--report", str(report), "--json", str(json_path)]
+    )
+    return status, report.read_text(), json.loads(json_path.read_text()), fake
+
+
+def test_main_end_to_end_with_a_fake_encoder(tmp_path, checkout, monkeypatch):
+    status, report, payload, fake = _run_main(tmp_path, checkout, monkeypatch, refusals={"us": 2})
+    # One pin is invalid (the plural field in us-ca), so the report lists findings.
+    assert status == ssr.EXIT_FINDINGS
+    assert payload["release"]["key_label"] == "CURRENT"
+    assert [p["status"] for p in payload["pins"]] == ["match", "invalid"]
+    assert fake.calls == {"us": 3, "us-ca": 1}
+    assert {v["jurisdiction"]: v["attempts"] for v in payload["encoder_verdicts"]} == {"us": 3, "us-ca": 1}
+    assert payload["differential"] == {"compared": ["us"], "disagreements": []}
+    assert "harness_error" not in payload and "Harness error" not in report
+
+
+def test_main_reports_a_root_still_refused_after_retries(tmp_path, checkout, monkeypatch):
+    status, report, payload, _ = _run_main(tmp_path, checkout, monkeypatch, refusals={"us-ca": 9})
+    assert status == ssr.EXIT_HARNESS_ERROR
+    assert payload["stuck_roots"] == ["us-ca"]
+    assert report.startswith("# Source staleness report\n\n**Harness error.**")
+
+
+def test_main_reports_missing_provisions_after_binding(tmp_path, checkout, monkeypatch):
+    status, report, payload, _ = _run_main(tmp_path, checkout, monkeypatch, place=False)
+    assert status == ssr.EXIT_HARNESS_ERROR
+    assert "provisions artifact(s) of `r` are not in the corpus checkout" in report
+    assert "harness_error" in payload
+
+
+def test_main_end_to_end_differential_catches_a_resolver_disagreement(tmp_path, checkout, monkeypatch):
+    # The report's resolver says the us pin is stale; the fake encoder says it matches.
+    status, report, payload, _ = _run_main(tmp_path, checkout, monkeypatch, digest=SHA_B)
+    assert status == ssr.EXIT_FINDINGS
+    assert payload["differential"]["disagreements"] == [
+        f"us/statutes/1/a.yaml: report says stale (current {SHA_B}), encoder says match"
+    ]

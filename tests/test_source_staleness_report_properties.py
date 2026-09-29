@@ -117,28 +117,44 @@ def test_property_render_lists_every_finding(statuses):
         assert listed == (status != "match")
 
 
-def _encoder_output_for(root, results, unpinned):
+def _encoder_output_for(root, results, unpinned, *, error_lines=False, extra=None, current_for=None):
     """Render what the encoder prints for these pin statuses (see source_hash.py)."""
+    current_for = current_for or {}
     lines = []
-    for item in results:
-        if item.status == "match":
-            continue
+    entries = [item for item in results if item.status != "match"]
+    for item in entries:
         current = item.current_sha if item.status == "stale" else ssr.NOT_FOUND
+        current = current_for.get(item.path, current)
         lines += [f"STALE {root / item.path}", f"  pinned  {item.pinned_sha}", f"  current {current}"]
+        if error_lines and item.status != "stale":
+            lines.append("  error   CorpusSourceNotFoundError: not in release")
     for index in range(unpinned):
         lines += [f"STALE {root / f'us/unpinned-{index}.yaml'}", "  pinned  <missing>",
-                  f"  current {ssr.NOT_FOUND}"]
-    flagged = sum(1 for item in results if item.status != "match") + unpinned
+                  f"  current {ssr.NOT_FOUND}",
+                  "  error   module does not pin module.source_verification.source_sha256"]
+    if extra is not None:
+        lines += [f"STALE {root / extra}", f"  pinned  {SHA_A}", f"  current {SHA_B}"]
+    flagged = len(entries) + unpinned + (extra is not None)
     lines.append(f"{flagged} of {len(results) + unpinned} pinned module(s) are stale.")
     return "\n".join(lines) + "\n"
+
+
+REFUSED = ssr.EncoderVerdict(
+    "us-ca",
+    1,
+    "ERROR /w/rulespec-us/us-ca/p.yaml\n"
+    "  error   retired corpus_citation_paths field is not supported: $.module\n",
+)
 
 
 @given(
     statuses=st.lists(st.sampled_from(ssr.PIN_STATUSES), min_size=1, max_size=15),
     unpinned=st.integers(min_value=0, max_value=3),
     victim=st.integers(min_value=0),
+    mutation=st.sampled_from(["flip", "encoder-digest", "extra-entry"]),
+    error_lines=st.booleans(),
 )
-def test_property_differential(tmp_path_factory, statuses, unpinned, victim):
+def test_property_differential(tmp_path_factory, statuses, unpinned, victim, mutation, error_lines):
     root = tmp_path_factory.getbasetemp() / "rulespec-us"
     results = [
         ssr.PinResult(
@@ -146,17 +162,40 @@ def test_property_differential(tmp_path_factory, statuses, unpinned, victim):
         )
         for i, s in enumerate(statuses)
     ]
-    verdict = ssr.EncoderVerdict("us", 1, _encoder_output_for(root, results, unpinned))
-    assert ssr.differential([verdict], results, root) == (["us"], [])
+    agreeing = ssr.EncoderVerdict(
+        "us", 1, _encoder_output_for(root, results, unpinned, error_lines=error_lines)
+    )
+    # A refused root in the same run is never compared.
+    assert ssr.differential([agreeing, REFUSED], results, root) == (["us"], [])
 
     index = victim % len(results)
+    item = results[index]
     changed = list(results)
-    item = changed[index]
-    if item.status == "match":
-        flipped = ssr.PinResult(item.path, "c", "stale", SHA_A, SHA_B)
+    verdict = agreeing
+    expected_path = item.path
+    if mutation == "flip":
+        if item.status == "match":
+            changed[index] = ssr.PinResult(item.path, "c", "stale", SHA_A, SHA_B)
+        else:
+            changed[index] = ssr.PinResult(item.path, "c", "match", SHA_A, SHA_A)
+    elif mutation == "encoder-digest":
+        # The encoder reports a different current digest (or flags a match).
+        if item.status == "match":
+            output = _encoder_output_for(
+                root, results, unpinned, error_lines=error_lines, extra=item.path
+            )
+        else:
+            other = hashlib.sha256(b"other").hexdigest()
+            output = _encoder_output_for(
+                root, results, unpinned, error_lines=error_lines, current_for={item.path: other}
+            )
+        verdict = ssr.EncoderVerdict("us", 1, output)
     else:
-        flipped = ssr.PinResult(item.path, "c", "match", SHA_A, SHA_A)
-    changed[index] = flipped
-    compared, disagreements = ssr.differential([verdict], changed, root)
+        expected_path = "us/only-the-encoder-saw-this.yaml"
+        verdict = ssr.EncoderVerdict(
+            "us", 1,
+            _encoder_output_for(root, results, unpinned, error_lines=error_lines, extra=expected_path),
+        )
+    compared, disagreements = ssr.differential([verdict, REFUSED], changed, root)
     assert compared == ["us"]
-    assert len(disagreements) == 1 and disagreements[0].startswith(item.path + ":")
+    assert len(disagreements) == 1 and disagreements[0].startswith(expected_path + ":")

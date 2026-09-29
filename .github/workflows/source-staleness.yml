@@ -67,12 +67,14 @@ jobs:
   source-staleness:
     name: source-staleness (report-only)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     # Report-only. Stale or unresolvable pins never fail this job. Every step
     # before the last runs with continue-on-error; the last step decides. On
     # pull requests it only annotates, so a broken report cannot hold up a
-    # merge. On pushes to main, the weekly schedule and manual runs, a report
-    # that could not be produced fails the job, so the break shows.
+    # merge (only a runner loss or the job timeout, which the inner timeouts
+    # stay well under, can still end it red). On pushes to main, the weekly
+    # schedule and manual runs, a report that could not be produced fails the
+    # job, so the break shows.
     steps:
       - name: Checkout rules repository
         id: rules_checkout
@@ -221,9 +223,9 @@ jobs:
           git -C "$corpus" remote add origin https://github.com/TheAxiomFoundation/axiom-corpus.git
           git -C "$corpus" config remote.origin.promisor true
           git -C "$corpus" config remote.origin.partialclonefilter blob:none
-          timeout 900 git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
+          timeout 600 git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
           git -C "$corpus" sparse-checkout set --no-cone --stdin < "$RUNNER_TEMP/corpus-sparse.txt"
-          timeout 900 git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
+          timeout 600 git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
           test "$(git -C "$corpus" rev-parse HEAD)" = "$COMMIT"
           release_dir="$corpus/releases/$RELEASE_NAME"
           mkdir -p "$release_dir"
@@ -292,6 +294,10 @@ jobs:
             exit 2
           fi
           cat "$RUNNER_TEMP/staleness-report.md" >> "$GITHUB_STEP_SUMMARY"
+          if python -c 'import json, sys; sys.exit(0 if "harness_error" in json.load(open(sys.argv[1])) else 1)' \
+            "$RUNNER_TEMP/staleness-report.json" 2>/dev/null; then
+            status=2
+          fi
           summary="$(python -c 'import json, sys; print(json.load(open(sys.argv[1])).get("summary", ""))' \
             "$RUNNER_TEMP/staleness-report.json" 2>/dev/null || true)"
           case "$status" in

@@ -528,12 +528,12 @@ def missing_provisions_hint(corpus_root: Path) -> str:
             for artifact in payload["content"]["artifacts"]
             if artifact.get("artifact_class") == "provisions"
         ]
-    except (IndexError, OSError, ValueError, KeyError, TypeError):
+        missing = [path for path in paths if not (corpus_root / str(path)).is_file()]
+        locks = (corpus_root / ".axiom" / "corpus-locks").is_dir()
+    except Exception:  # noqa: BLE001 - a hint must never mask the real error
         return ""
-    missing = [path for path in paths if not (corpus_root / path).is_file()]
     if not missing:
         return ""
-    locks = (corpus_root / ".axiom" / "corpus-locks").is_dir()
     return (
         f"\n\n{len(missing)} of {len(paths)} provisions artifact(s) are not in the corpus "
         f"checkout (first: `{missing[0]}`)"
@@ -615,16 +615,28 @@ def _run(args: argparse.Namespace) -> int:
         for root in roots:
             for attempt in range(1, ENCODER_ATTEMPTS + 1):
                 buffer = io.StringIO()
-                with contextlib.redirect_stdout(buffer):
-                    status = run_check_source_staleness(
-                        ["--rulespec-root", str(root), "--corpus-path", str(corpus_root)]
-                    )
+                try:
+                    with contextlib.redirect_stdout(buffer):
+                        status = run_check_source_staleness(
+                            ["--rulespec-root", str(root), "--corpus-path", str(corpus_root)]
+                        )
+                except Exception:
+                    if attempt == ENCODER_ATTEMPTS:
+                        raise
+                    continue
                 output = buffer.getvalue()
                 if TRANSIENT_ROOT_REFUSAL not in output:
                     break
             verdicts.append(EncoderVerdict(root.name, int(status), output, attempt))
 
     compared, disagreements = differential(verdicts, pin_results, repo_root)
+    stuck = [verdict.jurisdiction for verdict in verdicts if TRANSIENT_ROOT_REFUSAL in verdict.output]
+    stuck_message = (
+        f"The encoder refused {len(stuck)} root(s) as noncanonical after "
+        f"{ENCODER_ATTEMPTS} attempts: {', '.join(stuck)}. The report below is incomplete."
+        if stuck
+        else ""
+    )
     release_facts = {
         "name": release.name,
         "content_sha256": release.content_sha256,
@@ -640,10 +652,18 @@ def _run(args: argparse.Namespace) -> int:
         compared=compared,
         disagreements=disagreements,
     )
+    if stuck_message:
+        report = report.replace(
+            "# Source staleness report\n",
+            f"# Source staleness report\n\n**Harness error.** {stuck_message}\n",
+            1,
+        )
     args.report.write_text(report, encoding="utf-8")
+    harness = {"harness_error": stuck_message, "stuck_roots": stuck} if stuck else {}
     args.json_path.write_text(
         json.dumps(
             {
+                **harness,
                 "release": release_facts,
                 "scan": {
                     "yaml_files": scan.yaml_files,
@@ -665,12 +685,7 @@ def _run(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
     print(report)
-    stuck = [verdict.jurisdiction for verdict in verdicts if TRANSIENT_ROOT_REFUSAL in verdict.output]
     if stuck:
-        print(
-            f"The encoder refused {len(stuck)} root(s) as noncanonical after "
-            f"{ENCODER_ATTEMPTS} attempts: {', '.join(stuck)}"
-        )
         return EXIT_HARNESS_ERROR
     return overall_exit_status(pin_results, verdicts, disagreements)
 
