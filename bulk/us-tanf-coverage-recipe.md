@@ -142,14 +142,17 @@ provisions. This is the only AI step.
 cd ~/TheAxiomFoundation/axiom-encode
 AXIOM_ENCODE_APPLY_SIGNING_KEY=… uv run axiom-encode encode \
   "us-<st>/<class>/<citation-path>/<module>" \
-  --backend codex --model gpt-5.5 --mode repo-augmented \
+  --backend codex --model gpt-6-sol --mode repo-augmented \
   --output /tmp/axiom-encode-<st>-tanf --apply
 ```
 
-Defaults are `--backend codex --model gpt-5.5 --mode repo-augmented`. Needs codex
-auth (`~/.codex/auth.json` via `codex login`, or `$OPENAI_API_KEY`) and
-`AXIOM_ENCODE_APPLY_SIGNING_KEY`. `--apply` validates main + companion test in a
-temp overlay, copies both into `rulespec-us/us-<st>/…`, and writes a signed
+`--backend codex` and `--mode repo-augmented` are the encoder defaults; the
+command passes `--model gpt-6-sol` explicitly (the encoder's own default is
+`gpt-6-luna`, escalating to `gpt-6-sol`). Needs subscription codex auth
+(`~/.codex/auth.json` via `codex login` with ChatGPT sign-in; never
+`$OPENAI_API_KEY`) and `AXIOM_ENCODE_APPLY_SIGNING_KEY`. `--apply` validates
+main + companion test in a temp overlay, copies both into
+`rulespec-us/us-<st>/…`, and writes a signed
 apply manifest (`.axiom/encoding-manifests/…json`, HMAC-SHA256,
 `"backend":"codex"`). CI `axiom-encode guard-generated` rejects any changed
 RuleSpec YAML under `statutes/`/`regulations/`/`policies/` without a matching
