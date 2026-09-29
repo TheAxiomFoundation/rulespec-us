@@ -620,9 +620,12 @@ def _run(args: argparse.Namespace) -> int:
                         status = run_check_source_staleness(
                             ["--rulespec-root", str(root), "--corpus-path", str(corpus_root)]
                         )
-                except Exception:
+                except Exception as exc:
                     if attempt == ENCODER_ATTEMPTS:
-                        raise
+                        raise RuntimeError(
+                            f"check-source-staleness failed on {root.name} after "
+                            f"{ENCODER_ATTEMPTS} attempts: {type(exc).__name__}: {exc}"
+                        ) from exc
                     continue
                 output = buffer.getvalue()
                 if TRANSIENT_ROOT_REFUSAL not in output:

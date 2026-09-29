@@ -354,8 +354,17 @@ def test_summary_line():
 class _FakeEncoder:
     """Stand-in for the axiom_encode functions _run imports, for end-to-end tests."""
 
-    def __init__(self, corpus: Path, *, good_key: str, refusals: dict[str, int], digest: str):
+    def __init__(
+        self,
+        corpus: Path,
+        *,
+        good_key: str,
+        refusals: dict[str, int],
+        digest: str,
+        raises: dict[str, int] | None = None,
+    ):
         import contextlib
+        import json
         import types
 
         self.active_key = None
@@ -365,7 +374,18 @@ class _FakeEncoder:
         )
         release_object = corpus / "releases/r/abc.json"
         release_object.parent.mkdir(parents=True, exist_ok=True)
-        release_object.write_text('{"content": {"git": {"commit": "' + "c" * 40 + '"}}}')
+        release_object.write_text(
+            json.dumps(
+                {
+                    "content": {
+                        "git": {"commit": "c" * 40},
+                        "artifacts": [
+                            {"artifact_class": artifact.artifact_class, "path": artifact.path}
+                        ],
+                    }
+                }
+            )
+        )
         release = types.SimpleNamespace(
             name="r", content_sha256=SHA_A, artifacts=[artifact], root=corpus,
             release_object_path=release_object,
@@ -387,6 +407,8 @@ class _FakeEncoder:
         def run_check(argv):
             root = Path(argv[1]).name
             self.calls[root] = self.calls.get(root, 0) + 1
+            if self.calls[root] <= (raises or {}).get(root, 0):
+                raise OSError(f"probe failed on {root}")
             if self.calls[root] <= refusals.get(root, 0):
                 print(f"ERROR {argv[1]}")
                 print(f"  error   {ssr.TRANSIENT_ROOT_REFUSAL} country checkout")
@@ -411,12 +433,17 @@ class _FakeEncoder:
         }
 
 
-def _run_main(tmp_path, checkout, monkeypatch, *, refusals=None, digest=SHA_A, place=True):
+def _run_main(
+    tmp_path, checkout, monkeypatch, *, refusals=None, digest=SHA_A, place=True, raises=None,
+    good_key="GOOD",
+):
     import json
     import sys
 
     corpus = tmp_path / "axiom-corpus"
-    fake = _FakeEncoder(corpus, good_key="GOOD", refusals=refusals or {}, digest=digest)
+    fake = _FakeEncoder(
+        corpus, good_key=good_key, refusals=refusals or {}, digest=digest, raises=raises
+    )
     for name, module in fake.modules.items():
         monkeypatch.setitem(sys.modules, name, module)
     if place:
@@ -466,3 +493,43 @@ def test_main_end_to_end_differential_catches_a_resolver_disagreement(tmp_path, 
     assert payload["differential"]["disagreements"] == [
         f"us/statutes/1/a.yaml: report says stale (current {SHA_B}), encoder says match"
     ]
+
+
+def test_main_retries_an_encoder_exception_then_succeeds(tmp_path, checkout, monkeypatch):
+    status, _, payload, fake = _run_main(tmp_path, checkout, monkeypatch, raises={"us": 2})
+    assert status == ssr.EXIT_FINDINGS
+    assert fake.calls["us"] == 3
+    assert {v["jurisdiction"]: v["attempts"] for v in payload["encoder_verdicts"]}["us"] == 3
+
+
+def test_main_reports_an_encoder_exception_that_persists(tmp_path, checkout, monkeypatch):
+    status, report, payload, fake = _run_main(tmp_path, checkout, monkeypatch, raises={"us": 9})
+    assert status == ssr.EXIT_HARNESS_ERROR
+    assert fake.calls["us"] == ssr.ENCODER_ATTEMPTS
+    assert "check-source-staleness failed on us after 3 attempts: OSError" in report
+    assert "harness_error" in payload
+
+
+def test_main_reports_every_key_refusal_and_the_provisions_hint(tmp_path, checkout, monkeypatch):
+    status, report, payload, _ = _run_main(
+        tmp_path, checkout, monkeypatch, good_key="NEITHER", place=False
+    )
+    assert status == ssr.EXIT_HARNESS_ERROR
+    assert "- `RETIRED`: ValueError" in report and "- `CURRENT`: ValueError" in report
+    assert "1 of 1 provisions artifact(s) are not in the corpus checkout" in report
+
+
+def test_missing_provisions_hint_survives_a_malformed_release_object(tmp_path: Path):
+    import json
+
+    release = tmp_path / "releases/r/abc.json"
+    release.parent.mkdir(parents=True)
+    for content in (
+        {"artifacts": [1, {"artifact_class": "provisions", "path": 3}]},
+        {"artifacts": None},
+        [],
+    ):
+        release.write_text(json.dumps({"content": content}))
+        assert isinstance(ssr.missing_provisions_hint(tmp_path), str)
+    release.write_text("not json")
+    assert ssr.missing_provisions_hint(tmp_path) == ""

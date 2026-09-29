@@ -67,12 +67,12 @@ jobs:
   source-staleness:
     name: source-staleness (report-only)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     # Report-only. Stale or unresolvable pins never fail this job. Every step
     # before the last runs with continue-on-error; the last step decides. On
     # pull requests it only annotates, so a broken report cannot hold up a
-    # merge (only a runner loss or the job timeout, which the inner timeouts
-    # stay well under, can still end it red). On pushes to main, the weekly
+    # merge (only a runner loss or the 60-minute job timeout can still end it
+    # red; the step timeouts add up to less). On pushes to main, the weekly
     # schedule and manual runs, a report that could not be produced fails the
     # job, so the break shows.
     steps:
@@ -223,9 +223,9 @@ jobs:
           git -C "$corpus" remote add origin https://github.com/TheAxiomFoundation/axiom-corpus.git
           git -C "$corpus" config remote.origin.promisor true
           git -C "$corpus" config remote.origin.partialclonefilter blob:none
-          timeout 600 git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
+          timeout 300 git -C "$corpus" fetch --quiet --no-tags --depth=1 --filter=blob:none origin "$COMMIT"
           git -C "$corpus" sparse-checkout set --no-cone --stdin < "$RUNNER_TEMP/corpus-sparse.txt"
-          timeout 600 git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
+          timeout 300 git -C "$corpus" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"
           test "$(git -C "$corpus" rev-parse HEAD)" = "$COMMIT"
           release_dir="$corpus/releases/$RELEASE_NAME"
           mkdir -p "$release_dir"
@@ -250,18 +250,21 @@ jobs:
         id: install
         if: ${{ steps.encode_checkout.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         run: python -m pip install --quiet --upgrade pip ./_axiom/axiom-encode pytest hypothesis
 
       - name: Test the report script
         id: script_tests
         if: ${{ steps.install.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         run: python -m pytest -q tests/test_source_staleness_report.py tests/test_source_staleness_report_properties.py
 
       - name: Report source staleness
         id: report
         if: ${{ steps.corpus.outcome == 'success' && steps.install.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 15
         shell: bash
         env:
           ENCODE_REF: ${{ steps.pins.outputs.axiom_encode_ref }}
@@ -294,8 +297,17 @@ jobs:
             exit 2
           fi
           cat "$RUNNER_TEMP/staleness-report.md" >> "$GITHUB_STEP_SUMMARY"
-          if python -c 'import json, sys; sys.exit(0 if "harness_error" in json.load(open(sys.argv[1])) else 1)' \
-            "$RUNNER_TEMP/staleness-report.json" 2>/dev/null; then
+          # Fail closed: an unreadable or non-object JSON counts as a harness error.
+          if python - "$RUNNER_TEMP/staleness-report.json" <<'PY' 2>/dev/null; then
+          import json
+          import sys
+
+          try:
+              payload = json.load(open(sys.argv[1]))
+          except Exception:
+              sys.exit(0)
+          sys.exit(0 if not isinstance(payload, dict) or "harness_error" in payload else 1)
+          PY
             status=2
           fi
           summary="$(python -c 'import json, sys; print(json.load(open(sys.argv[1])).get("summary", ""))' \
@@ -303,7 +315,7 @@ jobs:
           case "$status" in
             0) echo "Every pin matches the pinned release. $summary" ;;
             1) echo "::warning::Source staleness findings: $summary. See the job summary and artifact." ;;
-            *) echo "::error::The source staleness report could not be produced (exit $status)."; exit "$status" ;;
+            *) echo "::error::The source staleness report could not be produced, or is incomplete (exit $status). $summary"; exit 2 ;;
           esac
 
       - name: Upload staleness report artifact
