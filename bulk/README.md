@@ -18,24 +18,17 @@ provisions to queue.
 | `bulk/roots_for.py` | Maps an applied module path to `guard-generated --roots`. |
 | `bulk/local_drain.py` | Review-safe local runner: exact classifier provenance, one draft PR per module, and no automatic merge. |
 | `bulk/applied_artifacts.py` | Validates the module, companion test, and signed manifest written by one encoder apply. |
-| `.github/workflows/bulk-encode.yml` | The runner: dispatch → matrix → encode `--apply` → gate battery → PR + auto-merge. |
+| `.github/workflows/bulk-encode.yml` | Fail-closed placeholder while protected cloud activation is reviewed. |
 
 ## Running it
 
-Dispatch from the Actions tab (**Bulk encode → Run workflow**) or the CLI:
+The cloud workflow is disabled during the protected provenance migration.
+Use the local review-safe runner after its checkout verification passes:
 
 ```bash
-# Encode the first 8 pending batch-A entries:
-gh workflow run bulk-encode.yml -f batch=A -f limit=8 --repo TheAxiomFoundation/rulespec-us
-
-# Encode up to 12 pending entries regardless of batch:
-gh workflow run bulk-encode.yml -f limit=12 --repo TheAxiomFoundation/rulespec-us
+python bulk/local_drain.py doctor
+python bulk/local_drain.py drain --status pending-local --limit 8
 ```
-
-The `schedule` trigger runs weekly and drains any remaining `pending` entries
-with no human action. Parallelism is capped at 4 (`max-parallel`) to stay under
-OpenAI rate limits; a top-level `concurrency` group serialises whole dispatches
-so two runs never fight over the same `bulk/<slug>` branches.
 
 ### Local review-safe drain
 
@@ -57,36 +50,21 @@ or encoder code and then regenerated with `encode --apply`.
 
 ### Secrets (repo Actions secrets on rulespec-us)
 
+The cloud bulk workflow is intentionally fail-closed during the protected
+provenance migration. Use the reviewed local drain only after `doctor` verifies
+every checkout against `.axiom/workflow-toolchain.toml`.
+
 | Secret | Why |
 | --- | --- |
 | `OPENAI_API_KEY` | Headless `--backend openai` generation. |
 | `AXIOM_ENCODE_APPLY_SIGNING_KEY` | Signs the apply manifest so `guard-generated` accepts the new files. Must match the key that signs manifests elsewhere. |
 | `BULK_ENCODE_TOKEN` | A `repo`+`workflow`-scoped token used to push the branch and open the PR. **Required**: PRs opened by the default `GITHUB_TOKEN` do **not** trigger the `pull_request` event, so the required `validate / validate` check would never run and auto-merge would hang forever. This token makes the PR a real event that triggers CI. |
 
-## What each job does
+## What the active runner does
 
-1. **dispatch** — installs PyYAML, runs `compute_matrix.py --status pending`
-   (optionally `--batch`, `--limit`), and emits the matrix.
-2. **encode** (one leg per module, ≤4 parallel):
-   - Checks out the repo into a leaf dir named exactly `rulespec-us` (the
-     `--apply` resolver requirement) using `BULK_ENCODE_TOKEN`.
-   - Reads `.axiom/toolchain.toml` and checks out **the pinned** `axiom-encode`,
-     `axiom-rules-engine`, and `axiom-corpus`, then builds the engine. Using the
-     pinned encoder means generation and the downstream PR CI validate with the
-     identical version — no version-skew surprises.
-   - Runs `axiom-encode encode <citation> --apply`. `--apply` validates the main
-     file, companion test, and direct dependents in a temporary overlay and
-     writes nothing on failure (fail-closed), then installs the three artifacts:
-     `statutes/**/<sec>.yaml`, `<sec>.test.yaml`, and a signed
-     `.axiom/encoding-manifests/**/<sec>.json`.
-   - Runs the gate battery in PR-CI order: `guard-generated` (manifest present),
-     `validate --skip-reviewers`, `proof-validate`, then the companion `test`.
-   - Opens `bulk/<slug>` with the manifest summary + gate output as the PR body,
-     labels it `bulk-encode`, and runs `gh pr merge --auto --squash`.
-
-The job **never** uses `--admin`, never bypasses a red check, and never merges
-directly. The authoritative gate is the repository's required
-`validate / validate` check on the PR.
+The local runner verifies the pinned encoder, engine, and corpus checkouts,
+runs `encode --apply` and the gate battery, and opens a draft PR. It never
+enables auto-merge; independent review and required CI remain mandatory.
 
 ## Statuses
 

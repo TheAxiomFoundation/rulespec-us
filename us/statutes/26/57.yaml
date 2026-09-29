@@ -1,0 +1,135 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_paths:
+      - us/statute/26/57/a
+      - us/statute/26/57/a/5/A
+      - us/statute/26/57/a/5/C
+  summary: |-
+    Bounded tax-year-2026 individual-AMT surfaces from Internal Revenue Code
+    section 57. The section 57(a)(5) tax-exempt-interest preference is a
+    completed-return amount that already applies every relevant reduction,
+    definition, and exception in paragraph (5).
+
+    The amount is exposed only when it is nonnegative, its completion
+    attestation holds, and the caller attests that the other operative section
+    57 preferences—depletion, intangible drilling costs, specified pre-1987
+    depreciation or amortization, and the applicable small-business-stock
+    exclusion preference—are all zero. Otherwise both public surfaces fail
+    closed.
+rules:
+  - name: no_other_section_57_preference
+    kind: derived
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    source: 26 USC 57(a), bounded completed-preference domain
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us/statute/26/57/a
+              excerpt: >-
+                the items of tax preference determined under this section are
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          completed_section_57_a_5_specified_private_activity_bond_interest >= 0
+          and section_57_a_5_completed_interest_domain_is_satisfied
+          and section_57_a_1_depletion_preference_is_zero
+          and section_57_a_2_intangible_drilling_cost_preference_is_zero
+          and section_57_a_6_pre_1987_depreciation_or_amortization_preference_is_zero
+          and section_57_a_7_small_business_stock_preference_is_zero
+
+  - name: section_57_a_5_specified_private_activity_bond_interest
+    kind: derived
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    source: 26 USC 57(a)(5), guarded completed tax-exempt-interest preference
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us:statutes/26/57#no_other_section_57_preference
+              output: no_other_section_57_preference
+              hash: sha256:local
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/statute/26/57/a/5/A
+              excerpt: >-
+                Interest on specified private activity bonds reduced by any
+                deduction (not allowable in computing the regular tax) which
+                would have been allowable if such interest were includible in
+                gross income.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/26/57/a/5/C
+              excerpt: >-
+                For purposes of this part, the term “specified private activity
+                bond” means any private activity bond (as defined in section
+                141) which is issued after August 7, 1986 , and the interest on
+                which is not includible in gross income under section 103.
+    versions:
+      - effective_from: '2026-01-01'
+        effective_to: '2026-12-31'
+        formula: |-
+          if no_other_section_57_preference:
+            completed_section_57_a_5_specified_private_activity_bond_interest
+          else:
+            0
+
+inputs:
+  - name: completed_section_57_a_5_specified_private_activity_bond_interest
+    entity: TaxUnit
+    dtype: Money
+    period: Year
+    unit: USD
+    description: >-
+      Completed section 57(a)(5) preference after all applicable treatment,
+      reduction, definition, and exception rules. It is never consumed
+      directly by section 55; only the guarded public output is.
+  - name: section_57_a_5_completed_interest_domain_is_satisfied
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: >-
+      Holds only when the completed amount applies every relevant section
+      57(a)(5) treatment, reduction, definition, and exception.
+  - name: section_57_a_1_depletion_preference_is_zero
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: >-
+      Holds only when the section 57(a)(1) depletion preference is zero.
+  - name: section_57_a_2_intangible_drilling_cost_preference_is_zero
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: >-
+      Holds only when the section 57(a)(2) intangible-drilling-cost preference
+      is zero after all applicable exceptions and limitations.
+  - name: section_57_a_6_pre_1987_depreciation_or_amortization_preference_is_zero
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: >-
+      Holds only when the section 57(a)(6) preference for specified pre-1987
+      depreciation or amortization is zero.
+  - name: section_57_a_7_small_business_stock_preference_is_zero
+    entity: TaxUnit
+    dtype: Judgment
+    period: Year
+    description: >-
+      Holds only when the section 57(a)(7) preference for the applicable
+      small-business-stock exclusion is zero.

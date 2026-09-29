@@ -6,6 +6,8 @@ fails the test (they do not recreate dicts by hand)."""
 import json
 import subprocess
 import sys
+
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,16 +17,23 @@ import build_program_artifacts as bpa  # noqa: E402
 def test_validation_toolchain_reads_pins(tmp_path: Path):
     axiom = tmp_path / ".axiom"
     axiom.mkdir()
-    (axiom / "toolchain.toml").write_text(
-        "[toolchain]\n"
+    (axiom / "workflow-toolchain.toml").write_text(
+        "[workflow_toolchain]\n"
         'axiom_encode_version = "0.2.1200"\n'
+        'axiom_encode_ref = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n'
+        'axiom_compose_ref = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"\n'
         'axiom_rules_engine_ref = "e19f1b7573c74512f20a6b71a0c55dbbf333d41b"\n'
+        'axiom_artifact_rules_engine_ref = "dddddddddddddddddddddddddddddddddddddddd"\n'
         'axiom_corpus_ref = "7661f3c9a3655e93fc9b2420048d70d231e7d44b"\n'
+        'rulespec_us_ref = "cccccccccccccccccccccccccccccccccccccccc"\n'
     )
     t = bpa.validation_toolchain(tmp_path)
     assert t["axiom_rules_engine_ref"] == "e19f1b7573c74512f20a6b71a0c55dbbf333d41b"
+    assert t["axiom_artifact_rules_engine_ref"] == "d" * 40
     assert t["axiom_corpus_ref"] == "7661f3c9a3655e93fc9b2420048d70d231e7d44b"
     assert t["axiom_encode_version"] == "0.2.1200"
+    assert t["axiom_compose_ref"] == "b" * 40
+    assert t["rulespec_us_ref"] == "c" * 40
 
 
 def test_validation_toolchain_absent_is_empty(tmp_path: Path):
@@ -61,7 +70,7 @@ def test_engine_build_sha_unknown_returns_empty(tmp_path, monkeypatch):
 
 
 def test_build_compat_contract_shape_and_floor():
-    compat = bpa.build_compat(engine_version="0.1.0", engine_sha="e19f1b75cafe")
+    compat = bpa.build_compat(engine_version="0.1.0", engine_sha="e19f1b75cafe", artifact_schema=2)
     assert compat["artifact_schema"] == 2
     # Provenance carries the real build sha; gating carries the FIXED floor,
     # not the building version. Artifact readers separately require the exact
@@ -70,18 +79,19 @@ def test_build_compat_contract_shape_and_floor():
     assert compat["requires_engine"]["min_version"] == bpa.MIN_ENGINE_VERSION == "0.1.0"
     assert compat["requires_engine"]["capabilities"] == []
     # A newer building engine still stamps the fixed floor, not its own version.
-    assert bpa.build_compat("0.9.0", "abc")["requires_engine"]["min_version"] == "0.1.0"
+    assert bpa.build_compat("0.9.0", "abc", 2)["requires_engine"]["min_version"] == "0.1.0"
 
 
 def test_assemble_manifest_stamps_real_engine_sha_not_stale():
     toolchain = {"axiom_rules_engine_ref": "e19f1b75", "axiom_corpus_ref": "7661f3c9"}
     m = bpa.assemble_manifest(
-        programs=[{"program_id": "co-snap", "compat": bpa.build_compat("0.1.0", "cafef00dbabe")}],
+        programs=[{"program_id": "co-snap", "compat": bpa.build_compat("0.1.0", "cafef00dbabe", 2)}],
         corpus={"repo": "rulespec-us", "sha": "733d1a17", "dirty": False},
         composer="0.1.0",
         engine_version="0.1.0",
         engine_sha="cafef00dbabe",
         toolchain=toolchain,
+        artifact_schema=2,
     )
     # The BOM's key assertion: engine identity is a real sha, not the "0.1.0" string.
     assert m["engine"]["git_sha"] == "cafef00dbabe"
@@ -100,8 +110,124 @@ def test_assemble_manifest_stamps_real_engine_sha_not_stale():
 def test_manifest_and_program_compat_cannot_disagree():
     # Both the artifact provenance and the per-program manifest entry take the
     # SAME compat object; prove equality holds for a shared instance.
-    compat = bpa.build_compat("0.1.0", "cafef00d")
+    compat = bpa.build_compat("0.1.0", "cafef00d", 2)
     program_entry = {"program_id": "co-snap", "compat": compat}
-    m = bpa.assemble_manifest([program_entry], {}, "0.1.0", "0.1.0", "cafef00d", {})
+    m = bpa.assemble_manifest([program_entry], {}, "0.1.0", "0.1.0", "cafef00d", {}, 2)
     assert m["programs"][0]["compat"] is compat
     assert m["programs"][0]["compat"]["built_by_engine"]["git_sha"] == "cafef00d"
+
+
+def test_requires_engine_carries_the_gating_schema_not_only_semver():
+    """Regression: v0.1.0 (format 1) and format-2 artifacts both advertised
+    "0.1.0", so a third party comparing `--version` against
+    requires_engine.min_version concluded compatible while every load failed.
+    Released v0.2.0 widens the same gap. The floor must carry the dimension the
+    loader actually matches."""
+    requires = bpa.build_compat("0.1.0", "ffd8213", artifact_schema=2)["requires_engine"]
+    assert requires["artifact_format_version"] == 2
+    # An engine reporting format 1 must be rejectable from the contract ALONE,
+    # without downloading or attempting to load the artifact.
+    engine_reports = {"engine_version": "0.2.0", "artifact_format_version": 1}
+    assert engine_reports["engine_version"] >= requires["min_version"]  # semver says yes
+    assert (
+        engine_reports["artifact_format_version"] != requires["artifact_format_version"]
+    ), "the schema dimension is what must say no"
+
+
+def test_compat_schema_follows_the_emitted_artifact_not_the_constant():
+    """The stamped generation is observed, never asserted: if the engine pin
+    moves across a format boundary the manifest must not keep claiming the old
+    number."""
+    compat = bpa.build_compat("0.1.0", "abc", artifact_schema=3)
+    assert compat["artifact_schema"] == 3
+    assert compat["requires_engine"]["artifact_format_version"] == 3
+
+
+def test_artifact_schema_of_reads_the_emitted_value(tmp_path):
+    artifact = tmp_path / "x.compiled.json"
+    artifact.write_text(json.dumps({"artifact_format_version": 2, "program": {}}))
+    assert bpa.artifact_schema_of(artifact) == 2
+    artifact.write_text(json.dumps({"program": {}}))
+    with pytest.raises(RuntimeError):
+        bpa.artifact_schema_of(artifact)
+
+
+def _fake_engine(tmp_path, body: str):
+    bin_path = tmp_path / "axiom-rules-engine"
+    bin_path.write_text(f"#!/bin/sh\n{body}\n")
+    bin_path.chmod(0o755)
+    return str(bin_path)
+
+
+def test_engine_capabilities_reads_the_self_report(tmp_path):
+    bin_path = _fake_engine(
+        tmp_path, 'echo \'{"engine_version": "0.2.1", "artifact_format_version": 2}\''
+    )
+    assert bpa.engine_capabilities(bin_path) == {
+        "engine_version": "0.2.1",
+        "artifact_format_version": 2,
+    }
+
+
+def test_engine_capabilities_is_none_on_engines_without_the_subcommand(tmp_path):
+    # Engines predating `capabilities` exit nonzero on the unknown command; the
+    # builder must fall back to the emitted artifacts, not crash or invent.
+    assert bpa.engine_capabilities(_fake_engine(tmp_path, "exit 1")) is None
+    assert bpa.engine_capabilities(str(tmp_path / "missing")) is None
+
+
+def test_engine_capabilities_fails_closed_on_a_broken_self_report(tmp_path):
+    # Exit 0 with unparseable output is a BROKEN engine, not a legacy one:
+    # treating it as legacy would silently bypass the pre-build cross-check.
+    with pytest.raises(RuntimeError):
+        bpa.engine_capabilities(_fake_engine(tmp_path, "echo not-json"))
+
+
+def test_build_reuses_corpus_and_still_compiles_every_program(tmp_path, monkeypatch):
+    """A shared parse must not skip programs or share their output artifacts."""
+    from types import SimpleNamespace
+
+    root = tmp_path / "rulespec-us"
+    root.mkdir()
+    builds = []
+    for name in ("first", "second"):
+        path = Path(f"{name}.yaml")
+        (root / path).write_text(name)
+        builds.append(bpa.SpecBuild(path, "us", name, "2026", [], name))
+    state = object()
+    loads = []
+    compositions = []
+    compilations = []
+
+    def load(roots):
+        loads.append(roots)
+        return state
+
+    def compose(spec, corpus):
+        assert corpus is state
+        compositions.append(spec)
+        return SimpleNamespace(source=spec.encode())
+
+    def compile_program(root, module, artifact, engine):
+        compilations.append(module.read_text())
+        artifact.write_text(json.dumps({"program": {}}))
+        return "0.2.2"
+
+    monkeypatch.setitem(sys.modules, "axiom_compose", SimpleNamespace(
+        load_corpus_from_roots=load, load_spec=lambda path: path.read_text(), compose=compose,
+    ))
+    monkeypatch.setattr(sys, "argv", ["build", "--root", str(root)])
+    monkeypatch.setenv("AXIOM_RULES_ENGINE_BIN", "test-engine")
+    monkeypatch.setattr(bpa, "discover_specs", lambda root: builds)
+    monkeypatch.setattr(bpa, "corpus_provenance", lambda root: {})
+    monkeypatch.setattr(bpa, "composer_version", lambda: "test")
+    monkeypatch.setattr(bpa, "engine_build_sha", lambda engine: "a" * 40)
+    monkeypatch.setattr(bpa, "engine_capabilities", lambda engine: None)
+    monkeypatch.setattr(bpa, "engine_compile", compile_program)
+    monkeypatch.setattr(bpa, "artifact_schema_of", lambda artifact: 2)
+    assert bpa.main() == 0
+    assert loads == [[root]]
+    assert compositions == ["first", "second"]
+    assert compilations == ["first", "second"]
+    manifest = json.loads((root / "dist/manifest.json").read_text())
+    assert len(manifest["programs"]) == 2
