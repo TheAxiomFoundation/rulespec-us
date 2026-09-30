@@ -493,7 +493,7 @@ jobs:
       timeout-minutes: 17
       shell: bash
       run: |
-        set -uo pipefail
+        set -euo pipefail
         report="$RUNNER_TEMP/issue233-diagnostic"
         timeout --signal=TERM --kill-after=30s 900s \
           /opt/axiom-verification/axiom-encode-signing-supervisor \
@@ -507,9 +507,97 @@ jobs:
           --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
           --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
           --axiom-compose-path /opt/axiom-compose-verification/axiom-compose \
-          > "$report/fingerprint.json" 2> "$report/stderr.log"
-        result=$?
+          > "$report/fingerprint.json" 2> "$report/stderr.log" &
+        command_pid=$!
+        # Read only this timeout process and its descendants. No environment,
+        # memory, file contents, or unrelated runner process inventory.
+        python - "$command_pid" "$report/process-progress.jsonl" <<'OBSERVER' &
+        import json, os, pathlib, sys, time
+
+
+        def read(proc, pid, name):
+            try:
+                return (proc / str(pid) / name).read_text().strip()
+            except (OSError, ValueError) as exc:
+                return 'unavailable: ' + type(exc).__name__
+
+
+        def stat(proc, pid):
+            raw = read(proc, pid, 'stat')
+            tail = raw.rsplit(')', 1)[-1].split()
+            if raw.startswith('unavailable:') or len(tail) < 20:
+                return None
+            return {'raw': raw, 'start': tail[19], 'parent': int(tail[1])}
+
+
+        def collect(proc, root, root_start):
+            queue, seen, records, truncated = [(root, None, None)], set(), [], False
+            while queue and len(seen) < 128:
+                pid, parent, parent_start = queue.pop()
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                before = stat(proc, pid)
+                if before is None:
+                    continue
+                def admitted():
+                    current = stat(proc, pid)
+                    if current is None or current['start'] != before['start']:
+                        return False
+                    if parent is None:
+                        return current['start'] == root_start
+                    owner = stat(proc, parent)
+                    return (current['parent'] == parent and owner is not None
+                            and owner['start'] == parent_start)
+                if not admitted():
+                    continue
+                record = {'pid': pid, 'starttime': before['start'], 'stat': before['raw'],
+                          'io': read(proc, pid, 'io'), 'wchan': read(proc, pid, 'wchan')}
+                children = set()
+                try:
+                    threads = sorted((proc / str(pid) / 'task').iterdir(), key=lambda p: p.name)
+                    truncated |= len(threads) > 128
+                    for thread in threads[:128]:
+                        if not thread.name.isdigit():
+                            continue
+                        raw = read(proc, pid, f'task/{thread.name}/children')
+                        if not raw.startswith('unavailable:'):
+                            children.update(int(p) for p in raw.split() if p.isdigit())
+                except OSError as exc:
+                    record['children_error'] = type(exc).__name__
+                if not admitted():
+                    continue
+                records.append(record)
+                queue.extend((child, pid, before['start']) for child in sorted(children))
+            return {'processes': records, 'truncated': truncated or bool(queue)}
+
+
+        if __name__ == '__main__':
+            root = int(sys.argv[1])
+            proc = pathlib.Path('/proc')
+            deadline = time.monotonic() + 940
+            initial = stat(proc, root)
+            root_start = initial['start'] if initial else None
+            with open(sys.argv[2], 'w') as out:
+                print(json.dumps({'observer': 'proc descendant counters only',
+                                  'interval_seconds': 15, 'clock_ticks': os.sysconf('SC_CLK_TCK'),
+                                  'root_pid': root, 'root_starttime': root_start}), file=out, flush=True)
+                while root_start is not None and time.monotonic() < deadline:
+                    current = stat(proc, root)
+                    if current is None or current['start'] != root_start:
+                        break
+                    sample = collect(proc, root, root_start)
+                    sample['monotonic_seconds'] = time.monotonic()
+                    print(json.dumps(sample), file=out, flush=True)
+                    time.sleep(15)
+        OBSERVER
+        observer_pid=$!
+        result=0
+        wait "$command_pid" || result=$?
         printf '%s\n' "$result" > "$report/exit-code.txt"
+        # The observer sees root exit within one interval; its failures must
+        # not replace the protected command's status.
+        wait "$observer_pid" || printf 'observer failed\n' >> "$report/observer-errors.log"
         cat "$report/fingerprint.json"
         cat "$report/stderr.log" >&2
         exit "$result"
