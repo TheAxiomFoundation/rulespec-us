@@ -615,8 +615,8 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.2078"
-    assert toolchain["axiom_encode_ref"] == "24e954d5512f306fef348ffe7c35d1c31419d66b"
+    assert toolchain["axiom_encode_version"] == "0.2.2079"
+    assert toolchain["axiom_encode_ref"] == "4e3cd9a27ca4d96389c9b8adbce0a76186631d52"
     assert toolchain["axiom_rules_engine_ref"] == (
         "af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca"
     )
@@ -648,7 +648,7 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert "axiom-compose-ref: ${{ needs.workflow-toolchain.outputs.axiom_compose_ref }}" in validation
     assert "axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}" in validation
     assert '"axiom_compose_ref",' in validation
-    assert "validate-rulespec.yml@f473f82b47f8aca70676a00a38c4d3aabbc1aeed" in validation
+    assert "validate-rulespec.yml@eb280ed1d0f275730cacabf40e1e50317cca44e3" in validation
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
