@@ -53,12 +53,24 @@ def manifest_roots() -> list[tuple[Path, Path]]:
 
 def resolve_applied_path(base: Path, applied: str) -> Path:
     head = applied.split("/", 1)[0]
-    if base == ROOT and head == "programs":
+    if base == ROOT and (
+        head == "programs"
+        or applied in {".axiom/toolchain.toml", "known-validation-gaps.yaml"}
+    ):
         return ROOT / applied
     if base == ROOT and not JURISDICTION_DIR_RE.match(head):
         # Pre-consolidation federal manifests predate the us/ prefix.
         return ROOT / "us" / applied
     return base / applied
+
+
+def test_resolve_applied_paths_preserves_root_metadata_and_legacy_layouts() -> None:
+    for path in (".axiom/toolchain.toml", "known-validation-gaps.yaml"):
+        assert resolve_applied_path(ROOT, path) == ROOT / path
+        assert resolve_applied_path(ROOT / "us-ct", path) == ROOT / "us-ct" / path
+    assert resolve_applied_path(ROOT, "statutes/26/213.yaml") == ROOT / "us/statutes/26/213.yaml"
+    assert resolve_applied_path(ROOT, "us/policies/example.yaml") == ROOT / "us/policies/example.yaml"
+    assert resolve_applied_path(ROOT, "programs/example.yaml") == ROOT / "programs/example.yaml"
 
 
 @functools.cache
