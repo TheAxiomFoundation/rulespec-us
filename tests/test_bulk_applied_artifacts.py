@@ -546,6 +546,31 @@ def test_encode_command_rejects_context_outside_checkout(tmp_path: Path) -> None
         )
 
 
+def test_encode_command_passes_drain_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    item = {"citation": "us-sc/manual/dss/snap-policy-manual/page-163"}
+
+    monkeypatch.delenv("DRAIN_BACKEND", raising=False)
+    monkeypatch.delenv("DRAIN_MODEL", raising=False)
+    default = _load_bulk_module("local_drain")
+    command = default.encode_command(tmp_path, tmp_path / "encode-out", item)
+    assert command.count("--model") == 1
+    assert command[command.index("--model") + 1] == "gpt-6.1-sol"
+    assert command.count("--escalation-model") == 1
+    assert command[command.index("--escalation-model") + 1] == "gpt-6.1-sol"
+    assert command[command.index("--backend") + 1] == "codex"
+
+    monkeypatch.setenv("DRAIN_MODEL", "gpt-6-luna")
+    override = _load_bulk_module("local_drain")
+    command = override.encode_command(tmp_path, tmp_path / "encode-out", item)
+    assert command.count("--model") == 1
+    assert command[command.index("--model") + 1] == "gpt-6-luna"
+    assert command.count("--escalation-model") == 1
+    assert command[command.index("--escalation-model") + 1] == "gpt-6-luna"
+    assert command[command.index("--backend") + 1] == "codex"
+
+
 def test_sc_local_queue_schedules_prerequisites_before_dependent() -> None:
     selected = select(_compute_matrix.load(), "pending-local", None, None)
 
