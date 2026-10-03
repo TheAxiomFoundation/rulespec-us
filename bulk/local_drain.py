@@ -2,7 +2,7 @@
 """Local bulk-encode drain runner.
 
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
-CLI (ChatGPT subscription, ``gpt-5.5``) instead of the cloud ``bulk-encode.yml``
+CLI (ChatGPT subscription, ``gpt-6.1-sol``) instead of the cloud ``bulk-encode.yml``
 dispatcher, opening one draft PR per module for independent review. It mirrors
 the generation path while adding the exact-checkout oracle-coverage-pending
 declaration needed to keep new-state PRs out of the unmapped coverage state.
@@ -95,7 +95,7 @@ ENGINE_BIN = ENGINE / "target" / "debug"
 WT_ROOT = DRAIN_BASE / "wt"
 
 BACKEND = os.environ.get("DRAIN_BACKEND", "codex")
-MODEL = os.environ.get("DRAIN_MODEL", "gpt-5.5")
+MODEL = os.environ.get("DRAIN_MODEL", "gpt-6.1-sol")
 
 # Codex subscription-limit signatures. On any of these we PAUSE the whole drain.
 LIMIT_SIGNS = re.compile(
@@ -634,7 +634,8 @@ def encode_command(leaf: Path, tmp: Path, item: dict) -> list[str]:
 
     command = [
         str(GEN_AE), "encode", item["citation"], "--backend", BACKEND,
-        "--model", MODEL, "--policy-repo-path", str(leaf),
+        "--model", MODEL, "--escalation-model", MODEL,
+        "--policy-repo-path", str(leaf),
         "--axiom-rules-engine-path", str(ENGINE), "--corpus-path", str(CORPUS),
         "--output", str(tmp), "--apply", "--no-sync",
     ]
