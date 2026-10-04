@@ -1,0 +1,131 @@
+name: Engine root load
+
+# Loads this checkout as a corpus root with the pinned axiom-rules-engine and
+# compiles every atomic module through the engine's own library. Repository
+# Checks skips waived modules, so main stayed green while hundreds of modules
+# declared fields the pinned engine had already removed (#1354). Here the
+# failures must equal tools/known-engine-load-failures.txt exactly. With an
+# existing protected-base baseline and unchanged engine pin, a pull request
+# may only shrink failing (surface, module) pairs. When the protected base has
+# no baseline, or axiom_rules_engine_ref moves, the baseline may grow.
+# See tools/engine_root_load.py.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Daily, so engine-side drift is visible even when no rulespec PR is open.
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  engine-root-load:
+    name: engine-root-load
+    runs-on: ubuntu-latest
+    env:
+      # The engine fixes the root's file set when it starts; nothing may write
+      # into the checkout while the harness runs.
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The engine admits only a root named exactly rulespec-<country>.
+          path: rulespec-us
+          # An existing base baseline bounds this one unless the engine pin moves.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Resolve pinned engine
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          path = Path("rulespec-us/.axiom/workflow-toolchain.toml")
+          toolchain = tomllib.loads(path.read_text())["workflow_toolchain"]
+          ref = toolchain.get("axiom_rules_engine_ref", "")
+          if re.fullmatch(r"[0-9a-f]{40}", ref) is None:
+              raise SystemExit(f"{path}: axiom_rules_engine_ref must be a full lowercase commit SHA")
+          print(f"axiom_rules_engine_ref={ref}")
+          PY
+
+      - name: Checkout axiom-rules-engine
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-rules-engine
+          ref: ${{ steps.toolchain.outputs.axiom_rules_engine_ref }}
+          path: axiom-rules-engine
+
+      - name: Cache harness build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            axiom-rules-engine/target
+          key: engine-root-load-${{ runner.os }}-${{ steps.toolchain.outputs.axiom_rules_engine_ref }}-${{ hashFiles('rulespec-us/tools/engine_root_load.py') }}
+          restore-keys: |
+            engine-root-load-${{ runner.os }}-${{ steps.toolchain.outputs.axiom_rules_engine_ref }}-
+
+      - name: Load every module with the pinned engine
+        run: |
+          python rulespec-us/tools/engine_root_load.py run \
+            --engine-src axiom-rules-engine \
+            --root "$GITHUB_WORKSPACE/rulespec-us" \
+            --output "$RUNNER_TEMP/engine-root-load.jsonl"
+
+      - name: Compare with the known-failure baseline
+        shell: bash
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$BASE_REF" ] && [ "$BASE_REF" != "0000000000000000000000000000000000000000" ]; then
+            args=(--base-ref "$BASE_REF")
+          fi
+          python rulespec-us/tools/engine_root_load.py check \
+            --root "$GITHUB_WORKSPACE/rulespec-us" \
+            --results "$RUNNER_TEMP/engine-root-load.jsonl" \
+            "${args[@]}" | tee "$RUNNER_TEMP/engine-root-load.txt"
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/engine-root-load.txt" ]; then
+            {
+              echo '### Engine root load'
+              echo '```'
+              head -c 60000 "$RUNNER_TEMP/engine-root-load.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Test the gate logic
+        working-directory: rulespec-us
+        run: |
+          python -m pip install --quiet pytest hypothesis
+          python -m pytest -q -p no:cacheprovider \
+            tests/test_engine_root_load.py tests/test_engine_root_load_properties.py
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: engine-root-load
+          path: ${{ runner.temp }}/engine-root-load.*
+          if-no-files-found: ignore
