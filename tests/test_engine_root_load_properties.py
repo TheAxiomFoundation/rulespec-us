@@ -8,8 +8,9 @@ Invariants, for every input:
    protected base baseline is given, every failing (surface, module) in the
    baseline was already failing in the base.
 3. Monotonicity: an unlisted failure always fails the gate; a listed module
-   that stops failing always fails the gate; a newly failing module always
-   fails it; a listed module changing class alone never does.
+   that stops failing always fails the gate; with an existing protected base
+   baseline and unchanged engine pin, a newly failing module always fails it;
+   a listed module changing class alone never does.
 4. Classification ignores machine-specific prefixes: the class of an engine
    message does not depend on where the checkout or scratch directory lives.
 
@@ -22,11 +23,12 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import given, strategies as st  # noqa: E402
+from hypothesis import HealthCheck, given, settings, strategies as st  # noqa: E402
 
 TOOL_PATH = Path(__file__).resolve().parent.parent / "tools" / "engine_root_load.py"
 _spec = importlib.util.spec_from_file_location("engine_root_load", TOOL_PATH)
@@ -51,18 +53,26 @@ failures = st.builds(
 )
 failure_sets = st.sets(failures, max_size=30)
 
+# These check semantics, not performance. Shared-runner load must not turn a
+# valid example or its filtered input generation into a timing failure.
+semantic_properties = settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 
+
+@semantic_properties
 @given(failure_sets)
 def test_baseline_round_trip(entries):
     text = erl.render_baseline(entries)
     assert erl.parse_baseline(text) == entries
     assert erl.render_baseline(erl.parse_baseline(text)) == text
+    body = [line for line in text.splitlines() if not line.startswith("#")]
+    assert body == sorted(body)
 
 
 def _keys(entries):
     return {(entry.surface, entry.module) for entry in entries}
 
 
+@semantic_properties
 @given(failure_sets, failure_sets, st.one_of(st.none(), failure_sets))
 def test_gate_passes_iff_equal_and_shrinking(observed, baseline, base):
     verdict = erl.compare(observed, baseline, base)
@@ -70,6 +80,24 @@ def test_gate_passes_iff_equal_and_shrinking(observed, baseline, base):
     assert verdict.ok == expected
 
 
+@semantic_properties
+@given(failure_sets.filter(bool), st.text(alphabet="0123456789abcdef", min_size=40, max_size=40))
+def test_baseline_introduction_differs_from_existing_empty_baseline(entries, pin):
+    toolchain = f'[workflow_toolchain]\naxiom_rules_engine_ref = "{pin}"\n'
+    with (
+        patch.object(erl, "git_show", side_effect=[toolchain, None, toolchain, ""]),
+        patch.object(Path, "read_text", return_value=toolchain),
+    ):
+        introduced = erl.read_base_baseline(Path("rulespec-us"), "protected-base")
+        existing = erl.read_base_baseline(Path("rulespec-us"), "protected-base")
+    assert introduced is None
+    assert erl.compare(entries, entries, introduced).ok
+    assert existing == set()
+    verdict = erl.compare(entries, entries, existing)
+    assert not verdict.ok and verdict.added == entries
+
+
+@semantic_properties
 @given(failure_sets, failures)
 def test_unlisted_failure_always_fails(baseline, extra):
     if extra in baseline:
@@ -78,6 +106,7 @@ def test_unlisted_failure_always_fails(baseline, extra):
     assert not verdict.ok and verdict.new == {extra}
 
 
+@semantic_properties
 @given(failure_sets.filter(bool), st.data())
 def test_fixed_but_listed_module_always_fails(baseline, data):
     fixed = data.draw(st.sampled_from(sorted(baseline)))
@@ -85,6 +114,7 @@ def test_fixed_but_listed_module_always_fails(baseline, data):
     assert not verdict.ok and verdict.stale == {fixed}
 
 
+@semantic_properties
 @given(failure_sets, failures)
 def test_newly_failing_module_always_fails(base, extra):
     if (extra.surface, extra.module) in _keys(base):
@@ -94,6 +124,7 @@ def test_newly_failing_module_always_fails(base, extra):
     assert not verdict.ok and verdict.added == {extra}
 
 
+@semantic_properties
 @given(failure_sets.filter(bool), st.data())
 def test_class_change_of_listed_module_passes(base, data):
     entry = data.draw(st.sampled_from(sorted(base)))
@@ -121,6 +152,7 @@ engine_messages = st.sampled_from(
 )
 
 
+@semantic_properties
 @given(engine_messages, prefixes, prefixes)
 def test_classification_ignores_machine_prefixes(template, first, second):
     one = erl.normalize_error(template.format(p=first), first)
