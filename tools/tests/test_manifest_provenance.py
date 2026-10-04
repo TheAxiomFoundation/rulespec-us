@@ -181,3 +181,53 @@ def test_engine_capabilities_fails_closed_on_a_broken_self_report(tmp_path):
     # treating it as legacy would silently bypass the pre-build cross-check.
     with pytest.raises(RuntimeError):
         bpa.engine_capabilities(_fake_engine(tmp_path, "echo not-json"))
+
+
+def test_build_reuses_corpus_and_still_compiles_every_program(tmp_path, monkeypatch):
+    """A shared parse must not skip programs or share their output artifacts."""
+    from types import SimpleNamespace
+
+    root = tmp_path / "rulespec-us"
+    root.mkdir()
+    builds = []
+    for name in ("first", "second"):
+        path = Path(f"{name}.yaml")
+        (root / path).write_text(name)
+        builds.append(bpa.SpecBuild(path, "us", name, "2026", [], name))
+    state = object()
+    loads = []
+    compositions = []
+    compilations = []
+
+    def load(roots):
+        loads.append(roots)
+        return state
+
+    def compose(spec, corpus):
+        assert corpus is state
+        compositions.append(spec)
+        return SimpleNamespace(source=spec.encode())
+
+    def compile_program(root, module, artifact, engine):
+        compilations.append(module.read_text())
+        artifact.write_text(json.dumps({"program": {}}))
+        return "0.2.2"
+
+    monkeypatch.setitem(sys.modules, "axiom_compose", SimpleNamespace(
+        load_corpus_from_roots=load, load_spec=lambda path: path.read_text(), compose=compose,
+    ))
+    monkeypatch.setattr(sys, "argv", ["build", "--root", str(root)])
+    monkeypatch.setenv("AXIOM_RULES_ENGINE_BIN", "test-engine")
+    monkeypatch.setattr(bpa, "discover_specs", lambda root: builds)
+    monkeypatch.setattr(bpa, "corpus_provenance", lambda root: {})
+    monkeypatch.setattr(bpa, "composer_version", lambda: "test")
+    monkeypatch.setattr(bpa, "engine_build_sha", lambda engine: "a" * 40)
+    monkeypatch.setattr(bpa, "engine_capabilities", lambda engine: None)
+    monkeypatch.setattr(bpa, "engine_compile", compile_program)
+    monkeypatch.setattr(bpa, "artifact_schema_of", lambda artifact: 2)
+    assert bpa.main() == 0
+    assert loads == [[root]]
+    assert compositions == ["first", "second"]
+    assert compilations == ["first", "second"]
+    manifest = json.loads((root / "dist/manifest.json").read_text())
+    assert len(manifest["programs"]) == 2
