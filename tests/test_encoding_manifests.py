@@ -58,6 +58,16 @@ MODEL_APPLY_MANIFEST_FIELDS = frozenset(
         "signature",
     }
 )
+CREATION_TARGET_FIELDS = frozenset(
+    {
+        "base_commit",
+        "base_tree",
+        "primary",
+        "companion",
+        "canonical_manifest",
+        "orphan_manifest",
+    }
+)
 RETIRE_APPLY_MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -457,6 +467,17 @@ def git_blob_sha256(repo: Path, commit: str, relative: str) -> str | None:
     return hashlib.sha256(completed.stdout).hexdigest()
 
 
+def git_path_present_at_ref(repo: Path, commit: str, relative: str) -> bool:
+    listed = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-z", commit, "--", relative],
+        check=False,
+        capture_output=True,
+    )
+    return listed.returncode == 0 and bool(
+        [record for record in listed.stdout.split(b"\0") if record]
+    )
+
+
 def receipt_operation_base_ref(
     repo: Path,
     manifest_relative: str,
@@ -659,6 +680,98 @@ def is_sha256(value: object) -> bool:
     )
 
 
+def is_git_sha1(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def canonical_repo_path(value: object) -> PurePosixPath | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or path.as_posix() != value
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        return None
+    return path
+
+
+def expected_creation_orphan_manifest(primary: PurePosixPath) -> str | None:
+    if (
+        len(primary.parts) >= 3
+        and primary.parts[0] == "us"
+        and primary.parts[1] in {"policies", "statutes"}
+    ):
+        return (
+            PurePosixPath(".axiom/encoding-manifests")
+            .joinpath(*primary.parts[1:])
+            .with_suffix(".json")
+            .as_posix()
+        )
+    return None
+
+
+def creation_target_is_structurally_valid(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != CREATION_TARGET_FIELDS:
+        return False
+    primary = canonical_repo_path(value.get("primary"))
+    companion = canonical_repo_path(value.get("companion"))
+    canonical_manifest = canonical_repo_path(value.get("canonical_manifest"))
+    orphan_value = value.get("orphan_manifest")
+    orphan_manifest = (
+        canonical_repo_path(orphan_value) if orphan_value is not None else None
+    )
+    if (
+        primary is None
+        or companion is None
+        or canonical_manifest is None
+        or (orphan_value is not None and orphan_manifest is None)
+        or not is_git_sha1(value.get("base_commit"))
+        or not is_git_sha1(value.get("base_tree"))
+        or len(primary.parts) < 3
+        or primary.parts[1] != "policies"
+        or primary.suffix != ".yaml"
+        or primary.name.endswith(".test.yaml")
+        or companion
+        != primary.with_name(f"{primary.stem}.test.yaml")
+        or canonical_manifest
+        != PurePosixPath(".axiom/encoding-manifests").joinpath(primary).with_suffix(
+            ".json"
+        )
+        or (orphan_manifest.as_posix() if orphan_manifest is not None else None)
+        != expected_creation_orphan_manifest(primary)
+    ):
+        return False
+    return is_protected_rulespec_path(primary) and (
+        unsupported_protected_path_issue(primary.as_posix()) is None
+    )
+
+
+def model_manifest_expected_fields(payload: dict) -> frozenset[str] | None:
+    operation_present = "target_operation" in payload
+    creation_present = "creation_target" in payload
+    if not operation_present:
+        return MODEL_APPLY_MANIFEST_FIELDS if not creation_present else None
+    operation = payload.get("target_operation")
+    if operation == "replace" and not creation_present:
+        return MODEL_APPLY_MANIFEST_FIELDS | {"target_operation"}
+    if (
+        operation == "create"
+        and creation_present
+        and creation_target_is_structurally_valid(payload.get("creation_target"))
+    ):
+        return MODEL_APPLY_MANIFEST_FIELDS | {
+            "target_operation",
+            "creation_target",
+        }
+    return None
+
+
 def pinned_encoder_identity(repo: Path) -> tuple[str, str]:
     toolchain = tomllib.loads((repo / ".axiom/workflow-toolchain.toml").read_text())[
         "workflow_toolchain"
@@ -708,8 +821,10 @@ def has_exact_model_manifest_structure(payload: object) -> bool:
     present_codex_fields = set(payload) & codex_fields
     backend = payload.get("backend")
     exact_fields = set(payload) - codex_fields
+    expected_fields = model_manifest_expected_fields(payload)
     return (
-        exact_fields == MODEL_APPLY_MANIFEST_FIELDS
+        expected_fields is not None
+        and exact_fields == expected_fields
         and backend in ENCODER_BACKENDS
         and payload.get("schema_version") == APPLIED_ENCODING_MANIFEST_SCHEMA
         and payload.get("tool") == "axiom-encode encode --apply"
@@ -797,6 +912,64 @@ def retirement_before_state_issue(
                 f"{manifest_relative} retirement before sha256 does not match "
                 f"its exact Git base blob: {relative}"
             )
+    return None
+
+
+def creation_before_state_issue(
+    repo: Path,
+    manifest_relative: str,
+    payload: dict,
+    operation_base_ref: str,
+) -> str | None:
+    creation = payload.get("creation_target")
+    if not creation_target_is_structurally_valid(creation):
+        return f"{manifest_relative} creation target evidence is malformed"
+    assert isinstance(creation, dict)
+    expected_tree = git_tree_ref(repo, operation_base_ref)
+    if expected_tree is None:
+        return f"{manifest_relative} creation exact Git base is unavailable"
+    if creation.get("base_commit") != operation_base_ref or creation.get(
+        "base_tree"
+    ) != expected_tree:
+        return (
+            f"{manifest_relative} creation identity does not match its exact "
+            "pre-operation commit and tree"
+        )
+    if creation.get("canonical_manifest") != manifest_relative:
+        return (
+            f"{manifest_relative} creation evidence names a different canonical "
+            "manifest"
+        )
+    protected_paths = [
+        creation["primary"],
+        creation["companion"],
+        creation["canonical_manifest"],
+    ]
+    if creation.get("orphan_manifest") is not None:
+        protected_paths.append(creation["orphan_manifest"])
+    occupied = sorted(
+        path
+        for path in protected_paths
+        if git_path_present_at_ref(repo, operation_base_ref, path)
+    )
+    if occupied:
+        return (
+            f"{manifest_relative} creation target was not absent from its exact "
+            "Git base: "
+            + ", ".join(occupied)
+        )
+    applied_files = payload.get("applied_files")
+    applied_paths = {
+        item.get("path")
+        for item in applied_files
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    } if isinstance(applied_files, list) else set()
+    required = {creation["primary"], creation["companion"]}
+    if not required <= applied_paths:
+        return (
+            f"{manifest_relative} creation receipt does not claim its exact "
+            "primary and companion"
+        )
     return None
 
 
@@ -1296,7 +1469,7 @@ def changed_manifest_entries(
             continue
         operation_base_ref: str | None = None
         expected_fields = (
-            MODEL_APPLY_MANIFEST_FIELDS
+            model_manifest_expected_fields(payload)
             if is_apply
             else (
                 RETIRE_APPLY_MANIFEST_FIELDS
@@ -1304,6 +1477,11 @@ def changed_manifest_entries(
                 else PATH_MIGRATION_APPLY_MANIFEST_FIELDS
             )
         )
+        if expected_fields is None:
+            issues.append(
+                f"{manifest_relative} has invalid target-operation or creation evidence"
+            )
+            continue
         codex_fields = {"codex_cli_version", "codex_cli_sha256"}
         actual_fields = set(payload)
         if is_apply and payload.get("backend") == "codex":
@@ -1363,6 +1541,28 @@ def changed_manifest_entries(
             )
             if retirement_issue is not None:
                 issues.append(retirement_issue)
+                continue
+        if is_apply and payload.get("target_operation") == "create":
+            operation_base_ref, operation_base_issue = receipt_operation_base_ref(
+                repo,
+                manifest_relative,
+                resolved_refs=resolved_refs,
+                worktree_changed_paths=worktree_changed_paths,
+            )
+            if operation_base_issue is not None or operation_base_ref is None:
+                issues.append(
+                    operation_base_issue
+                    or f"{manifest_relative} exact pre-operation Git base is unavailable"
+                )
+                continue
+            creation_issue = creation_before_state_issue(
+                repo,
+                manifest_relative,
+                payload,
+                operation_base_ref,
+            )
+            if creation_issue is not None:
+                issues.append(creation_issue)
                 continue
         if is_migration:
             if not isinstance(payload.get("source_attestation"), dict):
@@ -1935,6 +2135,8 @@ def _write_changed_receipt(
     *,
     retire: bool = False,
     retired_hashes: dict[str, str] | None = None,
+    target_operation: str | None = None,
+    creation_target: dict[str, object] | None = None,
 ) -> None:
     manifest_file = repo / manifest_relative
     manifest_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1965,11 +2167,165 @@ def _write_changed_receipt(
         }
     else:
         payload = _model_receipt_payload(applied_files)
+        if target_operation is not None:
+            payload["target_operation"] = target_operation
+        if creation_target is not None:
+            payload["creation_target"] = creation_target
     manifest_file.write_text(json.dumps(payload) + "\n")
 
 
 def _sha256(repo: Path, relative: str) -> str:
     return hashlib.sha256((repo / relative).read_bytes()).hexdigest()
+
+
+def _creation_target_fixture(
+    *,
+    primary: str,
+    base_commit: str,
+    base_tree: str,
+) -> tuple[str, str, dict[str, object]]:
+    primary_path = PurePosixPath(primary)
+    companion = primary_path.with_name(f"{primary_path.stem}.test.yaml").as_posix()
+    manifest = (
+        PurePosixPath(".axiom/encoding-manifests")
+        .joinpath(primary_path)
+        .with_suffix(".json")
+        .as_posix()
+    )
+    return (
+        companion,
+        manifest,
+        {
+            "base_commit": base_commit,
+            "base_tree": base_tree,
+            "primary": primary,
+            "companion": companion,
+            "canonical_manifest": manifest,
+            "orphan_manifest": expected_creation_orphan_manifest(primary_path),
+        },
+    )
+
+
+def test_model_manifest_accepts_exact_historical_replace_and_create_shapes() -> None:
+    historical = _model_receipt_payload([])
+    assert has_exact_model_manifest_structure(historical)
+
+    replacement = {**historical, "target_operation": "replace"}
+    assert has_exact_model_manifest_structure(replacement)
+
+    _companion, _manifest, creation = _creation_target_fixture(
+        primary="us-nc/policies/income_tax/encoder_guard.yaml",
+        base_commit="a" * 40,
+        base_tree="b" * 40,
+    )
+    created = {
+        **historical,
+        "target_operation": "create",
+        "creation_target": creation,
+    }
+    assert has_exact_model_manifest_structure(created)
+
+    assert not has_exact_model_manifest_structure(
+        {**historical, "target_operation": "unknown"}
+    )
+    assert not has_exact_model_manifest_structure(
+        {**replacement, "creation_target": creation}
+    )
+    assert not has_exact_model_manifest_structure(
+        {**historical, "creation_target": creation}
+    )
+    assert not has_exact_model_manifest_structure(
+        {
+            **created,
+            "creation_target": {**creation, "base_tree": "not-a-tree"},
+        }
+    )
+
+
+def test_replace_operation_receipt_satisfies_local_preflight(tmp_path: Path) -> None:
+    primary = "us-nc/policies/income_tax/encoder_guard.yaml"
+    companion = "us-nc/policies/income_tax/encoder_guard.test.yaml"
+    manifest = ".axiom/encoding-manifests/us-nc/policies/income_tax/encoder_guard.json"
+    _commit_rulespec_fixtures(tmp_path, primary, companion)
+    (tmp_path / primary).write_text("format: rulespec/v1\nrules: [replacement]\n")
+    (tmp_path / companion).write_text("cases: [{name: replacement}]\n")
+    _write_changed_receipt(
+        tmp_path,
+        manifest,
+        {primary: _sha256(tmp_path, primary), companion: _sha256(tmp_path, companion)},
+        target_operation="replace",
+    )
+
+    assert changed_rulespec_receipt_issues(tmp_path) == []
+
+
+def test_create_operation_receipt_binds_exact_absent_git_base(tmp_path: Path) -> None:
+    _initialize_git_fixture(tmp_path)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", ".axiom/workflow-toolchain.toml"],
+        check=True,
+    )
+    _commit_staged_fixture(tmp_path, message="creation base")
+    base_commit = git_commit_ref(tmp_path, "HEAD")
+    base_tree = git_tree_ref(tmp_path, "HEAD")
+    assert base_commit is not None and base_tree is not None
+    primary = "us-nc/policies/income_tax/encoder_guard.yaml"
+    companion, manifest, creation = _creation_target_fixture(
+        primary=primary,
+        base_commit=base_commit,
+        base_tree=base_tree,
+    )
+    _write_rulespec_fixture(tmp_path, primary)
+    _write_rulespec_fixture(tmp_path, companion)
+    _write_changed_receipt(
+        tmp_path,
+        manifest,
+        {primary: _sha256(tmp_path, primary), companion: _sha256(tmp_path, companion)},
+        target_operation="create",
+        creation_target=creation,
+    )
+
+    assert changed_rulespec_receipt_issues(tmp_path) == []
+
+    payload = json.loads((tmp_path / manifest).read_text())
+    payload["creation_target"]["base_tree"] = "0" * 40
+    (tmp_path / manifest).write_text(json.dumps(payload) + "\n")
+    assert (
+        f"{manifest} creation identity does not match its exact pre-operation "
+        "commit and tree"
+        in changed_rulespec_receipt_issues(tmp_path)
+    )
+
+
+def test_create_operation_fails_when_target_existed_at_git_base(
+    tmp_path: Path,
+) -> None:
+    primary = "us-nc/policies/income_tax/encoder_guard.yaml"
+    companion = "us-nc/policies/income_tax/encoder_guard.test.yaml"
+    _commit_rulespec_fixtures(tmp_path, primary, companion)
+    base_commit = git_commit_ref(tmp_path, "HEAD")
+    base_tree = git_tree_ref(tmp_path, "HEAD")
+    assert base_commit is not None and base_tree is not None
+    _companion, manifest, creation = _creation_target_fixture(
+        primary=primary,
+        base_commit=base_commit,
+        base_tree=base_tree,
+    )
+    (tmp_path / primary).write_text("format: rulespec/v1\nrules: [forged-create]\n")
+    (tmp_path / companion).write_text("cases: [{name: forged-create}]\n")
+    _write_changed_receipt(
+        tmp_path,
+        manifest,
+        {primary: _sha256(tmp_path, primary), companion: _sha256(tmp_path, companion)},
+        target_operation="create",
+        creation_target=creation,
+    )
+
+    assert (
+        f"{manifest} creation target was not absent from its exact Git base: "
+        f"{companion}, {primary}"
+        in changed_rulespec_receipt_issues(tmp_path)
+    )
 
 
 def _assert_new_modified_deleted_paths_require_receipts(
