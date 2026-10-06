@@ -4,7 +4,7 @@
 
 - Detached worktree created at `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`.
 - Scope is limited to the 42 U.S.C. § 19232(e) nonretroactivity limitation.
-- No encoding artifacts have been applied yet.
+- Final disposition: **REJECT**. No RuleSpec, companion fixture, or signed apply manifest was produced or retained.
 - Required safe output: a positive limitation judgment such as `subsection_a_certification_is_nonretroactively_inapplicable`; do not decide the underlying subsection (a) certification obligation.
 - Required external facts: evaluated Federal research agency identifier, policy-establishing agency identifier, whether that agency actually established its policy, whether the actual establishment date is available, the actual establishment date, R&D status, award/application stage, and the stage-appropriate date.
 - Required logic: after actual-establishment, date-availability, same-agency, and R&D guards, preserve `(application stage AND application submission date < policy establishment date) OR (award stage AND award-made date < policy establishment date)`.
@@ -21,14 +21,17 @@
 - Verified full source JSONL SHA-256 `566a513343f88d5a4944c591ef86464dcd27ea8dce8a4dd730f05efec4f69aa4` and OLRC ZIP SHA-256 `31929c28f117362ac8788607242795769b05ed7726f07e4ed3b1786f39655ce7`.
 - Verified the source credit is Pub. L. 117-167, div. B, title VI, § 10632, Aug. 9, 2022, with no delayed effective date; `2022-08-08` is therefore the exact pre-enactment sentinel.
 - Verified clean detached toolchain commits: `axiom-encode` `3869d66d009f52258be35901edbef370e65a399c` and `axiom-rules-engine` `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
-- Queried `agent-secret` for the signed-apply credential; the dedicated keychain exists, but its login-keychain unlock-password record is unavailable, so signed apply is currently blocked while generation and validation can proceed.
+- Queried `agent-secret` for the signed-apply credential; the dedicated keychain exists, but its login-keychain unlock-password record is unavailable, so signed apply was blocked independently of the generation failures.
 - Materialized the exact subsection (a) body as an encoder-only primary-source continuation; the encoder parsed body SHA-256 is exactly `ea3241a54755a3f0669c8d7bf16150900d1a4b1f8f2bd5ddf03f6e74d65487a8`.
 - Rejected encoder run `4145fe8f`: the Codex response stream disconnected before any RuleSpec was produced. Trace SHA-256 is `c1cf60e5f124d30e9ebba776fd02d43ec29a29411b798f2922af3ca5e60678cd`; the target worktree remained clean.
 - Rejected encoder run `94e778a8`: a fresh output root hit the same DNS/HTTPS stream-disconnect failure before producing RuleSpec. Trace SHA-256 is `40f6049cdbb58f82933d9f59d1bfa21d3b39229fee340938d302efa661490553`; the target worktree again remained clean.
+- Rejected encoder run `08ae436e`: the third fresh output root hit the same zero-token DNS/HTTPS stream-disconnect failure. Trace SHA-256 is `275599194f654c62b784cb514e82cec7ec1f954e2edb08a5f5d6e323e0fadcf8`; no RuleSpec was produced.
+- Retried the required remote fetch; DNS resolution for `github.com` still failed, while the local `origin/main` ref remained exactly `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`.
+- Retried the approved signing-key lookup `agent-secret get agent/axiom-encode-apply-signing-key`; the missing unlock-password record still blocked access.
+- Wrote the final report to `FINAL_REPORT.md`.
 
 ## Next
 
-- Retry `axiom-encode` from the specified toolchain against the canonical `us/` root.
-- Accept only an unchanged signed apply with proof and generated fixtures.
-- Validate the required date, stage, agency, R&D, and pre-enactment cases with the specified Rust engine.
-- Write the final report to the required output file and leave the worktree clean.
+- Restore outbound DNS/HTTPS access for the Codex CLI and restore the dedicated `agent-secret` unlock record.
+- Start a new generated-only `axiom-encode encode --apply` run; do not reuse any prior candidate.
+- Accept only an unchanged signed apply with proof, generated fixtures, and all required direct Rust outcomes.
