@@ -48,9 +48,57 @@ education wording. Those two files are implementation context only, not an
 authorized legal source or accepted dependency. Any candidate that imports or
 encodes that IHE concept is out of scope and must be rejected.
 
-## Retry state
+## Second-attempt outcomes
 
-One identical retry per item is in flight in fresh isolated roots ending in
-`-a2`. The retries remain disposable and cannot be accepted without unchanged
-generated output, successful validation/proof/Rust execution, and signed apply
-through `agent-secret`.
+The Item 2 `-a2` retry finished as another transport failure before model
+output. Run `21131959` / session `encode-21131959` recorded 63,313 ms, zero
+input/output tokens, zero RuleSpec bytes, `apply_requested=false`, and
+`standalone_failed`. Its 17-file aggregate ledger SHA-256 is
+`a0249ffcce025447352ac4396a84a9ada6d6314168f4cbf2fe1a77d607c46257`.
+The trace, repair manifest, and database hashes are respectively
+`9b5b1601caddef2a2bfed59c396fe2cb1bf615c76fc170e1323c64d78b5f89c7`,
+`28c86d0ee092934498363169b15db911fb1088c7f6d0bf172ff9e982414a5af4`,
+and `d139bf3275ba295bf914b77c24f0ad31d8f23cbc6eb05962f08c2a423bb4357f`.
+
+The Item 1 `-a2` retry was interrupted after context staging and before model
+execution or run registration. Its root contains 13 source/context files and
+no trace, repair manifest, database, run/session ID, generated YAML, or test.
+Its aggregate ledger SHA-256 is
+`8596891d503cf85ef38b087041e11b654f6ed2aae19181db490c4be091d413fd`.
+The last write was `2026-08-30T20:29:50-0400`; a later `lsof +D` found no open
+file. There is no encoder resume command, so this root is custody evidence only.
+
+## Fresh signed-apply attempts
+
+Fresh `-a3` roots invoked the same pinned encoder with `--apply`, `--no-sync`,
+the canonical `us/` policy root, and the inherited signing environment. The
+signing value was not printed, logged, hashed, retrieved, or otherwise
+inspected. Both runs failed at the Codex transport boundary before generation,
+validation, or signing. Their database outcomes are
+`apply_blocked_generation`, with `apply_requested=true`,
+`apply_success=false`, `applied_files=[]`, and zero RuleSpec bytes.
+
+Item 1 used only directly relevant FAQ questions 1, 5, 7, and 8, the two
+section 19233 prerequisite continuations, and the encoding brief. Item 2 used
+FAQ questions 1, 5, 6, 7, and 8, the three section 19234 prerequisite
+continuations, and the encoding brief.
+
+| Item | Output root | Run/session | Duration | Files | Aggregate ledger SHA-256 |
+|---|---|---|---:|---:|---|
+| Supporting documents | `/Users/maxghenis/tmp/axiom-nsf-in149-item1-run-47290-a3` | `28d303f4` / `encode-28d303f4` | 61,956 ms | 15 | `85383a7e1d8bf2edc913fc3742432a2dd6527c96abea500bdaad3ea2fdbedac2` |
+| Training certifications | `/Users/maxghenis/tmp/axiom-nsf-in149-item2-run-47290-a3` | `d369ad07` / `encode-d369ad07` | 42,419 ms | 17 | `d6cb1c0ed83f22f306c80143890e460303e4e98951c29bdc3f14c9d93be5cbf0` |
+
+| Artifact | Item 1 SHA-256 | Item 2 SHA-256 |
+|---|---|---|
+| Combined `source.txt` | `8f0defb6c30e263780323ad1f7bf90e326351b9186126178921475946ee6932f` | `7211f22db14a5077d32fb3b9308b9128d6e61ebbf66464db96d2b03298ba5d0b` |
+| `source-metadata.json` | `cd3f7765afce6287b44d369d400c2a4375457a95b6bb8f9ecb1ce896c666b144` | `60ed072378c25386a9de72bb981fcb4ca2b0ababc16b8b47350bdd5cd340d1f8` |
+| `context-manifest.json` | `88f420297f63b3d5c6b9a591a72adb17c1771b35b95a1cf578037dc2edae72fb` | `828d56932a09e574f9c11a493710f1d1c37b29462c0c35bf6de8bd206190de1e` |
+| Trace | `4f4a189554f34412c6d4a72df8ad7e3cdcc8f8fb362989e0b0de7a236bd93d88` | `d4d5a0148bb31cfc7472e7aa8c5b37379581dd98d9c9c23355e2f6eee69a896f` |
+| Repair manifest | `ca59443e99a08b0c27cb58ea7df3e8a4adc58b2b6e052e8d6b54daef2f19fc81` | `2cb2af423cc044845256d292a1fd57e2401f2371af21ea9ec055a05599737840` |
+| `encodings.db` | `c226c4a19133fbca2a6a08740e8d79e75ea03dc25f1ca6d12681a0abe5c904cf` | `3b8bffcc9f2da2c88ada40f9b293f947df441f9fc251e710e56e1999be0f4d12` |
+| Generated output | absent | absent |
+
+Each trace has 14 events: a thread and turn start, DNS lookup failures, a
+WebSocket-to-HTTPS fallback, five HTTPS reconnects, a terminal transport error,
+and `turn.failed`. Neither run emitted a target YAML, companion test, prompt
+receipt, signed apply manifest, fixture, proof result, or Rust result.

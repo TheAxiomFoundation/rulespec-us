@@ -47,3 +47,14 @@ therefore the custody pins for this task.
 Signed apply cannot proceed until the dedicated keychain unlock item is safely
 restored. Recreating the existing keychain could destroy other agent secrets and
 requires explicit user action.
+
+## Resumed signing custody
+
+The preceding subsection records the earlier run's environment and is retained
+as historical custody. On resumption, the user stated that
+`AXIOM_ENCODE_APPLY_SIGNING_KEY` was inherited and expressly prohibited any
+printing, logging, hashing, rotation, or retrieval. The fresh A3 commands passed
+no key argument and performed no keychain lookup. They requested `--apply`, but
+both stopped at `apply_blocked_generation` before validation, installation, or
+manifest signing, so signer usability was not exercised. No key value was
+accessed or disclosed, and the obsolete keychain-recovery step was not followed.
