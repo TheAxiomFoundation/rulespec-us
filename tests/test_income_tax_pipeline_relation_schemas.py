@@ -15,6 +15,14 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 
 EXPECTED_RELATION_SCHEMAS = {
+    "us/policies/income_tax/s_corporation_activity_qbi_niit_pipeline.yaml": {
+        "s_corporation_ownership_interest_of_tax_unit": {
+            "arity": 2,
+            # The engine lowers *_of_tax_unit with related_slot=0/current_slot=1.
+            # Do not inherit the reversed legacy declarations in issue #1178.
+            "arguments": ["OwnerBusinessActivity", "TaxUnit"],
+        },
+    },
     "us/policies/income_tax/salt_deduction_pipeline.yaml": {
         "salt_section_911_individual_of_tax_unit": {
             "arity": 2,
