@@ -86,7 +86,7 @@ def test_frozen_legacy_inventory_matches_repository() -> None:
         )
 
     retired = json.loads((ROOT / ".axiom/retired-schema-freeze.json").read_text())
-    assert len(retired["artifacts"]) == 307
+    assert len(retired["artifacts"]) == 310
     for relative_path, expected_digest in retired["artifacts"].items():
         artifact = ROOT / relative_path
         assert hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_digest
@@ -134,12 +134,12 @@ def test_required_workflow_runs_freeze_before_validation() -> None:
         "retired-schema-bootstrap-sha256: >-\n"
         "        ${{ fromJSON(needs.migration-authorization.outputs.allowed)"
     ) in workflow
-    assert "0d960eaf2830a9657108ffcba72bf965dd10ddeb0fc5fcc1b28a6039a21e5c0b" in workflow
+    assert "0eb5f0c4b050e4c94e8a50e15e50ae0d64e3ce98910c849ae4a75ad5d7427b3d" in workflow
     assert (
         "validation-waiver-bootstrap-sha256: >-\n"
         "        ${{ fromJSON(needs.migration-authorization.outputs.allowed)"
     ) in workflow
-    assert "827c551bf7d8dc562ae74c8d6f02a3862afeaf0ad656a203b4fe35b79f5f8aac" in workflow
+    assert "16d7c509c02683e8a91cc61e24d145fb6fdb774e568a8574e482fa5fb1d3a51c" in workflow
     assert "migration-authorization-path: .axiom/reviewed-migrations.json" in workflow
     assert "${{ !fromJSON(needs.migration-authorization.outputs.allowed) }}" in workflow
     assert "github.event.head_commit.message" not in workflow
