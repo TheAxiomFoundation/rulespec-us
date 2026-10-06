@@ -2,46 +2,64 @@
 
 ## State
 
-- Task: encode atomic definitions in 42 U.S.C. § 19237 for the federal proposal-security spine.
-- Worktree: `/Users/maxghenis/TheAxiomFoundation/_axiom-worktrees/rulespec-us-19237-atomic-20260830-codex-1959-a`.
-- Mode: detached HEAD; accepted branches are untouched.
-- Required base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`.
-- Verified worktree base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`.
-- Fetch custody note: `git fetch origin main --prune` was attempted on 2026-08-30 and failed because the sandbox could not resolve `github.com`; the already-tracked `origin/main` resolved to the required base object.
-- Priority: § 19237(3) foreign entity of concern; § 19237(1) covered individual only if it can be encoded separately and faithfully.
-- Official corpus: clean detached source worktree at `129dae01c6f7a4787bc7678d4a97a478f3934d9f`, with complete 133/133 coverage.
-- Pinned encoder: clean detached checkout at `3869d66d009f52258be35901edbef370e65a399c`.
-- Pinned Rust engine: clean detached checkout at `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
-- Signed apply is blocked before generation: `agent-secret get agent/axiom-encode-apply-signing-key` cannot unlock the existing agent keychain because the login-keychain unlock-password record is missing; the signing environment variable is unset.
-- Final state: rejected and restored clean; only this ledger and `FINAL_REPORT.md` differ from the required base.
-- Paragraph (3) disposition: reject; no candidate, test, apply manifest, proof result, fixture result, or route-level Rust result exists.
-- Paragraph (1) disposition: not attempted after the priority paragraph failed both signing and model-connectivity prerequisites; reject/no retained output.
+- Task: retry fail-closed atomic encodings in 42 U.S.C. § 19237.
+- Existing worktree: /Users/maxghenis/TheAxiomFoundation/_axiom-worktrees/rulespec-us-19237-atomic-20260830-codex-1959-a
+- Mode: detached HEAD at e06c4c9b777f94909abfd5c5bb5ec55efd7d394e; accepted branches untouched.
+- Required/live base: d58cc0ce67ad891fde4c9061c86a2091bfdd524f.
+- Canonical policy root used for every fresh run: the existing worktree path ending in /us.
+- Official corpus: clean branch checkout codex/federal-proposal-security-corpus-2026 at 129dae01c6f7a4787bc7678d4a97a478f3934d9f with complete 133/133 coverage.
+- Pinned encoder: clean detached checkout at 3869d66d009f52258be35901edbef370e65a399c; executable SHA-256 6d134a9820f10826d3cb56e1a0df755636cad8543051811acc2f0be102af0173.
+- Pinned real Rust engine: clean detached checkout at ffd8213271947b0189a9dd61a055c1e0e78908a0; binary SHA-256 ea9ba72582a92ac5f7b38fee0c6e30924669e5f2b8d1158f9162187776bd8efb.
+- Final disposition: reject both definitions; no RuleSpec, companion test, signed manifest, compiled target, or direct target request is retained.
+- Only FINAL_REPORT.md and this ledger are intentionally changed.
 
-## Done
+## Fresh apply-requested attempts
 
-- Read the repository instructions.
-- Attempted the required origin fetch and recorded the network failure without claiming freshness.
-- Created a unique detached worktree at the exact expected base.
-- Verified the detached worktree has no tracked or untracked differences before this ledger.
-- Audited the official JSONL records at lines 102–118 and raw USLM hierarchy for § 19237(1), § 19237(3), every child, and the section source credit.
-- Verified enactment by Pub. L. 117-167, div. B, title VI, § 10638 on 2022-08-09, requiring an explicit false version on 2022-08-08.
-- Verified § 19237(3) is `foreign entity AND (A OR B OR C OR D OR E)`, with all designations, list status, covered-nation status, relationship facts, Attorney General predicates, conviction-authority facts, and Commerce predicates supplied dynamically.
-- Verified § 19237(1) requires an individual, a caller-reviewed substantive/meaningful contribution fact, and designation by the same Federal research agency concerned.
-- Verified source custody hashes: JSONL `566a513343f88d5a4944c591ef86464dcd27ea8dce8a4dd730f05efec4f69aa4`; raw USLM `b72955590abe55bdbd1ce5d13c5293955a82add9c84fad92c1674ec469e86624`; archive `31929c28f117362ac8788607242795769b05ed7726f07e4ed3b1786f39655ce7`; paragraph (1) record `9e0bc9c9450756cec549336d87df1f1603680b76d83c21f7ff1dbd285151325b`; paragraph (3) record `aa3970b6e9c252e1c54a255b8ab13e30d09c99990e2300138ec7c5c2b4d25784`.
-- Read the selected encoder and engine instructions and verified their exact pinned revisions.
-- Followed the `agent-secrets` workflow: searched the dedicated keychain, checked the exact signing service, and did not inspect another credential source or expose a value.
-- Prepared operator acceptance contexts that require all 20 paragraph-(3) positive OR leaves, statutory adversaries, dynamic facts, exact child/chapeau proof, and the pre-enactment false version. Paragraph-(3) context SHA-256 is `2eeb2aedf0994d097c953198f92343fefda3c282273353c285dfaa71a5384bd7`; paragraph-(1) context SHA-256 is `54c3cd94ca645e10ce222580a475442489133b4ee81255b0d15d40e8b0b5b0e4`; source-credit continuation SHA-256 is `3b1135b5003f1e725b7287a4d32b3067a1db651e5b28a2f5bacdb3a7141a8e7e`.
-- Ran the actual pinned encoder once without apply for paragraph (3), solely to test the isolated generation path. Run `b07c2bf8` (`encode-b07c2bf8`) failed with zero input/output tokens because the Codex response stream disconnected after DNS/send retries. The run recorded `rulespec_bytes=0`, `apply_requested=false`, and `status=standalone_failed`.
-- Verified the failed run produced no candidate YAML, companion test, applied rule, applied test, or signed apply manifest.
-- Recorded failed-run custody: trace `2ceef221ad8042c3831eee337b823e352239d343316d2bf39ed33c1eda8fe454`; context manifest `f4a668dd0375cbabf441745d56cd09c1caeb735c6e681a84cde470d079cc9cba`; repair manifest `dc263df886ca389b904101f172c25c09a17c5a5faf76310a0c38ef93919b1539`; workspace source `0d010ba525a99b0e39266add08db454beb07d3e492844194218e1c77cf93b189`; workspace source metadata `639cd6b83b93f692920be56ba1e2ea02037b8f22b13fc10abcf7df711d3b0ecb`; canonical run-row export `f5b9bb3ba0da5174ceed256c5deb43a0eb9e0ae8c28de9cbec923aa8dd922218`; session export `d38baba475d8aa1468b39259f4c7f8eda9f724893269b43ab570bb4e1ce0e9e7`.
-- Verified encoder executable SHA-256 `6d134a9820f10826d3cb56e1a0df755636cad8543051811acc2f0be102af0173` and current real Rust binary SHA-256 `ea9ba72582a92ac5f7b38fee0c6e30924669e5f2b8d1158f9162187776bd8efb`.
-- Moved the exact failed encoder-output and operator-context directories out of the worktree to the Trash after hashing them; neither contained a RuleSpec candidate.
-- Reverified that both definitions' canonical rule, companion test, current apply-manifest, and legacy-root manifest paths are absent.
-- Ran the existing accepted OR-definition baseline `us/statutes/8/1641/b.test.yaml` through the selected real Rust engine: 4/4 cases passed, one compiled program, zero failures. This is runtime evidence only, not target-definition evidence.
-- Wrote the complete accept/reject and custody report to `FINAL_REPORT.md`; SHA-256 `c120942e3c605f89d3b51241434bd90ed241ee04bd36304ea0091db913029b28`.
+All fresh attempts used the unchanged pinned encoder with --apply --no-sync, backend/model codex/gpt-5.5, repo-augmented mode, the official corpus, the pinned Rust engine, the canonical /us policy root, an isolated database/output root, and the unchanged prepared operator contexts.
+
+| Definition / attempt | Run / session | Root | Duration | Tokens | RuleSpec bytes | Result |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| Paragraph (3), first | a9e8053c / encode-a9e8053c | /private/tmp/axiom-19237-atomic-retry-20260830.TabUHm | 60,911 ms | 0 | 0 | apply_blocked_generation |
+| Paragraph (3), second | d2a70c04 / encode-d2a70c04 | /private/tmp/axiom-19237-p3-retry2-20260830.wJfxTB | 66,575 ms | 0 | 0 | apply_blocked_generation |
+| Paragraph (1) | aac3cc36 / encode-aac3cc36 | /private/tmp/axiom-19237-p1-signed-20260830.AWLVp6 | 90,659 ms | 0 | 0 | apply_blocked_generation |
+
+Each run failed with the Codex response stream disconnecting before completion. Every run recorded apply_requested=true, apply_success=false, applied_files=[], final_success=false, zero input/output/cache/reasoning tokens, and no generated candidate. No apply auto-repair or manual repair occurred.
+
+The approved AXIOM_ENCODE_APPLY_SIGNING_KEY was not inspected, printed, logged, hashed, copied, rotated, placed on a command line, or retrieved from a keychain. Generation failed before signing, and no guard that would read the key was run.
+
+## Acceptance findings
+
+- Paragraph (3) still requires foreign entity AND (A OR B OR C OR D OR E).
+- Every designation, list, nation, government relationship, Attorney General allegation, same-activities conviction, authority, Commerce determination, Defense/DNI consultation, unauthorized-conduct fact, and detriment fact must remain external and dynamic.
+- Paragraph (3) requires 20 positive OR leaves, the foreign-entity conjunction, all missing/conjunction adversaries, and the 2022-08-08 false sentinel before the operative 2022-08-09 version.
+- Paragraph (3) proof must include the /3 chapeau; /3/A, /3/B, /3/C, /3/D, /3/D/i through /3/D/vii, and /3/E; the section root may support only enactment and the false sentinel.
+- Paragraph (1) still requires individual status, caller-adjudicated substantive/meaningful scientific-development or execution contribution, and designation by the same Federal research agency.
+- Paragraph (1) proof must include /1, /1/A, and /1/B; the section root may support only enactment and the false sentinel.
+- Missing dynamic facts must remain Rust missing-input errors, never false defaults.
+- No generated proof atoms or fixtures exist for either definition, so fixture counts and distinct states are zero.
+- No target RuleSpec exists, so proof validation, target compilation, and all route-level direct Rust cases correctly remain unrun/zero.
+
+## Runtime evidence
+
+The selected real Rust engine was re-exercised through the pinned encoder on the existing accepted OR-definition companion us/statutes/8/1641/b.test.yaml.
+
+Result: exit 0; success=true; one test file; 4/4 cases; one compiled program; zero failures.
+
+This confirms the selected runtime operates but supplies no § 19237 target evidence.
+
+## Custody
+
+- Paragraph (3) operator context SHA-256: 2eeb2aedf0994d097c953198f92343fefda3c282273353c285dfaa71a5384bd7.
+- Paragraph (1) operator context SHA-256: 54c3cd94ca645e10ce222580a475442489133b4ee81255b0d15d40e8b0b5b0e4.
+- Source-credit continuation SHA-256: 3b1135b5003f1e725b7287a4d32b3067a1db651e5b28a2f5bacdb3a7141a8e7e.
+- Run a9e8053c trace/context/repair/database SHA-256: 3720c1ee0c8bdfd104c1f8aac3748c401b6f912879dc606672134e173eacff70 / db15bf0bc63a41f14aa621ceb4209a0d458653ca3110667e21411cc93aa3044e / 92c2c94bb8b242626997c40c4601e1f8a866693586916425a706d98a56274659 / 4ffe1fcb10832e996187e9381e31d236e7790920a4e5711a13ac960bc277b900.
+- Run d2a70c04 trace/context/repair/database SHA-256: e0689709e8bf5d3825e198353f43e7e746452209b0c2a93daf4f95297e3345bf / db15bf0bc63a41f14aa621ceb4209a0d458653ca3110667e21411cc93aa3044e / b4ddd9b0fc35e38c859c386820df1637d7f42ebd3a75b4ace7874ec479204e63 / 22891b88c6bec64b3f9ed3bc3fea7de7f4739d11b3f8789ac61af9bdf12b9c1e.
+- Run aac3cc36 trace/context/repair/database SHA-256: 16b89e1d9fef550e26b5a9378eb4c00e8174022051383bcf9ed9bbcb23e653fb / 781bb90143f80f3c961c248b97c3d9174d8d822b76517ec394b88511933520d3 / 500bdfed49f4e25c060c9b375a8c16c46995872796fb13f2414b4f930c543f4e / 8b73d10e5fe59173f415b91334a1e46a4d3134e63b1e373b5e100f2d85deeb01.
+- FINAL_REPORT.md SHA-256: a9af20db84bcfb2d32834ac404974c12d573fb933d1bdde3e84a0760a659abe4.
 
 ## Next
 
-- User restores the missing `agent-secrets/keychain-password` record for the existing dedicated keychain and restores Codex backend DNS/connectivity.
-- A future agent performs a fresh signed `encode --apply --no-sync` run; the failed dry run cannot be promoted or copied.
-- Retain a definition only after unchanged signed output passes the full generated fixtures, exact proof audit, signature guard, source staleness, and every required direct Rust check.
+- Restore working Codex response-stream connectivity before any future retry.
+- Use a new isolated root/database for every future definition attempt.
+- Never promote or copy these failed runs.
+- Retain only a newly generated, unchanged signed output that independently passes exact proof, generated fixtures, manifest/file hash reconciliation, and the full direct real-Rust matrix.
