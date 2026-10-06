@@ -2,33 +2,46 @@
 
 ## State
 
-- Blocked before generation: the existing `agent-secrets` keychain is present, but `agent-secret` reports that its stored unlock password is missing. The required `agent/axiom-encode-apply-signing-key` cannot be read, and `AXIOM_ENCODE_APPLY_SIGNING_KEY` is not already present in the environment.
+- Final decision: **REJECT** run `3ca97e28` / session `encode-3ca97e28`.
+- The process-supplied signing key was used only by the unchanged `axiom-encode encode --apply` invocation. The key was not printed, logged, hashed, inspected, or rotated; every later diagnostic command explicitly removed it from the child environment.
+- The encoder generated an isolated candidate and companion test, but signed apply stopped at deterministic CI validation before copying or signing any policy artifact. The fatal error requires a statute/regulation corpus path or RuleSpec target in `upstream_source_check.checked_paths`; the sole authorized NSF guidance record cannot satisfy that gate without inventing another authority.
+- Apply outcome: `apply_requested=true`, `apply_success=false`, `applied_files=[]`, `final_success=false`, `status=apply_blocked_validation`.
+- No live rule, companion test, or NSF encoding manifest exists. The `us/` policy tree is unchanged, and `guard-generated` passes.
+- Isolated proof, all 10 generated expected-outcome fixtures, the pinned release Rust compile, and all 20 direct-Rust adversaries passed. Those diagnostics establish the candidate's narrow behavior but cannot cure the source-authority/apply failure.
+- Full report: `OUTPUT.md`.
+
+## Completed run
+
 - Worktree: `/Users/maxghenis/TheAxiomFoundation/_axiom-worktrees/rulespec-us-nsf-pappg-24-1-duplicate-review-20260830-codex-195000`.
-- Detached starting base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`.
-- The local `origin/main` ref equals the required base. A fresh `git fetch origin main` was attempted on 2026-08-30 but failed because sandbox DNS could not resolve `github.com`; no claim of a successful fresh fetch will be made.
-- Source authority is limited to corpus citation `us/guidance/nsf/pappg/24-1/chapter-i/submission-instructions` in the authorized federal-proposal-security corpus worktree. The separate NSF/PAPPG corpus worktree and PR #631 are out of scope.
-- Standing-order interpretation: checkpoint commits are local detached commits only. Nothing will be pushed, proposed as a PR, or deployed.
-- Final report target: `OUTPUT.md` in this detached worktree.
-- No encoder run exists yet, so no run ID, signed manifest, proof result, fixture result, or direct-Rust result can truthfully be reported.
+- Live upstream base: `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`; base tree: `20a8f964f20b4a4bfdedc239245c5d1dbafe3f29`; local `origin/main` still resolves to that exact base.
+- Current detached ledger HEAD: `d920d27abe81712f63d724924a54b6e39a09fdbc`; the only base-to-HEAD files are `PROGRESS.md` and `OUTPUT.md`.
+- Fresh isolated run root: `/Users/maxghenis/.axiom-runs/nsf-pappg-duplicate-review.DdJG0Z`.
+- Sole official corpus record: `us/guidance/nsf/pappg/24-1/chapter-i/submission-instructions`.
+- Same-record primary-source continuation supplied the authorized exact `expression_date: 2024-05-20` plus the already-audited exact official body. Its full-file SHA-256 is `d756536fc5889bae63abe651bacd7cce6c20b457e92d69e8a9b46611dd6dd56e`; the continuation body and corpus body both hash to `3e1a117c4a09679284ee79b0fae5b1f619af6e4cb4c6e6415e16e87a88e8804f` without a trailing newline.
+- Non-authoritative adapter scope SHA-256: `ec32063b768542747e883b46c2c26ce5b3be6113622b9b3a8fb3db45d603055a`.
+- Encoder: `3869d66d009f52258be35901edbef370e65a399c`, version `0.2.1200`.
+- Rust engine: `ffd8213271947b0189a9dd61a055c1e0e78908a0`, release binary SHA-256 `674ca6e70afdccb59c3d6847933bc24b4590105e49db54790f2dcd0bdbbe32d7`.
+- Generated isolated candidate SHA-256: `7e5cd93e5a69c2bbf61aee1bed3022edc8cd273cd2c2ac487c5105b694917afc`.
+- Generated isolated test SHA-256: `ed582ca5b8d9b93ce2a3d2f37788755bdb0648cac655731e6a63cb8d4394907c`.
+- Trace SHA-256: `d61ab316e265ea2b878027355ae9eefb8f1c94bdca990ed183817e5d043563b3`.
+- Context-manifest SHA-256: `ee5a84e6fd051958997f18408d4ce4da1e9ffedc6e58db8536a95d2024063815`.
+- Compiled artifact SHA-256: `4ea5dcf9a3ec2567be4d16a319e5702b110d1bcac4b94038d4050c9b0227d428`.
+- Direct-Rust results SHA-256: `78fa4450472da1acc1e24ec1ef4df2ccac4d69d2ea4b4cb566aaacb89c5cfd1b`.
 
-## Done
+## Verification
 
-- Read the Axiom project, encoder, corpus, and rulespec-us instructions.
-- Loaded the `agent-secrets` signing workflow; secret values will not be printed.
-- Confirmed the primary rulespec-us checkout is dirty/diverged and left it untouched except for the requested remote fetch attempt and worktree registration.
-- Removed one incomplete disposable worktree checkout created during this run after Git interrupted its index initialization; no pre-existing worktree or branch was changed.
-- Created and verified the clean detached worktree above at the exact required commit.
-- Located the single authorized corpus provision and confirmed its citation label, official NSF URL, source-as-of date, and `2024-05-20` expression date.
-- Pinned clean toolchains: corpus `129dae01c6f7a4787bc7678d4a97a478f3934d9f`, encoder `3869d66d009f52258be35901edbef370e65a399c`, and Rust engine `ffd8213271947b0189a9dd61a055c1e0e78908a0`.
-- Recorded source custody hashes: exact provision body `3e1a117c4a09679284ee79b0fae5b1f619af6e4cb4c6e6415e16e87a88e8804f`; raw JSONL record line including newline `0fc72c05862d6b70c64e3e26b36d2f550949c113efa9ca81a6e8fdf3264bb774`; normalized compact JSON record plus newline `d47e8abb046267894614c392312db4299a29d4537283c33b110533f3d7fef69d`; encoder-normalized `source.txt` bytes `987275bb6a2723b46698464c61229364955994f549ae733461a794c7865e70fc`; raw official HTML `a8f98d21d424ab919458571a268b50c77f7c42164fecfb4bdbe3a94c64197d29`; provisions JSONL `a16f78fee0769493e9ba11d4e7c154b84536158fb6091cef8721b8f8fc482a89`; inventory `5b5433685a24e613c69375c376cc4dabb1efa5faa48e036a410d0948931f82c7`; corpus manifest `86846900f5b137e1e5392f2cc464fd569114a3484258abe7ec00ba7af982538e`.
-- Recorded tool custody hashes: encoder tree `d2ce31c8073b4bc0b4b169b9273f394650094230`; encoder `uv.lock` `ff0ea7983fe344be90ab54b388b0c4c441a1ac69ecf73937440d12802d92d5fc`; engine tree `86e78cc74fffe774fe0ba010c0a951ca1dfcc000`; engine `Cargo.lock` `56f01fb4b5118a479328fbffd55b93635ed11038de60bcdd206b88aad84d16cb`; existing real-Rust binary `ea9ba72582a92ac5f7b38fee0c6e30924669e5f2b8d1158f9162187776bd8efb`.
-- Confirmed the encoder resolver supplies the exact body and citation but drops the record's `expression_date`; no silent arbitrary-context workaround or manual output repair has been used.
-- Tried the skill-prescribed `agent-secret search`, exact `get`, TTY `get`, and non-destructive `init` recovery. All stopped before secret access; the existing keychain was not replaced or rotated.
+- Candidate surface: exactly one public derived `Judgment`, `review_required`, on `ProposalPair`; nine explicit boolean facts; no relations; pre-effective false version from `0001-01-01`; operative version from `2024-05-20`.
+- Proof: pass, 3 atoms, 0 issues.
+- Generated expected-outcome fixtures: pass, 1 test file, 10 cases, 1 compiled program, 0 failures; 2 `holds` and 8 `not_holds`.
+- Deterministic validation: compile succeeds, CI fails only the higher-authority checked-path gate.
+- Pinned Rust: locked/offline release build pass; compile pass; artifact format 2, engine `0.1.0`, one derived output, fast-path compatible.
+- Direct Rust: 20/20 pass—7 outcome cases, 5 required-input omission errors, and 8 forbidden-output unknown-rule errors. The wholly pre-effective `2024-05-18..2024-05-19` case returns `not_holds`.
+- Generated-file guard: pass, no issues.
+- Live paths absent:
+  - `us/policies/nsf/pappg/24-1/chapter-i/submission-instructions.yaml`
+  - `us/policies/nsf/pappg/24-1/chapter-i/submission-instructions.test.yaml`
+  - `us/.axiom/encoding-manifests/policies/nsf/pappg/24-1/chapter-i/submission-instructions.json`
 
-## Next
+## Final limitation
 
-- User restores the existing `agent-secrets/keychain-password` unlock record so `agent-secret get agent/axiom-encode-apply-signing-key` succeeds without exposing the value.
-- Run one signed `axiom-encode encode --apply` against the authorized corpus, canonical `us/` policy root, detached rulespec worktree, and specified Rust engine.
-- Inspect the generated artifacts without altering them; verify signature, custody, proof, companion fixtures, and repository guards.
-- Compile and run independent direct-Rust adversaries for all required states, including missing facts and pre-effective time.
-- Accept only unchanged signed encoder output that passes every requirement; otherwise remove generated policy artifacts and report rejection.
+No further in-scope action can produce acceptable signed output. The validator requires a qualifying higher-authority path while the approved source boundary permits only the one NSF guidance record. Manual edits to generated artifacts, a fabricated checked path, or an unapproved second authority would violate the instructions. PR #631 and all accepted work were left untouched; no commit, push, PR, deployment, or publication occurred.
