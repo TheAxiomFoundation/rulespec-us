@@ -1,0 +1,132 @@
+# Maine TANF (Temporary Assistance for Needy Families) -- FY 2026, recipient-month benefit.
+#
+# Mirrors the encoded Maine DHHS slice in rulespec-us/us-me:
+#   - regulations/dhhs/ofi/chapter-331/tanf-rule-125a/maximum-benefit-and-standard-of-need
+#       (TANF Rule 125A Adult-Included standard-of-need and maximum-grant charts
+#        by household size 1..8, +Add Member, FFY 2026 effective 2025-10-01)
+#   - statutes/title-22/3762/assistance-standards
+#       (22 M.R.S. 3762(3)(B)(7-D): the $108 flat + 50% earned-income disregard,
+#        and the $50 child-support pass-through)
+# and adds the oracle-suite plumbing: the household-membership data relation, the
+# Count household-size declaration, the household-scope countable-income assembly,
+# and the 3762(3)(B)(8) benefit = min(maximum grant, standard-of-need deficit)
+# gated on the demographic fact PolicyEngine's me_tanf requires (a minor child or
+# pregnant member).
+#
+# Target oracle surface: PolicyEngine me_tanf (SPMUnit, MONTH):
+#   min(max(standard_of_need - countable_income, 0), maximum_benefit),
+#   defined_for me_tanf_eligible. Because the maximum grant is below the standard
+#   of need at every size, the benefit equals the maximum grant for the zero-income
+#   units that dominate the caseload. The annualized output mirrors the covered
+#   al/co/de/ga convention; the compare framework annualizes PE's monthly me_tanf.
+
+program: us-me/tanf
+period: 2026-01
+
+outputs:
+  - me_tanf_annual_benefit
+
+acknowledged_incomplete:
+  - me_tanf_annual_benefit
+
+scope:
+  state:
+    - statutes/title-22/3762/assistance-standards
+    - regulations/dhhs/ofi/chapter-331/tanf-rule-125a/maximum-benefit-and-standard-of-need
+
+transformations:
+  - pattern: data_relation
+    name: member_of_household
+    arity: 2
+    source: axiom-oracles ECPS projection household membership
+
+  # The Rule 125A charts are indexed_by household_size; the engine requires an
+  # integer chart key. Declare the chart's tanf_household_size free input Count,
+  # bound to the AU member count supplied at household scope by the populace input
+  # mapping (assistance_unit_member_count = hh_size), the shared TANF size slot.
+  - pattern: derived_formula
+    name: tanf_household_size
+    effective_from: '2021-10-01'
+    entity: TanfUnit
+    dtype: Count
+    source: axiom-oracles programs/us-me/tanf household size (integer chart key)
+    formula: assistance_unit_member_count
+
+  # PolicyEngine's me_tanf uses the standard (non-special-need-housing) charts;
+  # the +$300 Special Need Housing Allowance is not modeled by PE.
+  - pattern: derived_formula
+    name: household_has_special_need_housing
+    effective_from: '2021-10-01'
+    entity: TanfUnit
+    dtype: Judgment
+    source: axiom-oracles programs/us-me/tanf SNHA not modeled (PE parity)
+    formula: 'false'
+
+  # Countable earned income at HOUSEHOLD scope: 22 M.R.S. 3762(3)(B)(7-D)(c)
+  # $108 flat then 50% disregard of the remainder. Applied once (single-earner
+  # projection): exact for the 0- and 1-earner units that dominate the caseload;
+  # a rare multi-earner unit gets one $108 pass rather than one per earner
+  # (dispositioned) -- the ECPS composed-program bridge does not reliably
+  # materialise person entities for zero-earner units, so a per-person leaf would
+  # collapse to None there. Child-care disregard is 0 (not observable in ECPS and
+  # only reduces earned income for the predominantly unearned caseload).
+  - pattern: derived_formula
+    name: me_tanf_countable_earned_income
+    effective_from: '2013-11-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-me/tanf countable earned income (household scope)
+    formula: |-
+      max(0, total_wage_earner_earnings - earned_income_initial_disregard_amount) * (1 - earned_income_remaining_disregard_rate)
+
+  # Countable income = countable earned + countable unearned. The $50 child-support
+  # pass-through exclusion is not separately observable in ECPS (child support is
+  # not projected as a distinct unearned stream), so countable unearned is the
+  # monthly AU unearned sum; the resulting difference for child-support units is
+  # dispositioned.
+  - pattern: derived_formula
+    name: me_tanf_countable_income
+    effective_from: '2013-11-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-me/tanf countable income
+    formula: |-
+      me_tanf_countable_earned_income + unearned_income
+
+  # 22 M.R.S. 3762(3)(B)(8): benefit = min(maximum grant, standard-of-need deficit).
+  - pattern: derived_formula
+    name: me_tanf_benefit
+    effective_from: '2021-10-01'
+    entity: TanfUnit
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-me/tanf benefit computation
+    formula: |-
+      min(max(0, adult_included_standard_of_need - me_tanf_countable_income), adult_included_maximum_grant)
+
+  - pattern: derived_formula
+    name: me_tanf_monthly_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-oracles programs/us-me/tanf demographic-gated monthly benefit
+    formula: |-
+      if household_has_minor_or_pregnant_member: me_tanf_benefit else: 0
+
+  - pattern: derived_formula
+    name: me_tanf_annual_benefit
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Year
+    unit: USD
+    source: axiom-oracles programs/us-me/tanf program output
+    formula: |-
+      me_tanf_monthly_benefit * 12
