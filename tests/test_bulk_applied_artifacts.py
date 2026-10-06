@@ -615,10 +615,10 @@ def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.2049"
-    assert toolchain["axiom_encode_ref"] == "06b017082645f2af0504d2a93e4ffd64c45d4c52"
+    assert toolchain["axiom_encode_version"] == "0.2.2086"
+    assert toolchain["axiom_encode_ref"] == "39f4e66a97673ede447d59b0e4072571bfdaf86b"
     assert toolchain["axiom_rules_engine_ref"] == (
-        "af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca"
+        "89571cc2a938707fd60a5489b951135345697296"
     )
     assert toolchain["axiom_artifact_rules_engine_ref"] == (
         "ffd8213271947b0189a9dd61a055c1e0e78908a0"
@@ -645,6 +645,10 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert 'scanner = runpy.run_path(sys.argv[1])' in staleness
     assert "pip install -e _axiom/axiom-encode" not in staleness
     assert "needs.workflow-toolchain.outputs.axiom_rules_engine_ref" in validation
+    assert "axiom-compose-ref: ${{ needs.workflow-toolchain.outputs.axiom_compose_ref }}" in validation
+    assert "axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}" in validation
+    assert '"axiom_compose_ref",' in validation
+    assert "validate-rulespec.yml@df2dfb5310c6bc8d71abdb69281a7c71afc9663e" in validation
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:

@@ -1,0 +1,611 @@
+# Diagnostic only: does not replace required repository validation or authorize publication.
+name: Issue 233 protected ch50 diagnostic
+'on':
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+    - name: Free runner disk space
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Disk before cleanup:" && df -h /
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+          /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+        sudo docker image prune --all --force >/dev/null 2>&1 || true
+        echo "Disk after cleanup:" && df -h /
+    - name: Checkout rules repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        fetch-depth: 0
+        repository: TheAxiomFoundation/rulespec-us
+        ref: 12de163ed33ad5d57f6ee9871ecac8efd91499a5
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: '3.14'
+    - name: Resolve RuleSpec toolchain
+      id: toolchain
+      shell: bash
+      env:
+        PR_BASE_SHA: 36f72ea429f475c66b88453f67a344c16021c610
+      run: |
+        set -euo pipefail
+        python - <<'PY'
+        import os
+        import re
+        import subprocess
+        import sys
+        import tomllib
+        from pathlib import Path
+
+        TOOLCHAIN_PATH = Path(".axiom/toolchain.toml")
+        EXPECTED_KEYS = {
+            "axiom_corpus_release",
+            "axiom_corpus_release_content_sha256",
+            "validation_waiver_set_sha256",
+        }
+        SHA256_RE = re.compile(r"[0-9a-f]{64}")
+        RELEASE_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+
+        def fail(message: str) -> None:
+            print(f"RuleSpec toolchain error: {message}", file=sys.stderr)
+            sys.exit(1)
+
+        def load_toolchain(raw: bytes) -> dict[str, str]:
+            try:
+                payload = tomllib.loads(raw.decode("utf-8"))
+            except (UnicodeError, tomllib.TOMLDecodeError) as exc:
+                fail(f"toolchain file is not valid UTF-8 TOML: {exc}")
+            if set(payload) != {"toolchain"} or not isinstance(payload["toolchain"], dict):
+                fail("toolchain file must contain exactly one top-level [toolchain] table")
+            table = payload["toolchain"]
+            if set(table) != EXPECTED_KEYS:
+                fail("[toolchain] must contain exactly: " + ", ".join(sorted(EXPECTED_KEYS)))
+            if not all(isinstance(value, str) for value in table.values()):
+                fail("all [toolchain] values must be strings")
+            if RELEASE_RE.fullmatch(table["axiom_corpus_release"]) is None:
+                fail("axiom_corpus_release is not a canonical immutable release name")
+            if table["axiom_corpus_release"] == "current":
+                fail("axiom_corpus_release must not use the mutable current alias")
+            for key in EXPECTED_KEYS - {"axiom_corpus_release"}:
+                if SHA256_RE.fullmatch(table[key]) is None:
+                    fail(f"{key} must be a lowercase sha256 digest")
+            return table
+
+        def base_toolchain() -> dict[str, object] | None:
+            base_sha = os.environ.get("PR_BASE_SHA")
+            if not base_sha:
+                return None
+            result = subprocess.run(
+                ["git", "show", f"{base_sha}:.axiom/toolchain.toml"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                return None
+            # A base branch that predates the canonical-toolchain migration
+            # carries an old-schema toolchain. For the removal-guard below,
+            # that is equivalent to "no canonical toolchain yet": only a base
+            # whose toolchain already conforms to the strict schema may be
+            # forbidden from dropping it. Parse the base softly (key set only)
+            # so the very PR that performs the migration is not rejected for
+            # the base still being pre-migration. Any base already on the
+            # protected branch necessarily passed strict validation to land,
+            # so an exact EXPECTED_KEYS match is a sufficient "is migrated"
+            # signal here.
+            try:
+                payload = tomllib.loads(result.stdout.decode("utf-8"))
+            except (UnicodeError, tomllib.TOMLDecodeError):
+                return None
+            table = payload.get("toolchain")
+            if not isinstance(table, dict) or set(table) != EXPECTED_KEYS:
+                return None
+            return table
+
+        base_config = base_toolchain()
+        if not TOOLCHAIN_PATH.is_file() or TOOLCHAIN_PATH.is_symlink():
+            if base_config is not None:
+                fail(".axiom/toolchain.toml cannot be removed once a base branch uses it")
+            fail("a regular .axiom/toolchain.toml is required")
+        config = load_toolchain(TOOLCHAIN_PATH.read_bytes())
+
+        waiver_path = Path("known-validation-gaps.yaml")
+        if not waiver_path.is_file() or waiver_path.is_symlink():
+            fail("known-validation-gaps.yaml must be a regular file")
+        import hashlib
+        waiver_sha256 = hashlib.sha256(waiver_path.read_bytes()).hexdigest()
+        if waiver_sha256 != config["validation_waiver_set_sha256"]:
+            fail(
+                "ValidationWaiverHashMismatch: known-validation-gaps.yaml "
+                f"sha256 {waiver_sha256} != pinned "
+                f"{config['validation_waiver_set_sha256']}"
+            )
+
+        output_path = Path(os.environ["GITHUB_OUTPUT"])
+        with output_path.open("a") as output:
+            for key, value in config.items():
+                print(f"{key}={value}", file=output)
+        print(f"Resolved strict RuleSpec toolchain from {TOOLCHAIN_PATH}:")
+        for key, value in config.items():
+            print(f"- {key}: {value}")
+        PY
+    - name: Validate immutable dependency inputs
+      shell: bash
+      env:
+        AXIOM_ENCODE_SHA: e9742e17caf174880a5691d170aaf18fe4fff09f
+        AXIOM_RULES_ENGINE_SHA: af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca
+        AXIOM_CORPUS_SHA: 8f7d60aaced28ee4252b9237f9d6e02360dc34bc
+        RULESPEC_US_SHA: 38d5c8c516f9243cedf8e07a22f96dde9ac66fe3
+        RELEASE_BASE_URL: https://pub-a8952f8657fc49fda358146ac001366c.r2.dev
+        RELEASE_REGISTRY_URL: ''
+        RELEASE_REGISTRY_ANON_KEY: ''
+        PYTHON_VERSION: '3.14'
+      run: |
+        set -euo pipefail
+        for value in "$AXIOM_ENCODE_SHA" "$AXIOM_RULES_ENGINE_SHA" "$AXIOM_CORPUS_SHA" "$RULESPEC_US_SHA"; do
+          if [[ ! "$value" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Dependency inputs must be exact 40-character lowercase commit SHAs: $value" >&2
+            exit 1
+          fi
+        done
+        # python-version is spliced into many run: blocks; bound it to major.minor
+        # so a caller cannot smuggle shell into those steps (fail-open / RCE).
+        if [[ ! "$PYTHON_VERSION" =~ ^3\.[0-9]+$ ]]; then
+          echo "python-version must be a bare major.minor like 3.14: $PYTHON_VERSION" >&2
+          exit 1
+        fi
+        if [ -n "$RELEASE_REGISTRY_URL" ]; then
+          case "$RELEASE_REGISTRY_URL" in
+            https://*) ;;
+            *) echo "corpus-release-registry-url must use HTTPS" >&2; exit 1 ;;
+          esac
+          if [ -z "$RELEASE_REGISTRY_ANON_KEY" ]; then
+            echo "corpus-release-registry-anon-key is required with corpus-release-registry-url" >&2
+            exit 1
+          fi
+        else
+          if [ -n "$RELEASE_REGISTRY_ANON_KEY" ]; then
+            echo "corpus-release-registry-anon-key requires corpus-release-registry-url" >&2
+            exit 1
+          fi
+          case "$RELEASE_BASE_URL" in
+            https://*) ;;
+            *) echo "corpus-release-base-url must use HTTPS" >&2; exit 1 ;;
+          esac
+        fi
+    - name: Checkout axiom-encode
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        repository: TheAxiomFoundation/axiom-encode
+        ref: e9742e17caf174880a5691d170aaf18fe4fff09f
+        path: _axiom/axiom-encode
+        persist-credentials: false
+    - name: Checkout axiom-rules-engine
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        repository: TheAxiomFoundation/axiom-rules-engine
+        ref: af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca
+        path: _axiom/axiom-rules-engine
+        persist-credentials: false
+    - name: Checkout axiom-corpus
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        repository: TheAxiomFoundation/axiom-corpus
+        ref: 8f7d60aaced28ee4252b9237f9d6e02360dc34bc
+        path: _axiom/axiom-corpus
+        persist-credentials: false
+    - name: Checkout rulespec-us canonical targets
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        repository: TheAxiomFoundation/rulespec-us
+        ref: 38d5c8c516f9243cedf8e07a22f96dde9ac66fe3
+        path: _axiom/rulespec-us
+        persist-credentials: false
+    - name: Authenticate dependency commits
+      shell: bash
+      env:
+        AXIOM_ENCODE_SHA: e9742e17caf174880a5691d170aaf18fe4fff09f
+        AXIOM_RULES_ENGINE_SHA: af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca
+        AXIOM_CORPUS_SHA: 8f7d60aaced28ee4252b9237f9d6e02360dc34bc
+        RULESPEC_US_SHA: 38d5c8c516f9243cedf8e07a22f96dde9ac66fe3
+      run: |
+        set -euo pipefail
+        verify_ancestor() {
+          local repo="$1" expected="$2"
+          test "$(git -C "$repo" rev-parse HEAD)" = "$expected" || {
+            echo "$repo did not check out expected SHA $expected" >&2; return 1;
+          }
+          default_branch="$(git -C "$repo" ls-remote --symref origin HEAD | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$#\1#p')"
+          test -n "$default_branch" || { echo "Cannot resolve $repo default branch" >&2; return 1; }
+          git -C "$repo" fetch --no-tags --unshallow origin "+refs/heads/$default_branch:refs/remotes/origin/$default_branch"
+          git -C "$repo" merge-base --is-ancestor "$expected" "refs/remotes/origin/$default_branch" || {
+            echo "$repo SHA $expected is not an ancestor of protected default branch $default_branch" >&2; return 1;
+          }
+        }
+        verify_ancestor _axiom/axiom-encode "$AXIOM_ENCODE_SHA"
+        verify_ancestor _axiom/axiom-rules-engine "$AXIOM_RULES_ENGINE_SHA"
+        verify_ancestor _axiom/axiom-corpus "$AXIOM_CORPUS_SHA"
+        verify_ancestor _axiom/rulespec-us "$RULESPEC_US_SHA"
+    - name: Validate composer pin
+      env:
+        AXIOM_COMPOSE_REF: fabe0b3b3fd6e90d3e8f075516f9b668f524f711
+      run: |
+        set -euo pipefail
+        # composer-pin-validation-start
+        python - <<'PYCOMPOSE'
+        import os
+        import re
+        import tomllib
+        from pathlib import Path
+
+        ref = os.environ["AXIOM_COMPOSE_REF"]
+        if re.fullmatch(r"[0-9a-f]{40}", ref) is None:
+            raise SystemExit("axiom-compose-ref must be a full lowercase commit SHA")
+        path = Path(".axiom/workflow-toolchain.toml")
+        if path.is_symlink() or not path.is_file() or path.parent.is_symlink():
+            raise SystemExit("a regular workflow-toolchain.toml is required for composer")
+        config = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
+        if not isinstance(config, dict) or config.get("axiom_compose_ref") != ref:
+            raise SystemExit("composer input must match workflow-toolchain.toml")
+        PYCOMPOSE
+        # composer-pin-validation-end
+    - name: Checkout axiom-compose
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        repository: TheAxiomFoundation/axiom-compose
+        ref: fabe0b3b3fd6e90d3e8f075516f9b668f524f711
+        path: _axiom/axiom-compose
+        persist-credentials: false
+        fetch-depth: 0
+    - name: Authenticate composer commit
+      env:
+        AXIOM_COMPOSE_REF: fabe0b3b3fd6e90d3e8f075516f9b668f524f711
+      run: |
+        set -euo pipefail
+        repo=_axiom/axiom-compose
+        test "$(git -C "$repo" rev-parse HEAD)" = "$AXIOM_COMPOSE_REF"
+        test -z "$(git -C "$repo" status --porcelain)"
+        test "$(git -C "$repo" remote get-url origin)" = "https://github.com/TheAxiomFoundation/axiom-compose"
+        git -C "$repo" fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+        git -C "$repo" merge-base --is-ancestor "$AXIOM_COMPOSE_REF" refs/remotes/origin/main
+    - name: Install uv for composer runtime
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+      with:
+        version: 0.11.7
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+    - name: Set up Go 1.26.1
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+      with:
+        go-version: 1.26.1
+        cache: false
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install pytest pyyaml
+        python -m pip install -e _axiom/axiom-encode
+        rm -rf "$RUNNER_TEMP/axiom-verification-site-packages"
+        python -m pip install \
+          --target "$RUNNER_TEMP/axiom-verification-site-packages" \
+          ./_axiom/axiom-encode
+    - name: Fetch pinned signed corpus release object
+      shell: bash
+      env:
+        RELEASE_BASE_URL: https://pub-a8952f8657fc49fda358146ac001366c.r2.dev
+        RELEASE_REGISTRY_URL: ''
+        RELEASE_REGISTRY_ANON_KEY: ''
+        RELEASE_NAME: ${{ steps.toolchain.outputs.axiom_corpus_release }}
+        RELEASE_CONTENT_SHA256: ${{ steps.toolchain.outputs.axiom_corpus_release_content_sha256 }}
+      run: |
+        set -euo pipefail
+        destination="$GITHUB_WORKSPACE/_axiom/axiom-corpus/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
+        mkdir -p "$(dirname "$destination")"
+        if [ -n "$RELEASE_REGISTRY_URL" ]; then
+          acquisition=registry
+          url="${RELEASE_REGISTRY_URL%/}/rest/v1/release_objects?select=release_object&release_name=eq.${RELEASE_NAME}&content_sha256=eq.${RELEASE_CONTENT_SHA256}&limit=2"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --header "apikey: $RELEASE_REGISTRY_ANON_KEY" \
+            --header "Authorization: Bearer $RELEASE_REGISTRY_ANON_KEY" \
+            --header "Accept-Profile: corpus" \
+            --output "$destination.tmp" "$url"
+        else
+          acquisition=object
+          url="${RELEASE_BASE_URL%/}/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$destination.tmp" "$url"
+        fi
+        python - "$destination.tmp" "$RELEASE_NAME" "$RELEASE_CONTENT_SHA256" "$acquisition" <<'PY'
+        import hashlib
+        import json
+        import sys
+        from pathlib import Path
+
+        path, expected_name, expected_sha, acquisition = (
+            Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+        )
+        try:
+            response = json.loads(path.read_bytes())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"Corpus release acquisition error: invalid JSON: {exc}")
+        if acquisition == "registry":
+            if (
+                not isinstance(response, list)
+                or len(response) != 1
+                or not isinstance(response[0], dict)
+            ):
+                raise SystemExit(
+                    "Corpus release acquisition error: registry did not return exactly one row"
+                )
+            payload = response[0].get("release_object")
+        else:
+            payload = response
+        if not isinstance(payload, dict):
+            raise SystemExit("Corpus release acquisition error: missing release object")
+        if payload.get("release") != expected_name:
+            raise SystemExit("Corpus release acquisition error: release name mismatch")
+        content = payload.get("content")
+        if not isinstance(content, dict):
+            raise SystemExit("Corpus release acquisition error: missing content object")
+        actual = hashlib.sha256(json.dumps(
+            content, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        ).encode()).hexdigest()
+        if payload.get("content_sha256") != actual or actual != expected_sha:
+            raise SystemExit(
+                f"Corpus release acquisition error: content sha256 mismatch "
+                f"({actual} != {expected_sha})"
+            )
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        path.replace(path.with_suffix(""))
+        PY
+    - name: Authenticate signed corpus provenance commit
+      shell: bash
+      env:
+        RELEASE_NAME: ${{ steps.toolchain.outputs.axiom_corpus_release }}
+        RELEASE_CONTENT_SHA256: ${{ steps.toolchain.outputs.axiom_corpus_release_content_sha256 }}
+        AXIOM_CORPUS_SHA: 8f7d60aaced28ee4252b9237f9d6e02360dc34bc
+      run: |
+        set -euo pipefail
+        object="_axiom/axiom-corpus/releases/$RELEASE_NAME/$RELEASE_CONTENT_SHA256.json"
+        release_commit="$(python - "$object" <<'PY'
+        import json
+        import sys
+        print(json.load(open(sys.argv[1]))["content"]["git"]["commit"])
+        PY
+        )"
+        if [[ ! "$release_commit" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "Signed release provenance is not a full lowercase commit SHA" >&2
+          exit 1
+        fi
+        default_branch="$(git -C _axiom/axiom-corpus ls-remote --symref origin HEAD | sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$#\1#p')"
+        git -C _axiom/axiom-corpus fetch --no-tags origin \
+          "+refs/heads/$default_branch:refs/remotes/origin/$default_branch"
+        git -C _axiom/axiom-corpus merge-base --is-ancestor \
+          "$release_commit" "refs/remotes/origin/$default_branch" || {
+            echo "Signed release provenance $release_commit is not on the corpus default branch" >&2
+            exit 1
+          }
+        git -C _axiom/axiom-corpus merge-base --is-ancestor \
+          "$release_commit" "$AXIOM_CORPUS_SHA" || {
+            echo "Corpus checkout $AXIOM_CORPUS_SHA predates signed release provenance $release_commit" >&2
+            exit 1
+          }
+    - name: Provision protected verification supervisor
+      working-directory: _axiom/axiom-encode
+      env:
+        TRUST_APPLY_ROOT: ${{ vars.AXIOM_ENCODE_APPLY_SIGNING_PUBLIC_KEY }}
+        TRUST_EVAL_ROOT: ${{ vars.AXIOM_ENCODE_EVAL_SIGNING_PUBLIC_KEY }}
+        TRUST_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+        TRUST_RETIRED_CORPUS_RELEASE_ROOT: ${{ vars.AXIOM_CORPUS_RELEASE_RETIRED_PUBLIC_KEY }}
+      run: "set -euo pipefail\ntest -n \"$TRUST_APPLY_ROOT\" && test -n \"$TRUST_EVAL_ROOT\" && test -n \"$TRUST_CORPUS_RELEASE_ROOT\"\
+        \nCGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-buildid=' \\\n  -o \"$RUNNER_TEMP/axiom-encode-signing-supervisor\"\
+        \ \\\n  ./cmd/axiom-encode-signing-supervisor\nsudo rm -rf /opt/axiom-verification\n# sudo resets PATH (secure_path),\
+        \ so a bare `python` under sudo is\n# the SYSTEM interpreter \u2014 and the provision script copies the\n# invoking\
+        \ interpreter's sys.base_prefix, i.e. it would copytree\n# /usr until the runner disk dies. Resolve the setup-python\n\
+        # interpreter in this shell and pass its absolute path through.\nsudo \"$(command -v python)\" scripts/provision_verification_supervisor.py\
+        \ \\\n  --destination /opt/axiom-verification \\\n  --supervisor \"$RUNNER_TEMP/axiom-encode-signing-supervisor\"\
+        \ \\\n  --site-packages \"$RUNNER_TEMP/axiom-verification-site-packages\" \\\n  --apply-root \"$TRUST_APPLY_ROOT\"\
+        \ --eval-root \"$TRUST_EVAL_ROOT\" \\\n  --corpus-release-root \"$TRUST_CORPUS_RELEASE_ROOT\" \\\n  --retired-corpus-release-root\
+        \ \"$TRUST_RETIRED_CORPUS_RELEASE_ROOT\" \\\n  --git \"$(command -v git)\"\nsudo chown -R 0:0 /opt/axiom-verification\n\
+        sudo chmod -R go-w /opt/axiom-verification\n# The supervisor refuses a trust chain with group/other-writable\n# ancestors,\
+        \ and /opt ships group-writable on hosted runners.\n# Harden the directory bit itself (contents are untouched; nothing\n\
+        # later in this job creates new /opt entries).\nsudo chown root:root /opt\nsudo chmod go-w /opt\n"
+    - name: Build protected axiom-compose runtime
+      env:
+        AXIOM_COMPOSE_REF: fabe0b3b3fd6e90d3e8f075516f9b668f524f711
+      run: |
+        set -euo pipefail
+        uv python install 3.14
+        uv venv --python 3.14 "$RUNNER_TEMP/axiom-compose-build"
+        uv export \
+          --project ./_axiom/axiom-compose \
+          --locked \
+          --no-dev \
+          --no-emit-project \
+          --format requirements.txt \
+          --output-file "$RUNNER_TEMP/axiom-compose-requirements.txt"
+        uv pip install \
+          --python "$RUNNER_TEMP/axiom-compose-build/bin/python" \
+          --target "$RUNNER_TEMP/axiom-compose-site-packages" \
+          --requirement "$RUNNER_TEMP/axiom-compose-requirements.txt"
+        sudo rm -rf /opt/axiom-compose-verification
+        sudo "$RUNNER_TEMP/axiom-compose-build/bin/python" \
+          _axiom/axiom-encode/scripts/provision_axiom_compose_runtime.py \
+          --destination /opt/axiom-compose-verification \
+          --site-packages "$RUNNER_TEMP/axiom-compose-site-packages" \
+          --compose-checkout _axiom/axiom-compose \
+          --compose-ref "$AXIOM_COMPOSE_REF"
+        sudo chown -R 0:0 /opt/axiom-compose-verification
+        sudo chmod -R go-w /opt/axiom-compose-verification
+        /opt/axiom-compose-verification/axiom-compose --help > /dev/null
+    - name: Build axiom-rules-engine
+      working-directory: _axiom/axiom-rules-engine
+      run: cargo build --verbose
+    - name: Expose axiom-rules-engine on PATH
+      run: echo "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine/target/debug" >> "$GITHUB_PATH"
+    - name: Link axiom-rules-engine as sibling checkout
+      shell: bash
+      run: |
+        set -euo pipefail
+        ln -sfn "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" "$GITHUB_WORKSPACE/../axiom-rules-engine"
+        ln -sfn "$GITHUB_WORKSPACE/_axiom/axiom-corpus" "$GITHUB_WORKSPACE/../axiom-corpus"
+        if [ "$(basename "$GITHUB_WORKSPACE")" != "rulespec-us" ]; then
+          ln -sfn "$GITHUB_WORKSPACE/_axiom/rulespec-us" "$GITHUB_WORKSPACE/../rulespec-us"
+        fi
+    - name: Record actual immutable checkouts
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/issue233-diagnostic"
+        {
+          python --version
+          uname -a
+          for repo in . _axiom/axiom-encode _axiom/axiom-rules-engine _axiom/axiom-corpus _axiom/rulespec-us _axiom/axiom-compose; do
+            printf '%s ' "$repo"
+            git -C "$repo" rev-parse HEAD
+          done
+          python -m pip freeze
+        } > "$RUNNER_TEMP/issue233-diagnostic/identities.txt"
+        test "$(git rev-parse HEAD)" = 12de163ed33ad5d57f6ee9871ecac8efd91499a5
+
+        python - <<'REPORT'
+        import importlib.metadata as m, json, os, pathlib, subprocess, hashlib
+        out=pathlib.Path(os.environ['RUNNER_TEMP'])/'issue233-diagnostic'
+        roots=['/opt/axiom-verification','/opt/axiom-compose-verification']
+        report={'event':os.environ.get('GITHUB_EVENT_NAME'),'dispatch_sha':os.environ.get('GITHUB_SHA'),'run_id':os.environ.get('GITHUB_RUN_ID'),'install_note':'Encoder pip installs are unlocked, as in original workflow.','runtimes':{}}
+        for root in roots:
+         base=pathlib.Path(root)
+         wrapper=base/('axiom-encode' if root.endswith('axiom-verification') else 'axiom-compose')
+         interpreter=wrapper.read_text().splitlines()[0][2:].split()[0]
+         runtime={'python':subprocess.check_output([interpreter,'-I','--version'],text=True).strip(),'distributions':sorted((d.metadata['Name'],d.version) for d in m.distributions(path=[str(base/'python/lib/python3.14/site-packages')])),'wrapper_sha256':hashlib.sha256(wrapper.read_bytes()).hexdigest()}
+         report['runtimes'][root]=runtime
+        engine=pathlib.Path('_axiom/axiom-rules-engine/target/debug/axiom-rules-engine')
+        report['engine_sha256']=hashlib.sha256(engine.read_bytes()).hexdigest()
+        (out/'protected-identities.json').write_text(json.dumps(report,indent=2)+'\n')
+        REPORT
+    - name: Protected single-module fingerprint (diagnostic only)
+      timeout-minutes: 17
+      shell: bash
+      run: |
+        set -euo pipefail
+        report="$RUNNER_TEMP/issue233-diagnostic"
+        timeout --signal=TERM --kill-after=30s 900s \
+          /opt/axiom-verification/axiom-encode-signing-supervisor \
+          --trusted-signing-roots /opt/axiom-verification/signing-trust-roots.json \
+          --trusted-python-runtime-root /opt/axiom-verification/python \
+          --trusted-python-import-root /opt/axiom-verification/python/lib/python3.14/site-packages \
+          --trusted-python-package-root /opt/axiom-verification/python/lib/python3.14/site-packages/axiom_encode \
+          -- /opt/axiom-verification/axiom-encode validation-waivers fingerprint \
+          us/policies/cbp/us-tariff-schedule/generated/ch50/ch50.yaml \
+          --json --root "$GITHUB_WORKSPACE" \
+          --corpus-path "$GITHUB_WORKSPACE/_axiom/axiom-corpus" \
+          --axiom-rules-engine-path "$GITHUB_WORKSPACE/_axiom/axiom-rules-engine" \
+          --axiom-compose-path /opt/axiom-compose-verification/axiom-compose \
+          > "$report/fingerprint.json" 2> "$report/stderr.log" &
+        command_pid=$!
+        # Read only this timeout process and its descendants. No environment,
+        # memory, file contents, or unrelated runner process inventory.
+        python - "$command_pid" "$report/process-progress.jsonl" <<'OBSERVER' &
+        import json, os, pathlib, sys, time
+
+
+        def read(proc, pid, name):
+            try:
+                return (proc / str(pid) / name).read_text().strip()
+            except (OSError, ValueError) as exc:
+                return 'unavailable: ' + type(exc).__name__
+
+
+        def stat(proc, pid):
+            raw = read(proc, pid, 'stat')
+            tail = raw.rsplit(')', 1)[-1].split()
+            if raw.startswith('unavailable:') or len(tail) < 20:
+                return None
+            return {'raw': raw, 'start': tail[19], 'parent': int(tail[1])}
+
+
+        def collect(proc, root, root_start):
+            queue, seen, records, truncated = [(root, None, None)], set(), [], False
+            while queue and len(seen) < 128:
+                pid, parent, parent_start = queue.pop()
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                before = stat(proc, pid)
+                if before is None:
+                    continue
+                def admitted():
+                    current = stat(proc, pid)
+                    if current is None or current['start'] != before['start']:
+                        return False
+                    if parent is None:
+                        return current['start'] == root_start
+                    owner = stat(proc, parent)
+                    return (current['parent'] == parent and owner is not None
+                            and owner['start'] == parent_start)
+                if not admitted():
+                    continue
+                record = {'pid': pid, 'starttime': before['start'], 'stat': before['raw'],
+                          'io': read(proc, pid, 'io'), 'wchan': read(proc, pid, 'wchan')}
+                children = set()
+                try:
+                    threads = sorted((proc / str(pid) / 'task').iterdir(), key=lambda p: p.name)
+                    truncated |= len(threads) > 128
+                    for thread in threads[:128]:
+                        if not thread.name.isdigit():
+                            continue
+                        raw = read(proc, pid, f'task/{thread.name}/children')
+                        if not raw.startswith('unavailable:'):
+                            children.update(int(p) for p in raw.split() if p.isdigit())
+                except OSError as exc:
+                    record['children_error'] = type(exc).__name__
+                if not admitted():
+                    continue
+                records.append(record)
+                queue.extend((child, pid, before['start']) for child in sorted(children))
+            return {'processes': records, 'truncated': truncated or bool(queue)}
+
+
+        if __name__ == '__main__':
+            root = int(sys.argv[1])
+            proc = pathlib.Path('/proc')
+            deadline = time.monotonic() + 940
+            initial = stat(proc, root)
+            root_start = initial['start'] if initial else None
+            with open(sys.argv[2], 'w') as out:
+                print(json.dumps({'observer': 'proc descendant counters only',
+                                  'interval_seconds': 15, 'clock_ticks': os.sysconf('SC_CLK_TCK'),
+                                  'root_pid': root, 'root_starttime': root_start}), file=out, flush=True)
+                while root_start is not None and time.monotonic() < deadline:
+                    current = stat(proc, root)
+                    if current is None or current['start'] != root_start:
+                        break
+                    sample = collect(proc, root, root_start)
+                    sample['monotonic_seconds'] = time.monotonic()
+                    print(json.dumps(sample), file=out, flush=True)
+                    time.sleep(15)
+        OBSERVER
+        observer_pid=$!
+        result=0
+        wait "$command_pid" || result=$?
+        printf '%s\n' "$result" > "$report/exit-code.txt"
+        # The observer sees root exit within one interval; its failures must
+        # not replace the protected command's status.
+        wait "$observer_pid" || printf 'observer failed\n' >> "$report/observer-errors.log"
+        cat "$report/fingerprint.json"
+        cat "$report/stderr.log" >&2
+        exit "$result"
+    - name: Retain exact diagnostic evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: issue233-ch50-protected-diagnostic
+        path: ${{ runner.temp }}/issue233-diagnostic/
+        if-no-files-found: error
+        retention-days: 7

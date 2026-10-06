@@ -24,13 +24,15 @@ is not hidden behind its kind error.
 Failures the repository already carries are listed, one per line, in
 ``tools/known-engine-load-failures.txt`` as ``<surface> <class> <module>``
 (tab separated). ``check`` passes only when the failures equal that list
-exactly, and, given the protected base's copy, only when no module was added
-to it. So a new failure is red, a fixed module must leave the list in the same
-change, and the set of failing modules can only shrink. A listed module may
-change class, because the engine reports only the first error and a fix can
-expose one the module already had. The one exception to shrinking is a change
-that moves ``axiom_rules_engine_ref``: a newer engine may reject what the old
-one loaded, and the pin bump is where those failures are listed and reviewed.
+exactly: an unlisted failure is red, and a fixed module must leave the list
+in the same change. When the protected base already has a baseline and the
+engine pin is unchanged, the failing (surface, module) set can only shrink.
+A listed module may change class, because the engine reports only the first
+error and a fix can expose one the module already had. If the protected base
+has no baseline, the check establishes the first baseline without enforcing
+shrinking. Moving ``axiom_rules_engine_ref`` also permits baseline growth: a
+newer engine may reject what the old one loaded, and the pin bump is where
+those failures are listed and reviewed.
 
 Subcommands:
   install-harness  write the harness into an engine checkout's examples/
@@ -296,8 +298,10 @@ BASELINE_HEADER = """\
 # Modules the pinned axiom-rules-engine does not load from this checkout.
 # Format: <surface>\\t<class>\\t<module>, sorted. Maintained by
 # tools/engine_root_load.py; the engine-root-load workflow fails when a module
-# fails that is not listed, when a listed module no longer fails that way, or
-# when a pull request adds a module. Fix a module, then delete its line.
+# fails that is not listed or a listed module no longer fails that way.
+# With an existing base baseline and unchanged engine pin, a pull request
+# may only shrink failing (surface, module) pairs. Baseline introduction and
+# engine pin changes permit growth. Fix a module, then delete its line.
 """
 
 
@@ -322,12 +326,13 @@ def compare(
     baseline: set[Failure],
     base_baseline: set[Failure] | None = None,
 ) -> Verdict:
-    """The gate: failures must equal the baseline, which may only shrink.
+    """The gate: failures must equal the baseline.
 
-    Shrinking is measured in failing (surface, module) pairs, not lines: the
-    engine reports only a module's first error, so fixing one problem can
-    expose another the module already had. Its line then changes class, which
-    the diff shows, but no module that loaded before may start failing.
+    When base_baseline is supplied, failing (surface, module) pairs may only
+    shrink. The engine reports only a module's first error, so fixing one
+    problem can expose another the module already had. Its line then changes
+    class, which the diff shows, but no module absent from that base baseline
+    may start failing.
     """
     base_keys = None if base_baseline is None else {_key(entry) for entry in base_baseline}
     return Verdict(
@@ -514,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("--baseline", type=Path)
     check_parser.add_argument(
         "--base-ref",
-        help="protected base commit; its baseline bounds this one (decrement-only)",
+        help="protected base commit; its existing baseline bounds this one unless the engine pin moves",
     )
 
     baseline_parser = sub.add_parser("baseline", help="print the baseline matching a results file")
