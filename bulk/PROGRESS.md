@@ -2,32 +2,73 @@
 
 ## State
 
-- Blocked-before-generation Axiom-native encoding of the NSF Important Notice 149 and implementation FAQ MFTRP certification adapter.
-- Unique worktree is detached, was created from the required base object `d58cc0ce67ad891fde4c9061c86a2091bfdd524f`, and is clean at its committed preparation state.
-- A live `git fetch origin main` was attempted on 2026-08-30, but the sandbox could not resolve `github.com`; the local `origin/main` ref exactly matches the required object. Fetch will be retried before final acceptance.
-- No existing branch, accepted candidate, or axiom-corpus PR #631 worktree has been modified.
-- Official-source custody, atomic-boundary, encoder, and Rust workflow inspection is complete.
-- No RuleSpec artifact has been generated or accepted yet.
-- Signed apply is blocked before secret lookup because `agent-secret` cannot find the existing keychain's stored unlock-password record. No secret value was read and no alternate credential path was used.
-- A second live fetch attempt also failed on GitHub DNS. The required cached object is exact, but the fresh-fetch prerequisite remains unmet.
-- Retention decision: no executable RuleSpec, companion, manifest, proof result, fixture result, or Rust result is retained.
+- Transport-blocked before RuleSpec generation after three reviewed Codex
+  gpt-5.5 encode --apply invocations with unchanged encode arguments.
+- Detached lane HEAD remains
+  5bd899c572dc473254579898309994d0cc6396c3 on the required and
+  user-confirmed live base d58cc0ce67ad891fde4c9061c86a2091bfdd524f.
+- The approved AXIOM_ENCODE_APPLY_SIGNING_KEY environment variable was present
+  for the encoder processes. Its value was never inspected, printed, logged,
+  hashed, or rotated, and it was not used for another command or operation.
+- The prior keychain and fresh-fetch blockers are superseded: no keychain
+  lookup was attempted, and the user explicitly confirmed the live base.
+- Each model trace ended with a ChatGPT response-stream disconnection after the
+  built-in reconnect loop. A direct diagnostic then failed to resolve
+  chatgpt.com.
+- All three runs returned zero RuleSpec bytes,
+  standalone_validation_success=false, applied_files=[], and
+  apply_blocked_generation.
+- No main RuleSpec, companion test, signed manifest, index change, proof,
+  fixture, oracle, or Rust result was generated or retained.
+- Executable retention decision: all six atomic outputs rejected.
+- Existing accepted work, other worktrees, branches, and axiom-corpus PR #631
+  remain untouched.
 
 ## Done
 
-- Read the global and repository Axiom instructions and the `agent-secrets` signing workflow.
-- Created and verified a unique detached `rulespec-us` worktree at the requested base.
-- Audited only IN-149 items 3 and 4 and FAQ questions 3, 5, 6, 7, and 8 in the supplied official corpus worktree.
-- Confirmed the selected records require separate current-membership, senior/key individual, AOR organizational, and annual PI/co-PI rules.
-- Confirmed proposal certifications are project-linked, annual certification requires an active NSF award made on or after 2024-05-20, and the selected records do not establish a precise earlier proposal-certification effective date.
-- Confirmed no canonical `us/statutes/42/19232` module exists at the required base, so the adapter must expose the incorporated statutory responsibilities as external prerequisites rather than import them.
-- Recorded the source-faithful runtime, temporal, proof, and adversary contract in `bulk/ENCODING_BRIEF.md` and prepared exactly six official-text continuation inputs for item 4 and FAQ questions 3, 5, 6, 7, and 8.
-- Verified every continuation body against the exact selected corpus record and recorded complete base, source, toolchain, signing, fixture, proof, Rust, and atomic rejection evidence in `bulk/FINAL_REPORT.md`.
+- Re-read and reconciled the committed PROGRESS, FINAL_REPORT,
+  ENCODING_BRIEF, exact continuations, repository instructions, and toolchain
+  procedures.
+- Reverified the clean detached lane, exact merge base, canonical /us policy
+  root, and absence of a reusable us:statutes/42/19232 module.
+- Preserved the unchanged item 3 positional source and exactly six audited
+  continuation files for item 4 and FAQ questions 3, 5, 6, 7, and 8.
+- Reconfirmed the four separate concepts: actual current-participation
+  ineligibility; same-project senior/key individual certification;
+  same-project AOR organizational certification; and annual PI/co-PI duty for
+  at least one linked active NSF award made on or after 2024-05-20.
+- Reconfirmed the strict greater-than 2024-05-20 award ineligibility edge,
+  inclusive annual-duty edge, proposal-only project limitation, and
+  fail-closed proposal-certification gate through 2025-12-01.
+- Used three fresh output roots, isolated databases, --no-sync, the pinned
+  axiom-encode 0.2.1200, the pinned corpus, the canonical /us root, and the
+  pinned real Rust engine path.
+- Verified all three context manifests contain only the unchanged brief and
+  six continuations and record exactly the seven authorized corpus paths.
+- Preserved run IDs 545f312a, 199fc3bb, and 2c12f1cb with prompt, context,
+  trace, repair, database, and run-log hashes in bulk/FINAL_REPORT.md.
+- Relocated the first two encoder-created untracked run logs into their
+  matching isolated roots without changing their hashes; the third log was
+  isolated from process start.
+- Confirmed the pinned encoder has no supported signed-apply resume, offline
+  replay, or cached-response recovery path and did not switch backend, model,
+  or signing method.
+- Updated the configured final report with source, date, scope, custody,
+  per-rule rejection, fixture/proof/Rust non-results, and exact unblock
+  evidence.
 
 ## Next
 
-- Restore access to `agent/axiom-encode-apply-signing-key` through `agent-secret`; do not bypass the helper or begin a paid generation/apply run while signed retention is impossible.
-- Restore GitHub DNS/network access, freshly fetch `origin/main`, and reverify the required base before generation.
-- Use the pinned `axiom-encode` with the canonical `us/` root and `agent-secret`-supplied signing material to generate and signed-apply the standard artifact bundle without manual repair.
-- Run strict proof validation, all requested generated fixtures, and direct adversaries through the real Rust `axiom-rules-engine`.
-- Retain only unchanged signed output with complete evidence; otherwise restore the worktree to a clean accepted state.
-- Replace the current blocked-run rejections in `bulk/FINAL_REPORT.md` with exact signed-run, proof, fixture, and Rust evidence if both prerequisites are restored and the candidate passes every retention gate.
+- Restore DNS/transport access from the pinned Codex backend to
+  chatgpt.com/backend-api/codex/responses.
+- Rerun the exact sanitized command in bulk/FINAL_REPORT.md with a new isolated
+  output root and AXIOM_ENCODE_RUN_LOG_DIR inside that root.
+- Do not change the source set, encoding brief, Codex gpt-5.5 backend, toolchain
+  pins, /us policy root, or approved environment signing path.
+- If generation succeeds, require generated/applied byte equality, no
+  auto-repair or auto-deferral markers, signed-manifest and guard-generated
+  success, strict proof, all generated fixtures, and the full direct pinned
+  Rust adversary matrix before retaining any atomic output.
+- If any atomic output fails those gates, restore its complete generated bundle
+  rather than manually editing generated artifacts.
+- No commit, push, PR, deploy, or publish action is authorized.
