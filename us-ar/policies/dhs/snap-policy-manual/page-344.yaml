@@ -1,0 +1,148 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+    upstream_source_check:
+      status: checked_higher_authority
+      checked_paths:
+        - us:regulations/7-cfr/273/9/d/6/iii
+      rationale: |-
+        Federal utility-allowance context was checked. This manual slice supplies the Arkansas operational rules for telephone deductions, verification requests, and the excess shelter deduction calculation, including the state manual's annual maximum-reference rule.
+  summary: |-
+    "If the household is assigned the Standard Utility Allowance (SUA), Basic Utility Allowance (BUA), or the Homeless Living Allowance (HLA), a separate deduction for telephone will not be allowed." Excess shelter is calculated by subtracting one-half of adjusted SNAP income from total shelter costs, with a maximum unless the household contains an individual living with a disability or a person sixty years old or older.
+rules:
+  - name: adjusted_snap_income_half_rate
+    kind: parameter
+    dtype: Rate
+    source: SNAP Certification Manual section 6628
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+              excerpt: "one-half of the adjusted SNAP income"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          0.5
+
+  - name: person_age_threshold_for_uncapped_excess_shelter_deduction
+    kind: parameter
+    dtype: Count
+    source: SNAP Certification Manual section 6628
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+              excerpt: "sixty (60) years old or older"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          60
+
+  - name: separate_telephone_deduction_disallowed_under_utility_allowance
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6628
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_assigned_standard_utility_allowance
+          or household_assigned_basic_utility_allowance
+          or household_assigned_homeless_living_allowance
+
+  - name: shelter_cost_verification_request_allowed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6627
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_shelter_charges_property_taxes_or_insurance_questionable
+
+  - name: utility_standard_entitlement_verification_needed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: SNAP Certification Manual section 6627
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          household_primary_heating_or_cooling_statements_questionable
+          or household_primary_heating_or_cooling_statements_contradictory
+
+  - name: household_excess_shelter
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Certification Manual section 6628
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          max(0, household_total_shelter_costs - adjusted_snap_income_half_rate * household_adjusted_snap_income)
+
+  - name: excess_shelter_deduction
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: SNAP Certification Manual section 6628
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ar/manual/dhs/snap-policy-manual/page-344
+              excerpt: "Unless the household contains an individual living with a disability or a person sixty (60) years old or older"
+    versions:
+      - effective_from: '2021-01-01'
+        formula: |-
+          if household_contains_individual_living_with_disability or household_contains_person_age >= person_age_threshold_for_uncapped_excess_shelter_deduction: household_excess_shelter else: min(household_excess_shelter, maximum_allowable_excess_shelter_deduction)
