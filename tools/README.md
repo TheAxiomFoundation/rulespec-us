@@ -99,6 +99,12 @@ AXIOM_RULES_ENGINE_BIN=~/axiom-rules/target/release/axiom-rules-engine \
   python tools/build_program_artifacts.py           # writes dist/
 ```
 
+Before writing, a build deletes the top-level `*.compiled.json`,
+`*.rulespec.yaml` and `manifest.json` an earlier build left in `dist/`, so a
+`dist/` from before the #784 rename never mixes old names with new ones. Other
+files and subdirectories are left alone. `--check` touches nothing. After a
+failing build `dist/` holds only the specs that built; don't use it.
+
 The builder's own tests need no engine. CI runs them in the `builder-tests`
 job from the hash-pinned `tools/tests/requirements.txt`:
 

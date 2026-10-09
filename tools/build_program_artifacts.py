@@ -499,6 +499,24 @@ def stamp_provenance(artifact: Path, provenance: dict) -> None:
     artifact.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n")
 
 
+BUILDER_OUTPUT_PATTERNS = ("*.compiled.json", "*.rulespec.yaml", "manifest.json")
+
+
+def clear_builder_outputs(dist: Path) -> list[Path]:
+    """Delete the files a previous build wrote at the top of `dist`.
+
+    Only regular files matching the builder's own output names are removed;
+    subdirectories and any other file are left alone. Returns what was removed.
+    """
+    removed: list[Path] = []
+    for pattern in BUILDER_OUTPUT_PATTERNS:
+        for path in sorted(dist.glob(pattern)):
+            if path.is_file() and not path.is_symlink():
+                path.unlink()
+                removed.append(path)
+    return removed
+
+
 def load_allowlist(root: Path) -> set[str]:
     path = root / "tools" / "known-broken-specs.txt"
     if not path.exists():
@@ -535,6 +553,12 @@ def main() -> int:
     builds = discover_specs(root)
     if not args.check:
         dist.mkdir(parents=True, exist_ok=True)
+        # A dist/ from an earlier build may hold artifacts under names this
+        # build no longer writes (every name changed with #784). Leaving them
+        # next to the new manifest lets a consumer that looks files up by name
+        # silently load the old build, so clear the builder's own outputs.
+        for stale in clear_builder_outputs(dist):
+            print(f"removed stale {stale.name} from {dist}", file=sys.stderr)
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()

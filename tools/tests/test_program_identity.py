@@ -423,6 +423,47 @@ def test_check_mode_builds_everything_and_writes_nothing(tmp_path, monkeypatch, 
     assert not (root / "dist").exists()
 
 
+def test_a_build_clears_artifacts_an_earlier_build_left_in_dist(tmp_path, monkeypatch, toolchain):
+    root = tmp_path / "rulespec-us"
+    write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
+    dist = root / "dist"
+    dist.mkdir(parents=True)
+    # What a pre-#784 build wrote, plus files the builder does not own.
+    (dist / "us-az-snap.compiled.json").write_text("{}\n")
+    (dist / "us-az-snap.rulespec.yaml").write_text("old\n")
+    (dist / "manifest.json").write_text('{"programs": []}\n')
+    (dist / "notes.txt").write_text("keep me\n")
+    (dist / "nested").mkdir()
+    (dist / "nested" / "keep.compiled.json").write_text("{}\n")
+
+    assert run_main(monkeypatch, root) == 0
+
+    assert sorted(p.name for p in dist.iterdir()) == [
+        "manifest.json",
+        "nested",
+        "notes.txt",
+        "us-az-snap-fy-2026.compiled.json",
+        "us-az-snap-fy-2026.rulespec.yaml",
+    ]
+    assert (dist / "nested" / "keep.compiled.json").exists()
+    manifest = json.loads((dist / "manifest.json").read_text())
+    assert [entry["artifact"] for entry in manifest["programs"]] == [
+        "us-az-snap-fy-2026.compiled.json"
+    ]
+
+
+def test_check_mode_leaves_an_existing_dist_untouched(tmp_path, monkeypatch, toolchain):
+    root = tmp_path / "rulespec-us"
+    write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
+    dist = tmp_path / "out"
+    dist.mkdir()
+    (dist / "us-az-snap.compiled.json").write_text("{}\n")
+
+    assert run_main(monkeypatch, root, "--check", "--dist", str(dist)) == 0
+
+    assert sorted(p.name for p in dist.iterdir()) == ["us-az-snap.compiled.json"]
+
+
 def test_check_mode_still_fails_on_a_spec_that_does_not_compile(tmp_path, monkeypatch, toolchain):
     root = tmp_path / "rulespec-us"
     write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
