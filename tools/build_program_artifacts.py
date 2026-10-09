@@ -6,6 +6,20 @@ program (axiom-compose), compiles it to an executable artifact
 (axiom-rules-engine compile), stamps provenance into the artifact metadata, and
 writes a manifest describing everything that was built.
 
+Identity and naming (rulespec-us#784):
+  - A spec's legal identity is (jurisdiction, program_id, period): the first
+    and last segments of its `program:` field, plus its `period:`. Several
+    periods of one program build side by side; the build refuses only two
+    specs that claim the same identity.
+  - An artifact is named after its spec path: the path under programs/,
+    without `.yaml`, joined with "-". programs/us-az/snap/fy-2026.yaml builds
+    us-az-snap-fy-2026.compiled.json. The name depends on nothing but the
+    path, so it never changes when another spec is added or removed.
+  - The manifest also records program_key ("<jurisdiction>-<program_id>", the
+    period-free name every artifact had before #784) and period_label (the
+    path segment that names the period, or null when the path names the
+    program itself, as the tariff-schedule chapters do).
+
 The output is deterministic for a given (corpus SHA, composer version, engine
 version): no timestamps or randomness enter the artifacts or the manifest, so
 rebuilding the same commit yields byte-identical outputs.
@@ -32,8 +46,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import yaml
 
@@ -58,37 +73,135 @@ class SpecBuild:
     period: str
     outputs: list[str]
     artifact_name: str
+    # The spec's `program:` field as written (e.g. us/payroll/oasdi-wage-tax).
+    program: str = ""
+    # The path segment naming the legal period (fy-2026), or None when the
+    # spec path names the program itself (us-tariff-schedule/ch01.yaml).
+    period_label: str | None = None
+
+    @property
+    def program_key(self) -> str:
+        """Period-free program identity; the artifact name before #784."""
+        return f"{self.jurisdiction}-{self.program_id}"
+
+    @property
+    def identity(self) -> tuple[str, str, str]:
+        """What two specs may not share: (jurisdiction, program_id, period)."""
+        return (self.jurisdiction, self.program_id, self.period)
+
+
+def artifact_name_for(spec_path: PurePath) -> str:
+    """The artifact name for a spec at `spec_path` (relative to programs/).
+
+    A pure function of the path: "-".join of its segments without `.yaml`.
+    Nothing else about the spec or the tree enters it.
+    """
+    return "-".join(spec_path.with_suffix("").parts)
+
+
+def period_label_for(spec_path: PurePath, program_segments: tuple[str, ...]) -> str | None:
+    """The path segment naming the spec's legal period, if the path has one.
+
+    programs/us-az/snap/fy-2026.yaml (program us-az/snap) -> "fy-2026".
+    programs/us/us-tariff-schedule/ch01.yaml (program
+    us/us-tariff-schedule/ch01) -> None: the stem is the chapter, which is part
+    of the program, and the period lives only in `period:`.
+    """
+    parts = spec_path.with_suffix("").parts
+    if parts == program_segments:
+        return None
+    return parts[-1]
+
+
+class SpecIdentityError(SystemExit):
+    """The spec tree cannot be built without two specs sharing an output.
+
+    `duplicates` maps each (jurisdiction, program_id, period) claimed by more
+    than one spec to those spec paths. `name_collisions` maps each artifact
+    name (case-folded, because release assets land on case-insensitive
+    filesystems) that more than one spec path would produce to those paths.
+    """
+
+    def __init__(
+        self,
+        duplicates: dict[tuple[str, str, str], list[str]],
+        name_collisions: dict[str, list[str]],
+    ) -> None:
+        self.duplicates = duplicates
+        self.name_collisions = name_collisions
+        lines: list[str] = []
+        if duplicates:
+            lines.append(
+                "duplicate legal period: more than one spec claims the same "
+                "(jurisdiction, program_id, period); keep one spec per period:"
+            )
+            for (jurisdiction, program_id, period), paths in sorted(duplicates.items()):
+                lines.append(
+                    f"  {jurisdiction} {program_id} period {period!r}: {', '.join(paths)}"
+                )
+        if name_collisions:
+            lines.append(
+                "artifact name collision: distinct spec paths join to the same "
+                "artifact name; rename one of the paths:"
+            )
+            for name, paths in sorted(name_collisions.items()):
+                lines.append(f"  {name}: {', '.join(paths)}")
+        super().__init__("\n".join(lines))
+
+
+def plan_builds(specs: Iterable[tuple[PurePath, object]]) -> list[SpecBuild]:
+    """Name and key every spec, refusing only trees whose outputs would clash.
+
+    `specs` holds (path relative to the repo root, parsed YAML) pairs; every
+    path must sit under programs/. Pure: the result depends only on the
+    pairs, never on their order or on the filesystem. Raises
+    SpecIdentityError when two specs share (jurisdiction, program_id, period),
+    or when two distinct paths would write the same artifact file.
+    """
+    builds: list[SpecBuild] = []
+    for spec_path, spec in sorted(specs, key=lambda item: PurePath(item[0])):
+        if not isinstance(spec, Mapping) or "program" not in spec:
+            continue
+        spec_path = Path(spec_path)
+        under_programs = spec_path.relative_to("programs")
+        program_field = str(spec["program"]).strip()
+        segments = tuple(s for s in program_field.split("/") if s)
+        if not segments:
+            raise SystemExit(f"{spec_path.as_posix()}: `program` has no path segments")
+        builds.append(
+            SpecBuild(
+                spec_path=spec_path,
+                jurisdiction=segments[0],
+                program_id=segments[-1],
+                period=str(spec.get("period", "")).strip(),
+                outputs=[str(o) for o in spec.get("outputs", [])],
+                artifact_name=artifact_name_for(under_programs),
+                program=program_field,
+                period_label=period_label_for(under_programs, segments),
+            )
+        )
+
+    by_identity: dict[tuple[str, str, str], list[str]] = {}
+    by_name: dict[str, list[str]] = {}
+    for build in builds:
+        by_identity.setdefault(build.identity, []).append(build.spec_path.as_posix())
+        by_name.setdefault(build.artifact_name.casefold(), []).append(
+            build.spec_path.as_posix()
+        )
+    duplicates = {key: paths for key, paths in by_identity.items() if len(paths) > 1}
+    collisions = {name: paths for name, paths in by_name.items() if len(paths) > 1}
+    if duplicates or collisions:
+        raise SpecIdentityError(duplicates, collisions)
+    return builds
 
 
 def discover_specs(root: Path) -> list[SpecBuild]:
-    builds: list[SpecBuild] = []
+    specs: list[tuple[Path, object]] = []
     for path in sorted((root / "programs").rglob("*.yaml")):
         if path.name.endswith(".test.yaml"):
             continue
-        spec = yaml.safe_load(path.read_text())
-        if not isinstance(spec, dict) or "program" not in spec:
-            continue
-        program_field = str(spec["program"])
-        segments = [s for s in program_field.split("/") if s]
-        jurisdiction = segments[0]
-        program_id = segments[-1]
-        period = str(spec.get("period", ""))
-        outputs = [str(o) for o in spec.get("outputs", [])]
-        builds.append(
-            SpecBuild(
-                spec_path=path.relative_to(root),
-                jurisdiction=jurisdiction,
-                program_id=program_id,
-                period=period,
-                outputs=outputs,
-                artifact_name=f"{jurisdiction}-{program_id}",
-            )
-        )
-    names = [b.artifact_name for b in builds]
-    dupes = {n for n in names if names.count(n) > 1}
-    if dupes:
-        raise SystemExit(f"artifact name collision: {sorted(dupes)}")
-    return builds
+        specs.append((path.relative_to(root), yaml.safe_load(path.read_text())))
+    return plan_builds(specs)
 
 
 def git_output(root: Path, *args: str) -> str:
@@ -289,6 +402,38 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def manifest_entry(
+    build: SpecBuild,
+    *,
+    spec_sha256: str,
+    artifact: str,
+    artifact_sha256: str,
+    compat: dict,
+    program: dict,
+) -> dict:
+    """One manifest `programs[]` entry. Every pre-#784 field keeps its meaning;
+    `program`, `program_key` and `period_label` are additive."""
+    return {
+        "jurisdiction": build.jurisdiction,
+        "program_id": build.program_id,
+        "program": build.program,
+        "program_key": build.program_key,
+        "period": build.period,
+        "period_label": build.period_label,
+        "spec_path": build.spec_path.as_posix(),
+        "spec_sha256": spec_sha256,
+        "outputs": build.outputs,
+        "artifact": artifact,
+        "artifact_sha256": artifact_sha256,
+        "compat": compat,
+        "counts": {
+            "derived": len(program.get("derived", [])),
+            "parameters": len(program.get("parameters", [])),
+            "relations": len(program.get("relations", [])),
+        },
+    }
+
+
 def compose_spec(root: Path, build: SpecBuild, out_path: Path, corpus_state) -> None:
     from axiom_compose import compose, load_spec
 
@@ -330,10 +475,16 @@ def load_allowlist(root: Path) -> set[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--dist", type=Path, default=None)
-    parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="compile every spec and run every check, but write nothing to --dist",
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -343,9 +494,11 @@ def main() -> int:
         return 2
 
     dist = (args.dist or root / "dist").resolve()
-    dist.mkdir(parents=True, exist_ok=True)
 
+    # Refuse a clashing spec tree before writing anything.
     builds = discover_specs(root)
+    if not args.check:
+        dist.mkdir(parents=True, exist_ok=True)
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()
@@ -380,12 +533,6 @@ def main() -> int:
             )
             return 2
 
-    manifest_programs = []
-    unexpected_failures: list[str] = []
-    unexpected_successes: list[str] = []
-    artifact_schemas: set[int] = set()
-    engine_version = "unknown"
-
     # Compose and compile in a neutral temp directory OUTSIDE the repo: the
     # engine discovers additional rulespec repos by walking up from the module
     # path, so building inside the checkout lets stray sibling checkouts leak
@@ -393,6 +540,39 @@ def main() -> int:
     # import the pinned corpus cannot). Neutral cwd keeps local builds
     # byte-identical to CI.
     workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-"))
+    try:
+        return build_all(
+            root, builds, dist, workdir, engine_bin, engine_sha, allowlist,
+            corpus, composer, toolchain, write=not args.check,
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def build_all(
+    root: Path,
+    builds: list[SpecBuild],
+    dist: Path,
+    workdir: Path,
+    engine_bin: str,
+    engine_sha: str,
+    allowlist: set[str],
+    corpus: dict,
+    composer: str,
+    toolchain: dict,
+    *,
+    write: bool,
+) -> int:
+    """Compose and compile every build in `workdir`.
+
+    With write=False (--check) every check still runs and the manifest is
+    still assembled, but nothing reaches `dist`.
+    """
+    manifest_programs = []
+    unexpected_failures: list[str] = []
+    unexpected_successes: list[str] = []
+    artifact_schemas: set[int] = set()
+    engine_version = "unknown"
 
     # The pinned composer treats CorpusState as immutable and compose() as pure.
     # Parse/index this fixed checkout once, rather than once per program.
@@ -446,27 +626,20 @@ def main() -> int:
         }
         stamp_provenance(artifact_path, provenance)
 
-        shutil.copy2(module_path, dist / module_path.name)
-        artifact_path = Path(shutil.copy2(artifact_path, dist / artifact_path.name))
+        if write:
+            shutil.copy2(module_path, dist / module_path.name)
+            artifact_path = Path(shutil.copy2(artifact_path, dist / artifact_path.name))
 
         program = json.loads(artifact_path.read_text())["program"]
         manifest_programs.append(
-            {
-                "jurisdiction": build.jurisdiction,
-                "program_id": build.program_id,
-                "period": build.period,
-                "spec_path": spec_rel,
-                "spec_sha256": provenance["spec_sha256"],
-                "outputs": build.outputs,
-                "artifact": artifact_path.name,
-                "artifact_sha256": sha256_file(artifact_path),
-                "compat": compat,
-                "counts": {
-                    "derived": len(program.get("derived", [])),
-                    "parameters": len(program.get("parameters", [])),
-                    "relations": len(program.get("relations", [])),
-                },
-            }
+            manifest_entry(
+                build,
+                spec_sha256=provenance["spec_sha256"],
+                artifact=artifact_path.name,
+                artifact_sha256=sha256_file(artifact_path),
+                compat=compat,
+                program=program,
+            )
         )
         print(
             f"OK   {spec_rel} -> {artifact_path.name} "
@@ -489,7 +662,8 @@ def main() -> int:
         toolchain,
         artifact_schemas.pop() if artifact_schemas else EXPECTED_ARTIFACT_SCHEMA_VERSION,
     )
-    (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if write:
+        (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
     if unexpected_successes:
         print(
@@ -499,7 +673,10 @@ def main() -> int:
     if unexpected_failures:
         print(f"{len(unexpected_failures)} spec(s) failed to build", file=sys.stderr)
         return 1
-    print(f"built {len(manifest_programs)}/{len(builds)} programs -> {dist}")
+    if write:
+        print(f"built {len(manifest_programs)}/{len(builds)} programs -> {dist}")
+    else:
+        print(f"built {len(manifest_programs)}/{len(builds)} programs (--check: nothing written)")
     return 0
 
 
