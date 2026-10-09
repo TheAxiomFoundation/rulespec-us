@@ -9,9 +9,10 @@ $2,610 "200% gross income limit" instead of $4,442.
 
 Florida's assistance group size (ESS 2210.0200, 2210.0312, 2210.0323) is the
 household size net of ineligible and disqualified members, which is the
-count the federal tables use under 7 CFR 273.11(c). So binding the A-1 key to
-`household_size` is right exactly when A-1's tables agree with the federal
-FY 2026 tables row for row.
+count the federal tables use under 7 CFR 273.11(c), which is why the A-1 key
+binds to `household_size`. Because A-1 restates the federal FY 2026
+standards, its tables should also agree with the federal tables row for row;
+invariant 2 checks that.
 
 Invariants checked, exhaustively over household sizes 1-100:
 
@@ -22,9 +23,9 @@ Invariants checked, exhaustively over household sizes 1-100:
    the binding.
 2. Source-table agreement: at every size, including the per-member extension
    rows, A-1 and the federal FY 2026 tables agree. The 130% gross limit, the
-   100% net limit, the maximum benefit, the standard deduction and the minimum
-   allotment are equal, and A-1's 200% gross limit is twice the federal 100%
-   net limit.
+   165% need standard, the 100% net limit, the maximum benefit, the standard
+   deduction and the minimum allotment are equal, and A-1's 200% gross limit
+   is twice the federal 100% net limit.
 3. Monotonicity: every A-1 and federal limit and maximum is non-decreasing in
    size.
 
@@ -89,9 +90,9 @@ def appendix_limit(stem: str):
     return lambda n: table[n] if n <= listed else table[listed] + (n - listed) * add
 
 
-def federal_limit(stem: str, path: Path | None = None):
+def federal_limit(stem: str):
     """Federal `<stem>(n)`: row min(n, 8), plus the per-member add above 8."""
-    module = rules(path or (FEDERAL_ALLOTMENTS if stem == "snap_maximum_allotment" else FEDERAL))
+    module = rules(FEDERAL_ALLOTMENTS if stem == "snap_maximum_allotment" else FEDERAL)
     formula = " ".join(only_version(module[stem])["formula"].split())
     assert formula == (
         f"{stem}_table[max(min(household_size, 8), 1)] + "
@@ -139,10 +140,13 @@ def test_appendix_limits_match_the_federal_tables_at_every_size() -> None:
     fl_200 = appendix_limit("monthly_200_percent_gross_income_limit")
     fl_130 = appendix_limit("monthly_130_percent_gross_income_limit")
     fl_100 = appendix_limit("monthly_100_percent_net_income_limit")
+    fl_165 = appendix_limit("monthly_165_percent_need_standard")
     fed_130 = federal_limit("snap_gross_income_limit_130_percent_fpl_48_states_dc")
     fed_100 = federal_limit("snap_net_income_limit_100_percent_fpl_48_states_dc")
+    fed_165 = federal_limit("snap_gross_income_limit_165_percent_fpl_48_states_dc")
     for n in SIZES:
         assert fl_130(n) == fed_130(n), n
+        assert fl_165(n) == fed_165(n), n
         assert fl_100(n) == fed_100(n), n
         assert fl_200(n) == 2 * fed_100(n), n
     # The reported case: a household of three.
@@ -204,9 +208,11 @@ def test_limits_are_non_decreasing_in_household_size() -> None:
         appendix_limit("monthly_200_percent_gross_income_limit"),
         appendix_limit("monthly_130_percent_gross_income_limit"),
         appendix_limit("monthly_100_percent_net_income_limit"),
+        appendix_limit("monthly_165_percent_need_standard"),
         appendix_limit("maximum_food_assistance_benefit"),
         federal_limit("snap_gross_income_limit_130_percent_fpl_48_states_dc"),
         federal_limit("snap_net_income_limit_100_percent_fpl_48_states_dc"),
+        federal_limit("snap_gross_income_limit_165_percent_fpl_48_states_dc"),
         federal_limit("snap_maximum_allotment"),
     ]
     for limit in limits:
