@@ -648,7 +648,7 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert "axiom-compose-ref: ${{ needs.workflow-toolchain.outputs.axiom_compose_ref }}" in validation
     assert "axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}" in validation
     assert '"axiom_compose_ref",' in validation
-    assert "validate-rulespec.yml@ff774c29a58448592c3ac92c9195d4995f5f4b57" in validation
+    assert "validate-rulespec.yml@92ccb0f2266bf06aba6111d2bfd0e5f03af55fc3" in validation
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
