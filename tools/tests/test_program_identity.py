@@ -435,10 +435,14 @@ def test_a_build_clears_artifacts_an_earlier_build_left_in_dist(tmp_path, monkey
     (dist / "notes.txt").write_text("keep me\n")
     (dist / "nested").mkdir()
     (dist / "nested" / "keep.compiled.json").write_text("{}\n")
+    elsewhere = tmp_path / "elsewhere.json"
+    elsewhere.write_text("{}\n")
+    (dist / "linked.compiled.json").symlink_to(elsewhere)
 
     assert run_main(monkeypatch, root) == 0
 
     assert sorted(p.name for p in dist.iterdir()) == [
+        "linked.compiled.json",
         "manifest.json",
         "nested",
         "notes.txt",
@@ -446,10 +450,36 @@ def test_a_build_clears_artifacts_an_earlier_build_left_in_dist(tmp_path, monkey
         "us-az-snap-fy-2026.rulespec.yaml",
     ]
     assert (dist / "nested" / "keep.compiled.json").exists()
+    assert (dist / "linked.compiled.json").is_symlink()
+    assert elsewhere.read_text() == "{}\n"
     manifest = json.loads((dist / "manifest.json").read_text())
     assert [entry["artifact"] for entry in manifest["programs"]] == [
         "us-az-snap-fy-2026.compiled.json"
     ]
+
+
+def test_a_refused_preflight_leaves_an_existing_dist_untouched(tmp_path, monkeypatch, toolchain):
+    root = tmp_path / "rulespec-us"
+    write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
+    dist = root / "dist"
+    dist.mkdir(parents=True)
+    (dist / "us-az-snap-fy-2026.compiled.json").write_text("{}\n")
+    (dist / "manifest.json").write_text('{"programs": []}\n')
+    # An engine whose loader contract disagrees with the builder is refused
+    # before anything is built.
+    monkeypatch.setattr(
+        bpa,
+        "engine_capabilities",
+        lambda engine: {"artifact_format_version": bpa.EXPECTED_ARTIFACT_SCHEMA_VERSION + 1},
+    )
+
+    assert run_main(monkeypatch, root) == 2
+
+    assert sorted(p.name for p in dist.iterdir()) == [
+        "manifest.json",
+        "us-az-snap-fy-2026.compiled.json",
+    ]
+    assert toolchain.composed == []
 
 
 def test_check_mode_leaves_an_existing_dist_untouched(tmp_path, monkeypatch, toolchain):

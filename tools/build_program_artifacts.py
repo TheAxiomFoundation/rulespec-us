@@ -533,7 +533,16 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--dist", type=Path, default=None)
+    parser.add_argument(
+        "--dist",
+        type=Path,
+        default=None,
+        help=(
+            "output directory (default: <root>/dist). The builder owns it: a build "
+            "first deletes the top-level *.compiled.json, *.rulespec.yaml and "
+            "manifest.json already there"
+        ),
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -551,14 +560,6 @@ def main() -> int:
 
     # Refuse a clashing spec tree before writing anything.
     builds = discover_specs(root)
-    if not args.check:
-        dist.mkdir(parents=True, exist_ok=True)
-        # A dist/ from an earlier build may hold artifacts under names this
-        # build no longer writes (every name changed with #784). Leaving them
-        # next to the new manifest lets a consumer that looks files up by name
-        # silently load the old build, so clear the builder's own outputs.
-        for stale in clear_builder_outputs(dist):
-            print(f"removed stale {stale.name} from {dist}", file=sys.stderr)
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()
@@ -592,6 +593,16 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 2
+
+    if not args.check:
+        dist.mkdir(parents=True, exist_ok=True)
+        # A dist/ from an earlier build may hold artifacts under names this
+        # build no longer writes (every name changed with #784). Leaving them
+        # next to the new manifest lets a consumer that looks files up by name
+        # silently load the old build, so clear the builder's own outputs. Done
+        # after every pre-flight check, so a refused build leaves dist/ as is.
+        for stale in clear_builder_outputs(dist):
+            print(f"removed stale {stale.name} from {dist}", file=sys.stderr)
 
     # Compose and compile in a neutral temp directory OUTSIDE the repo: the
     # engine discovers additional rulespec repos by walking up from the module
