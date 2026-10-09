@@ -90,6 +90,7 @@ def toolchain(monkeypatch):
         ),
     )
     monkeypatch.setenv("AXIOM_RULES_ENGINE_BIN", "test-engine")
+    monkeypatch.setattr(bpa, "engine_binary_problem", lambda engine: None)
     monkeypatch.setattr(
         bpa, "corpus_provenance", lambda root: {"repo": "rulespec-us", "sha": "a" * 40, "dirty": False}
     )
@@ -458,13 +459,15 @@ def test_a_build_clears_artifacts_an_earlier_build_left_in_dist(tmp_path, monkey
     ]
 
 
-def test_a_refused_preflight_leaves_an_existing_dist_untouched(tmp_path, monkeypatch, toolchain):
+@pytest.mark.parametrize("dist_exists", [True, False])
+def test_a_refused_preflight_leaves_dist_untouched(tmp_path, monkeypatch, toolchain, dist_exists):
     root = tmp_path / "rulespec-us"
     write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
     dist = root / "dist"
-    dist.mkdir(parents=True)
-    (dist / "us-az-snap-fy-2026.compiled.json").write_text("{}\n")
-    (dist / "manifest.json").write_text('{"programs": []}\n')
+    if dist_exists:
+        dist.mkdir(parents=True)
+        (dist / "us-az-snap-fy-2026.compiled.json").write_text("{}\n")
+        (dist / "manifest.json").write_text('{"programs": []}\n')
     # An engine whose loader contract disagrees with the builder is refused
     # before anything is built.
     monkeypatch.setattr(
@@ -475,11 +478,70 @@ def test_a_refused_preflight_leaves_an_existing_dist_untouched(tmp_path, monkeyp
 
     assert run_main(monkeypatch, root) == 2
 
-    assert sorted(p.name for p in dist.iterdir()) == [
-        "manifest.json",
-        "us-az-snap-fy-2026.compiled.json",
-    ]
+    if dist_exists:
+        assert sorted(p.name for p in dist.iterdir()) == [
+            "manifest.json",
+            "us-az-snap-fy-2026.compiled.json",
+        ]
+    else:
+        assert not dist.exists()
     assert toolchain.composed == []
+
+
+@pytest.mark.parametrize("missing", ["engine", "axiom_compose"])
+def test_a_missing_engine_or_composer_is_refused_before_dist_is_touched(
+    tmp_path, monkeypatch, toolchain, missing
+):
+    root = tmp_path / "rulespec-us"
+    write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
+    dist = root / "dist"
+    dist.mkdir(parents=True)
+    (dist / "us-az-snap-fy-2026.compiled.json").write_text("{}\n")
+    if missing == "engine":
+        monkeypatch.setattr(
+            bpa, "engine_binary_problem", lambda engine: "AXIOM_RULES_ENGINE_BIN test-engine is not on PATH"
+        )
+    else:
+        monkeypatch.setitem(sys.modules, "axiom_compose", None)  # import raises ImportError
+
+    assert run_main(monkeypatch, root) == 2
+
+    assert sorted(p.name for p in dist.iterdir()) == ["us-az-snap-fy-2026.compiled.json"]
+    assert toolchain.composed == []
+
+
+@pytest.mark.parametrize("linked_name", ["us-az-snap-fy-2026.compiled.json", "manifest.json"])
+def test_a_symlink_named_like_an_output_refuses_the_build(tmp_path, monkeypatch, toolchain, linked_name):
+    root = tmp_path / "rulespec-us"
+    write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
+    dist = root / "dist"
+    dist.mkdir(parents=True)
+    outside = tmp_path / "outside.json"
+    outside.write_text("keep\n")
+    (dist / linked_name).symlink_to(outside)
+    (dist / "us-az-snap.compiled.json").write_text("{}\n")  # stale pre-#784 output
+
+    assert run_main(monkeypatch, root) == 2
+
+    assert outside.read_text() == "keep\n"
+    assert (dist / linked_name).is_symlink()
+    assert (dist / "us-az-snap.compiled.json").exists()  # nothing cleared
+    assert toolchain.composed == []
+
+
+def test_engine_binary_problem(tmp_path, monkeypatch):
+    exe = tmp_path / "engine"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    plain = tmp_path / "plain"
+    plain.write_text("")
+    plain.chmod(0o644)
+    assert bpa.engine_binary_problem(str(exe)) is None
+    assert "does not exist" in bpa.engine_binary_problem(str(tmp_path / "nope"))
+    assert "is not executable" in bpa.engine_binary_problem(str(plain))
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert bpa.engine_binary_problem("engine") is None
+    assert "is not on PATH" in bpa.engine_binary_problem("axiom-rules-engine-missing")
 
 
 def test_check_mode_leaves_an_existing_dist_untouched(tmp_path, monkeypatch, toolchain):

@@ -502,6 +502,28 @@ def stamp_provenance(artifact: Path, provenance: dict) -> None:
 BUILDER_OUTPUT_PATTERNS = ("*.compiled.json", "*.rulespec.yaml", "manifest.json")
 
 
+def engine_binary_problem(engine_bin: str) -> str | None:
+    """Why `engine_bin` cannot be run, or None if it names an executable."""
+    if os.sep in engine_bin or (os.altsep and os.altsep in engine_bin):
+        path = Path(engine_bin).expanduser()
+        if not path.is_file():
+            return f"AXIOM_RULES_ENGINE_BIN {engine_bin} does not exist"
+        if not os.access(path, os.X_OK):
+            return f"AXIOM_RULES_ENGINE_BIN {engine_bin} is not executable"
+        return None
+    if shutil.which(engine_bin) is None:
+        return f"AXIOM_RULES_ENGINE_BIN {engine_bin} is not on PATH"
+    return None
+
+
+def symlinked_outputs(dist: Path, builds: list["SpecBuild"]) -> list[Path]:
+    """Output paths in `dist` that are symlinks; writing them would follow the link."""
+    names = ["manifest.json"]
+    for build in builds:
+        names += [f"{build.artifact_name}.rulespec.yaml", f"{build.artifact_name}.compiled.json"]
+    return [dist / name for name in names if (dist / name).is_symlink()]
+
+
 def clear_builder_outputs(dist: Path) -> list[Path]:
     """Delete the files a previous build wrote at the top of `dist`.
 
@@ -538,9 +560,11 @@ def main() -> int:
         type=Path,
         default=None,
         help=(
-            "output directory (default: <root>/dist). The builder owns it: a build "
-            "first deletes the top-level *.compiled.json, *.rulespec.yaml and "
-            "manifest.json already there"
+            "output directory (default: <root>/dist). The builder owns it: once its "
+            "pre-flight checks pass and before writing, a build deletes the top-level "
+            "*.compiled.json, *.rulespec.yaml and manifest.json regular files already "
+            "there (symlinks and other files are left alone; a symlink named like an "
+            "output refuses the build)"
         ),
     )
     parser.add_argument(
@@ -556,10 +580,29 @@ def main() -> int:
         print("AXIOM_RULES_ENGINE_BIN is not set", file=sys.stderr)
         return 2
 
+    problem = engine_binary_problem(engine_bin)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+    try:
+        import axiom_compose  # noqa: F401  (build_all imports it; fail before dist/ is touched)
+    except ImportError as exc:
+        print(f"axiom-compose is not importable: {exc}", file=sys.stderr)
+        return 2
+
     dist = (args.dist or root / "dist").resolve()
 
     # Refuse a clashing spec tree before writing anything.
     builds = discover_specs(root)
+    if not args.check:
+        linked = symlinked_outputs(dist, builds)
+        if linked:
+            print(
+                "refusing to build: these outputs in --dist are symlinks, and writing them "
+                f"would write through the link: {[str(p) for p in linked]}",
+                file=sys.stderr,
+            )
+            return 2
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()

@@ -99,11 +99,16 @@ AXIOM_RULES_ENGINE_BIN=~/axiom-rules/target/release/axiom-rules-engine \
   python tools/build_program_artifacts.py           # writes dist/
 ```
 
-Once its pre-flight checks pass and before it writes, a build deletes the top-level `*.compiled.json`,
-`*.rulespec.yaml` and `manifest.json` an earlier build left in `dist/`, so a
-`dist/` from before the #784 rename never mixes old names with new ones. Other
-files and subdirectories are left alone. `--check` touches nothing. After a
-failing build `dist/` holds only the specs that built; don't use it.
+Pre-flight refuses a build, leaving `dist/` untouched, when the engine binary
+is missing or not executable, axiom-compose is not importable, the engine's
+artifact format disagrees with the builder, the spec tree clashes, or a file
+the build would write in `dist/` is a symlink (writing it would follow the
+link). Once the pre-flight checks pass and before it writes, a build deletes
+the top-level `*.compiled.json`, `*.rulespec.yaml` and `manifest.json` regular
+files an earlier build left in `dist/`, so a `dist/` from before the #784
+rename never mixes old names with new ones. Other files, symlinks and
+subdirectories are left alone. `--check` touches nothing. After a failing
+build `dist/` holds only the specs that built; don't use it.
 
 The builder's own tests need no engine. CI runs them in the `builder-tests`
 job from the hash-pinned `tools/tests/requirements.txt`:
