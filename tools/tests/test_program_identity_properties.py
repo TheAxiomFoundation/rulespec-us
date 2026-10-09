@@ -3,9 +3,11 @@
 Invariants, for every generated spec tree:
 
 1. Exact refusal. plan_builds refuses a tree iff two specs share
-   (jurisdiction, program_id, period) or two distinct spec paths join to the
-   same case-folded artifact name; the error lists exactly those groups.
-   A second period of a program is never refused on its own.
+   (jurisdiction, program_id, period), two distinct spec paths join to the
+   same case-folded artifact name, or two different (jurisdiction,
+   program_id) pairs join to the same case-folded program_key; the error
+   lists exactly those groups. A second period of a program is never
+   refused on its own.
 2. Injective names. On every accepted tree, two specs have the same artifact
    name iff they have the same path, and each name is the hyphen join of the
    path under programs/ without `.yaml`.
@@ -13,19 +15,36 @@ Invariants, for every generated spec tree:
    to an accepted tree never renames a spec already in it.
 4. Period label. period_label is None iff the path under programs/ equals
    the `program:` segments; otherwise it is the path's last segment.
-5. Differential against the pre-#784 builder. program_key equals the old
-   artifact name for every spec, and every tree the old builder accepted is
-   accepted now unless two of its paths join to one name. (Generated
-   `program:` values carry no surrounding whitespace; the builder strips it,
-   as axiom-compose does, where the old builder kept it in the name.)
+5. Differential against the pre-#784 builder (reimplemented below from
+   a9dc38fb0). program_key equals the old artifact name for every spec, and
+   every tree the old builder accepted is accepted now unless two of its
+   paths join to one name or two of its old names differ only in case (two
+   files that overwrite each other on a case-insensitive filesystem).
+   Generated `program:` values carry no surrounding whitespace; see 9.
 6. Filesystem agreement. discover_specs on a tree written to disk, in any
    creation order and with companion `.test.yaml` files and non-spec YAML
    beside it, returns what plan_builds returns for the specs alone.
-7. Manifest compatibility. Every manifest entry keeps the pre-#784 fields
-   with their old values and adds program, program_key and period_label.
+7. Manifest compatibility. Every manifest entry has exactly the pre-#784
+   keys plus program, program_key and period_label. Every pre-#784 value
+   except `artifact` equals what the old builder wrote for the same spec and
+   build outputs; `artifact` is the renamed file, and the old one was
+   program_key + ".compiled.json".
+8. Routing key. On every accepted tree, program_key.casefold() determines
+   (jurisdiction, program_id), so (program_key, period) names exactly one
+   spec, even ignoring case.
+9. Whitespace. Padding every `program:` and `period:` with surrounding
+   whitespace never changes the plan: the builder strips both, as
+   axiom-compose does.
+
+Most invariants run over two generators: spec_trees, which mixes layouts
+freely, and split_key_trees, which splits one hyphenated string into
+(jurisdiction, program_id) at different hyphens and in either case. The
+second exists because spec_trees rarely produces two programs whose
+program_keys coincide while their paths do not collide (about 7 trees in
+2,000, against about 300 in 2,000 for split_key_trees).
 
 The tests skip where Hypothesis is not installed; the program-artifacts
-workflow installs it.
+builder-tests job installs it from tools/tests/requirements.txt.
 """
 
 from __future__ import annotations
@@ -47,7 +66,9 @@ import build_program_artifacts as bpa  # noqa: E402
 # collisions common enough to exercise every branch.
 LOWER_SEGMENT = st.from_regex(r"[ab1]{1,2}(-[ab1]{1,2})?", fullmatch=True)
 MIXED_SEGMENT = st.from_regex(r"[aAb1]{1,2}(-[aAb1]{1,2})?", fullmatch=True)
+TOKEN = st.from_regex(r"[aAb1]{1,2}", fullmatch=True)
 PERIODS = st.sampled_from(["2026-01", "2026-10", "2026"])
+WHITESPACE = st.sampled_from(["", " ", "  ", "\t", " \n"])
 
 
 @st.composite
@@ -69,6 +90,52 @@ def spec_trees(segment=MIXED_SEGMENT, max_size=8):
     return st.lists(spec_entries(segment), max_size=max_size, unique_by=lambda e: e[0])
 
 
+@st.composite
+def split_key_entries(draw):
+    """Two to four specs whose programs all split ONE hyphenated string into
+    (jurisdiction, program_id): at the same or a different hyphen, in its
+    case or swapped, with or without a middle segment, at a period path or
+    a chapter path. These are the trees where program_key alone can be
+    ambiguous: us-az/snap against us/az-snap, or us-az/snap against
+    US-AZ/snap."""
+    key = "-".join(draw(st.lists(TOKEN, min_size=2, max_size=4)))
+    hyphens = key.count("-")
+    # Sometimes every spec is one program (one cut, one case), so the tree
+    # is a multi-period program that should be accepted when periods differ.
+    one_program = draw(st.booleans())
+    fixed = (draw(st.booleans()), draw(st.integers(1, hyphens)))
+    entries = []
+    for _ in range(draw(st.integers(2, 4))):
+        swap, cut = (
+            fixed if one_program else (draw(st.booleans()), draw(st.integers(1, hyphens)))
+        )
+        tokens = (key.swapcase() if swap else key).split("-")
+        middle = tuple(draw(st.lists(LOWER_SEGMENT, max_size=1)))
+        program = ("-".join(tokens[:cut]), *middle, "-".join(tokens[cut:]))
+        if draw(st.booleans()):  # programs/<program...>/<period>.yaml
+            parts = program + (draw(MIXED_SEGMENT),)
+        else:  # programs/<program...>.yaml
+            parts = program
+        path = PurePosixPath("programs", *parts[:-1], f"{parts[-1]}.yaml")
+        spec = {"program": "/".join(program), "period": draw(PERIODS), "outputs": ["x"]}
+        entries.append((path, spec))
+    return entries
+
+
+def first_per_path(entries):
+    seen: dict = {}
+    for path, spec in entries:
+        seen.setdefault(path, spec)
+    return list(seen.items())
+
+
+def split_key_trees():
+    """split_key_entries plus up to four unrelated specs, one spec per path."""
+    return st.tuples(split_key_entries(), spec_trees(max_size=4)).map(
+        lambda pair: first_per_path(pair[0] + pair[1])
+    )
+
+
 # -- Independent oracles -----------------------------------------------------
 
 
@@ -88,16 +155,33 @@ def grouped(tree, key) -> dict:
     return {k: v for k, v in groups.items() if len(v) > 1}
 
 
+def expected_ambiguous_keys(tree) -> dict:
+    """Case-folded program_keys that more than one (jurisdiction,
+    program_id) pair joins to, with every spec path carrying the key."""
+    groups: dict = {}
+    for path, spec in sorted(tree, key=lambda e: e[0]):
+        jurisdiction, program_id, _ = expected_identity(spec)
+        groups.setdefault(f"{jurisdiction}-{program_id}".casefold(), []).append(
+            (path.as_posix(), (jurisdiction, program_id))
+        )
+    return {
+        key: [path for path, _ in members]
+        for key, members in groups.items()
+        if len({pair for _, pair in members}) > 1
+    }
+
+
 def expected_problems(tree):
     duplicates = grouped(tree, lambda path, spec: expected_identity(spec))
     collisions = grouped(tree, lambda path, spec: expected_name(path).casefold())
-    return duplicates, collisions
+    return duplicates, collisions, expected_ambiguous_keys(tree)
 
 
 def legacy_names(tree) -> dict[str, str] | None:
-    """The pre-#784 builder (tools/build_program_artifacts.py:63-91 at
-    a9dc38fb0): f"{jurisdiction}-{program_id}", any repeat aborts. Returns
-    None where it aborted."""
+    """The pre-#784 naming, reimplemented over in-memory (path, spec) pairs
+    from tools/build_program_artifacts.py:63-91 at a9dc38fb0:
+    f"{jurisdiction}-{program_id}", and any exact repeat aborts the build.
+    Returns None where it aborted."""
     names = {}
     for path, spec in tree:
         segments = [s for s in str(spec["program"]).split("/") if s]
@@ -108,12 +192,23 @@ def legacy_names(tree) -> dict[str, str] | None:
     return names
 
 
+def refusal(error):
+    return ("refused", error.duplicates, error.name_collisions, error.ambiguous_program_keys)
+
+
+def record_fired_checks(problems) -> None:
+    """Record which checks fired, for --hypothesis-show-statistics."""
+    names = ("duplicate", "name collision", "ambiguous key")
+    fired = [name for name, groups in zip(names, problems) if groups]
+    hypothesis.event("refused: " + " + ".join(fired) if fired else "accepted")
+
+
 def outcome(tree):
     """A comparable summary of plan_builds: the builds, or the refusal."""
     try:
         builds = bpa.plan_builds(tree)
     except bpa.SpecIdentityError as error:
-        return ("refused", error.duplicates, error.name_collisions)
+        return refusal(error)
     return (
         "accepted",
         [
@@ -134,16 +229,27 @@ def outcome(tree):
 # -- 1. Exact refusal --------------------------------------------------------
 
 
-@settings(max_examples=400, deadline=None)
-@given(spec_trees())
-def test_refuses_exactly_identity_duplicates_and_name_collisions(tree):
-    duplicates, collisions = expected_problems(tree)
+def check_exact_refusal(tree):
+    problems = expected_problems(tree)
+    record_fired_checks(problems)
     result = outcome(tree)
-    if duplicates or collisions:
-        assert result == ("refused", duplicates, collisions)
+    if any(problems):
+        assert result == ("refused", *problems)
     else:
         assert result[0] == "accepted"
         assert len(result[1]) == len(tree)
+
+
+@settings(max_examples=400, deadline=None)
+@given(spec_trees())
+def test_refuses_exactly_the_three_clashes(tree):
+    check_exact_refusal(tree)
+
+
+@settings(max_examples=400, deadline=None)
+@given(split_key_trees())
+def test_refuses_exactly_the_three_clashes_on_split_keys(tree):
+    check_exact_refusal(tree)
 
 
 @settings(max_examples=200, deadline=None)
@@ -160,7 +266,7 @@ def test_a_second_period_alone_is_never_refused(tree, new_period):
     # Only the period is new: no spec in the tree claims it for this program.
     assume(all(expected_identity(other) != expected_identity(added) for _, other in tree))
     grown = tree + [(sibling, added)]
-    assert expected_problems(grown) == ({}, {})
+    assert expected_problems(grown) == ({}, {}, {})
     result = outcome(grown)
     assert result[0] == "accepted"
     keys = [row[4] for row in result[1]]
@@ -230,21 +336,42 @@ def test_period_label_is_the_path_segment_beyond_the_program(tree):
 # -- 5. Differential against the pre-#784 builder ----------------------------
 
 
-@settings(max_examples=400, deadline=None)
-@given(spec_trees())
-def test_program_key_is_the_legacy_name_and_legacy_trees_still_build(tree):
+def check_against_legacy(tree):
     result = outcome(tree)
     legacy = legacy_names(tree)
     if result[0] == "accepted":
         for spec_path, _name, (jurisdiction, program_id, _), _, key, _, _ in result[1]:
             assert key == f"{jurisdiction}-{program_id}"
-    if legacy is not None:
-        # The old builder accepted it, so no (jurisdiction, program_id) repeats,
-        # so no identity duplicate: only a hyphen-join collision can refuse it.
-        if result[0] == "refused":
-            assert result[1] == {} and result[2] != {}
-        else:
-            assert {row[0]: row[4] for row in result[1]} == legacy
+    if legacy is None:
+        return
+    if result[0] == "accepted":
+        assert {row[0]: row[4] for row in result[1]} == legacy
+        return
+    # The old builder accepted it, so every old name is distinct, so no
+    # (jurisdiction, program_id) repeats and no identity duplicate. What can
+    # still refuse it: a hyphen-join name collision, or old names that differ
+    # only in case, which overwrote each other on a case-insensitive
+    # filesystem.
+    hypothesis.event("legacy accepted, now refused")
+    _, duplicates, collisions, ambiguous = result
+    assert duplicates == {}
+    assert collisions or ambiguous
+    for key, paths in ambiguous.items():
+        old = [legacy[path] for path in paths]
+        assert len(set(old)) == len(old)
+        assert {name.casefold() for name in old} == {key}
+
+
+@settings(max_examples=400, deadline=None)
+@given(spec_trees())
+def test_program_key_is_the_legacy_name_and_legacy_trees_still_build(tree):
+    check_against_legacy(tree)
+
+
+@settings(max_examples=400, deadline=None)
+@given(split_key_trees())
+def test_program_key_is_the_legacy_name_and_legacy_trees_still_build_on_split_keys(tree):
+    check_against_legacy(tree)
 
 
 # -- 6. Filesystem agreement -------------------------------------------------
@@ -277,7 +404,7 @@ def test_discover_specs_matches_plan_builds_on_disk(tree, rng):
         try:
             discovered = ("accepted", bpa.discover_specs(root))
         except bpa.SpecIdentityError as error:
-            discovered = ("refused", error.duplicates, error.name_collisions)
+            discovered = refusal(error)
 
     expected = outcome(tree)
     if expected[0] == "refused":
@@ -314,30 +441,118 @@ LEGACY_ENTRY_FIELDS = (
 )
 
 
+def legacy_entry(path, spec, *, spec_sha256, artifact_sha256, compat, program) -> dict:
+    """The pre-#784 manifest entry for one spec, reimplemented from
+    tools/build_program_artifacts.py at a9dc38fb0: identity from
+    discover_specs (lines 63-91), the entry from build_all (lines 453-470).
+    `spec_path` was str(path relative to the root), which is the POSIX form
+    on the Linux runner that releases."""
+    segments = [s for s in str(spec["program"]).split("/") if s]
+    jurisdiction, program_id = segments[0], segments[-1]
+    return {
+        "jurisdiction": jurisdiction,
+        "program_id": program_id,
+        "period": str(spec.get("period", "")),
+        "spec_path": str(path),
+        "spec_sha256": spec_sha256,
+        "outputs": [str(o) for o in spec.get("outputs", [])],
+        "artifact": f"{jurisdiction}-{program_id}.compiled.json",
+        "artifact_sha256": artifact_sha256,
+        "compat": compat,
+        "counts": {
+            "derived": len(program.get("derived", [])),
+            "parameters": len(program.get("parameters", [])),
+            "relations": len(program.get("relations", [])),
+        },
+    }
+
+
+COMPILED_PROGRAMS = st.fixed_dictionaries(
+    {
+        "derived": st.lists(st.integers(), max_size=3),
+        "parameters": st.lists(st.integers(), max_size=3),
+        "relations": st.lists(st.integers(), max_size=3),
+    }
+)
+
+
 @settings(max_examples=200, deadline=None)
-@given(spec_trees())
-def test_manifest_entries_keep_legacy_fields_and_add_identity(tree):
+@given(spec_trees(), COMPILED_PROGRAMS)
+def test_manifest_entries_match_the_legacy_builder_except_the_file_name(tree, program):
     try:
         builds = bpa.plan_builds(tree)
     except bpa.SpecIdentityError:
         assume(False)
+    specs = dict(tree)
     compat = bpa.build_compat("0.1.2", "c" * 40, 2)
+    hashes = {"spec_sha256": "d" * 64, "artifact_sha256": "e" * 64}
     for build in builds:
         entry = bpa.manifest_entry(
             build,
-            spec_sha256="d" * 64,
             artifact=f"{build.artifact_name}.compiled.json",
-            artifact_sha256="e" * 64,
             compat=compat,
-            program={"derived": [1, 2], "parameters": [1], "relations": []},
+            program=program,
+            **hashes,
         )
-        assert set(entry) == set(LEGACY_ENTRY_FIELDS) | {"program", "program_key", "period_label"}
-        assert entry["jurisdiction"] == build.jurisdiction
-        assert entry["program_id"] == build.program_id
-        assert entry["period"] == build.period
-        assert entry["spec_path"] == build.spec_path.as_posix()
-        assert entry["outputs"] == build.outputs
-        assert entry["counts"] == {"derived": 2, "parameters": 1, "relations": 0}
+        old = legacy_entry(
+            PurePosixPath(build.spec_path.as_posix()),
+            specs[PurePosixPath(build.spec_path.as_posix())],
+            compat=compat,
+            program=program,
+            **hashes,
+        )
+        assert set(entry) == set(old) | {"program", "program_key", "period_label"}
+        assert set(old) == set(LEGACY_ENTRY_FIELDS)
+        for field in LEGACY_ENTRY_FIELDS:
+            if field != "artifact":
+                assert entry[field] == old[field], field
+        assert entry["artifact"] == f"{build.artifact_name}.compiled.json"
+        assert old["artifact"] == f"{entry['program_key']}.compiled.json"
         assert entry["program_key"] == f"{build.jurisdiction}-{build.program_id}"
         assert entry["program"] == build.program
         assert entry["period_label"] == build.period_label
+
+
+# -- 8. Routing key ----------------------------------------------------------
+
+
+def check_routing_key(tree):
+    result = outcome(tree)
+    hypothesis.event(result[0])
+    if result[0] != "accepted":
+        return
+    programs: dict = {}
+    routes = []
+    for _path, _name, (jurisdiction, program_id, period), _p, key, _l, _o in result[1]:
+        programs.setdefault(key.casefold(), set()).add((jurisdiction, program_id))
+        routes.append((key.casefold(), period))
+    assert all(len(pairs) == 1 for pairs in programs.values())
+    assert len(set(routes)) == len(routes)
+
+
+@settings(max_examples=400, deadline=None)
+@given(spec_trees())
+def test_program_key_names_one_program_on_accepted_trees(tree):
+    check_routing_key(tree)
+
+
+@settings(max_examples=400, deadline=None)
+@given(split_key_trees())
+def test_program_key_names_one_program_on_accepted_split_key_trees(tree):
+    check_routing_key(tree)
+
+
+# -- 9. Whitespace -----------------------------------------------------------
+
+
+@settings(max_examples=300, deadline=None)
+@given(spec_trees(), st.data())
+def test_surrounding_whitespace_never_changes_the_plan(tree, data):
+    def pad(value: str) -> str:
+        return data.draw(WHITESPACE) + value + data.draw(WHITESPACE)
+
+    padded = [
+        (path, dict(spec, program=pad(spec["program"]), period=pad(spec["period"])))
+        for path, spec in tree
+    ]
+    assert outcome(padded) == outcome(tree)

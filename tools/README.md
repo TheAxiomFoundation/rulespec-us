@@ -24,12 +24,13 @@ release, then bump the consumer's pin.
 
 A spec's legal identity is `(jurisdiction, program_id, period)`:
 `jurisdiction` and `program_id` are the first and last segments of its
-`program:` field, and `period` is its `period:` value. axiom-compose's
-behavior depends on `program:` only through those two segments: the first
-sets the allowed import prefixes and the `state:` scope prefix, and the last
-is the auto-gate program token. The middle segments appear only in labels
-(the composition target and summary). One program can have any number of
-periods; each is its own spec file and its own artifact.
+`program:` field, and `period` is its `period:` value. Both fields are read
+with surrounding whitespace stripped, as axiom-compose reads them.
+axiom-compose's behavior depends on `program:` only through those two
+segments: the first sets the allowed import prefixes and the `state:` scope
+prefix, and the last is the auto-gate program token. The middle segments
+appear only in labels (the composition target and summary). One program can
+have any number of periods; each is its own spec file and its own artifact.
 
 Each artifact is named after its spec path: the path under `programs/`,
 without `.yaml`, joined with `-`. The name depends only on the path, so
@@ -45,7 +46,8 @@ adding a period never renames an artifact that already exists.
 Each `manifest.json` program entry carries three fields beside the existing
 ones:
 
-- `program`: the spec's `program:` field as written.
+- `program`: the spec's `program:` field as written, surrounding whitespace
+  stripped.
 - `program_key`: `<jurisdiction>-<program_id>`. It is the period-free key
   shared by every period of one program, and it is exactly the name every
   artifact had before rulespec-us#784.
@@ -54,7 +56,7 @@ ones:
   `null` case: in `ch01.yaml` the stem is the chapter, which is part of the
   program, and the period appears only in `period`.
 
-The build refuses a spec tree, before composing anything, in two cases:
+The build refuses a spec tree, before composing anything, in three cases:
 
 - **Duplicate legal period.** Two specs share `(jurisdiction, program_id,
   period)`. Keep one spec per period.
@@ -63,6 +65,12 @@ The build refuses a spec tree, before composing anything, in two cases:
   case-insensitive filesystems. This needs one hyphenated string split
   differently across directory levels, such as `programs/us-az/snap/x.yaml`
   and `programs/us/az-snap/x.yaml`. Rename one of the paths.
+- **Ambiguous `program_key`.** Two different `(jurisdiction, program_id)`
+  pairs join to the same `program_key`, compared case-insensitively. For
+  example, `program: us-az/snap` and `program: us/az-snap` are different
+  programs (different jurisdictions) that would both have the key
+  `us-az-snap`, even at paths whose names do not collide. Change the first
+  or last `program:` segment of one of them.
 
 The builder never refuses a second period on its own.
 
@@ -70,8 +78,10 @@ To add a period, add a spec beside the existing one, for example
 `programs/us-az/snap/fy-2027.yaml` with the same `program:` and the new
 `period:`. Consumers select an artifact by `program_key` and then pick the
 entry with the greatest `period` that does not exceed the requested period.
-The builder guarantees `(program_key, period)` is unique, so that rule always
-picks exactly one artifact. The manifest does not record when a period ends.
+On every tree the builder accepts, a `program_key` names exactly one
+`(jurisdiction, program_id)`. Together with the duplicate check, that makes
+`(program_key, period)` unique, so the rule always picks exactly one
+artifact. The manifest does not record when a period ends.
 
 The workflow also signs GitHub build-provenance attestations for
 `manifest.json` and every `*.compiled.json`. Consumers can verify a
@@ -89,10 +99,11 @@ AXIOM_RULES_ENGINE_BIN=~/axiom-rules/target/release/axiom-rules-engine \
   python tools/build_program_artifacts.py           # writes dist/
 ```
 
-The builder's own tests need no engine:
+The builder's own tests need no engine. CI runs them in the `builder-tests`
+job from the hash-pinned `tools/tests/requirements.txt`:
 
 ```bash
-uv run --no-project --with pytest --with hypothesis --with pyyaml \
+uv run --no-project --python 3.14 --with-requirements tools/tests/requirements.txt \
   python -m pytest -q tools/tests
 ```
 

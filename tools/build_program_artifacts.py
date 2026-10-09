@@ -8,9 +8,9 @@ writes a manifest describing everything that was built.
 
 Identity and naming (rulespec-us#784):
   - A spec's legal identity is (jurisdiction, program_id, period): the first
-    and last segments of its `program:` field, plus its `period:`. Several
-    periods of one program build side by side; the build refuses only two
-    specs that claim the same identity.
+    and last segments of its `program:` field, plus its `period:`, each with
+    surrounding whitespace stripped. Several periods of one program build
+    side by side.
   - An artifact is named after its spec path: the path under programs/,
     without `.yaml`, joined with "-". programs/us-az/snap/fy-2026.yaml builds
     us-az-snap-fy-2026.compiled.json. The name depends on nothing but the
@@ -19,6 +19,12 @@ Identity and naming (rulespec-us#784):
     period-free name every artifact had before #784) and period_label (the
     path segment that names the period, or null when the path names the
     program itself, as the tariff-schedule chapters do).
+  - The build refuses a tree, before composing anything, in exactly three
+    cases (plan_builds): two specs share an identity; two spec paths join to
+    the same case-folded artifact name; or two different (jurisdiction,
+    program_id) pairs join to the same case-folded program_key. On every tree
+    it accepts, a program_key names one program and (program_key, period)
+    names one artifact.
 
 The output is deterministic for a given (corpus SHA, composer version, engine
 version): no timestamps or randomness enter the artifacts or the manifest, so
@@ -73,7 +79,8 @@ class SpecBuild:
     period: str
     outputs: list[str]
     artifact_name: str
-    # The spec's `program:` field as written (e.g. us/payroll/oasdi-wage-tax).
+    # The spec's `program:` field as written, surrounding whitespace stripped
+    # (e.g. us/payroll/oasdi-wage-tax).
     program: str = ""
     # The path segment naming the legal period (fy-2026), or None when the
     # spec path names the program itself (us-tariff-schedule/ch01.yaml).
@@ -114,21 +121,27 @@ def period_label_for(spec_path: PurePath, program_segments: tuple[str, ...]) -> 
 
 
 class SpecIdentityError(SystemExit):
-    """The spec tree cannot be built without two specs sharing an output.
+    """The spec tree cannot be built without two specs sharing an output or a
+    routing key.
 
     `duplicates` maps each (jurisdiction, program_id, period) claimed by more
     than one spec to those spec paths. `name_collisions` maps each artifact
     name (case-folded, because release assets land on case-insensitive
     filesystems) that more than one spec path would produce to those paths.
+    `ambiguous_program_keys` maps each program_key (case-folded) that two or
+    more different (jurisdiction, program_id) pairs produce to every spec
+    path carrying that key.
     """
 
     def __init__(
         self,
         duplicates: dict[tuple[str, str, str], list[str]],
         name_collisions: dict[str, list[str]],
+        ambiguous_program_keys: dict[str, list[str]] | None = None,
     ) -> None:
         self.duplicates = duplicates
         self.name_collisions = name_collisions
+        self.ambiguous_program_keys = ambiguous_program_keys or {}
         lines: list[str] = []
         if duplicates:
             lines.append(
@@ -146,6 +159,15 @@ class SpecIdentityError(SystemExit):
             )
             for name, paths in sorted(name_collisions.items()):
                 lines.append(f"  {name}: {', '.join(paths)}")
+        if self.ambiguous_program_keys:
+            lines.append(
+                "ambiguous program_key: different (jurisdiction, program_id) "
+                "pairs join to the same program_key, compared case-insensitively; "
+                "consumers route by program_key, so change the first or last "
+                "`program:` segment of one program:"
+            )
+            for key, paths in sorted(self.ambiguous_program_keys.items()):
+                lines.append(f"  {key}: {', '.join(paths)}")
         super().__init__("\n".join(lines))
 
 
@@ -156,7 +178,14 @@ def plan_builds(specs: Iterable[tuple[PurePath, object]]) -> list[SpecBuild]:
     path must sit under programs/. Pure: the result depends only on the
     pairs, never on their order or on the filesystem. Raises
     SpecIdentityError when two specs share (jurisdiction, program_id, period),
-    or when two distinct paths would write the same artifact file.
+    when two distinct paths would write the same artifact file, or when two
+    different (jurisdiction, program_id) pairs share a program_key.
+
+    The third check is what makes program_key a routing key: on an accepted
+    tree, program_key.casefold() determines (jurisdiction, program_id), so
+    together with the first check (program_key, period) names exactly one
+    spec. Without it, us-az/snap and us/az-snap would both carry program_key
+    us-az-snap and read as two periods of one program.
     """
     builds: list[SpecBuild] = []
     for spec_path, spec in sorted(specs, key=lambda item: PurePath(item[0])):
@@ -183,15 +212,22 @@ def plan_builds(specs: Iterable[tuple[PurePath, object]]) -> list[SpecBuild]:
 
     by_identity: dict[tuple[str, str, str], list[str]] = {}
     by_name: dict[str, list[str]] = {}
+    by_key: dict[str, list[SpecBuild]] = {}
     for build in builds:
         by_identity.setdefault(build.identity, []).append(build.spec_path.as_posix())
         by_name.setdefault(build.artifact_name.casefold(), []).append(
             build.spec_path.as_posix()
         )
+        by_key.setdefault(build.program_key.casefold(), []).append(build)
     duplicates = {key: paths for key, paths in by_identity.items() if len(paths) > 1}
     collisions = {name: paths for name, paths in by_name.items() if len(paths) > 1}
-    if duplicates or collisions:
-        raise SpecIdentityError(duplicates, collisions)
+    ambiguous = {
+        key: [b.spec_path.as_posix() for b in group]
+        for key, group in by_key.items()
+        if len({(b.jurisdiction, b.program_id) for b in group}) > 1
+    }
+    if duplicates or collisions or ambiguous:
+        raise SpecIdentityError(duplicates, collisions, ambiguous)
     return builds
 
 

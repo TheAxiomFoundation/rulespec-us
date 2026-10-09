@@ -1,9 +1,10 @@
 """Example tests for program identity and artifact naming (rulespec-us#784).
 
 Two legal periods of one program must build side by side; the build refuses
-only a genuine (jurisdiction, program_id, period) duplicate, or two spec paths
-that would write the same artifact file. These drive the real `main()` with
-axiom-compose and the engine stubbed, so they need no Rust build.
+only a genuine (jurisdiction, program_id, period) duplicate, two spec paths
+that would write the same artifact file, or two different programs that would
+share a program_key. These drive the real `main()` with axiom-compose and the
+engine stubbed, so they need no Rust build.
 Property-based versions of the same invariants are in
 test_program_identity_properties.py.
 """
@@ -27,7 +28,7 @@ TARIFF_SCHEDULE_DIR = PurePosixPath("programs/us/us-tariff-schedule")
 
 
 def legacy_artifact_names(root: Path) -> dict[str, str]:
-    """The pre-#784 naming, copied from tools/build_program_artifacts.py
+    """The pre-#784 naming, reimplemented from tools/build_program_artifacts.py
     discover_specs at a9dc38fb0 (lines 63-91): f"{jurisdiction}-{program_id}"."""
     names: dict[str, str] = {}
     for path in sorted((root / "programs").rglob("*.yaml")):
@@ -221,6 +222,13 @@ def test_distinct_paths_that_join_to_one_name_fail_with_both_paths():
             "programs/us-az/snap/fy-2026.yaml",
         ]
     }
+    # The two programs also share program_key us-az-snap; both are reported.
+    assert excinfo.value.ambiguous_program_keys == {
+        "us-az-snap": [
+            "programs/us/az-snap/fy-2026.yaml",
+            "programs/us-az/snap/fy-2026.yaml",
+        ]
+    }
     assert "artifact name collision" in str(excinfo.value.code)
 
 
@@ -234,6 +242,95 @@ def test_names_differing_only_in_case_collide():
             ]
         )
     assert list(excinfo.value.name_collisions) == ["us-az-snap-fy-2026"]
+    # us-az-SNAP and us-az-snap are one routing key once case is ignored.
+    assert list(excinfo.value.ambiguous_program_keys) == ["us-az-snap"]
+
+
+@pytest.mark.parametrize("other_period", ["2026-01", "2026-10"])
+def test_distinct_programs_sharing_a_program_key_are_refused(
+    tmp_path, monkeypatch, toolchain, other_period
+):
+    # us-az/snap and us/az-snap are different programs: different
+    # jurisdictions, so different import and `state:` scopes in compose. Both
+    # hyphen-join to program_key us-az-snap. The stems differ, so their
+    # artifact names do not collide. Accepted, a consumer routing by
+    # (program_key, period) would read them as one program: with equal
+    # periods it could not choose, and with different periods it would
+    # silently treat one program as another's earlier period.
+    root = tmp_path / "rulespec-us"
+    write_spec(root, "programs/us-az/snap/fy-2026.yaml", "us-az/snap", "2026-01")
+    write_spec(root, "programs/us/az-snap/fy-2026b.yaml", "us/az-snap", other_period)
+
+    with pytest.raises(bpa.SpecIdentityError) as excinfo:
+        run_main(monkeypatch, root)
+
+    error = excinfo.value
+    assert error.duplicates == {}
+    assert error.name_collisions == {}
+    assert error.ambiguous_program_keys == {
+        "us-az-snap": [
+            "programs/us/az-snap/fy-2026b.yaml",
+            "programs/us-az/snap/fy-2026.yaml",
+        ]
+    }
+    assert "ambiguous program_key" in str(error.code)
+    assert toolchain.composed == []
+    assert not (root / "dist").exists()
+
+
+def test_program_keys_differing_only_in_case_are_refused():
+    # Different paths, so no name collision, and different identities, but
+    # us-az-snap and US-AZ-snap are one key to a case-insensitive consumer
+    # (and were one file on macOS under the pre-#784 names).
+    with pytest.raises(bpa.SpecIdentityError) as excinfo:
+        bpa.plan_builds(
+            [
+                (PurePosixPath("programs/us-az/snap/fy-2026.yaml"), {"program": "us-az/snap", "period": "2026-01"}),
+                (PurePosixPath("programs/legacy/snap/fy-2027.yaml"), {"program": "US-AZ/snap", "period": "2026-10"}),
+            ]
+        )
+    assert excinfo.value.duplicates == {}
+    assert excinfo.value.name_collisions == {}
+    assert excinfo.value.ambiguous_program_keys == {
+        "us-az-snap": [
+            "programs/legacy/snap/fy-2027.yaml",
+            "programs/us-az/snap/fy-2026.yaml",
+        ]
+    }
+
+
+def test_surrounding_whitespace_in_program_and_period_is_stripped():
+    # compose strips both fields (_non_empty_string, spec.py:151-154 at
+    # fabe0b3); the builder must agree, or " 2026-01 " and "2026-01" would be
+    # two periods of one program.
+    padded = {"program": "  us-az/snap ", "period": " 2026-01 ", "outputs": ["x"]}
+    [build] = bpa.plan_builds([(PurePosixPath("programs/us-az/snap/fy-2026.yaml"), padded)])
+    assert (build.program, build.jurisdiction, build.program_id, build.period) == (
+        "us-az/snap",
+        "us-az",
+        "snap",
+        "2026-01",
+    )
+    assert build.program_key == "us-az-snap"
+    assert build.period_label == "fy-2026"
+    entry = bpa.manifest_entry(
+        build,
+        spec_sha256="d" * 64,
+        artifact="us-az-snap-fy-2026.compiled.json",
+        artifact_sha256="e" * 64,
+        compat={},
+        program={},
+    )
+    assert (entry["program"], entry["period"]) == ("us-az/snap", "2026-01")
+
+    with pytest.raises(bpa.SpecIdentityError) as excinfo:
+        bpa.plan_builds(
+            [
+                (PurePosixPath("programs/us-az/snap/fy-2026.yaml"), padded),
+                (PurePosixPath("programs/us-az/snap/fy-2026-copy.yaml"), {"program": "us-az/snap", "period": "2026-01"}),
+            ]
+        )
+    assert list(excinfo.value.duplicates) == [("us-az", "snap", "2026-01")]
 
 
 def test_specs_without_a_program_are_skipped_and_an_empty_program_is_refused():
@@ -269,6 +366,14 @@ def test_real_spec_tree_names_are_unique_including_the_tariff_chapters():
     names = [build.artifact_name.casefold() for build in builds]
     assert len(set(names)) == len(builds)
     assert len({build.identity for build in builds}) == len(builds)
+    # program_key names one program, so (program_key, period) names one spec.
+    programs_by_key: dict[str, set[tuple[str, str]]] = {}
+    for build in builds:
+        programs_by_key.setdefault(build.program_key.casefold(), set()).add(
+            (build.jurisdiction, build.program_id)
+        )
+    assert all(len(pairs) == 1 for pairs in programs_by_key.values())
+    assert len({(b.program_key.casefold(), b.period) for b in builds}) == len(builds)
 
     chapters = [b for b in builds if PurePosixPath(b.spec_path.as_posix()).parent == TARIFF_SCHEDULE_DIR]
     assert chapters, "expected the generated tariff-schedule chapter specs"
