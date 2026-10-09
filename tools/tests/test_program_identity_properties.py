@@ -15,7 +15,9 @@ Invariants, for every generated spec tree:
    the `program:` segments; otherwise it is the path's last segment.
 5. Differential against the pre-#784 builder. program_key equals the old
    artifact name for every spec, and every tree the old builder accepted is
-   accepted now unless two of its paths join to one name.
+   accepted now unless two of its paths join to one name. (Generated
+   `program:` values carry no surrounding whitespace; the builder strips it,
+   as axiom-compose does, where the old builder kept it in the name.)
 6. Filesystem agreement. discover_specs on a tree written to disk, in any
    creation order and with companion `.test.yaml` files and non-spec YAML
    beside it, returns what plan_builds returns for the specs alone.

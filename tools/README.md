@@ -24,9 +24,11 @@ release, then bump the consumer's pin.
 
 A spec's legal identity is `(jurisdiction, program_id, period)`:
 `jurisdiction` and `program_id` are the first and last segments of its
-`program:` field, and `period` is its `period:` value. These are the two
-segments axiom-compose reads: the first sets the `state:` scope prefix and
-the last is the auto-gate program token. One program can have any number of
+`program:` field, and `period` is its `period:` value. axiom-compose's
+behavior depends on `program:` only through those two segments: the first
+sets the allowed import prefixes and the `state:` scope prefix, and the last
+is the auto-gate program token. The middle segments appear only in labels
+(the composition target and summary). One program can have any number of
 periods; each is its own spec file and its own artifact.
 
 Each artifact is named after its spec path: the path under `programs/`,

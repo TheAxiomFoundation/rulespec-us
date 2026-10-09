@@ -176,8 +176,9 @@ def test_a_genuine_duplicate_period_fails_before_anything_is_built(
 
 
 def test_period_identity_ignores_the_programs_middle_path_segments():
-    # axiom-compose reads only the first `program:` segment (state scope
-    # prefix) and the last (auto-gate token), so the identity uses only those.
+    # axiom-compose's behavior depends on `program:` only through its first
+    # segment (import and `state:` scope prefixes) and its last (auto-gate
+    # token); middle segments are labels. The identity uses only those two.
     def spec(program, period):
         return {"program": program, "period": period, "outputs": ["x"]}
 
