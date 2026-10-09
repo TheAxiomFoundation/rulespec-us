@@ -11,14 +11,24 @@ module:
     rules and the FAA6.J.09 utility allowance amounts, and exposes the issued
     monthly benefit (snap_benefit) on the 273.10 chain. Arizona's own
     manual-literal benefit-amount rule remains exposed as
-    na_regular_month_allotment, fed by the same net income; the budgetary-unit
-    eligibility determination remains an input bridge until the full Arizona
-    NA eligibility chain is wired.
+    na_regular_month_allotment, fed by the same net income. The budgetary-unit
+    eligibility determination (na_budgetary_unit_is_eligible, exposed as
+    snap_eligible) is computed: 7 CFR 273.3 residency, at least one member
+    eligible under the composed 7 CFR 273.4-273.7 and 273.24 member rules, and
+    Arizona categorical eligibility (FAA5 NA Categorical Eligibility, basic or
+    expanded) or else the federal 7 CFR 273.9 income tests and 7 CFR 273.8
+    resource test. Arizona's FAA5 medical deduction (the $145 standard
+    medical deduction or actual expenses over $35) is bound into the 7 CFR
+    273.10 medical deduction, so it reaches net income and snap_benefit.
 imports:
   - us:policies/usda/snap/state-plan-composition
   - us-az:policies/des/faa5/na-utility-expenses-and-allowances/utility-allowance-eligibility
   - us-az:policies/des/faa6/utility-allowance-current-amount
   - us-az:policies/des/faa5/na-eligibility-and-benefit-determination/benefit-amount
+  - us:regulations/7-cfr/273/8
+  - us:regulations/7-cfr/273/9
+  - us-az:policies/des/faa5/na-categorical-eligibility/expanded-categorical-eligibility
+  - us-az:policies/des/faa5/na-medical-expenses-and-deduction/medical-deduction
 rules:
   - name: az_applied_utility_allowance
     kind: derived
@@ -89,6 +99,109 @@ rules:
         formula: |-
           max(0, snap_excess_shelter_deduction_for_net_income)
 
+  # Expanded categorical eligibility (ECE) inputs, bound to the federal chain.
+  # The ECE module declares entity Person, but FAA5 block 4 states every ECE
+  # condition of the budgetary unit; the composition reads ECE's judgments
+  # from Household rules, so they evaluate at the household.
+  - name: gross_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: >-
+      FAA5 NA Categorical Eligibility, block 4 (gross income for ECE); FAA5 NA
+      Eligibility and Benefit Determination, block 5 (gross income is all
+      countable income received by the budgetary unit); 7 CFR 273.10(e)(1)(i)(A)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_total_gross_income
+
+  - name: current_federal_poverty_level_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: >-
+      FAA5 NA Categorical Eligibility, block 4 (current federal poverty level);
+      USDA FNS FY 2026 SNAP income eligibility standards, 100 percent of the
+      poverty guideline by household size
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_net_income_limit_100_percent_fpl_48_states_dc
+
+  # Basic categorical eligibility (BCE) stays an input: the BCE module
+  # (basic-categorical-eligibility.yaml) still declares its budgetary-unit
+  # judgments on entity Person (rulespec-us#1429, #1440), so it is not
+  # imported. Its outcome enters through ECE's own input
+  # budgetary_unit_meets_basic_categorical_eligibility_requirements.
+  - name: az_na_categorically_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FAA5 NA Categorical Eligibility, blocks 3 and 4 (basic or expanded categorical eligibility)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          budgetary_unit_meets_basic_categorical_eligibility_requirements
+          or na_expanded_categorical_eligibility
+
+  - name: snap_categorically_eligible_for_resource_exemption
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: >-
+      FAA5 NA Categorical Eligibility, block 4 (an ECE budgetary unit is
+      considered to have met resources); 7 CFR 273.2(j)(2)(v) (PA/SSI
+      categorical eligibility deems the resource limit)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          az_na_categorically_eligible
+
+  - name: az_na_income_and_resource_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: >-
+      FAA5 NA Categorical Eligibility, block 4 (an ECE budgetary unit is
+      considered to have met the gross and net income tests); FAA5 NA
+      Eligibility and Benefit Determination, blocks 5 and 6; 7 CFR 273.8;
+      7 CFR 273.9(a)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          az_na_categorically_eligible
+          or (
+            snap_standard_income_eligible
+            and snap_resource_eligible
+          )
+
+  # The budgetary-unit eligibility determination that benefit-amount gates
+  # on. Deriving it here removes the input, so no consumer can assert
+  # eligibility directly.
+  - name: na_budgetary_unit_is_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: >-
+      FAA5 NA Eligibility and Benefit Determination, blocks 5 and 6; FAA5 NA
+      Categorical Eligibility, block 4; 7 CFR 273.3; 7 CFR 273.4-273.7; 7 CFR
+      273.24
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_residency_eligible
+          and snap_household_member_eligible
+          and az_na_income_and_resource_eligible
+
   - name: snap_eligible
     kind: derived
     entity: Household
@@ -99,6 +212,55 @@ rules:
       - effective_from: '2025-10-01'
         formula: |-
           na_budgetary_unit_is_eligible
+
+  # Arizona's medical deduction on the federal net-income chain. These two
+  # bindings make 7 CFR 273.10 snap_excess_medical_deduction_for_net_income
+  # equal Arizona's medical_deduction for every input (the Colorado
+  # composition also binds snap_total_medical_expenses with a composition
+  # rule). Once
+  # rulespec-us#1436 lands, one source_relation of type sets on
+  # snap_excess_medical_deduction_for_net_income, with basis
+  # snap_approved_medical_demonstration_delegation, replaces both.
+  - name: budgetary_unit_includes_elderly_or_disabled_participant_with_medical_expenses
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: >-
+      FAA5 NA Medical Expenses and Deduction, block 2 (budgetary units with
+      participants who are elderly or have a disability); 7 USC 2012(j)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_household_has_elderly_or_disabled_member
+
+  - name: household_entitled_to_excess_medical_deduction
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: >-
+      FAA5 NA Medical Expenses and Deduction, block 2; 7 CFR
+      273.10(e)(1)(i)(D)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          medical_deduction > 0
+
+  - name: snap_total_medical_expenses
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: >-
+      FAA5 NA Medical Expenses and Deduction, block 2 (the $145 standard
+      medical deduction, or actual expenses minus the $35 disregard); 7 CFR
+      273.10(e)(1)(i)(D)
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if medical_deduction > 0: medical_deduction + snap_medical_expense_threshold else: 0
 
   - name: na_regular_month_allotment
     kind: derived
