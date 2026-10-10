@@ -36,11 +36,14 @@ import copy
 import hashlib
 import json
 import re
+from decimal import Decimal
 from pathlib import Path
 
 import yaml
 
-GENERATOR_VERSION = "b1.6-schedule-compositions-3"
+import schedule_heading_overlap
+
+GENERATOR_VERSION = "b1.6-schedule-compositions-4"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
 WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
@@ -51,6 +54,15 @@ COMPOSITION_DIR = REPO_ROOT / "us/policies/cbp/us-tariff-schedule/generated"
 PROGRAM_DIR = REPO_ROOT / "programs/us/us-tariff-schedule"
 TABLE_EFFECTIVE_FROM = "2025-01-01"
 WITNESS_EFFECTIVE_FROM = "2026-02-15"
+# Section 232 steel windows.  Proclamation of April 2026 (FR 2026-06960,
+# cited by the witness) moves aluminum and steel duties to full value, sets
+# the 50/25 percent rates and charges multi-metal goods once, from April 6.
+# The witness's aluminum component switches to the consolidated U.S. note 16
+# headings (overlays rev12-consolidation / rev12-uk-consolidation) on July 21.
+SECTION_232_PREPROCLAMATION_TO = "2026-04-05"
+SECTION_232_PROCLAMATION_FROM = "2026-04-06"
+SECTION_232_PRECONSOLIDATION_TO = "2026-07-20"
+SECTION_232_CONSOLIDATION_FROM = "2026-07-21"
 COMPANION_EFFECTIVE_DATE = "2026-08-01"
 WITNESS_LINE_KEYS = {
     2203000030,
@@ -119,6 +131,27 @@ COMPONENT_FORMULA_REPLACEMENTS = {
         ("elif origin_is_forced_labor_twelve_and_one_half_percent_country:", "elif entry_is_forced_labor_301_listed and origin_is_forced_labor_twelve_and_one_half_percent_country:"),
         ("elif origin_is_japan or origin_is_korea or origin_is_switzerland:", "elif entry_is_forced_labor_301_listed and (origin_is_japan or origin_is_korea or origin_is_switzerland):"),
     ),
+}
+
+# The heading-overlap check feeds every flag entry preparation produces.
+HEADING_CHECK_ENTRY_INPUTS = GENERATED_MEMBERSHIP_INPUTS + RETAINED_ENTRY_FLAGS
+# Double charges the check reports that another PR removes, keyed by
+# (chapter, HTS number, heading or group key).  A collision is excused only
+# for the listed origin and exactly the listed (summand, parameter) charges;
+# a listed charge that stops appearing fails generation, so the list cannot
+# go stale.
+KNOWN_DOUBLE_CHARGES = {
+    ("22", "2203.00.00.30", "9903.88.03"): {
+        "origin": "CN",
+        "charges": (
+            ("china_section_301_component_rate", "list_1_additional_ad_valorem_rate"),
+            ("china_section_301_component_rate", "list_1_additional_ad_valorem_rate"),
+        ),
+        "reason": (
+            "rulespec-us#1398: the witness line_d China 301 term and the List 1-3 "
+            "membership term both charge list_1_additional_ad_valorem_rate"
+        ),
+    },
 }
 
 DECLARED_BOOLEAN_INPUTS = (
@@ -528,29 +561,200 @@ def generalized_component_rule(witness_rule: dict, chapter: str) -> dict:
     return serialize_rule_for_chapter(generalized, chapter, copied_from_witness=True)
 
 
-def steel_parameter_rule() -> dict:
-    atoms = [
-        {"path": "versions[0].formula", "kind": "parameter", "source": {
-            "corpus_citation_path": f"us/statute/hts/{heading}",
-            "excerpt": "Rates of duty (1-General): The duty provided in the applicable subheading + 50%"}}
-        for heading in ("9903.82.02",)
-    ]
+NOTE16_PAGE = "us/statute/hts/chapter-99/page-236"
+NOTE16_SCOPE_EXCERPT = (
+    "Except as provided in headings 9903.82.01, 9903.85.67, and 9903.85.68, "
+    "headings 9903.82.02\u20139903.82.26 provide the ordinary customs duty treatment"
+)
+NOTE16_EXCLUSIVITY_EXCERPT = (
+    "These headings are mutually exclusive, such that an imported article will be "
+    "subject to no more than one of these headings."
+)
+NOTE19_TERMINATION_PAGE = "us/statute/hts/chapter-99/page-250"
+NOTE19_TERMINATION_EXCERPT = (
+    "Headings 9903.85.01\u20139903.85.15, 9903.85.21\u20139903.85.66, and 9903.85.69 "
+    "9903.85.72 are terminated as of April 6, 2026."
+)
+UK_HEADING_SCOPE_EXCERPT = (
+    "Articles of aluminum or of steel and derivative aluminum or steel articles the product "
+    "of the United Kingdom, as provided for in subdivisions (c)(i)\u2013(iv) and (d) of U.S. "
+    "note 16 to this subchapter"
+)
+RUSSIA_STEEL_HEADING_SCOPE_EXCERPT = (
+    "Articles of steel or of copper and derivative steel the product of the Russian "
+    "Federation, as provided for in subdivisions (c)(iii)\u2013(v) of U.S. note 16 to this "
+    "subchapter"
+)
+PROCLAMATION_2026_06960 = "us/rulemaking/federal-register/2026-04-09/2026-06960"
+PROCLAMATION_EFFECTIVE_EXCERPT = (
+    "Effective with respect to goods entered for consumption or withdrawn from warehouse "
+    "for consumption on or after 12:01 a.m. eastern daylight time on April 6, 2026, the "
+    "applicable additional ad valorem rate of duty imposed pursuant to section 232"
+)
+PROCLAMATION_SCOPE_EXCERPT = (
+    "for all aluminum and steel articles, most copper articles, and certain derivative "
+    "articles of aluminum and steel, as listed in Annex I-A to this proclamation"
+)
+PROCLAMATION_ONCE_EXCERPT = (
+    "shall only be subject once to the respective duty rates established in clause (2), "
+    "clause (3), or clause (5) of this proclamation even if the good contains aluminum and steel"
+)
+PROCLAMATION_GENERAL_EXCERPT = (
+    "(a) 50 percent, unless a lower rate of duty applies pursuant to clause (2)(b) or "
+    "(2)(c) of this proclamation"
+)
+PROCLAMATION_UK_EXCERPT = (
+    "(b) 25 percent for United Kingdom products, the aluminum content of which is composed "
+    "entirely of aluminum that was smelted or most recently cast in the United Kingdom or the "
+    "steel content of which is composed entirely of steel that was melted and poured in the "
+    "United Kingdom"
+)
+PROCLAMATION_RUSSIA_EXCERPT = (
+    "shall continue to be subject to the 200 percent ad valorem rate of duty established in "
+    "Proclamation 10522"
+)
+# Imported rev12 overlay parameters (headings 9903.82.02 and 9903.82.04); the
+# witness aluminum component already charges them from 2026-07-21.
+S232_CONSOLIDATED_RATE = "section_232_non_excepted_aluminum_steel_copper_derivative_articles_additional_duty_rate"
+S232_UK_CONSOLIDATED_RATE = "section_232_uk_aluminum_steel_derivative_articles_additional_duty_rate"
+
+
+def _atom(path: str, kind: str, citation: str, excerpt: str) -> dict:
     return {
-        "name": "s232_steel_heading_rate", "kind": "parameter", "dtype": "Rate",
-        "source": "HTS 9903.82.02 current consolidated primary and derivative steel rate; 2026 Rev. 15 vintage",
-        "metadata": {"proof": {"atoms": atoms}},
-        "versions": [{"effective_from": WITNESS_EFFECTIVE_FROM, "formula": "0.50"}],
+        "path": path,
+        "kind": kind,
+        "source": {"corpus_citation_path": citation, "excerpt": excerpt},
     }
 
 
+def _scalar_parameter(name: str, source: str, effective_from: str, value: str, atoms: list[dict]) -> dict:
+    return {
+        "name": name, "kind": "parameter", "dtype": "Rate", "source": source,
+        "metadata": {"proof": {"atoms": atoms}},
+        "versions": [{"effective_from": effective_from, "formula": value}],
+    }
+
+
+def steel_parameter_rules() -> list[dict]:
+    """Generator-authored steel rates, each cited to verbatim corpus text.
+
+    s232_steel_heading_rate is the original single Rev. 15 rate, now used
+    only before April 6, 2026.  Russia is a General Note 3(b) country, so
+    heading 9903.82.14's column 2 text is the operative one.
+    """
+    return [
+        _scalar_parameter(
+            "s232_steel_heading_rate",
+            "HTS 9903.82.02 current consolidated primary and derivative steel rate; 2026 Rev. 15 vintage",
+            WITNESS_EFFECTIVE_FROM, "0.50",
+            [_atom("versions[0].formula", "parameter", "us/statute/hts/9903.82.02",
+                   "Rates of duty (1-General): The duty provided in the applicable subheading + 50%")],
+        ),
+        _scalar_parameter(
+            "s232_steel_proclamation_rate",
+            "Proclamation of April 2026 (FR 2026-06960) clause (2)(a) Annex I-A aluminum and steel rate",
+            SECTION_232_PROCLAMATION_FROM, "0.50",
+            [_atom("versions[0].formula", "parameter", PROCLAMATION_2026_06960, PROCLAMATION_GENERAL_EXCERPT)],
+        ),
+        _scalar_parameter(
+            "s232_steel_uk_proclamation_rate",
+            "Proclamation of April 2026 (FR 2026-06960) clause (2)(b) United Kingdom Annex I-A rate",
+            SECTION_232_PROCLAMATION_FROM, "0.25",
+            [_atom("versions[0].formula", "parameter", PROCLAMATION_2026_06960, PROCLAMATION_UK_EXCERPT)],
+        ),
+        _scalar_parameter(
+            "s232_steel_russia_heading_rate",
+            "HTS 9903.82.14 Russian steel and derivative steel articles; 2026 Rev. 15 vintage",
+            SECTION_232_CONSOLIDATION_FROM, "0.50",
+            [_atom("versions[0].formula", "parameter", "us/statute/hts/9903.82.14",
+                   "Rates of duty (2): The duty provided in the applicable subheading + 50%")],
+        ),
+    ]
+
+
+STEEL_PREPROCLAMATION_FORMULA = "if entry_is_section_232_steel: s232_steel_heading_rate\nelse: 0"
+STEEL_PROCLAMATION_FORMULA = (
+    "if entry_is_section_232_aluminum: 0\n"
+    "elif entry_is_section_232_steel:\n"
+    "  (if origin_is_uk: s232_steel_uk_proclamation_rate\n"
+    "   else: s232_steel_proclamation_rate)\n"
+    "else: 0"
+)
+STEEL_CONSOLIDATED_FORMULA = (
+    "if entry_is_section_232_aluminum: 0\n"
+    "elif entry_is_section_232_steel:\n"
+    "  (if origin_is_russia: s232_steel_russia_heading_rate\n"
+    "   elif origin_is_uk: " + S232_UK_CONSOLIDATED_RATE + "\n"
+    "   else: " + S232_CONSOLIDATED_RATE + ")\n"
+    "else: 0"
+)
+
+
 def steel_component_rule() -> dict:
+    """Section 232 steel component, never stacked on the aluminum component.
+
+    Before April 6, 2026 the component keeps the generator's earlier single
+    rate, cited to Rev. 15 heading 9903.82.02, which post-dates that window:
+    the metal-content basis of that period is not modelled and the corpus
+    carries no pre-consolidation steel headings.  From April 6 the proclamation
+    charges a multi-metal good once, so an entry that is also a section 232
+    aluminum member is charged by the witness aluminum component alone and
+    this component yields zero; a steel-only member pays 25 percent if
+    British (the witness's origin_is_uk proxy for the UK-melt condition) and
+    50 percent otherwise.  For a Russian aluminum and steel member the
+    single charge is the clause (8) 200 percent aluminum rate.  Clause (9)
+    speaks only of the clause (2), (3) and (5) rates, so this is an
+    interpretive ruling, not a holding of the text: it follows note 16(a),
+    which excepts headings 9903.85.67/.68 from 9903.82.02-9903.82.26, and
+    note 19's compiler's note, which keeps .67/.68 while terminating the
+    other aluminum headings on April 6.
+    From July 21 the same routing uses the consolidated U.S. note 16
+    headings: note 16(a) makes 9903.82.02-9903.82.26 mutually exclusive and
+    excepts Russian aluminum headings 9903.85.67/.68 from all of them, a
+    Russian steel-only member pays 9903.82.14, a British one 9903.82.04 and
+    any other 9903.82.02.
+    """
+    atoms = [
+        _atom("versions[0].formula", "parameter", "us/statute/hts/9903.82.02",
+              "Rates of duty (1-General): The duty provided in the applicable subheading + 50%"),
+        _atom("versions[1].formula", "effective_period", PROCLAMATION_2026_06960, PROCLAMATION_EFFECTIVE_EXCERPT),
+        _atom("versions[1].formula", "condition", PROCLAMATION_2026_06960, PROCLAMATION_SCOPE_EXCERPT),
+        _atom("versions[1].formula", "exception", PROCLAMATION_2026_06960, PROCLAMATION_ONCE_EXCERPT),
+        _atom("versions[1].formula", "formula", PROCLAMATION_2026_06960, PROCLAMATION_GENERAL_EXCERPT),
+        _atom("versions[1].formula", "formula", PROCLAMATION_2026_06960, PROCLAMATION_UK_EXCERPT),
+        _atom("versions[1].formula", "exception", PROCLAMATION_2026_06960, PROCLAMATION_RUSSIA_EXCERPT),
+        _atom("versions[1].formula", "exception", NOTE16_PAGE, NOTE16_SCOPE_EXCERPT),
+        _atom("versions[1].formula", "exception", NOTE19_TERMINATION_PAGE, NOTE19_TERMINATION_EXCERPT),
+        _atom("versions[2].formula", "condition", NOTE16_PAGE, NOTE16_SCOPE_EXCERPT),
+        _atom("versions[2].formula", "exception", NOTE16_PAGE, NOTE16_EXCLUSIVITY_EXCERPT),
+        _atom("versions[2].formula", "exception", "us/statute/hts/9903.82.02",
+              "Except as provided for in headings 9903.82.14, 9903.85.67 and 9903.85.68"),
+        _atom("versions[2].formula", "formula", "us/statute/hts/9903.82.02",
+              "Rates of duty (1-General): The duty provided in the applicable subheading + 50%"),
+        _atom("versions[2].formula", "condition", "us/statute/hts/9903.82.04", UK_HEADING_SCOPE_EXCERPT),
+        _atom("versions[2].formula", "formula", "us/statute/hts/9903.82.04",
+              "Rates of duty (1-General): The duty provided in the applicable subheading + 25%"),
+        _atom("versions[2].formula", "condition", "us/statute/hts/9903.82.14", RUSSIA_STEEL_HEADING_SCOPE_EXCERPT),
+        _atom("versions[2].formula", "formula", "us/statute/hts/9903.82.14",
+              "Rates of duty (2): The duty provided in the applicable subheading + 50%"),
+    ]
     return {
         "name": "section_232_steel_component_rate", "kind": "derived",
         "entity": "CustomsEntry", "dtype": "Rate", "period": "Day",
-        "source": "Section 232 primary and derivative steel overlay; 2026 Rev. 15 single-version surface",
-        "metadata": copy.deepcopy(steel_parameter_rule()["metadata"]),
-        "versions": [{"effective_from": WITNESS_EFFECTIVE_FROM,
-                      "formula": "if entry_is_section_232_steel: s232_steel_heading_rate\nelse: 0"}],
+        "source": (
+            "Section 232 primary and derivative steel overlay: the earlier single rate before April "
+            "6, 2026 (unsourced for that window); FR 2026-06960 clause (2) rates through July 20; U.S. note 16 headings "
+            "9903.82.02, 9903.82.04 and 9903.82.14 from July 21; never charged when the section "
+            "232 aluminum component charges the same entry"
+        ),
+        "metadata": {"proof": {"atoms": atoms}},
+        "versions": [
+            {"effective_from": WITNESS_EFFECTIVE_FROM, "effective_to": SECTION_232_PREPROCLAMATION_TO,
+             "formula": STEEL_PREPROCLAMATION_FORMULA},
+            {"effective_from": SECTION_232_PROCLAMATION_FROM, "effective_to": SECTION_232_PRECONSOLIDATION_TO,
+             "formula": STEEL_PROCLAMATION_FORMULA},
+            {"effective_from": SECTION_232_CONSOLIDATION_FROM, "formula": STEEL_CONSOLIDATED_FORMULA},
+        ],
     }
 
 
@@ -774,7 +978,10 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
         else:
             rules.append(generalized_component_rule(witness_rule, chapter))
     rules.extend([
-        serialize_rule_for_chapter(steel_parameter_rule(), chapter, copied_from_witness=False),
+        *(
+            serialize_rule_for_chapter(rule, chapter, copied_from_witness=False)
+            for rule in steel_parameter_rules()
+        ),
         serialize_rule_for_chapter(steel_component_rule(), chapter, copied_from_witness=False),
     ])
     rules.append(
@@ -815,10 +1022,17 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
                 )
 
     source_verification = copy.deepcopy(witness["module"]["source_verification"])
-    steel_citation = "us/statute/hts/9903.82.02"
-    if steel_citation not in source_verification["corpus_citation_paths"]:
+    steel_citations = {
+        "us/statute/hts/9903.82.02",
+        "us/statute/hts/9903.82.04",
+        "us/statute/hts/9903.82.14",
+        NOTE16_PAGE,
+        NOTE19_TERMINATION_PAGE,
+        PROCLAMATION_2026_06960,
+    }
+    if not steel_citations <= set(source_verification["corpus_citation_paths"]):
         source_verification["corpus_citation_paths"] = sorted(
-            set(source_verification["corpus_citation_paths"]) | {steel_citation}
+            set(source_verification["corpus_citation_paths"]) | steel_citations
         )
     structural_note = ""
     if chapter == "76":
@@ -835,8 +1049,25 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
         "entry preparation cannot yet populate those lists; both actions are outside the "
         "April-June window (effective 2026-07-22 and 2026-07-24). China 2024-action and "
         "solar inputs also default FALSE pending note-31 membership tables. Beer/section-338 "
-        "keeps entry_is_line_d because no membership module exists. Steel uses the Rev. 15 "
-        "50-percent single-version rate, and the April-June window is wholly post-escalation. "
+        "keeps entry_is_line_d because no membership module exists. Before 2026-04-06 steel keeps "
+        "the generator's earlier single 50-percent rate; its only citation, Rev. 15 heading "
+        "9903.82.02, post-dates that window, and the corpus has no source for the pre-April "
+        "steel rate or its metal-content basis (encoding debt). From 2026-04-06 the proclamation in FR 2026-06960 "
+        "charges a good listed under more than one metal only once, and from 2026-07-21 U.S. "
+        "note 16(a) makes headings 9903.82.02-9903.82.26 mutually exclusive and excepts the "
+        "Russian aluminum headings 9903.85.67/.68 from all of them; an entry that is both a "
+        "section 232 aluminum and steel member (HTS 7614.10.10.00) is therefore charged once, by "
+        "the aluminum component. A steel-only member pays 25 percent if British (clause (2)(b), "
+        "then heading 9903.82.04) and 50 percent otherwise (clause (2)(a), then heading "
+        "9903.82.02, or 9903.82.14 for Russia). Charging a Russian aluminum and steel member "
+        "only the 200 percent aluminum rate from April 6 is an interpretive ruling (clause (8), "
+        "note 16(a)'s exception for 9903.85.67/.68), not a holding of clause (9). The aggregate "
+        "steel membership still includes note 16(c)(vii), (x) and (xi) articles (339 of the 781 "
+        "steel-flagged entries) whose own headings (9903.82.05-.12, .16, .17, .22; FR 2026-06960 "
+        "clauses (3) and (5)) are not modelled: they are routed to the (c)(i)-(v) headings, so a "
+        "British one pays 25 percent where its heading sets 15 percent or a floor, a Russian one "
+        "50 percent where 9903.82.16/.17 set 25, and any other 50 percent where its heading sets "
+        "25 percent or a floor. "
         "The witness's 7202.11.10.00 steel exemplar is a ferroalloy outside note 16(c), so "
         "the untouched witness correctly has no steel component slot. These identifiers are "
         "referenced without local derived rules under the referenced-implies-input convention."
@@ -1072,6 +1303,117 @@ def positive_judgment_cases(module_path: str, module: dict) -> list[dict]:
     return cases
 
 
+# Per-chapter branch cases for the section 232 aluminum/steel routing.  Each
+# names its window, origin, true memberships and expected component values.
+SECTION_232_BRANCH_CASES = (
+    ("2026-03-02", "GB", ("entry_is_section_232_steel",), 0, 0.5,
+     "pins the unchanged pre-April 6 steel value; the corpus has no source for it (encoding debt)"),
+    ("2026-05-01", "DE", ("entry_is_section_232_aluminum", "entry_is_section_232_steel"), 0.5, 0,
+     "FR 2026-06960 clause (9) charges an aluminum and steel member once"),
+    ("2026-05-01", "GB", ("entry_is_section_232_steel",), 0, 0.25,
+     "FR 2026-06960 clause (2)(b) charges a UK steel member 25 percent"),
+    ("2026-05-01", "RU", ("entry_is_section_232_aluminum", "entry_is_section_232_steel"), 2.0, 0,
+     "interpretive ruling: a Russian aluminum and steel member pays only the clause (8) 200 percent aluminum rate"),
+    ("2026-08-19", "DE", ("entry_is_section_232_aluminum", "entry_is_section_232_steel"), 0.5, 0,
+     "note 16(a) mutual exclusivity charges an aluminum and steel member heading 9903.82.02 once"),
+    ("2026-08-19", "GB", ("entry_is_section_232_aluminum", "entry_is_section_232_steel"), 0.25, 0,
+     "note 16(a) mutual exclusivity charges a UK aluminum and steel member heading 9903.82.04 once"),
+    ("2026-08-19", "RU", ("entry_is_section_232_aluminum", "entry_is_section_232_steel"), 2.0, 0,
+     "note 16(a) excepts a Russian aluminum and steel member from 9903.82.02-.26; only 9903.85.67/.68 applies"),
+    ("2026-08-19", "GB", ("entry_is_section_232_steel",), 0, 0.25,
+     "a UK steel-only member pays heading 9903.82.04"),
+    ("2026-08-19", "RU", ("entry_is_section_232_steel",), 0, 0.5,
+     "a Russian steel-only member pays heading 9903.82.14"),
+    ("2026-08-19", "DE", ("entry_is_section_232_steel",), 0, 0.5,
+     "any other steel-only member pays heading 9903.82.02"),
+)
+
+# Real entries whose entry-preparation vectors exercise the routing.  The
+# vectors are pinned here; tests/test_tariff_schedule_heading_overlap.py
+# asserts tools/b16_entry_flags.py still produces them.
+SECTION_232_ENTRY_DATE = "2026-08-19"
+SECTION_232_ENTRY_CASES = {
+    "76": (
+        7614101000, "7614.10.10.00",
+        ("entry_is_china_301_list123", "entry_is_section_232_aluminum",
+         "entry_is_section_232_steel", "entry_is_section_232_covered"),
+        {"CN": (0.5, 0, 0.25), "RU": (2.0, 0, 0), "GB": (0.25, 0, 0), "DE": (0.5, 0, 0)},
+    ),
+    "72": (
+        7206100000, "7206.10.00.00",
+        ("entry_is_section_232_steel", "entry_is_section_232_covered"),
+        {"GB": (0, 0.25, 0), "RU": (0, 0.5, 0), "DE": (0, 0.5, 0)},
+    ),
+}
+
+
+def _rate(value) -> float | int:
+    number = Decimal(str(value))
+    return int(number) if number == number.to_integral_value() else float(number)
+
+
+def section_232_branch_cases(module_path: str) -> list[dict]:
+    cases = []
+    for day, origin, members, aluminum, steel, description in SECTION_232_BRANCH_CASES:
+        values: dict[str, object] = {
+            "country_of_origin": origin,
+            "entry_is_line_d": False,
+            "entry_is_section_232_aluminum": "entry_is_section_232_aluminum" in members,
+            "entry_is_section_232_steel": "entry_is_section_232_steel" in members,
+        }
+        cases.append({
+            "name": f"section 232 routing {day} {origin}: {description}",
+            "period": _day(day),
+            "input": _qualified_inputs(module_path, values),
+            "output": {
+                f"{module_path}#section_232_aluminum_component_rate": aluminum,
+                f"{module_path}#section_232_steel_component_rate": steel,
+            },
+        })
+    return cases
+
+
+def section_232_entry_cases(chapter: str, module_path: str, module: dict, table: dict) -> list[dict]:
+    if chapter not in SECTION_232_ENTRY_CASES:
+        return []
+    rate_line, hts_number, members, expected = SECTION_232_ENTRY_CASES[chapter]
+    cases = []
+    column2_origins = set(
+        re.findall(r'country_of_origin == "([A-Z]{2})"', next(
+            version["formula"]
+            for rule in module["rules"] if rule["name"] == "origin_is_column_2_country"
+            for version in rule["versions"]
+        ))
+    )
+    for origin, (aluminum, steel, china_301) in expected.items():
+        base = (table["column2_rates"] if origin in column2_origins else table["general_rates"])[rate_line]
+        values: dict[str, object] = {
+            "hts_line": rate_line,
+            "hts_number": hts_number,
+            "country_of_origin": origin,
+            **{name: False for name in DECLARED_BOOLEAN_INPUTS},
+            **{name: False for name in RETAINED_ENTRY_FLAGS},
+            **{name: name in members for name in GENERATED_MEMBERSHIP_INPUTS},
+        }
+        stack = sum(Decimal(str(item)) for item in (base, aluminum, steel, china_301))
+        cases.append({
+            "name": (
+                f"{hts_number} {origin} {SECTION_232_ENTRY_DATE}: entry-preparation "
+                "memberships stack one section 232 charge"
+            ),
+            "period": _day(SECTION_232_ENTRY_DATE),
+            "input": _qualified_inputs(module_path, values),
+            "output": {
+                f"{module_path}#mfn_ad_valorem_rate": _rate(base),
+                f"{module_path}#section_232_aluminum_component_rate": aluminum,
+                f"{module_path}#section_232_steel_component_rate": steel,
+                f"{module_path}#china_section_301_component_rate": china_301,
+                f"{module_path}#schedule_statutory_stack": _rate(stack),
+            },
+        })
+    return cases
+
+
 def companion_test(chapter: str, module: dict, table: dict) -> bytes:
     """Exhaustive chapter sample plus required positive/zero branch cases."""
     module_path = f"us:policies/cbp/us-tariff-schedule/generated/ch{chapter}/ch{chapter}"
@@ -1146,7 +1488,13 @@ def companion_test(chapter: str, module: dict, table: dict) -> bytes:
         ),
         "output": {f"{module_path}#ieepa_component_rate_with_declared_exceptions": 0},
     }
-    cases = [case, declared_exception_zero, *positive_judgment_cases(module_path, module)]
+    cases = [
+        case,
+        declared_exception_zero,
+        *section_232_branch_cases(module_path),
+        *section_232_entry_cases(chapter, module_path, module, table),
+        *positive_judgment_cases(module_path, module),
+    ]
     return dump_yaml(cases)
 
 
@@ -1178,12 +1526,20 @@ def program_spec(chapter: str, imports: list[str], has_column2_rate: bool) -> by
 
 
 def relative_outputs(
-    chapters: list[str], witness: dict, manifest: dict[str, str]
+    chapters: list[str],
+    witness: dict,
+    manifest: dict[str, str],
+    modules: dict[str, dict] | None = None,
+    table_keys: dict[str, set[int]] | None = None,
 ) -> dict[Path, bytes]:
     outputs: dict[Path, bytes] = {}
     for chapter in chapters:
         table = load_chapter_table(chapter, manifest)
         module = composition(chapter, witness, table)
+        if modules is not None:
+            modules[chapter] = copy.deepcopy(module)
+        if table_keys is not None:
+            table_keys[chapter] = set(table["general_dispositions"])
         module_rel = Path(f"us/policies/cbp/us-tariff-schedule/generated/ch{chapter}/ch{chapter}.yaml")
         test_rel = Path(f"us/policies/cbp/us-tariff-schedule/generated/ch{chapter}/ch{chapter}.test.yaml")
         program_rel = Path(f"programs/us/us-tariff-schedule/ch{chapter}.yaml")
@@ -1193,6 +1549,55 @@ def relative_outputs(
             chapter, module["imports"], table["column2_rates"] is not None
         )
     return dict(sorted(outputs.items(), key=lambda item: item[0].as_posix()))
+
+
+def heading_check_fixed_inputs() -> dict[str, object]:
+    """Inputs the heading check holds fixed: only memberships vary by entry."""
+    fixed: dict[str, object] = {name: False for name in DECLARED_BOOLEAN_INPUTS}
+    fixed["resolved_non_ad_valorem_column2_rate"] = Decimal(0)
+    return fixed
+
+
+def split_known_double_charges(report, chapters) -> tuple[list, list]:
+    """Return (unexpected collisions, stale KNOWN_DOUBLE_CHARGES keys)."""
+    def known(item) -> bool:
+        entry = KNOWN_DOUBLE_CHARGES.get((item.chapter, item.hts_number, item.heading))
+        return (
+            entry is not None
+            and item.origin == entry["origin"]
+            and sorted(item.charges) == sorted(entry["charges"])
+        )
+
+    unexpected = [item for item in report.collisions if not known(item)]
+    seen = {(item.chapter, item.hts_number, item.heading) for item in report.collisions if known(item)}
+    stale = [key for key in KNOWN_DOUBLE_CHARGES if key[0] in chapters and key not in seen]
+    return unexpected, stale
+
+
+def check_heading_overlap(modules: dict[str, dict], table_keys: dict[str, set[int]]) -> str:
+    """Fail closed if any entry is charged one chapter-99 heading or
+    mutually exclusive group twice, beyond the named KNOWN_DOUBLE_CHARGES."""
+    try:
+        report = schedule_heading_overlap.check_chapters(
+            modules,
+            table_keys,
+            entry_inputs=HEADING_CHECK_ENTRY_INPUTS,
+            fixed_inputs=heading_check_fixed_inputs(),
+        )
+    except schedule_heading_overlap.CheckError as error:
+        raise SystemExit(f"heading-overlap check could not evaluate: {error}") from error
+    unexpected, stale = split_known_double_charges(report, set(modules))
+    if unexpected:
+        shown = "\n".join(str(item) for item in unexpected[:10])
+        raise SystemExit(
+            f"heading-overlap check FAILED: {len(unexpected)} double charges\n{shown}"
+        )
+    if stale:
+        raise SystemExit(
+            f"heading-overlap check FAILED: KNOWN_DOUBLE_CHARGES entries no longer occur, remove them: {stale}"
+        )
+    known = len(report.collisions)
+    return report.summary() + (f" ({known} listed in KNOWN_DOUBLE_CHARGES)" if known else "")
 
 
 def write_outputs(outputs: dict[Path, bytes]) -> None:
@@ -1245,12 +1650,15 @@ def main() -> int:
     available = available_chapters(manifest)
     chapters = parse_chapters(args.chapters, available)
     witness = load_witness()
-    first = relative_outputs(chapters, witness, manifest)
+    modules: dict[str, dict] = {}
+    table_keys: dict[str, set[int]] = {}
+    first = relative_outputs(chapters, witness, manifest, modules, table_keys)
     second = relative_outputs(chapters, witness, manifest)
     if first != second:
         raise SystemExit("determinism FAILED: double-emit differs")
     if set(chapters) == available and len(first) != 300:
         raise SystemExit(f"full generation expected 300 outputs, got {len(first)}")
+    print(f"heading-overlap check OK: {check_heading_overlap(modules, table_keys)}")
 
     if args.check:
         drift = check_outputs(first)
