@@ -218,6 +218,7 @@ def test_build_reuses_corpus_and_still_compiles_every_program(tmp_path, monkeypa
     ))
     monkeypatch.setattr(sys, "argv", ["build", "--root", str(root)])
     monkeypatch.setenv("AXIOM_RULES_ENGINE_BIN", "test-engine")
+    monkeypatch.setattr(bpa, "engine_binary_problem", lambda engine: None)
     monkeypatch.setattr(bpa, "discover_specs", lambda root: builds)
     monkeypatch.setattr(bpa, "corpus_provenance", lambda root: {})
     monkeypatch.setattr(bpa, "composer_version", lambda: "test")
