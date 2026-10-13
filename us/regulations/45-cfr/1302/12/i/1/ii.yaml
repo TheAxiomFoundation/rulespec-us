@@ -1,0 +1,104 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us/regulation/45/1302/12
+  summary: |-
+    "A program may make an adjustment to a family's gross income calculation ... to account for excessive housing costs" by determining whether the family spends "more than 30 percent" of gross income on housing costs and, if applicable, reducing gross income by the housing costs above that threshold.
+rules:
+  - name: excessive_housing_cost_threshold_rate
+    kind: parameter
+    dtype: Rate
+    source: 45 CFR 1302.12(i)(1)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "more than 30 percent of their total gross income"
+    versions:
+      - effective_from: '2024-10-21'
+        formula: |-
+          0.30
+
+  - name: excessive_housing_cost_adjustment_inputs_valid
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(i)(1)(ii)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: predicate
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+    versions:
+      - effective_from: '2024-10-21'
+        formula: |-
+          family_gross_income >= 0
+          and total_annual_housing_costs >= 0
+
+  - name: family_spends_more_than_excessive_housing_cost_threshold
+    kind: derived
+    entity: Family
+    dtype: Judgment
+    period: Year
+    source: 45 CFR 1302.12(i)(1)(ii)(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "Determine if a family spends more than 30 percent of their total gross income on housing costs"
+    versions:
+      - effective_from: '2024-10-21'
+        formula: |-
+          excessive_housing_cost_adjustment_inputs_valid
+          and total_annual_housing_costs > excessive_housing_cost_threshold_rate * family_gross_income
+
+  - name: excessive_housing_cost_amount
+    kind: derived
+    entity: Family
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 45 CFR 1302.12(i)(1)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "amount spent on housing costs that exceed more than 30 percent"
+    versions:
+      - effective_from: '2024-10-21'
+        formula: |-
+          if family_spends_more_than_excessive_housing_cost_threshold: max(0, total_annual_housing_costs - excessive_housing_cost_threshold_rate * family_gross_income) else: 0
+
+  - name: adjusted_family_gross_income_for_excessive_housing_costs
+    kind: derived
+    entity: Family
+    dtype: Money
+    unit: USD
+    period: Year
+    source: 45 CFR 1302.12(i)(1)(ii)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/45/1302/12
+              excerpt: "reduce the total gross income by the amount spent on housing costs that exceed more than 30 percent"
+    versions:
+      - effective_from: '2024-10-21'
+        formula: |-
+          if excessive_housing_cost_adjustment_inputs_valid: (if program_makes_excessive_housing_cost_adjustment and family_spends_more_than_excessive_housing_cost_threshold: max(0, family_gross_income - excessive_housing_cost_amount) else: family_gross_income) else: 0
