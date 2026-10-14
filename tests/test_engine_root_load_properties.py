@@ -9,8 +9,9 @@ Invariants, for every input:
    baseline was already failing in the base.
 3. Monotonicity: an unlisted failure always fails the gate; a listed module
    that stops failing always fails the gate; with an existing protected base
-   baseline and unchanged engine pin, a newly failing module always fails it;
-   a listed module changing class alone never does.
+   baseline, a newly failing module always fails it unless it is growable
+   (a module a pin-moving change leaves untouched); a listed module changing
+   class alone never does.
 4. Classification ignores machine-specific prefixes: the class of an engine
    message does not depend on where the checkout or scratch directory lives.
 
@@ -85,15 +86,15 @@ def test_gate_passes_iff_equal_and_shrinking(observed, baseline, base):
 def test_baseline_introduction_differs_from_existing_empty_baseline(entries, pin):
     toolchain = f'[workflow_toolchain]\naxiom_rules_engine_ref = "{pin}"\n'
     with (
-        patch.object(erl, "git_show", side_effect=[toolchain, None, toolchain, ""]),
+        patch.object(erl, "git_show", side_effect=[None, "", toolchain]),
         patch.object(Path, "read_text", return_value=toolchain),
     ):
-        introduced = erl.read_base_baseline(Path("rulespec-us"), "protected-base")
-        existing = erl.read_base_baseline(Path("rulespec-us"), "protected-base")
-    assert introduced is None
+        introduced, introduced_growable = erl.read_base_bound(Path("rulespec-us"), "protected-base")
+        existing, existing_growable = erl.read_base_bound(Path("rulespec-us"), "protected-base")
+    assert introduced is None and not introduced_growable
     assert erl.compare(entries, entries, introduced).ok
-    assert existing == set()
-    verdict = erl.compare(entries, entries, existing)
+    assert existing == set() and not existing_growable
+    verdict = erl.compare(entries, entries, existing, existing_growable)
     assert not verdict.ok and verdict.added == entries
 
 
@@ -125,6 +126,17 @@ def test_newly_failing_module_always_fails(base, extra):
 
 
 @semantic_properties
+@given(failure_sets, failure_sets, st.data())
+def test_only_growable_modules_may_newly_fail(base, extra, data):
+    grown = base | extra
+    new_modules = {e.module for e in grown if (e.surface, e.module) not in _keys(base)}
+    growable = frozenset(data.draw(st.sets(st.sampled_from(sorted(new_modules)))) if new_modules else set())
+    verdict = erl.compare(grown, grown, base, growable)
+    assert verdict.ok == (new_modules <= growable)
+    assert {e.module for e in verdict.added} == new_modules - growable
+
+
+@semantic_properties
 @given(failure_sets.filter(bool), st.data())
 def test_class_change_of_listed_module_passes(base, data):
     entry = data.draw(st.sampled_from(sorted(base)))
@@ -144,7 +156,8 @@ engine_messages = st.sampled_from(
         "RuleSpec module `{p}/us/a.yaml` declares removed plural `corpus_citation_paths`; x",
         "failed to load RuleSpec module `{p}/us/a.yaml`: yaml parse error: "
         "module.source_verification: unknown field `values`, expected one of `a`",
-        "atomic RuleSpec module `{p}/us/a.yaml` must not declare module.kind; `composition`",
+        "failed to load RuleSpec module `{p}/us/a.yaml`: atomic RuleSpec module "
+        "`us:policies/a` must not declare module.kind; `composition`",
         "invalid filesystem RuleSpec path `{p}/us-la/statutes/47:32.yaml`: bad",
         "RuleSpec import `us:a#b` in `us:c` could not be resolved",
         "unknown derived dependency `a` referenced from `{p}/b`",

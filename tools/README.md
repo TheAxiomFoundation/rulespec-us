@@ -60,14 +60,16 @@ Failures must equal `tools/known-engine-load-failures.txt`
 - a module that fails and is not listed fails the check;
 - a listed module that no longer fails that way fails the check, so a fix
   deletes its line in the same change;
-- when the protected base already has a baseline and the engine pin is
-  unchanged, a pull request may only shrink the failing `(surface, module)`
-  set. A listed module may change class: the engine reports only a module's
-  first error, so fixing one can expose another;
+- when the protected base already has a baseline, a pull request may only
+  shrink the failing `(surface, module)` set. A listed module may change
+  class: the engine reports only a module's first error, so fixing one can
+  expose another;
 - when the protected base has no baseline, the check establishes the first
-  baseline without enforcing that shrinking rule. Moving
-  `axiom_rules_engine_ref` also permits baseline growth: a newer engine may
-  reject more, and the pin bump is where those failures are listed and reviewed.
+  baseline without enforcing that shrinking rule;
+- a change that moves `axiom_rules_engine_ref` may add modules it leaves
+  byte-identical, because a newer engine may reject more and the pin bump is
+  where those failures are listed and reviewed. A module the change edits or
+  renames must still load if it loaded before.
 
 Run locally from a checkout whose directory is named exactly `rulespec-us`:
 

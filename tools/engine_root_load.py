@@ -30,9 +30,10 @@ engine pin is unchanged, the failing (surface, module) set can only shrink.
 A listed module may change class, because the engine reports only the first
 error and a fix can expose one the module already had. If the protected base
 has no baseline, the check establishes the first baseline without enforcing
-shrinking. Moving ``axiom_rules_engine_ref`` also permits baseline growth: a
-newer engine may reject what the old one loaded, and the pin bump is where
-those failures are listed and reviewed.
+shrinking. A change that moves ``axiom_rules_engine_ref`` may add modules it
+leaves byte-identical (a newer engine may reject what the old one loaded, and
+the pin bump is where those failures are listed and reviewed), but a module
+it edits or renames must still load if it loaded before.
 
 Subcommands:
   install-harness  write the harness into an engine checkout's examples/
@@ -108,7 +109,7 @@ HARNESS_SOURCE = r"""//! Written by rulespec-us tools/engine_root_load.py; see t
 //! second line for the composed surface, compiled from a copy under the
 //! scratch directory (composed programs must sit outside every root).
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use axiom_rules_engine::compile::{CompileError, CompiledProgramArtifact};
 use axiom_rules_engine::rulespec::{CanonicalRuleSpecRoots, RuleSpecError};
@@ -134,7 +135,7 @@ fn main() {
     for module in list.lines().filter(|line| !line.is_empty()) {
         let path = root.join(module);
         let atomic = CompiledProgramArtifact::from_rulespec_file(&path, &roots);
-        let declares_kind = declares_own_kind(&atomic, &path, module);
+        let declares_kind = declares_own_kind(&atomic, module);
         emit(&mut out, module, "atomic", &atomic);
         if declares_kind {
             let copy = composed_dir.join(module);
@@ -149,13 +150,10 @@ fn main() {
 }
 
 /// True only when the module itself declares `module.kind`, not when an
-/// import it pulls in does: the engine names the offending module in the
-/// error, by file path for the loaded file or by canonical target otherwise.
-fn declares_own_kind(
-    result: &Result<CompiledProgramArtifact, CompileError>,
-    path: &Path,
-    module: &str,
-) -> bool {
+/// import it pulls in does. Every atomic call site names the offender by its
+/// canonical target (`<jurisdiction>:<path without .yaml>`), so that is the
+/// only spelling compared here.
+fn declares_own_kind(result: &Result<CompiledProgramArtifact, CompileError>, module: &str) -> bool {
     let Err(CompileError::RuleSpec {
         error: RuleSpecError::ModuleKindOnAtomicSurface { path: offender },
         ..
@@ -167,7 +165,7 @@ fn declares_own_kind(
         .strip_suffix(".yaml")
         .and_then(|stem| stem.split_once('/'))
         .map(|(jurisdiction, rest)| format!("{jurisdiction}:{rest}"));
-    *offender == path.display().to_string() || Some(offender) == target.as_ref()
+    Some(offender) == target.as_ref()
 }
 
 fn emit(
@@ -299,9 +297,9 @@ BASELINE_HEADER = """\
 # Format: <surface>\\t<class>\\t<module>, sorted. Maintained by
 # tools/engine_root_load.py; the engine-root-load workflow fails when a module
 # fails that is not listed or a listed module no longer fails that way.
-# With an existing base baseline and unchanged engine pin, a pull request
-# may only shrink failing (surface, module) pairs. Baseline introduction and
-# engine pin changes permit growth. Fix a module, then delete its line.
+# A pull request may only shrink failing (surface, module) pairs; one that
+# moves the engine pin may add only modules it does not edit. Fix a module,
+# then delete its line.
 """
 
 
@@ -325,6 +323,7 @@ def compare(
     failures: set[Failure],
     baseline: set[Failure],
     base_baseline: set[Failure] | None = None,
+    growable: frozenset[str] = frozenset(),
 ) -> Verdict:
     """The gate: failures must equal the baseline.
 
@@ -332,13 +331,17 @@ def compare(
     shrink. The engine reports only a module's first error, so fixing one
     problem can expose another the module already had. Its line then changes
     class, which the diff shows, but no module absent from that base baseline
-    may start failing.
+    may start failing. `growable` names the modules exempt from that rule: in a
+    change that moves the engine pin, the modules it leaves byte-identical,
+    since only the new engine can have made those fail.
     """
     base_keys = None if base_baseline is None else {_key(entry) for entry in base_baseline}
     return Verdict(
         new=failures - baseline,
         stale=baseline - failures,
-        added=set() if base_keys is None else {e for e in baseline if _key(e) not in base_keys},
+        added=set()
+        if base_keys is None
+        else {e for e in baseline if _key(e) not in base_keys and e.module not in growable},
     )
 
 
@@ -346,12 +349,41 @@ def _key(entry: Failure) -> tuple[str, str]:
     return entry.surface, entry.module
 
 
+KIND_OFFENDER = re.compile(r"atomic RuleSpec module `([^`]+)` must not declare module\.kind")
+
+
+def canonical_target(module: str) -> str:
+    """`us/policies/a/b.yaml` -> `us:policies/a/b`, the engine's module identity."""
+    jurisdiction, rest = module.removesuffix(".yaml").split("/", 1)
+    return f"{jurisdiction}:{rest}"
+
+
+def declares_own_kind(result: Result) -> bool:
+    match = KIND_OFFENDER.search(result.error) if not result.ok else None
+    return bool(match) and match.group(1) == canonical_target(result.module)
+
+
 def check_coverage(results: list[Result], modules: list[str]) -> list[str]:
-    """Every selected module must have exactly one atomic result."""
-    counts = Counter(result.module for result in results if result.surface == ATOMIC)
+    """Every selected module has exactly one atomic result, and exactly the
+    modules refused for their own `module.kind` have one composed result."""
+    selected = set(modules)
+    atomic = [result for result in results if result.surface == ATOMIC]
+    counts = Counter(result.module for result in atomic)
+    composed = Counter(result.module for result in results if result.surface == COMPOSED)
     problems = [f"no atomic result for {module}" for module in modules if counts[module] == 0]
     problems += [f"{count} atomic results for {module}" for module, count in counts.items() if count > 1]
-    problems += [f"result for unselected module {module}" for module in counts if module not in set(modules)]
+    problems += [
+        f"result for unselected module {module}"
+        for module in sorted(set(counts) | set(composed))
+        if module not in selected
+    ]
+    expected = {result.module for result in atomic if declares_own_kind(result)}
+    problems += [
+        f"{composed[module]} composed results for {module}, expected "
+        f"{1 if module in expected else 0}"
+        for module in sorted(set(composed) | expected)
+        if composed[module] != (1 if module in expected else 0)
+    ]
     return problems
 
 
@@ -453,20 +485,41 @@ def engine_pin(toolchain_text: str | None) -> str | None:
     return tomllib.loads(toolchain_text).get("workflow_toolchain", {}).get("axiom_rules_engine_ref")
 
 
-def read_base_baseline(root: Path, base_ref: str) -> set[Failure] | None:
-    """The protected base's baseline, or None when it may not bound this one.
+def changed_paths(root: Path, base_ref: str) -> set[str]:
+    """Paths whose content differs between the base commit and the checkout."""
+    listing = subprocess.run(
+        ["git", "-C", str(root), "diff", "--name-only", "--no-renames", "-z", base_ref, "--"],
+        check=True,
+        capture_output=True,
+    ).stdout.decode("utf-8")
+    return {path for path in listing.split("\0") if path}
 
-    None means the baseline is being introduced, or the change moves the engine
-    pin: a newer engine may reject modules the old one loaded, and the pin bump
-    is where those new failures get listed and reviewed.
+
+def read_base_bound(
+    root: Path, base_ref: str
+) -> tuple[set[Failure] | None, frozenset[str]]:
+    """The protected base's baseline and the modules allowed to newly fail.
+
+    The baseline is None only while it is being introduced. When the change
+    moves the engine pin, a newer engine may reject modules the old one loaded,
+    and the pin bump is where those failures are listed and reviewed; but only
+    for modules the change leaves byte-identical. A module the change edits
+    (or renames) must still load if it loaded before.
     """
+    text = git_show(root, base_ref, BASELINE_RELATIVE_PATH)
+    if text is None:
+        return None, frozenset()
     base_pin = engine_pin(git_show(root, base_ref, TOOLCHAIN_RELATIVE_PATH))
     head_pin = engine_pin((root / TOOLCHAIN_RELATIVE_PATH).read_text(encoding="utf-8"))
+    growable: frozenset[str] = frozenset()
     if base_pin != head_pin:
-        print(f"Engine pin moves {base_pin} -> {head_pin}; the baseline may grow in this change.")
-        return None
-    text = git_show(root, base_ref, BASELINE_RELATIVE_PATH)
-    return None if text is None else parse_baseline(text)
+        edited = changed_paths(root, base_ref)
+        growable = frozenset(module for module in tracked_modules(root) if module not in edited)
+        print(
+            f"Engine pin moves {base_pin} -> {head_pin}: modules this change does not "
+            "edit may be added to the baseline."
+        )
+    return parse_baseline(text), growable
 
 
 def check(results_path: Path, baseline_path: Path, root: Path, base_ref: str | None) -> int:
@@ -476,8 +529,8 @@ def check(results_path: Path, baseline_path: Path, root: Path, base_ref: str | N
         print("Results do not cover this checkout:\n  " + "\n  ".join(problems[:50]))
         return 1
     baseline = parse_baseline(baseline_path.read_text(encoding="utf-8"))
-    base_baseline = read_base_baseline(root, base_ref) if base_ref else None
-    verdict = compare(failures_from_results(results), baseline, base_baseline)
+    base_baseline, growable = read_base_bound(root, base_ref) if base_ref else (None, frozenset())
+    verdict = compare(failures_from_results(results), baseline, base_baseline, growable)
     errors = {(result.module, result.surface): result.error for result in results if not result.ok}
     print(summarize(results))
     if verdict.new:
@@ -491,7 +544,7 @@ def check(results_path: Path, baseline_path: Path, root: Path, base_ref: str | N
     if verdict.added:
         print(
             f"\n{len(verdict.added)} module(s) added to {baseline_path.name}; "
-            "a module that loaded before may not start failing:"
+            "a module that loaded before, or a renamed one, may not start failing:"
         )
         for entry in sorted(verdict.added):
             print(f"  {entry.render()}")
@@ -519,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("--baseline", type=Path)
     check_parser.add_argument(
         "--base-ref",
-        help="protected base commit; its existing baseline bounds this one unless the engine pin moves",
+        help="protected base commit; its baseline bounds this one",
     )
 
     baseline_parser = sub.add_parser("baseline", help="print the baseline matching a results file")

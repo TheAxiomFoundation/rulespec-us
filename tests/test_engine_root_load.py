@@ -42,8 +42,13 @@ VALUES = (
 )
 KIND = (
     "failed to load RuleSpec module `us/policies/cbp/us-tariff-duty/composition.yaml`: "
-    "atomic RuleSpec module `us/policies/cbp/us-tariff-duty/composition.yaml` must not "
+    "atomic RuleSpec module `us:policies/cbp/us-tariff-duty/composition` must not "
     "declare module.kind; `composition` is accepted only by the composed-program surface"
+)
+IMPORTED_KIND = (
+    "failed to load RuleSpec module `us-ca/policies/cdss/snap/x.yaml`: atomic RuleSpec "
+    "module `us:policies/usda/snap/state-plan-composition` must not declare module.kind; "
+    "`composition` is accepted only by the composed-program surface"
 )
 PATH = (
     "failed to load RuleSpec module `us-la/statutes/47:32.yaml`: invalid filesystem "
@@ -270,3 +275,77 @@ def test_committed_baseline_is_canonical_and_names_tracked_modules():
         "a composed-surface entry needs its module's atomic kind failure: "
         f"{sorted(composed_only)[:10]}"
     )
+
+
+def test_composed_results_exist_exactly_for_modules_declaring_their_own_kind():
+    own = "us/policies/cbp/us-tariff-duty/composition.yaml"
+    importer = "us-ca/policies/cdss/snap/x.yaml"
+    loads = "us/statutes/26/32.yaml"
+    modules = [importer, own, loads]
+    atomic = _results(
+        {"module": own, "surface": "atomic", "ok": False, "error": KIND},
+        {"module": importer, "surface": "atomic", "ok": False, "error": IMPORTED_KIND},
+        {"module": loads, "surface": "atomic", "ok": True},
+    )
+    composed_own = _results({"module": own, "surface": "composed", "ok": True})
+    assert erl.check_coverage(atomic + composed_own, modules) == []
+    assert erl.check_coverage(atomic, modules) == [
+        f"0 composed results for {own}, expected 1"
+    ]
+    stray = _results(
+        {"module": importer, "surface": "composed", "ok": True},
+        {"module": loads, "surface": "composed", "ok": True},
+    )
+    assert erl.check_coverage(atomic + composed_own + stray, modules) == [
+        f"1 composed results for {importer}, expected 0",
+        f"1 composed results for {loads}, expected 0",
+    ]
+    assert erl.check_coverage(atomic + composed_own + composed_own, modules) == [
+        f"2 composed results for {own}, expected 1"
+    ]
+
+
+def test_canonical_target_matches_the_engine_identity():
+    assert erl.canonical_target("us/policies/a/b.yaml") == "us:policies/a/b"
+    assert erl.canonical_target("us-la/statutes/47:32.yaml") == "us-la:statutes/47:32"
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def test_a_pin_move_lets_only_untouched_modules_newly_fail(tmp_path):
+    root = tmp_path / "rulespec-us"
+    for relative, text in {
+        ".axiom/workflow-toolchain.toml": '[workflow_toolchain]\naxiom_rules_engine_ref = "old"\n',
+        "tools/known-engine-load-failures.txt": erl.render_baseline(set()),
+        "us/statutes/edited.yaml": "format: rulespec/v1\n",
+        "us/statutes/untouched.yaml": "format: rulespec/v1\n",
+    }.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(text, encoding="utf-8")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+    base = _git(root, "rev-parse", "HEAD")
+
+    # Same pin: nothing may newly fail.
+    baseline, growable = erl.read_base_bound(root, base)
+    assert baseline == set() and growable == frozenset()
+
+    # The pin moves and one module is edited: only the untouched one may grow.
+    (root / ".axiom/workflow-toolchain.toml").write_text(
+        '[workflow_toolchain]\naxiom_rules_engine_ref = "new"\n', encoding="utf-8"
+    )
+    (root / "us/statutes/edited.yaml").write_text("format: rulespec/v1\nrules: []\n", encoding="utf-8")
+    _git(root, "add", "-A")
+    baseline, growable = erl.read_base_bound(root, base)
+    assert growable == frozenset({"us/statutes/untouched.yaml"})
+    broken = {
+        erl.Failure("atomic", "other", "us/statutes/edited.yaml"),
+        erl.Failure("atomic", "other", "us/statutes/untouched.yaml"),
+    }
+    verdict = erl.compare(broken, broken, baseline, growable)
+    assert verdict.added == {erl.Failure("atomic", "other", "us/statutes/edited.yaml")}
