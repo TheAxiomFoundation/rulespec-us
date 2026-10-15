@@ -1,0 +1,278 @@
+name: Source conflicts
+
+# Network verification of known-source-conflicts.yaml (tools/source_conflicts.py).
+# The offline checks (schema, status rules, hygiene, in-repo references and
+# the scan for unregistered module interpretations) run inside the required
+# Repository Checks pytest leg. This workflow checks what needs the network:
+# every `texts` excerpt verbatim at its citation in the PINNED corpus release
+# (.axiom/toolchain.toml) and every `pending_texts` excerpt verbatim in its
+# pinned snapshot, both judged by axiom-encode's own proof-atom matcher at
+# axiom_encode_ref; snapshot hashes; and external implementations and tests at
+# their pinned commits. It is deliberately not a required check, so an outage
+# of a source host never blocks merges; a red scheduled or main run opens an
+# alarm issue instead. Scheduled, main and dispatched runs also keep a
+# tracking issue listing unregistered open module interpretations, which
+# `check` reports as warnings rather than failures.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - known-source-conflicts.yaml
+      - tools/source_conflicts.py
+      - tests/test_source_conflicts.py
+      - tests/test_source_conflicts_properties.py
+      - .github/workflows/source-conflicts.yml
+      - .axiom/toolchain.toml
+      - .axiom/workflow-toolchain.toml
+  push:
+    branches: [main]
+    paths:
+      - known-source-conflicts.yaml
+      - tools/source_conflicts.py
+      - .github/workflows/source-conflicts.yml
+      - .axiom/toolchain.toml
+      - .axiom/workflow-toolchain.toml
+  schedule:
+    # Daily: snapshots, pinned commits and the corpus pin can drift without a
+    # rulespec change.
+    - cron: "29 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: source-conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: rulespec-us
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Resolve pins
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          root = Path("rulespec-us/.axiom")
+          workflow = tomllib.loads((root / "workflow-toolchain.toml").read_text())["workflow_toolchain"]
+          toolchain = tomllib.loads((root / "toolchain.toml").read_text())["toolchain"]
+          for key in ("axiom_encode_ref", "axiom_corpus_ref"):
+              if re.fullmatch(r"[0-9a-f]{40}", workflow.get(key, "")) is None:
+                  raise SystemExit(f"workflow-toolchain.toml: {key} must be a full lowercase commit SHA")
+              print(f"{key}={workflow[key]}")
+          release = toolchain["axiom_corpus_release"]
+          digest = toolchain["axiom_corpus_release_content_sha256"]
+          if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", release) is None or release == "current":
+              raise SystemExit("toolchain.toml: axiom_corpus_release is not an immutable release name")
+          if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+              raise SystemExit("toolchain.toml: axiom_corpus_release_content_sha256 must be a sha256 digest")
+          print(f"release={release}")
+          print(f"release_sha256={digest}")
+          PY
+
+      - name: Checkout axiom-encode
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+          path: axiom-encode
+
+      - name: Checkout axiom-corpus provisions
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
+          path: axiom-corpus
+          sparse-checkout: |
+            data/corpus/provisions
+            .axiom
+
+      - name: Fetch the pinned signed corpus release object
+        shell: bash
+        env:
+          RELEASE_NAME: ${{ steps.pins.outputs.release }}
+          RELEASE_SHA256: ${{ steps.pins.outputs.release_sha256 }}
+          # The shared validate workflow's default public release bucket.
+          RELEASE_BASE_URL: https://pub-a8952f8657fc49fda358146ac001366c.r2.dev
+        run: |
+          set -euo pipefail
+          destination="axiom-corpus/releases/$RELEASE_NAME/$RELEASE_SHA256.json"
+          mkdir -p "$(dirname "$destination")"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$destination" "$RELEASE_BASE_URL/releases/$RELEASE_NAME/$RELEASE_SHA256.json"
+          # The content digest is checked here and the Ed25519 signature by
+          # axiom-encode when the release is opened.
+          python - "$destination" "$RELEASE_NAME" "$RELEASE_SHA256" <<'PY'
+          import hashlib
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1]))
+          content = payload.get("content")
+          actual = hashlib.sha256(
+              json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+          ).hexdigest()
+          if payload.get("release") != sys.argv[2] or actual != sys.argv[3] or payload.get("content_sha256") != actual:
+              raise SystemExit(f"corpus release object mismatch: {payload.get('release')} {actual}")
+          print(f"Fetched {sys.argv[2]} ({actual})")
+          PY
+
+      - name: Install axiom-encode
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pyyaml hypothesis
+          python -m pip install -e axiom-encode
+
+      - name: Place provisions that live outside git
+        shell: bash
+        env:
+          RELEASE_NAME: ${{ steps.pins.outputs.release }}
+          RELEASE_SHA256: ${{ steps.pins.outputs.release_sha256 }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_CORPUS_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_CORPUS_READ_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          # A corpus pin from before the lock switch keeps provisions in git,
+          # and the sparse checkout above already placed them.
+          if [ ! -d axiom-corpus/.axiom/corpus-locks ]; then
+            echo "Provisions are tracked in git at this corpus pin."
+            exit 0
+          fi
+          axiom-encode corpus-fetch --corpus-path axiom-corpus \
+            --release "$RELEASE_NAME" --content-sha256 "$RELEASE_SHA256"
+
+      - name: Offline check
+        run: |
+          python rulespec-us/tools/source_conflicts.py check --root rulespec-us \
+            --warnings-file "$RUNNER_TEMP/open-interpretations.txt"
+
+      - name: Keep the unregistered open interpretations
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: open-interpretations
+          path: ${{ runner.temp }}/open-interpretations.txt
+          if-no-files-found: ignore
+
+      - name: Verify excerpts, snapshots and external references
+        env:
+          AXIOM_CORPUS_RELEASE_PUBLIC_KEY: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          python rulespec-us/tools/source_conflicts.py verify \
+            --root rulespec-us --corpus-path axiom-corpus 2>&1 | tee "$RUNNER_TEMP/source-conflicts.txt"
+
+      - name: Test the tool, with property-based and differential tests
+        working-directory: rulespec-us
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            tests/test_source_conflicts.py tests/test_source_conflicts_properties.py
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/source-conflicts.txt" ]; then
+            {
+              echo '### Source conflicts'
+              echo '```'
+              head -c 60000 "$RUNNER_TEMP/source-conflicts.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  open-interpretations:
+    # Unregistered open module interpretations are warnings, not failures:
+    # signed encoder re-encodes may emit them. A scheduled, main or dispatched
+    # run keeps one tracking issue listing them, and closes it when none remain.
+    needs: verify
+    if: ${{ always() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Fetch the list
+        id: list
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: open-interpretations
+          path: ${{ runner.temp }}/open-interpretations
+
+      - name: Update the tracking issue
+        if: ${{ steps.list.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/open-interpretations/open-interpretations.txt"
+          title="Unregistered open module interpretations (source-conflict register)"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ ! -s "$file" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+                --comment "No unregistered open interpretations remain: ${RUN_URL}"
+            fi
+            exit 0
+          fi
+          {
+            echo "These module interpretations cite two or more provisions in tension, are \`open\`, and are not in known-source-conflicts.yaml. That is a warning, not a failure: give each an entry (adopted_by naming the module and interpretation) when it is ruled or confirmed; an unregistered ruled, confirmed or contradicted interpretation fails Repository Checks."
+            echo
+            echo "Generated by ${RUN_URL}:"
+            echo
+            sed 's/^/- /' "$file"
+          } > "$RUNNER_TEMP/body.md"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+  alarm:
+    # A red scheduled or main run opens (or refreshes) one tracking issue.
+    needs: verify
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.verify.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or refresh the source-conflicts alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          title="Source-conflict register verification is red on main"
+          body="tools/source_conflicts.py verify failed on main (${EVENT_NAME}): ${RUN_URL}
+
+          An excerpt no longer matches the pinned corpus release or its snapshot, a
+          pinned snapshot or commit is unreadable, or an implementation's cites_entry
+          claim no longer matches its file. Fix known-source-conflicts.yaml (or the
+          pin that moved), then close this issue once the workflow is green."
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still red on $(date -u +%Y-%m-%dT%H:%MZ) (${EVENT_NAME}): ${RUN_URL}"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

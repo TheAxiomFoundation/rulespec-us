@@ -72,6 +72,8 @@ def allowed_yaml_roots() -> set[str]:
         "programs",
         "known-dangling.yaml",
         "known-missing-money-atoms.yaml",
+        # Source-conflict register; validated by tools/source_conflicts.py.
+        "known-source-conflicts.yaml",
         "known-validation-gaps.yaml",
         # Declared oracle-coverage debt lane, written at the repo root by
         # `axiom-encode oracle-coverage-pending sync`. The changed-file oracle
