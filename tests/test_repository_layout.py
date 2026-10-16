@@ -295,10 +295,7 @@ def module_has_source_locator(payload: object) -> bool:
     source_verification = module.get("source_verification")
     if not isinstance(source_verification, dict):
         return False
-    if source_verification.get("corpus_citation_path"):
-        return True
-    citation_paths = source_verification.get("corpus_citation_paths")
-    return isinstance(citation_paths, list) and any(citation_paths)
+    return bool(source_verification.get("corpus_citation_path"))
 
 
 def test_rulespec_rule_names_are_specific() -> None:
