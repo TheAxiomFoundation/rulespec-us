@@ -16,55 +16,48 @@ provisions to queue.
 | `bulk/worklist.yaml` | The durable queue. One entry per module. Committed. |
 | `bulk/compute_matrix.py` | Turns the worklist into the CI job matrix; single source of truth for status selection. |
 | `bulk/roots_for.py` | Maps an applied module path to `guard-generated --roots`. |
-| `bulk/local_drain.py` | Review-safe local runner: exact classifier provenance, one draft PR per module, and no automatic merge. |
+| `bulk/local_drain.py` | Former local runner; its local apply-signing credential path is retired. |
 | `bulk/applied_artifacts.py` | Validates the module, companion test, and signed manifest written by one encoder apply. |
 | `.github/workflows/bulk-encode.yml` | Fail-closed placeholder while protected cloud activation is reviewed. |
 
 ## Running it
 
-The cloud workflow is disabled during the protected provenance migration.
-Use the local review-safe runner after its checkout verification passes:
+The cloud bulk workflow is disabled during the protected provenance migration.
+Signed reencoding now goes through axiom-encode's
+[`targeted-signed-reencode` workflow](https://github.com/TheAxiomFoundation/axiom-encode/actions/workflows/targeted-signed-reencode.yml),
+which signs only on `main` in a protected environment.
 
-```bash
-python bulk/local_drain.py doctor
-python bulk/local_drain.py drain --status pending-local --limit 8
-```
+### Retired local drain
 
-### Local review-safe drain
+The local apply-signing credential path in `bulk/local_drain.py` was retired on
+2026-10-14. It raises an explicit retirement error before consulting the
+environment, `agent-secret`, or macOS Keychain. Local drains cannot sign new
+applies; use the central workflow above. RuleSpec is still produced only by
+the supervised encoder with `--backend codex --apply`.
 
-Agent-operated drains use `bulk/local_drain.py`, not the legacy cloud
-dispatcher. The local runner requires the immutable classifier and oracle refs
-recorded in the script, reads the apply signing key from an approved secret
-source, and generates RuleSpec only through `axiom-encode encode --apply`.
+The former local drain opened generated branches as drafts with auto-merge
+disabled. Each PR must complete the independent review/fix cycle and current CI
+before a human or agent marks it ready and merges it. RuleSpec YAML and companion
+fixtures are never hand-edited; findings are fixed in source material, prompts,
+harnesses, or encoder code and then regenerated with `encode --apply`.
 
-```bash
-uv run python bulk/local_drain.py doctor
-uv run python bulk/local_drain.py drain --max-entries 1 --concurrency 1
-```
+### Signing credentials
 
-Every generated branch is opened as a draft with auto-merge disabled. Each PR
-must complete the independent review/fix cycle and current CI before a human or
-agent marks it ready and merges it. RuleSpec YAML and companion fixtures are
-never hand-edited; findings are fixed in source material, prompts, harnesses,
-or encoder code and then regenerated with `encode --apply`.
-
-### Secrets (repo Actions secrets on rulespec-us)
-
-The cloud bulk workflow is intentionally fail-closed during the protected
-provenance migration. Use the reviewed local drain only after `doctor` verifies
-every checkout against `.axiom/workflow-toolchain.toml`.
+Do not provision `AXIOM_ENCODE_APPLY_SIGNING_KEY` in this repository, local
+environments, agent keychains, or macOS Keychain. Signing is owned by the
+central workflow's protected environment. Encoder agents use subscription
+Codex auth.
 
 | Secret | Why |
 | --- | --- |
-| `OPENAI_API_KEY` | Headless `--backend openai` generation. |
-| `AXIOM_ENCODE_APPLY_SIGNING_KEY` | Signs the apply manifest so `guard-generated` accepts the new files. Must match the key that signs manifests elsewhere. |
 | `BULK_ENCODE_TOKEN` | A `repo`+`workflow`-scoped token used to push the branch and open the PR. **Required**: PRs opened by the default `GITHUB_TOKEN` do **not** trigger the `pull_request` event, so the required `validate / validate` check would never run and auto-merge would hang forever. This token makes the PR a real event that triggers CI. |
 
-## What the active runner does
+## Local runner history
 
-The local runner verifies the pinned encoder, engine, and corpus checkouts,
-runs `encode --apply` and the gate battery, and opens a draft PR. It never
-enables auto-merge; independent review and required CI remain mandatory.
+Before retirement, the local runner verified the pinned encoder, engine, and
+corpus checkouts, ran `encode --apply` and the gate battery, and opened a draft
+PR with auto-merge disabled. Independent review and required CI remain
+mandatory for centrally signed changes.
 
 ## Statuses
 

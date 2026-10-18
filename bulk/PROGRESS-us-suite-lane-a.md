@@ -145,6 +145,9 @@ Multi-bracket (need per-case bracket floor + cumulative base + marginal, like OH
 
 TAXSIM SOI codes for these: DE=8 MD=21 ME=20 MN=24 CT=7. Same recipe; add to
 `_TAXSIM_STATE`/`_PE_VAR`/`_TOL`, author pipeline+test, `axiom-encode test`, sign,
-oracle suite. Signing key: `agent-secret get agent/axiom-encode-apply-signing-key`
-→ export `AXIOM_ENCODE_APPLY_SIGNING_KEY`. Generator needs UT/VA `.test.yaml` from
+oracle suite. The local apply-signing key path was retired on 2026-10-14; do not
+retrieve or export `AXIOM_ENCODE_APPLY_SIGNING_KEY`. Use axiom-encode's
+[`targeted-signed-reencode` workflow](https://github.com/TheAxiomFoundation/axiom-encode/actions/workflows/targeted-signed-reencode.yml)
+for central signing, which runs only on `main` in a protected environment.
+Generator needs UT/VA `.test.yaml` from
 `origin/laneb-slice` present locally (untracked) until lane B's rulespec PR lands.

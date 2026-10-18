@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Local bulk-encode drain runner.
 
+Local apply signing is retired. Signed reencoding now uses axiom-encode's
+``targeted-signed-reencode`` workflow on main in its protected environment.
+The local signing entrypoint exits with this guidance before credential lookup.
+
 Drains ``bulk/worklist.yaml`` on the operator's machine using the local Codex
 CLI (ChatGPT subscription, ``gpt-6.1-sol``) instead of the cloud ``bulk-encode.yml``
 dispatcher, opening one draft PR per module for independent review. It mirrors
@@ -43,7 +47,7 @@ Usage:
                                        [--batch A] [--concurrency 3]
                                        [--max-entries N] [--max-seconds 540]
     python bulk/local_drain.py unstick [--pr N ...] [--all] [--wait]
-    python bulk/local_drain.py doctor  # verify toolchain + auth + signing key
+    python bulk/local_drain.py doctor  # verify toolchain + auth; report signing retirement
 """
 
 from __future__ import annotations
@@ -149,32 +153,10 @@ def run(
 
 
 def signing_key() -> str:
-    key = os.environ.get("AXIOM_ENCODE_APPLY_SIGNING_KEY", "").strip()
-    if key:
-        return key
-    agent_secret = str(Path.home() / "bin/agent-secret")
-    for cmd in (
-        [agent_secret, "get", "agent/axiom-encode-apply-signing-key"],
-        ["agent-secret", "get", "agent/axiom-encode-apply-signing-key"],
-        [
-            "security",
-            "find-generic-password",
-            "-a",
-            "axiom-encode",
-            "-s",
-            "AXIOM_ENCODE_APPLY_SIGNING_KEY",
-            "-w",
-        ],
-    ):
-        try:
-            rc, out = run(cmd)
-            if rc == 0 and out.strip():
-                return out.strip()
-        except FileNotFoundError:
-            continue
+    """Reject the retired local signing path before any credential lookup."""
     raise SystemExit(
-        "Signing key AXIOM_ENCODE_APPLY_SIGNING_KEY unavailable "
-        "(tried env, agent-secret, and macOS Keychain)."
+        "Local apply signing is retired. Use TheAxiomFoundation/axiom-encode's "
+        "targeted-signed-reencode workflow on main in its protected environment."
     )
 
 
@@ -671,10 +653,11 @@ def encode_entry(item: dict) -> dict:
         res["status"] = "skipped"
         res["detail"] = "bulk/<slug> PR already exists"
         return res
+    signing_key()
     leaf = make_worktree(slug, "origin/main")
     tmp = WT_ROOT / slug / "encode-out"
     env = {
-        "AXIOM_ENCODE_APPLY_SIGNING_KEY": signing_key(),
+        "AXIOM_ENCODE_APPLY_SIGNING_KEY": None,
         "AXIOM_CORPUS_REPO": str(CORPUS),
         "AXIOM_RULESPEC_REPO_ROOTS": str(leaf),
         # The pinned encoder's bin MUST be on PATH: the --apply manifest step
@@ -960,6 +943,14 @@ def require_coverage_ref() -> str:
 
 
 def cmd_doctor(_args) -> int:
+    # Report signing retirement first, so a broken encoder or toolchain probe
+    # below can never hide where signed re-encoding now runs.
+    try:
+        signing_key()
+        signing_ok = True
+    except SystemExit as e:
+        print(f"local apply signing : {e}")
+        signing_ok = False
     tc = pinned_toolchain()
     print(f"DRAIN_BASE           : {DRAIN_BASE}")
     command_ok = True
@@ -1005,12 +996,6 @@ def cmd_doctor(_args) -> int:
     corpus_ok = CORPUS.exists() and toolchain_ok
     print(f"engine bin           : {'OK' if engine_ok else 'MISSING'} {ENGINE_BIN}")
     print(f"corpus               : {'OK' if corpus_ok else 'MISSING'} {CORPUS}")
-    try:
-        print(f"signing key          : present (len {len(signing_key())})")
-        signing_ok = True
-    except SystemExit as e:
-        print(f"signing key          : {e}")
-        signing_ok = False
     rc, out = run(["codex", "--version"])
     print(f"codex CLI            : {'OK ' + out.strip() if rc == 0 else 'MISSING'}")
     return 0 if all(
@@ -1041,6 +1026,7 @@ def cmd_unstick(args) -> int:
 
 
 def cmd_drain(args) -> int:
+    signing_key()
     require_generation_toolchain()
     require_coverage_ref()
     matrix = json.loads(subprocess.run(
@@ -1145,7 +1131,7 @@ def main() -> int:
     u.add_argument("--all", action="store_true")
     u.add_argument("--wait", action="store_true", help="Poll each PR until CI finishes.")
     u.set_defaults(func=cmd_unstick)
-    doc = sub.add_parser("doctor", help="Verify toolchain, auth, signing key.")
+    doc = sub.add_parser("doctor", help="Verify toolchain and auth; report signing retirement.")
     doc.set_defaults(func=cmd_doctor)
     fl = sub.add_parser("flip", help="Batch accumulated drain status flips into one PR.")
     fl.set_defaults(func=cmd_flip)

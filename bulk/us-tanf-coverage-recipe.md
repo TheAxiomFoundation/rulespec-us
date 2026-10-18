@@ -76,17 +76,18 @@ scripts/sync_rulespec_roots.sh        # rsyncs ~/rulespec-us/us-XX/ -> ~/.axiom-
 cargo build --manifest-path ~/axiom-rules-engine/Cargo.toml --bin axiom-rules-engine --release
 ```
 
-**Required secrets (throughput gate — verify before planning a wave):**
-- `AXIOM_ENCODE_APPLY_SIGNING_KEY` — needed for `axiom-encode encode --apply`
-  (Step 2). Without it you cannot write a signed encoding manifest and CI
-  `guard-generated` rejects the leaf module. Observed **absent** in the wave-1
-  scout environment → any state whose benefit leaf is not already encoded was
-  un-provable there. Provision this (plus codex auth) on every encode lane.
+**Signing and auth prerequisites (verify before planning a wave):**
+- Signed encoding (Step 2) uses axiom-encode's
+  [`targeted-signed-reencode` workflow](https://github.com/TheAxiomFoundation/axiom-encode/actions/workflows/targeted-signed-reencode.yml),
+  which signs only on `main` in a protected environment. The local
+  `AXIOM_ENCODE_APPLY_SIGNING_KEY` path was retired on 2026-10-14; do not provision
+  that key on encode lanes or retrieve it from agent or macOS keychains.
 - `AXIOM_CORPUS_INGEST_PRIVATE_KEY` (+ `_PUBLIC_KEY`) — needed for Step 1
   `sign-ingest-manifest` / `guard-ingested`. Also absent in the scout env → fresh
   corpus ingest was un-provable there; only already-ingested states were workable.
-- codex auth (`~/.codex/auth.json` or `$OPENAI_API_KEY`) — present in the scout
-  env, but useless for `--apply` without the encode signing key above.
+- Subscription Codex auth — use a subscription lane with
+  `export CODEX_HOME=~/.codex-6` and ChatGPT sign-in; never set or read
+  `OPENAI_API_KEY`. Local auth does not enable local apply signing.
 
 Pins that must stay coherent (do not drift):
 - Oracle runner PE pins (`scripts/run_comparison.py::_PE_ORACLE_PINS`):
@@ -138,24 +139,22 @@ source. Do **not** publish to R2/Supabase unless explicitly asked.
 Net-new statutory encoding of the payment-standard and disregard/computation
 provisions. This is the only AI step.
 
-```bash
-cd ~/TheAxiomFoundation/axiom-encode
-AXIOM_ENCODE_APPLY_SIGNING_KEY=… uv run axiom-encode encode \
-  "us-<st>/<class>/<citation-path>/<module>" \
-  --backend codex --model gpt-6.1-sol --mode repo-augmented \
-  --output /tmp/axiom-encode-<st>-tanf --apply
-```
+Use axiom-encode's `targeted-signed-reencode` workflow for signed reencoding;
+signing runs only on `main` in its protected environment. The former local
+command that supplied `AXIOM_ENCODE_APPLY_SIGNING_KEY` is retired.
 
-The command explicitly selects `--backend codex`, `--model gpt-6.1-sol`, and
+The supervised encoder must use
+`axiom-encode encode <corpus citation> --backend codex --apply`.
+This recipe selects `--model gpt-6.1-sol` and
 `--mode repo-augmented`. With an encoder that supports model escalation
 (including the repository's pinned encoder 0.2.2080), also pass
 `--escalation-model gpt-6.1-sol` to keep validation retries on the selected
 model. Older encoder checkouts may not support that option.
 
-It needs subscription Codex auth
-(`~/.codex/auth.json` via `codex login` with ChatGPT sign-in; never
-`$OPENAI_API_KEY`) and `AXIOM_ENCODE_APPLY_SIGNING_KEY`. `--apply` validates
-main + companion test in a temp overlay, copies both into
+Encoding needs subscription Codex auth (a subscription `CODEX_HOME` lane and
+`codex login` with ChatGPT sign-in; never set or read `OPENAI_API_KEY`). Signed
+applies require the central workflow, not a local credential. `--apply`
+validates main + companion test in a temp overlay, copies both into
 `rulespec-us/us-<st>/…`, and writes a signed
 apply manifest (`.axiom/encoding-manifests/…json`, HMAC-SHA256,
 `"backend":"codex"`). CI `axiom-encode guard-generated` rejects any changed
@@ -357,10 +356,11 @@ already-ingested states carry **partial** leaves and still need Step 2:
   encoding with no clean `fl_tca_*` outputs and no composition module; treat as a
   hard compose (reverse-engineer the 2600 pages), not a quick win.
 
-So under the scout env (no encode signing key), **AL was the only fully
-provable new state**; every other candidate is gated on either the signing key
-(fresh encode) or a heavy compose (FL). Wave-2 sequencing: provision the signing
-key first, then simplest-PE-module-first — **AL (done)**, then encode-and-compose
+Under the historical scout environment, **AL was the only fully provable new
+state** because its benefit leaf was already encoded. Fresh encodes now require
+the central `targeted-signed-reencode` workflow; FL still requires a heavy
+compose. Wave-2 sequencing: arrange central signed reencoding first, then
+simplest-PE-module-first — **AL (done)**, then encode-and-compose
 GA/DE/ME/HI, then the no-corpus set (MS, ND, NC, SD before TX/MT/IL). Skip IN
 (another lane holds it — it already has `bridges/mappings/us.yaml` entries) and
 non-simulated states (file as `in_scope: false`, `suite: null`).
