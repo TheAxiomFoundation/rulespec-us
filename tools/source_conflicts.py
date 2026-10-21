@@ -16,7 +16,7 @@ and program, provisions not yet in the corpus (`pending_texts`, checked
 against pinned snapshots), whether the adopted reading computes or refuses
 contested cases (`outcome`), the modules that adopt the entry as
 (module path, interpretation id) pairs (`adopted_by`), code outside RuleSpec
-that adopts a reading (`implementations`), the tests that pin each reading
+that adopts a reading (`implementations`), unshipped changes (`proposed`), the tests that pin each reading
 (`tests`) and an invented money case (`money_case`).
 
 Three commands:
@@ -121,6 +121,7 @@ ENTRY_KEYS = frozenset(
         "outcome",
         "adopted_by",
         "implementations",
+        "proposed",
         "tests",
         "money_case",
     }
@@ -314,7 +315,8 @@ def _unsupported_money(text: str) -> list[str]:
 
 def _prose_fields(entry: Mapping[str, Any], label: str) -> Iterator[tuple[str, str]]:
     """The entry's own prose: question, reading, basis and each alternative's
-    reading and effect. Source excerpts, citations and records quote others."""
+    reading and effect, and each proposal's basis. Source excerpts, citations
+    and records quote others."""
 
     for key in ("question", "reading", "basis"):
         if isinstance(entry.get(key), str):
@@ -325,6 +327,9 @@ def _prose_fields(entry: Mapping[str, Any], label: str) -> Iterator[tuple[str, s
             for key in ("reading", "effect"):
                 if isinstance(alternative.get(key), str):
                     yield f"{label}.alternatives[{index}].{key}", alternative[key]
+    for index, proposal in enumerate(_as_list(entry.get("proposed"))):
+        if isinstance(proposal, dict) and isinstance(proposal.get("basis"), str):
+            yield f"{label}.proposed[{index}].basis", proposal["basis"]
 
 
 def check_interpretation_core(entry: Mapping[str, Any], *, label: str, require_texts: bool) -> list[str]:
@@ -714,6 +719,35 @@ def check_entry(entry: Any, *, index: int, ctx: RepoContext, jurisdictions: froz
             _check_reading_ref(item.get("follows"), label=f"{i_label}.follows", alternatives=alternatives, issues=issues)
             if not isinstance(item.get("cites_entry"), bool):
                 issues.append(f"{i_label}.cites_entry must be true or false.")
+
+    if "proposed" in entry:
+        proposed = entry["proposed"]
+        if not _nonempty_list(proposed, label=f"{label}.proposed", issues=issues):
+            proposed = []
+        seen_proposals: set[tuple[str, str]] = set()
+        for p_index, item in enumerate(proposed):
+            p_label = f"{label}.proposed[{p_index}]"
+            if not _mapping(item, label=p_label, allowed={"repo", "path", "follows", "basis", "pull_request"}, issues=issues):
+                continue
+            repo = item.get("repo")
+            path = item.get("path")
+            valid_repo = isinstance(repo, str) and REPO_RE.fullmatch(repo)
+            if not valid_repo or repo == ctx.repo:
+                issues.append(f"{p_label}.repo must be an external owner/name; in-repository modules use adopted_by.")
+            if not _relative_path(path):
+                issues.append(f"{p_label}.path must be a relative path inside the repository.")
+            elif valid_repo:
+                pair = (repo, path)
+                if pair in seen_proposals:
+                    issues.append(f"{p_label} repeats ({repo}, {path}).")
+                seen_proposals.add(pair)
+            _check_reading_ref(item.get("follows"), label=f"{p_label}.follows", alternatives=alternatives, issues=issues)
+            _string(item.get("basis"), label=f"{p_label}.basis", issues=issues)
+            if "pull_request" in item and not (
+                valid_repo and isinstance(item["pull_request"], str)
+                and re.fullmatch(rf"https://github\.com/{re.escape(repo)}/pull/[1-9][0-9]*", item["pull_request"])
+            ):
+                issues.append(f"{p_label}.pull_request must be a GitHub pull-request URL for its repo.")
 
     if "tests" in entry:
         if not _nonempty_list(tests, label=f"{label}.tests", issues=issues):
@@ -1204,6 +1238,11 @@ def verify_register(
                 issues.append(f"{t_label}: {missing_test(item['name'], where)}")
             else:
                 counts["tests"] += 1
+        for p_index, item in enumerate(entry.get("proposed") or []):
+            report.append(
+                f"proposed: {label}.proposed[{p_index}] ({item['repo']}:{item['path']}) "
+                "is unshipped; implementation and tests are not verified"
+            )
     report.insert(
         0,
         "verified: "
@@ -1288,6 +1327,7 @@ def aggregate(registers: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[
                         for item in _as_list(entry.get("implementations"))
                         if isinstance(item, dict)
                     ],
+                    "proposed": [dict(item) for item in _as_list(entry.get("proposed")) if isinstance(item, dict)],
                     "tests": len(entry.get("tests") or []),
                     "money_case": entry.get("money_case"),
                 }

@@ -42,6 +42,21 @@ SHA = "b" * 64
 # The committed register
 
 
+def test_corpus_checkout_keeps_historical_locked_blobs() -> None:
+    # actions/checkout makes sparse checkouts blobless. corpus-fetch refuses
+    # lazy network reads, so historical git_blob locks need ordinary history.
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/source-conflicts.yml").read_text())
+    checkouts = [
+        step["with"]
+        for step in workflow["jobs"]["verify"]["steps"]
+        if step.get("with", {}).get("repository") == "TheAxiomFoundation/axiom-corpus"
+    ]
+    assert len(checkouts) == 1
+    assert checkouts[0].get("fetch-depth") == 0
+    assert "sparse-checkout" not in checkouts[0]
+    assert "filter" not in checkouts[0]
+
+
 def test_committed_register_passes_check() -> None:
     payload = sc.load_register(REPO_ROOT / sc.REGISTER_FILENAME)
     issues = sc.check_register(payload, sc.RepoContext(root=REPO_ROOT, repo=REPO))
@@ -154,6 +169,67 @@ def write_module(ctx, rel, interpretations, rules=("rule_a", "rule_b")):
 
 def test_valid_entry_has_no_issues(tmp_path):
     assert check(make_repo(tmp_path), entry()) == []
+
+
+def proposal_entry(**proposal_overrides):
+    value = entry(status="open")
+    for key in ("ruling", "implementations", "tests", "money_case"):
+        del value[key]
+    value["proposed"] = [{
+        "repo": "PolicyEngine/policyengine-us",
+        "path": "policyengine_us/parameters/example.yaml",
+        "follows": "reading",
+        "basis": "The unshipped change uses the operational manual pending clarification.",
+        **proposal_overrides,
+    }]
+    return value
+
+
+@pytest.mark.parametrize("extra", [{}, {"pull_request": "https://github.com/PolicyEngine/policyengine-us/pull/123"}])
+def test_proposal_needs_no_shipped_commit_or_test_pin(tmp_path, extra):
+    assert check(make_repo(tmp_path), proposal_entry(**extra)) == []
+
+
+@pytest.mark.parametrize("field", ["repo", "path", "follows", "basis"])
+def test_proposal_requires_its_file_and_reason(tmp_path, field):
+    value = proposal_entry()
+    del value["proposed"][0][field]
+    assert any(f".{field} " in issue for issue in check(make_repo(tmp_path), value))
+
+
+@pytest.mark.parametrize("extra, message", [
+    ({"commit": COMMIT}, "unknown key `commit`"),
+    ({"cites_entry": True}, "unknown key `cites_entry`"),
+    ({"repo": REPO}, ".repo must be an external owner/name"),
+    ({"repo": []}, ".repo must be an external owner/name"),
+    ({"path": "../outside.py"}, ".path must be a relative path"),
+    ({"follows": "alternatives[2]"}, ".follows"),
+    ({"basis": ""}, ".basis"),
+    ({"basis": "It pays $100."}, "which no money case backs"),
+    ({"pull_request": "https://github.com/PolicyEngine/another-repo/pull/123"}, ".pull_request"),
+    ({"pull_request": "https://github.com/PolicyEngine/policyengine-us/issues/123"}, ".pull_request"),
+])
+def test_proposal_rejects_invalid_or_shipped_claims(tmp_path, extra, message):
+    assert any(message in issue for issue in check(make_repo(tmp_path), proposal_entry(**extra)))
+
+
+def test_duplicate_proposed_file_is_rejected(tmp_path):
+    value = proposal_entry()
+    value["proposed"].append(dict(value["proposed"][0]))
+    assert any("repeats (PolicyEngine/policyengine-us," in issue for issue in check(make_repo(tmp_path), value))
+
+
+@pytest.mark.parametrize("value", [None, {}, "proposal", [], [None], [[]]])
+def test_malformed_proposals_are_findings_not_exceptions(tmp_path, value):
+    assert check(make_repo(tmp_path), entry(proposed=value))
+
+
+def test_aggregation_preserves_unshipped_proposals_separately():
+    value = proposal_entry()
+    rows, issues = sc.aggregate({REPO: {"entries": [value]}})
+    assert issues == []
+    assert rows[0]["implementations"] == []
+    assert rows[0]["proposed"] == value["proposed"]
 
 
 def test_top_level_shape(tmp_path):
@@ -926,6 +1002,15 @@ def test_verify_passes_and_reports_lag_and_uncited():
     assert report[0] == "verified: 1 texts, 1 pending texts, 1 implementations, 2 tests"
     assert any(line.startswith("uncited:") for line in report)
     assert any(line.startswith("lags:") for line in report)
+
+
+def test_verify_reports_proposals_without_fetching_or_counting_them():
+    payload, net, corpus = verified_inputs()
+    payload["entries"][0]["proposed"] = proposal_entry()["proposed"]
+    issues, report = sc.verify_register(payload, fetch=net, matches=substring, resolve=corpus.get)
+    assert issues == []
+    assert report[0] == "verified: 1 texts, 1 pending texts, 1 implementations, 2 tests"
+    assert any(line.startswith("proposed:") and "unshipped" in line and "not verified" in line for line in report)
 
 
 def test_verify_findings():
