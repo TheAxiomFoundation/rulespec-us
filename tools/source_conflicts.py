@@ -1009,14 +1009,27 @@ def check_pending_texts(pending: Any, *, label: str, issues: list[str]) -> list[
 # matches its source. A backslash and n is read as an escape whatever follows
 # it. A backslash and t or r is read as one only where no letter follows,
 # since a source may set a real backslash there ("applicant\recipient" in a
-# Nevada manual, "\times", "C:\temp"). So the one real text this refuses is a
-# backslash before n ("citizen\noncitizen", "\neq"); quote around it.
-ESCAPE_RE = re.compile(r"\\(?:n|[tr](?![^\W\d_]))")
+# Nevada manual, "\times", "C:\temp"). A real backslash before n
+# ("citizen\noncitizen", "\neq"), or before t or r and no letter, is refused
+# too; the author quotes around it.
+_ESCAPE_RE = re.compile(r"\\[ntr]")
 # What axiom-encode's collapse_evidence_whitespace reads as a paragraph gap: a
 # run of whitespace holding a paragraph separator or two line ends.
 _WHITESPACE_RUN_RE = re.compile(r"\s+")
 _LINE_END_RE = re.compile(r"\r\n|\r(?!\n)|\n")
 _PARAGRAPH_SEPARATORS = frozenset("\u2028\u2029\x0b\x0c\x85")
+
+
+def escapes_held_as_text(text: str) -> list[str]:
+    """The escape sequences the text holds as text, sorted: a backslash and n
+    wherever it stands, and a backslash and t or r that no letter
+    (str.isalpha) follows."""
+
+    found = set()
+    for match in _ESCAPE_RE.finditer(text):
+        if match.group() == "\\n" or not text[match.end() : match.end() + 1].isalpha():
+            found.add(match.group())
+    return sorted(found)
 
 
 def has_paragraph_gap(text: str) -> bool:
@@ -1031,11 +1044,12 @@ def has_paragraph_gap(text: str) -> bool:
 
 def check_excerpts(entry: Mapping[str, Any], *, label: str, issues: list[str]) -> None:
     """Two mistakes in `texts` and `pending_texts` excerpts that verify would
-    find and check can see: an escape sequence held as text (ESCAPE_RE), and a
-    paragraph gap in a pending text, whose snapshot verify reads with every run
-    of whitespace as one space (snapshot_text), so the excerpt never matches.
-    Module interpretations are left to axiom-encode, whose validation
-    check_module_interpretation mirrors."""
+    find and check can see: an escape sequence held as text
+    (escapes_held_as_text), and a paragraph gap in a pending text, whose
+    snapshot verify reads with every run of whitespace as one space
+    (snapshot_text), so the excerpt never matches. Module interpretations are
+    left to axiom-encode, whose validation check_module_interpretation
+    mirrors."""
 
     for field in ("texts", "pending_texts"):
         items = entry.get(field)
@@ -1044,7 +1058,7 @@ def check_excerpts(entry: Mapping[str, Any], *, label: str, issues: list[str]) -
             if not isinstance(excerpt, str):
                 continue
             e_label = f"{label}.{field}[{index}].excerpt"
-            escapes = sorted(set(ESCAPE_RE.findall(excerpt)))
+            escapes = escapes_held_as_text(excerpt)
             if escapes:
                 issues.append(
                     f"{e_label} holds {', '.join(f'`{escape}`' for escape in escapes)} as text, a backslash and "

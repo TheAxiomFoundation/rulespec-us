@@ -162,6 +162,55 @@ and email addresses). It cannot tell a person's name from an organisation's,
 or a private page from a public one. The file may not use YAML anchors or
 aliases; `load_register` refuses them, so no entry can contain itself.
 
+### Excerpts
+
+An excerpt (`texts[].excerpt` or `pending_texts[].excerpt`) is the source's
+own words. `verify` matches it with axiom-encode's proof-atom matcher, which
+reads whitespace through `collapse_evidence_whitespace` at
+`axiom_encode_ref`. That function keeps every paragraph gap. In the source
+and the excerpt alike, a run of whitespace holding two or more line ends, or
+a paragraph separator (form feed, vertical tab, U+0085, U+2028 or U+2029),
+becomes one blank line, and any other run becomes one space. So where the
+corpus text sets a subparagraph off with a blank line, the excerpt has a
+blank line there too, and it has a blank line nowhere else. Line wraps and
+extra spaces don't matter. Write such an excerpt as a literal block
+(`excerpt: |-`), which keeps its blank lines:
+
+```yaml
+texts:
+- corpus_citation_path: us/statute/26/199A/a/2
+  excerpt: |-
+    an amount equal to 20 percent of the excess (if any) of—
+
+    (A) the taxable income of the taxpayer for the taxable year, over
+
+    (B) the net capital gain (as defined in section 1(h)) of the taxpayer for such taxable year.
+```
+
+Written on one line (`… of— (A) the taxable income …`), the same words don't
+match. In a plain, single-quoted or folded (`>-`) scalar, one blank line
+folds to a single line break, which reads as a space, so those styles lose
+the gap too. `check` can't see the corpus, so it can't catch a gap mismatch
+in `texts`. When the words match once every paragraph gap is read as a
+space, `verify`'s issue says to keep the source's paragraph gaps; it flattens
+both texts with the encoder's own normaliser to tell. A snapshot is
+different: `verify` reads it with every run of whitespace as one space
+(`snapshot_text`), so a `pending_texts` excerpt never has a blank line, and
+`check` refuses one that has.
+
+YAML keeps a backslash as itself outside double quotes, so an excerpt copied
+from escaped text holds `\n` as two characters and never matches its source.
+`check` refuses an excerpt holding a backslash and `n`, whatever follows it
+(`who\nis`, `\n(1)`, `\n\n(1)`), or a backslash and `t` or `r` that no
+letter follows (`\t2,000`, `\r\n`). Write a real line break or a space
+instead. A backslash and `t` or `r` before a letter is left alone, because a
+source may set a real backslash there (`applicant\recipient`, `\times`,
+`C:\temp`). A real backslash before `n` (`citizen\noncitizen`, `\neq`), or
+before `t` or `r` and no letter, is refused too: quote a span that stops
+before it. If the
+corpus text itself shows an escape, that is an ingest defect to fix in
+axiom-corpus, not text to quote. Module interpretations are left to
+axiom-encode's own validation, which `check_module_interpretation` mirrors.
 
 ### Quotation examples
 
@@ -216,6 +265,8 @@ of these:
 - a `resolution` without `conflict: resolved`, or a resolved entry without a
   `resolution` or `years.to`;
 - a hygiene hit (one of the four token patterns below);
+- an excerpt holding an escape sequence as text, or a `pending_texts`
+  excerpt with a paragraph gap (see [Excerpts](#excerpts));
 - a global id that `household-choices.yaml` also uses (see
   [Household choices](#household-choices); both checks call one function);
 - an adopting module that is missing, or that does not carry the entry's
@@ -251,7 +302,9 @@ pinned commit and fails unless pytest reports it passed; see
 [Test references](#test-references).
 
 Both excerpt checks use axiom-encode's own resolver and proof-atom matcher at
-`axiom_encode_ref`. The verify report lists:
+`axiom_encode_ref`. A corpus excerpt that matches once every paragraph gap is
+read as a space is reported with a hint to keep the source's paragraph gaps
+(see [Excerpts](#excerpts)). The verify report lists:
 - implementations that do not cite their entry yet;
 - implementations that lag (they follow a reading other than the one they adopt);
 - unpublished sources, which it cannot check.
@@ -596,6 +649,8 @@ runs it inside the Repository Checks pytest leg. It fails on any of these:
   pin;
 - an `axiom.input`, `source_conflict` or `coupled_with` that names nothing;
 - a global id that the register also uses;
+- an excerpt holding an escape sequence as text, or a `pending_texts`
+  excerpt with a paragraph gap, as in the register (see [Excerpts](#excerpts));
 - a hygiene hit, or an amount of money in prose.
 
 `verify` (the `source-conflicts` job) checks excerpts, snapshots, shipped

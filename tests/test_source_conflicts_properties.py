@@ -82,6 +82,21 @@ Invariants, for every input:
     - The floor is main's scanner exactly (`_main_words` equals a verbatim
       copy of main's function), so the count is never below main's; and
       widening the single openers never lowers it.
+18. Excerpts:
+    - An excerpt with no backslash never draws an escape issue, and one with
+      a backslash and n inserted anywhere always does, naming the field.
+    - `escapes_held_as_text` equals an independent reading of the rule (a
+      backslash before n; before t or r, only when no letter follows).
+    - Differential (when axiom-encode is importable): `has_paragraph_gap`
+      agrees with axiom-encode's `collapse_evidence_whitespace` on every text.
+      A run of a snapshot's words matches it under the encoder's matcher
+      exactly when the excerpt has no paragraph gap, which is the pending
+      rule. For a source in records, the matcher accepts a run of its words
+      exactly when the run stays inside one record and each separator is a
+      gap where the source's is; with both flattened
+      (`encoder_gap_flattener`), it accepts exactly the runs inside one
+      record. So verify's paragraph-gap hint fires exactly when only the gaps
+      differ.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the source-conflicts workflow installs it and runs them.
@@ -1339,3 +1354,144 @@ def test_every_recognisable_quotation_counts_in_full(case):
     # included) counts at least its own words.
     text, words = case
     assert sc.quoted_words(text) >= words, text
+
+
+# 18. Excerpts: escapes held as text, and paragraph gaps
+BACKSLASH_FREE = st.text(st.characters(exclude_characters="\\", exclude_categories=("Cs",)), max_size=60)
+ANY_TEXT = st.text(st.characters(exclude_categories=("Cs",)), max_size=60)
+
+
+def _escape_issues(issues):
+    return [issue for issue in issues if " as text, a backslash and a letter" in issue]
+
+
+def _reference_escapes(text):
+    """An independent reading of the rule: every backslash before n, and every
+    backslash before t or r whose next character is not a letter."""
+
+    found = set()
+    for index in range(len(text) - 1):
+        if text[index] == "\\" and text[index + 1] in "ntr":
+            after = text[index + 2 : index + 3]
+            if text[index + 1] == "n" or not after.isalpha():
+                found.add("\\" + text[index + 1])
+    return sorted(found)
+
+
+def _with_excerpts(value, excerpt):
+    value = copy.deepcopy(value)
+    for item in value.get("texts", []) + value.get("pending_texts", []):
+        item["excerpt"] = excerpt
+    return value
+
+
+@SETTINGS
+@given(value=entries(), excerpt=BACKSLASH_FREE.filter(str.strip))
+def test_no_escape_issue_without_a_backslash(tmp_path, value, excerpt):
+    assert not _escape_issues(sc.check_register({"version": 1, "entries": [_with_excerpts(value, excerpt)]}, repo(tmp_path)))
+
+
+@SETTINGS
+@given(value=entries(), excerpt=ANY_TEXT, data=st.data())
+def test_an_inserted_backslash_n_is_always_reported(value, excerpt, data):
+    # Whatever the excerpt holds (backslashes included) and wherever the
+    # escape goes, the field is reported and `\n` is named.
+    fields = [(field, index) for field in ("texts", "pending_texts") for index in range(len(value.get(field, [])))]
+    field, index = data.draw(st.sampled_from(fields))
+    cut = data.draw(st.integers(0, len(excerpt)))
+    value = copy.deepcopy(value)
+    value[field][index]["excerpt"] = excerpt[:cut] + "\\n" + excerpt[cut:]
+    issues: list[str] = []
+    sc.check_excerpts(value, label="x", issues=issues)
+    assert any(issue.startswith(f"x.{field}[{index}].excerpt holds ") and "`\\n`" in issue.split(" as text")[0] for issue in issues), issues
+
+
+@SETTINGS
+@given(text=ANY_TEXT, data=st.data())
+def test_escapes_match_an_independent_reading(text, data):
+    # Insert backslashes before n, t and r, and before letters or not, so the
+    # interesting cases are common.
+    for _ in range(data.draw(st.integers(0, 4))):
+        cut = data.draw(st.integers(0, len(text)))
+        text = text[:cut] + "\\" + data.draw(st.sampled_from("ntrx\\(")) + text[cut:]
+    assert sc.escapes_held_as_text(text) == _reference_escapes(text)
+
+
+@SETTINGS
+@given(text=BACKSLASH_FREE, data=st.data())
+def test_a_backslash_t_or_r_is_an_escape_exactly_when_no_letter_follows(text, data):
+    cut = data.draw(st.integers(0, len(text)))
+    letter = data.draw(st.sampled_from("tr"))
+    escaped = text[:cut] + "\\" + letter + text[cut:]
+    expected = [] if text[cut : cut + 1].isalpha() else ["\\" + letter]
+    assert sc.escapes_held_as_text(escaped) == expected
+
+
+GAP_ALPHABET = st.sampled_from(list("ab(1). ") + ["\n", "\r", "\r\n", "\t", "\x0b", "\x0c", "\x1c", "\x1e", "\x85", " ", " ", " ", "　"])
+
+
+@SETTINGS
+@given(parts=st.lists(GAP_ALPHABET, max_size=30))
+def test_paragraph_gaps_match_the_encoders_normaliser(parts):
+    proof_validator = pytest.importorskip("axiom_encode.harness.proof_validator")
+    text = "".join(parts)
+    assert sc.has_paragraph_gap(text) == ("\n\n" in proof_validator.collapse_evidence_whitespace(text.strip()))
+
+
+WORDS = st.lists(st.from_regex(r"[a-z]{2,8}", fullmatch=True), min_size=2, max_size=12, unique=True)
+SPACE = st.sampled_from([" ", "  ", "\n", "\t", " \n ", " "])
+GAP = st.sampled_from(["\n\n", "\n \n", "\r\n\r\n", "\x0c", " ", "\n\n\n"])
+
+
+def _joined(words, separators):
+    return words[0] + "".join(separator + word for separator, word in zip(separators, words[1:]))
+
+
+@SETTINGS
+@given(words=WORDS, data=st.data())
+def test_a_pending_excerpt_matches_its_snapshot_exactly_when_it_has_no_gap(words, data):
+    # The rule check applies to pending texts: a snapshot is read with every
+    # run of whitespace as one space, so a run of its words matches it unless
+    # the excerpt sets a paragraph gap between two of them; flattened, it
+    # always does.
+    pytest.importorskip("axiom_encode.harness.proof_validator")
+    matches, flatten = sc.encoder_matcher(), sc.encoder_gap_flattener()
+    snapshot = sc.snapshot_text(("<p>" + "</p>\n\n<p>".join(words) + "</p>").encode(), "x.html")
+    start = data.draw(st.integers(0, len(words) - 2))
+    end = data.draw(st.integers(start + 2, len(words)))
+    excerpt = _joined(words[start:end], [data.draw(st.one_of(SPACE, GAP)) for _ in range(end - start - 1)])
+    assert matches(snapshot, excerpt) is not sc.has_paragraph_gap(excerpt), excerpt
+    assert matches(flatten(snapshot), flatten(excerpt))
+
+
+@SETTINGS
+@given(words=WORDS, data=st.data())
+def test_the_gap_hint_fires_exactly_when_only_the_gaps_differ(words, data):
+    # A source of distinct words set off by spaces, line wraps or paragraph
+    # gaps, split into records; an excerpt is a run of its words with its own
+    # whitespace. The encoder's matcher accepts the excerpt exactly when each
+    # of its separators is a gap where the source's is; flattened, it accepts
+    # any run inside one record and none across two, so verify's hint
+    # (verify_texts) fires exactly when only the gaps differ.
+    pytest.importorskip("axiom_encode.harness.proof_validator")
+    from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR as SEP
+
+    matches, flatten = sc.encoder_matcher(), sc.encoder_gap_flattener()
+    source_separators = [data.draw(st.one_of(SPACE, GAP, st.just(SEP))) for _ in words[1:]]
+    source = _joined(words, source_separators)
+    start = data.draw(st.integers(0, len(words) - 2))
+    end = data.draw(st.integers(start + 2, len(words)))
+    excerpt_separators = [data.draw(st.one_of(SPACE, GAP)) for _ in range(end - start - 1)]
+    excerpt = _joined(words[start:end], excerpt_separators)
+    inside = SEP not in source_separators[start : end - 1]
+    gaps_agree = all(
+        sc.has_paragraph_gap(f"a{ours}b") == sc.has_paragraph_gap(f"a{theirs}b")
+        for ours, theirs in zip(excerpt_separators, source_separators[start : end - 1])
+    )
+    assert matches(source, excerpt) is (inside and gaps_agree), (source, excerpt)
+    assert matches(flatten(source), flatten(excerpt)) is inside, (source, excerpt)
+    issues: list[str] = []
+    value = {"texts": [{"corpus_citation_path": "us/statute/1/1", "excerpt": excerpt}]}
+    sc.verify_texts(value, "x", resolve={"us/statute/1/1": source}.get, matches=matches, issues=issues, flatten_gaps=flatten)
+    assert bool(issues) is not (inside and gaps_agree)
+    assert any(issue.endswith(sc.GAP_HINT) for issue in issues) is (inside and not gaps_agree)

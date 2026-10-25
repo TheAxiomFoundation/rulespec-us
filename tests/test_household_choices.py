@@ -216,6 +216,30 @@ def test_texts_and_pending_texts_are_checked_as_the_register_checks_them(tmp_pat
     assert has(issues, "pending_texts[0].snapshot.repo is required")
 
 
+def test_excerpts_are_screened_as_the_register_screens_them(tmp_path):
+    # The register's check_excerpts: an escape held as text in any excerpt,
+    # and a paragraph gap in a pending text, whose snapshot verify flattens.
+    ctx = make_repo(tmp_path)
+    pending = [
+        {
+            "citation": "Form 1040 instructions",
+            "kind": "instructions",
+            "url": "https://www.irs.gov/instructions/i1040gi",
+            "excerpt": "Itemize\n\nif it lowers your tax",
+            "snapshot": {"repo": PE, "commit": COMMIT, "path": "tests/data/i1040.html", "sha256": "b" * 64},
+        }
+    ]
+    value = entry(texts=[{"corpus_citation_path": "us/statute/26/63/e/1", "excerpt": "Unless an\\nindividual"}], pending_texts=pending)
+    issues = check(ctx, value)
+    label = "Entry `itemized-deduction-election` (entries[0])"
+    assert has(issues, f"{label}.texts[0].excerpt holds `\\n` as text")
+    assert has(issues, f"{label}.pending_texts[0].excerpt has a blank line or a paragraph separator")
+    assert not has(issues, f"{label}.pending_texts[0].excerpt holds")
+    value["texts"][0]["excerpt"] = "Unless an individual"
+    value["pending_texts"][0]["excerpt"] = "Itemize if it lowers your tax"
+    assert not has(check(ctx, value), "excerpt")
+
+
 def test_unknown_keys_rejected_at_every_level(tmp_path):
     ctx = make_repo(tmp_path)
     value = entry(extra=1)
@@ -961,6 +985,32 @@ def test_verify_checks_the_implementation_defines_its_variable():
     issues, report = hc.verify_choices(choices, fetch=net, matches=substring, resolve=corpus.get, on_default_branch=lambda r, c: True)
     assert issues == []
     assert any(line.startswith("unchecked: ") and "not a Python file" in line for line in report)
+
+
+def test_verify_says_when_only_the_paragraph_gaps_differ():
+    # The register's hint (sc.GAP_HINT), with a stub resolver and flattener.
+    choices, net, _ = verified_inputs()
+    choices["entries"][0]["texts"][0]["excerpt"] = "an election under this subsection"
+    resolve = {"us/statute/26/63/e/1": "Unless an individual makes an election\n\nunder this subsection"}.get
+    flatten = lambda text: " ".join(text.split())  # noqa: E731
+    issues, _ = hc.verify_choices(choices, fetch=net, matches=substring, resolve=resolve, on_default_branch=lambda r, c: True, flatten_gaps=flatten)
+    assert issues == [
+        "us:itemized-deduction-election (entries[0]).texts[0]: the excerpt is not verbatim at us/statute/26/63/e/1 "
+        "in the pinned corpus release." + sc.GAP_HINT
+    ]
+    issues, _ = hc.verify_choices(choices, fetch=net, matches=substring, resolve=resolve, on_default_branch=lambda r, c: True)
+    assert not issues[0].endswith(sc.GAP_HINT)
+
+
+def test_verify_cli_passes_the_encoders_flattener(tmp_path, monkeypatch):
+    (tmp_path / sc.CHOICES_FILENAME).write_text("version: 1\nentries: []\n")
+    flatten = object()
+    seen = {}
+    monkeypatch.setattr(sc, "encoder_matcher", lambda: substring)
+    monkeypatch.setattr(sc, "encoder_gap_flattener", lambda: flatten)
+    monkeypatch.setattr(hc, "verify_choices", lambda payload, **kwargs: (seen.update(kwargs), ([], ["verified"]))[1])
+    assert hc.main(["verify", "--root", str(tmp_path)]) == 0
+    assert seen["flatten_gaps"] is flatten
 
 
 def test_verify_findings():
