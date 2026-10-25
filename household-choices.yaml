@@ -101,6 +101,339 @@ entries:
       Compare the household's net income with a parent claiming the child and
       with the other eligible taxpayer claiming the child.
 
+  # Montana, tax years 2021 to 2023: married spouses could file separate
+  # returns, and spouses filing separately on one form chose how to divide
+  # some items between their columns. The four choices interact, so they are
+  # coupled. From tax year 2024 Montana uses the federal filing status.
+  - id: separate-or-joint-return
+    jurisdiction: us-mt
+    program: income-tax
+    question: >-
+      Do married spouses file separate Montana returns instead of a joint
+      return?
+    actor: spouses-jointly
+    years:
+      from: 2021
+      to: 2023
+      type: tax
+    texts:
+      - corpus_citation_path: us-mt/statute/15-30-2602--mca-2021/block-1
+        excerpt: >-
+          each taxpayer who is married and living with a husband or wife and
+          is required to file a return may, at the taxpayer's option, file a
+          joint return with the husband or wife even though one of the spouses
+          has neither gross income nor deductions.
+      - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
+        excerpt: >-
+          you and your spouse have the option to file your Montana tax return
+          either jointly or separately.
+      - corpus_citation_path: us-mt/form/mtdor/ty2022/form-2-instructions/document-1
+        excerpt: >-
+          you and your spouse have the option to file your Montana tax return
+          either jointly or separately.
+      - corpus_citation_path: us-mt/form/mtdor/ty2023/form-2-instructions/document-1
+        excerpt: >-
+          you and your spouse have the option to file your Montana tax return
+          either jointly or separately. Beginning in Tax Year 2024, taxpayers
+          must use the same filing status used on the federal Form 1040.
+    text_kinds:
+      us-mt/form/mtdor/ty2021/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2022/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2023/form-2-instructions/document-1: instructions
+    domain:
+      kind: boolean
+      per: tax-unit
+      coupled_with:
+        - us-mt:separate-filing-dependent-exemptions
+        - us-mt:separate-same-form-charitable-allocation
+        - us-mt:separate-filing-dependent-medical-allocation
+    default:
+      value: true
+      basis: statute
+      note: >-
+        15-30-2602(2) makes a joint return the taxpayer's option, so with no
+        election the spouses file separately. True covers separate filing on
+        one form (Filing Status 2a) and on separate forms (2b and 2c).
+    objective:
+      measure: net-income
+      scope: tax-unit
+    optimization:
+      structure: two-way
+    implementations:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/variables/gov/states/mt/tax/income/filing/mt_files_separately.py
+        variable: mt_files_separately
+        models: optimized
+        objective:
+          measure: state-income-tax
+          scope: tax-unit
+        basis: >-
+          While gov.states.mt.tax.income.married_filing_separately_on_same_return_allowed
+          is true (2021 to 2023), it compares the sum of the spouses' separate
+          Montana income taxes (mt_income_tax_indiv) with the joint tax
+          (mt_income_tax_joint) and files separately when the sum is lower,
+          so on a tie it files jointly. Separate filing is modeled on one
+          form.
+        cites_entry: false
+    tests:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/tests/policy/baseline/gov/states/mt/tax/income/mt_files_separately.yaml
+        name: Joint under individual income
+        pins: [optimum]
+        variable: mt_files_separately
+        chooses: false
+    full_optimization: >-
+      Compare the couple's net income filing jointly and filing separately,
+      choosing the separate-filing allocations (each dependent's column and
+      the split of shared deductions) at the same time.
+
+  - id: separate-filing-dependent-exemptions
+    jurisdiction: us-mt
+    program: income-tax
+    question: >-
+      When married spouses file separate Montana returns, which spouse claims
+      the exemption for a dependent of both?
+    actor: spouses-jointly
+    years:
+      from: 2021
+      to: 2023
+      type: tax
+    texts:
+      - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
+        excerpt: >-
+          If you are filing separately, and the same individual is the
+          dependent of both, you must allocate this dependent to one or the
+          other spouse. The same dependent cannot be claimed twice.
+      - corpus_citation_path: us-mt/form/mtdor/ty2022/form-2-instructions/document-1
+        excerpt: >-
+          If you are filing separately, and the same individual is the
+          dependent of both, you must allocate this dependent to one or the
+          other spouse. The same dependent cannot be claimed twice.
+      - corpus_citation_path: us-mt/form/mtdor/ty2023/form-2-instructions/document-1
+        excerpt: >-
+          If you are filing separately, and the same individual is the
+          dependent of both, you must allocate this dependent to one or the
+          other spouse. The same dependent cannot be claimed twice.
+    text_kinds:
+      us-mt/form/mtdor/ty2021/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2022/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2023/form-2-instructions/document-1: instructions
+    domain:
+      kind: enum
+      per: person
+      options: [taxpayer, spouse]
+      coupled_with:
+        - us-mt:separate-or-joint-return
+        - us-mt:separate-same-form-charitable-allocation
+        - us-mt:separate-filing-dependent-medical-allocation
+    default:
+      value: taxpayer
+      basis: convention
+      note: >-
+        The instructions put each such dependent in one spouse's column and
+        name neither spouse. With nothing stated, the dependent goes in the
+        taxpayer's column, Column A.
+    objective:
+      measure: net-income
+      scope: tax-unit
+    optimization:
+      structure: finite
+    implementations:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/variables/gov/states/mt/tax/income/tax_calculation/mt_taxable_income_indiv.py
+        models: absent
+        basis: >-
+          It divides the total of the dependent exemptions as an amount
+          instead of placing each dependent. Up to the gap between the
+          spouses' taxable incomes before dependent exemptions goes to the
+          higher-income column, and the rest is halved between the columns.
+          So one dependent's exemption can be split between the columns,
+          which the instructions forbid, and no variable holds a dependent's
+          column.
+        cites_entry: false
+    full_optimization: >-
+      Enumerate each dependent's column together with the filing choice and
+      the split of shared deductions, comparing the couple's net income.
+
+  - id: separate-same-form-charitable-allocation
+    jurisdiction: us-mt
+    program: income-tax
+    question: >-
+      When married spouses file separate Montana returns on the same form,
+      what share of their charitable deduction not clearly attributable to
+      one spouse does the taxpayer's column claim?
+    actor: spouses-jointly
+    years:
+      from: 2021
+      to: 2023
+      type: tax
+    texts:
+      - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
+        excerpt: >-
+          if the spouses file a separate return on the same form, an itemized
+          deduction not clearly attributable to one spouse may be divided as
+          provided on the form; (c) if one or both of the spouses files a
+          separate return on a separate form, an itemized deduction not
+          clearly attributable to one spouse must be divided equally unless
+          the spouses enter into a binding written agreement providing a
+          different division;
+      - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
+        excerpt: >-
+          Payments made from accounts owned by both spouses that pertain to
+          expenses not attributable specifically to one spouse can be
+          allocated to either spouse in any proportional amount.
+      - corpus_citation_path: us-mt/form/mtdor/ty2022/form-2-instructions/document-1
+        excerpt: >-
+          Payments made from accounts owned by both spouses that pertain to
+          expenses not attributable specifically to one spouse can be
+          allocated to either spouse in any proportional amount.
+      - corpus_citation_path: us-mt/form/mtdor/ty2023/form-2-instructions/document-1
+        excerpt: >-
+          Payments made from accounts owned by both spouses that pertain to
+          expenses not attributable specifically to one spouse can be
+          allocated to either spouse in any proportional amount.
+    text_kinds:
+      us-mt/form/mtdor/ty2021/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2022/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2023/form-2-instructions/document-1: instructions
+    domain:
+      kind: share
+      per: tax-unit
+      bounds: ["0", "1"]
+      coupled_with:
+        - us-mt:separate-or-joint-return
+        - us-mt:separate-filing-dependent-exemptions
+        - us-mt:separate-filing-dependent-medical-allocation
+    default:
+      value: "0.5"
+      basis: convention
+      note: >-
+        ARM 42.15.524(3)(b) lets spouses on the same form divide the deduction
+        as the form provides, and the form allows any proportion, so the law
+        sets no split. Half to each column is the convention. The equal
+        division in (3)(c) binds spouses on separate forms who have no
+        written agreement, not spouses on the same form.
+    objective:
+      measure: net-income
+      scope: tax-unit
+    optimization:
+      structure: piecewise-linear
+    implementations:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/variables/gov/states/mt/tax/income/deductions/itemized/general/mt_itemized_deductions_indiv.py
+        models: convention
+        basis: >-
+          It computes the charitable deduction only for the tax unit and puts
+          gov.states.mt.tax.income.deductions.itemized.spouse_allocation_rate
+          (one half) of it in each spouse's column, gifts attributable to one
+          spouse included.
+        cites_entry: false
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/variables/gov/states/mt/tax/income/deductions/itemized/federal_itemization/mt_itemized_deductions_for_federal_itemization_indiv.py
+        models: convention
+        basis: >-
+          The same split, in the itemized deductions computed for a couple
+          that itemizes on the federal return.
+        cites_entry: false
+    tests:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/tests/policy/baseline/gov/states/mt/tax/income/deductions/itemized/mt_itemized_deductions_indiv.yaml
+        name: Test case 1
+        pins: [default]
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/tests/policy/baseline/gov/states/mt/tax/income/deductions/itemized/federal_itemization/mt_itemized_deductions_for_federal_itemization_indiv.yaml
+        name: Test case 1
+        pins: [default]
+    full_optimization: >-
+      Evaluate the couple's net income at both ends of the share and at each
+      point where a column's tax rate changes, together with the other
+      separate-filing allocations and the filing choice.
+
+  - id: separate-filing-dependent-medical-allocation
+    jurisdiction: us-mt
+    program: income-tax
+    question: >-
+      When married spouses file separate Montana returns on the same form,
+      what share of their dependents' medical and dental expenses, paid from
+      accounts both spouses own, does the taxpayer's column claim?
+    actor: spouses-jointly
+    years:
+      from: 2021
+      to: 2023
+      type: tax
+    texts:
+      - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
+        excerpt: >-
+          if the spouses file a separate return on the same form, an itemized
+          deduction not clearly attributable to one spouse may be divided as
+          provided on the form;
+      - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
+        excerpt: >-
+          Payments made from accounts owned by both spouses that pertain to
+          expenses not attributable specifically to one spouse can be
+          allocated to either spouse in any proportional amount.
+      - corpus_citation_path: us-mt/form/mtdor/ty2022/form-2-instructions/document-1
+        excerpt: >-
+          Payments made from accounts owned by both spouses that pertain to
+          expenses not attributable specifically to one spouse can be
+          allocated to either spouse in any proportional amount.
+      - corpus_citation_path: us-mt/form/mtdor/ty2023/form-2-instructions/document-1
+        excerpt: >-
+          Payments made from accounts owned by both spouses that pertain to
+          expenses not attributable specifically to one spouse can be
+          allocated to either spouse in any proportional amount.
+    text_kinds:
+      us-mt/form/mtdor/ty2021/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2022/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2023/form-2-instructions/document-1: instructions
+    domain:
+      kind: share
+      per: tax-unit
+      bounds: ["0", "1"]
+      coupled_with:
+        - us-mt:separate-or-joint-return
+        - us-mt:separate-filing-dependent-exemptions
+        - us-mt:separate-same-form-charitable-allocation
+    default:
+      value: "0.5"
+      basis: convention
+      note: >-
+        The form lets the spouses divide these expenses in any proportion, so
+        the law sets no split. Half to each column is the convention, as for
+        the charitable deduction.
+    objective:
+      measure: net-income
+      scope: tax-unit
+    optimization:
+      structure: piecewise-linear
+    implementations:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/variables/gov/states/mt/tax/income/deductions/itemized/medical/mt_medical_expense_deduction_indiv.py
+        models: absent
+        basis: >-
+          Each spouse's column counts only that spouse's own medical expenses
+          (other_medical_expenses on the head or spouse), so a dependent's
+          expenses are deducted in neither column.
+        cites_entry: false
+    proposed:
+      - repo: PolicyEngine/policyengine-us
+        pr: https://github.com/PolicyEngine/policyengine-us/pull/10276
+        path: policyengine_us/variables/gov/states/mt/tax/income/deductions/itemized/medical/mt_medical_and_dental_expenses_indiv.py
+        models: convention
+    full_optimization: >-
+      Evaluate the couple's net income at both ends of the share and at each
+      point where a column's medical floor binds or its tax rate changes,
+      together with the other separate-filing allocations and the filing
+      choice.
+
 statutory_not_choice:
   - jurisdiction: us-mt
     citation: MCA 2021 15-30-2131(1)(c)(vi)(D)
