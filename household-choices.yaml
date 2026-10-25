@@ -103,7 +103,7 @@ entries:
 
   # Montana, tax years 2021 to 2023: married spouses could file separate
   # returns, and spouses filing separately on one form chose how to divide
-  # some items between their columns. The four choices interact, so they are
+  # some items between their columns. The five choices interact, so they are
   # coupled. From tax year 2024 Montana uses the federal filing status.
   - id: separate-or-joint-return
     jurisdiction: us-mt
@@ -144,6 +144,7 @@ entries:
       kind: boolean
       per: tax-unit
       coupled_with:
+        - us-mt:separate-filing-itemize-election
         - us-mt:separate-filing-dependent-exemptions
         - us-mt:separate-same-form-charitable-allocation
         - us-mt:separate-filing-dependent-medical-allocation
@@ -152,8 +153,12 @@ entries:
       basis: statute
       note: >-
         15-30-2602(2) makes a joint return the taxpayer's option, so with no
-        election the spouses file separately. True covers separate filing on
-        one form (Filing Status 2a) and on separate forms (2b and 2c).
+        election the spouses file separately. The question asks about
+        separate filing so that true matches PolicyEngine-US's
+        mt_files_separately; an Axiom slot for the joint-return election
+        would be an inverse consumer. True covers separate filing on one form,
+        which the instructions call the Filing Status 2a election, and on
+        separate forms (Filing Status 2b and 2c).
     objective:
       measure: net-income
       scope: tax-unit
@@ -186,8 +191,103 @@ entries:
         chooses: false
     full_optimization: >-
       Compare the couple's net income filing jointly and filing separately,
-      choosing the separate-filing allocations (each dependent's column and
-      the split of shared deductions) at the same time.
+      choosing the separate-filing choices (itemizing, each dependent's
+      column and the split of shared deductions) at the same time.
+
+  - id: separate-filing-itemize-election
+    jurisdiction: us-mt
+    program: income-tax
+    question: >-
+      When married spouses file separate Montana returns, do both itemize
+      deductions instead of both taking the standard deduction?
+    actor: spouses-jointly
+    years:
+      from: 2021
+      to: 2023
+      type: tax
+    texts:
+      - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
+        excerpt: >-
+          (1) If one spouse files separately and itemizes deductions, then both
+          must do so.
+      - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
+        excerpt: >-
+          When you and your spouse file, you must both use the standard deduction
+          or itemize your deductions. You cannot use two different methods. If
+          one spouse itemizes, the other one must itemize as well. When you elect
+          to itemize your deductions, you must mark the box and include page 7 of
+          Form 2 with your return. If you do not mark the box or do not include
+          page 7, the processing of your return may be delayed, or your return
+          may be adjusted using the standard deduction.
+      - corpus_citation_path: us-mt/form/mtdor/ty2022/form-2-instructions/document-1
+        excerpt: >-
+          When you and your spouse file, you must both use the standard deduction
+          or itemize your deductions. You cannot use two different methods. If
+          one spouse itemizes, the other one must itemize as well. When you elect
+          to itemize your deductions, you must mark the box and include page 7 of
+          Form 2 with your return. If you do not mark the box or do not include
+          page 7, the processing of your return may be delayed, or your return
+          may be adjusted using the standard deduction.
+      - corpus_citation_path: us-mt/form/mtdor/ty2023/form-2-instructions/document-1
+        excerpt: >-
+          When you and your spouse file, you must both use the standard deduction
+          or itemize your deductions. You cannot use two different methods. If
+          one spouse itemizes, the other one must itemize as well. When you elect
+          to itemize your deductions, you must mark the box and include page 7 of
+          Form 2 with your return. If you do not mark the box or do not include
+          page 7, the processing of your return may be delayed, or your return
+          may be adjusted using the standard deduction.
+    text_kinds:
+      us-mt/form/mtdor/ty2021/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2022/form-2-instructions/document-1: instructions
+      us-mt/form/mtdor/ty2023/form-2-instructions/document-1: instructions
+    domain:
+      kind: boolean
+      per: tax-unit
+      coupled_with:
+        - us-mt:separate-or-joint-return
+        - us-mt:separate-filing-dependent-exemptions
+        - us-mt:separate-same-form-charitable-allocation
+        - us-mt:separate-filing-dependent-medical-allocation
+    default:
+      value: false
+      basis: agency
+      note: >-
+        Itemizing is an election marked by a box on Form 2, and the
+        instructions say a return without it may be adjusted using the
+        standard deduction. So with no election both columns take the
+        standard deduction.
+    objective:
+      measure: net-income
+      scope: tax-unit
+    optimization:
+      structure: two-way
+    implementations:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/variables/gov/states/mt/tax/income/deductions/general/mt_tax_unit_itemizes.py
+        variable: mt_tax_unit_itemizes
+        models: convention
+        basis: >-
+          It itemizes when the spouses' Montana itemized deductions
+          (mt_itemized_deductions_indiv) sum to more than their standard
+          deductions (mt_standard_deduction_indiv), and mt_deductions_indiv
+          applies the choice to both columns. It compares deduction totals,
+          not tax, so where the columns face different tax rates it can
+          choose the option with the higher combined tax. For a joint return,
+          mt_taxable_income_joint deducts the larger of the joint totals, and
+          no variable holds that choice.
+        cites_entry: false
+    tests:
+      - repo: PolicyEngine/policyengine-us
+        commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
+        path: policyengine_us/tests/policy/baseline/gov/states/mt/tax/income/deductions/mt_tax_unit_itemizes.yaml
+        name: Combined-AGI care phaseout keeps itemized deductions below the standard deduction
+        pins: [default]
+    full_optimization: >-
+      Compare the couple's net income with both columns itemizing and with
+      both taking the standard deduction, together with the filing choice
+      and the other separate-filing allocations.
 
   - id: separate-filing-dependent-exemptions
     jurisdiction: us-mt
@@ -226,6 +326,7 @@ entries:
       options: [taxpayer, spouse]
       coupled_with:
         - us-mt:separate-or-joint-return
+        - us-mt:separate-filing-itemize-election
         - us-mt:separate-same-form-charitable-allocation
         - us-mt:separate-filing-dependent-medical-allocation
     default:
@@ -255,16 +356,18 @@ entries:
           column.
         cites_entry: false
     full_optimization: >-
-      Enumerate each dependent's column together with the filing choice and
-      the split of shared deductions, comparing the couple's net income.
+      Enumerate each dependent's column together with the filing choice, the
+      itemizing choice and the split of shared deductions, comparing the
+      couple's net income.
 
   - id: separate-same-form-charitable-allocation
     jurisdiction: us-mt
     program: income-tax
     question: >-
-      When married spouses file separate Montana returns on the same form,
-      what share of their charitable deduction not clearly attributable to
-      one spouse does the taxpayer's column claim?
+      When married spouses who filed a joint federal return, or no federal
+      return, file separate Montana returns on the same form, what share of
+      their charitable deduction, paid from accounts both spouses own and not
+      clearly attributable to one spouse, does the taxpayer's column claim?
     actor: spouses-jointly
     years:
       from: 2021
@@ -273,13 +376,21 @@ entries:
     texts:
       - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
         excerpt: >-
-          if the spouses file a separate return on the same form, an itemized
-          deduction not clearly attributable to one spouse may be divided as
-          provided on the form; (c) if one or both of the spouses files a
-          separate return on a separate form, an itemized deduction not
-          clearly attributable to one spouse must be divided equally unless
-          the spouses enter into a binding written agreement providing a
-          different division;
+          (3) If a married taxpayer files a separate Montana return, the
+          following rules apply if the taxpayer filed a joint federal income tax
+          return with the taxpayer's spouse or did not file a federal income tax
+          return:
+      - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
+        excerpt: >-
+          (b) if the spouses file a separate return on the same form, an
+          itemized deduction not clearly attributable to one spouse may be
+          divided as provided on the form;
+      - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
+        excerpt: >-
+          (c) if one or both of the spouses files a separate return on a
+          separate form, an itemized deduction not clearly attributable to one
+          spouse must be divided equally unless the spouses enter into a
+          binding written agreement providing a different division;
       - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
         excerpt: >-
           Payments made from accounts owned by both spouses that pertain to
@@ -305,16 +416,18 @@ entries:
       bounds: ["0", "1"]
       coupled_with:
         - us-mt:separate-or-joint-return
+        - us-mt:separate-filing-itemize-election
         - us-mt:separate-filing-dependent-exemptions
         - us-mt:separate-filing-dependent-medical-allocation
     default:
       value: "0.5"
       basis: convention
       note: >-
-        ARM 42.15.524(3)(b) lets spouses on the same form divide the deduction
-        as the form provides, and the form allows any proportion, so the law
-        sets no split. Half to each column is the convention. The equal
-        division in (3)(c) binds spouses on separate forms who have no
+        ARM 42.15.524(3) governs spouses who filed a joint federal return or
+        none. For spouses on the same form, (3)(b) lets them divide the
+        deduction as the form provides, and the form allows any proportion,
+        so the law sets no split. Half to each column is the convention. The
+        equal division in (3)(c) binds spouses on separate forms who have no
         written agreement, not spouses on the same form.
     objective:
       measure: net-income
@@ -337,32 +450,35 @@ entries:
         path: policyengine_us/variables/gov/states/mt/tax/income/deductions/itemized/federal_itemization/mt_itemized_deductions_for_federal_itemization_indiv.py
         models: convention
         basis: >-
-          The same split, in the itemized deductions computed for a couple
-          that itemizes on the federal return.
+          The same split, in the copy of the itemized deductions
+          PolicyEngine-US computes for the federal itemization choice. That
+          copy does not enter the Montana tax.
         cites_entry: false
     tests:
       - repo: PolicyEngine/policyengine-us
         commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
         path: policyengine_us/tests/policy/baseline/gov/states/mt/tax/income/deductions/itemized/mt_itemized_deductions_indiv.yaml
-        name: Test case 1
+        name: Test case 3
         pins: [default]
       - repo: PolicyEngine/policyengine-us
         commit: dd7acdbabc15bc179c1392f229a1962366d96a6c
         path: policyengine_us/tests/policy/baseline/gov/states/mt/tax/income/deductions/itemized/federal_itemization/mt_itemized_deductions_for_federal_itemization_indiv.yaml
-        name: Test case 1
+        name: Charitable allocation agrees across separate paths at default half share
         pins: [default]
     full_optimization: >-
       Evaluate the couple's net income at both ends of the share and at each
       point where a column's tax rate changes, together with the other
-      separate-filing allocations and the filing choice.
+      separate-filing choices and the filing choice.
 
   - id: separate-filing-dependent-medical-allocation
     jurisdiction: us-mt
     program: income-tax
     question: >-
-      When married spouses file separate Montana returns on the same form,
-      what share of their dependents' medical and dental expenses, paid from
-      accounts both spouses own, does the taxpayer's column claim?
+      When married spouses who filed a joint federal return, or no federal
+      return, file separate Montana returns on the same form, what share of
+      their dependents' medical and dental expenses other than insurance
+      premiums, paid from accounts both spouses own, does the taxpayer's
+      column claim?
     actor: spouses-jointly
     years:
       from: 2021
@@ -371,9 +487,15 @@ entries:
     texts:
       - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
         excerpt: >-
-          if the spouses file a separate return on the same form, an itemized
-          deduction not clearly attributable to one spouse may be divided as
-          provided on the form;
+          (3) If a married taxpayer files a separate Montana return, the
+          following rules apply if the taxpayer filed a joint federal income tax
+          return with the taxpayer's spouse or did not file a federal income tax
+          return:
+      - corpus_citation_path: us-mt/regulation/title-42/chapter-42-15/subchapter-42-15-5/rule-42-15-524--effective-2010-04-30/block-1
+        excerpt: >-
+          (b) if the spouses file a separate return on the same form, an
+          itemized deduction not clearly attributable to one spouse may be
+          divided as provided on the form;
       - corpus_citation_path: us-mt/form/mtdor/ty2021/form-2-instructions/document-1
         excerpt: >-
           Payments made from accounts owned by both spouses that pertain to
@@ -399,15 +521,17 @@ entries:
       bounds: ["0", "1"]
       coupled_with:
         - us-mt:separate-or-joint-return
+        - us-mt:separate-filing-itemize-election
         - us-mt:separate-filing-dependent-exemptions
         - us-mt:separate-same-form-charitable-allocation
     default:
       value: "0.5"
       basis: convention
       note: >-
-        The form lets the spouses divide these expenses in any proportion, so
-        the law sets no split. Half to each column is the convention, as for
-        the charitable deduction.
+        As for the charitable deduction, ARM 42.15.524(3) governs spouses who
+        filed a joint federal return or none, and the form lets spouses on
+        the same form divide these expenses in any proportion, so the law
+        sets no split. Half to each column is the convention.
     objective:
       measure: net-income
       scope: tax-unit
@@ -431,8 +555,7 @@ entries:
     full_optimization: >-
       Evaluate the couple's net income at both ends of the share and at each
       point where a column's medical floor binds or its tax rate changes,
-      together with the other separate-filing allocations and the filing
-      choice.
+      together with the other separate-filing choices and the filing choice.
 
 statutory_not_choice:
   - jurisdiction: us-mt
