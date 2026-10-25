@@ -942,11 +942,11 @@ def verify_choices(
     matches: Callable[[str, str], bool],
     resolve: Callable[[str], str | None] | None,
     on_default_branch: Callable[[str, str], bool] | None = None,
-    flatten_gaps: Callable[[str], str] | None = None,
+    gap_variants: Callable[[str, str], list[str]] | None = None,
 ) -> tuple[list[str], list[str]]:
     """(issues, report lines), as the register's verify: `resolve` None skips
     corpus texts and `on_default_branch` None skips reachability, both
-    reported, and `flatten_gaps` lets a corpus mismatch say when only its
+    reported, and `gap_variants` lets a corpus mismatch say when only its
     paragraph gaps differ."""
 
     issues: list[str] = []
@@ -959,7 +959,7 @@ def verify_choices(
         gid = sc.global_id(entry)
         label = f"{gid} (entries[{index}])"
         counts["texts"] += sc.verify_texts(
-            entry, label, resolve=resolve, matches=matches, issues=issues, flatten_gaps=flatten_gaps
+            entry, label, resolve=resolve, matches=matches, issues=issues, gap_variants=gap_variants
         )
         counts["pending_texts"] += sc.verify_pending_texts(
             entry, label, fetch=fetch, matches=matches, shipped=shipped, issues=issues
@@ -1142,7 +1142,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             matches = sc.encoder_matcher()
-            flatten_gaps = sc.encoder_gap_flattener()
+            gap_variants = sc.encoder_gap_variants()
         except ImportError as exc:
             print(f"household-choices verify needs axiom-encode importable: {exc}", file=sys.stderr)
             return 2
@@ -1156,7 +1156,7 @@ def main(argv: list[str] | None = None) -> int:
         token = os.environ.get("GITHUB_TOKEN")
         issues, report = verify_choices(
             payload, fetch=sc.github_fetch(token), matches=matches, resolve=resolve,
-            on_default_branch=sc.github_on_default_branch(token), flatten_gaps=flatten_gaps,
+            on_default_branch=sc.github_on_default_branch(token), gap_variants=gap_variants,
         )
         for line in report:
             print(line)

@@ -19,6 +19,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -2173,68 +2174,105 @@ GAPPED = (
 RUN_TOGETHER = "of— (A) the taxable income of the taxpayer"
 
 
-def gap_issues(excerpt, *, source=GAPPED, matches=substring, flatten_gaps=None):
+def gap_issues(excerpt, *, source=GAPPED, matches=substring, gap_variants=None):
     payload, net, _ = verified_inputs()
     payload["entries"][0]["texts"][0]["excerpt"] = excerpt
     issues, _ = sc.verify_register(
-        payload, fetch=net, matches=matches, resolve={"us/statute/42/403/a/5": source}.get, flatten_gaps=flatten_gaps
+        payload, fetch=net, matches=matches, resolve={"us/statute/42/403/a/5": source}.get, gap_variants=gap_variants
     )
     return issues
 
 
-def flatten_all(text):
-    """A stand-in flattener for the substring matcher: every run of whitespace one space."""
+def plain_gap_variants(source, excerpt):
+    """A stand-in for encoder_gap_variants with the substring matcher: one
+    record, every run of whitespace a space or, with a second line end, a
+    blank line."""
 
-    return " ".join(text.split())
+    collapse = lambda text: re.sub(r"\s+", lambda run: "\n\n" if run.group().count("\n") > 1 else " ", text).strip()  # noqa: E731
+    return sc.gap_variants_in([collapse(source)], collapse(excerpt))
 
 
 def test_verify_says_when_only_the_paragraph_gaps_differ():
     not_verbatim = "us:family-maximum-saving-clause (entries[0]).texts[0]: the excerpt is not verbatim at us/statute/42/403/a/5 in the pinned corpus release."
-    assert gap_issues(RUN_TOGETHER, flatten_gaps=flatten_all) == [not_verbatim + sc.GAP_HINT]
+    assert gap_issues(RUN_TOGETHER, gap_variants=plain_gap_variants) == [not_verbatim + sc.GAP_HINT]
     assert sc.GAP_HINT == (
-        " Its words match once every paragraph gap is read as a space, so keep the source's paragraph gaps: a blank "
-        "line where the source has one (in a literal block, `excerpt: |-`), and nowhere else."
+        " The same words verify with the paragraph gaps the source sets between them, so keep the source's "
+        "paragraph gaps: a blank line where the source has one (in a literal block, `excerpt: |-`), and nowhere else."
     )
-    # Without a flattener, or when the words differ too, there is no hint.
+    # Without gap variants, or when the words differ too, there is no hint.
     assert gap_issues(RUN_TOGETHER) == [not_verbatim]
-    assert gap_issues("of— (A) the taxable incomes of the taxpayer", flatten_gaps=flatten_all) == [not_verbatim]
-    # A verbatim excerpt verifies, and the flattener is never asked.
-    assert gap_issues("of—\n\n(A) the taxable income of the taxpayer", flatten_gaps=lambda text: 1 / 0) == []
+    assert gap_issues("of— (A) the taxable incomes of the taxpayer", gap_variants=plain_gap_variants) == [not_verbatim]
+    # A verbatim excerpt verifies, and no variant is asked for.
+    assert gap_issues("of—\n\n(A) the taxable income of the taxpayer", gap_variants=lambda source, excerpt: 1 / 0) == []
+
+
+def test_gap_variants_are_runs_of_the_excerpts_words_inside_one_record():
+    # Collapsed texts: each run of whitespace is one space or one blank line.
+    assert sc.gap_variants_in(["a\n\nb c"], "a b c") == ["a\n\nb c"]
+    # The excerpt itself is no variant, nor is a run of other words.
+    assert sc.gap_variants_in(["a b c"], "a b c") == []
+    assert sc.gap_variants_in(["a\n\nb c"], "a b d") == []
+    assert sc.gap_variants_in(["ab\n\nc"], "a b c") == []
+    # A one-word excerpt has no gaps to move, and an empty one no words.
+    assert sc.gap_variants_in(["a\n\nb"], "a") == []
+    assert sc.gap_variants_in(["a\n\nb"], "") == []
+    # Every occurrence counts, overlapping ones too, each variant once.
+    assert sc.gap_variants_in(["a a\n\na a\n\na"], "a a a") == ["a a\n\na", "a\n\na a"]
+    assert sc.gap_variants_in(["x\n\ny", "x\n\ny"], "x y") == ["x\n\ny"]
+    # Words found only across two records are no variant.
+    assert sc.gap_variants_in(["the first record ends", "here and the second begins"], "ends here") == []
+    # A word is matched as text, never as a pattern.
+    assert sc.gap_variants_in(["(a)\n\n1.5"], "(a) 1.5") == ["(a)\n\n1.5"]
+    assert sc.gap_variants_in(["(a)\n\n1x5"], "(a) 1.5") == []
 
 
 def test_verify_hint_with_the_encoders_own_normaliser():
     pytest.importorskip("axiom_encode.harness.proof_validator")
     from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR as SEP
 
-    matches, flatten = sc.encoder_matcher(), sc.encoder_gap_flattener()
-    gapped_hint = gap_issues(RUN_TOGETHER, matches=matches, flatten_gaps=flatten)
+    matches, gap_variants = sc.encoder_matcher(), sc.encoder_gap_variants()
+    gapped_hint = gap_issues(RUN_TOGETHER, matches=matches, gap_variants=gap_variants)
     assert len(gapped_hint) == 1 and gapped_hint[0].endswith(sc.GAP_HINT)
     # The literal block verifies; so does one with extra spaces and a line wrap.
-    assert gap_issues("of—\n\n(A) the taxable income of the taxpayer", matches=matches, flatten_gaps=flatten) == []
-    assert gap_issues("of—\n   \n(A) the taxable\nincome  of the taxpayer", matches=matches, flatten_gaps=flatten) == []
+    assert gap_issues("of—\n\n(A) the taxable income of the taxpayer", matches=matches, gap_variants=gap_variants) == []
+    assert gap_issues("of—\n   \n(A) the taxable\nincome  of the taxpayer", matches=matches, gap_variants=gap_variants) == []
     # A gap the source lacks is a gap mismatch too.
-    extra = gap_issues("(A) the taxable\n\nincome of the taxpayer", matches=matches, flatten_gaps=flatten)
+    extra = gap_issues("(A) the taxable\n\nincome of the taxpayer", matches=matches, gap_variants=gap_variants)
     assert len(extra) == 1 and extra[0].endswith(sc.GAP_HINT)
     # Other words: no hint.
-    other = gap_issues("of— (A) the taxable incomes of the taxpayer", matches=matches, flatten_gaps=flatten)
+    other = gap_issues("of— (A) the taxable incomes of the taxpayer", matches=matches, gap_variants=gap_variants)
     assert len(other) == 1 and not other[0].endswith(sc.GAP_HINT)
-    # The flattener keeps source records apart, so words that only run across
-    # two records get no hint.
+    # Words that only run across two records get no hint.
     records = f"the first record ends here{SEP}second record begins"
-    assert flatten(records) == records
-    across = gap_issues("ends here second record", source=records, matches=matches, flatten_gaps=flatten)
+    assert gap_variants(records, "ends here second record") == []
+    across = gap_issues("ends here second record", source=records, matches=matches, gap_variants=gap_variants)
     assert len(across) == 1 and not across[0].endswith(sc.GAP_HINT)
+    # The review's cases. A number before the gap: flattened, "1 100" reads
+    # as one space-grouped number, but the variant keeps the source's gap and
+    # verifies, so the hint fires.
+    assert matches("1\n\n100\n\nx", "100\n\nx") and not matches("1\n\n100\n\nx", "100 x")
+    numeric = gap_issues("100 x", source="1\n\n100\n\nx", matches=matches, gap_variants=gap_variants)
+    assert len(numeric) == 1 and numeric[0].endswith(sc.GAP_HINT)
+    # A record separator in the excerpt is a blank line to the matcher, which
+    # splits only the source into records.
+    assert gap_variants("a b", f"a{SEP}b") == ["a b"]
+    held = gap_issues(f"a{SEP}b", source="a b", matches=matches, gap_variants=gap_variants)
+    assert len(held) == 1 and held[0].endswith(sc.GAP_HINT)
+    # A variant the matcher refuses (it cuts a word) draws no hint.
+    assert gap_variants("xa\n\nb", "a b") == ["a\n\nb"] and not matches("xa\n\nb", "a\n\nb")
+    cut = gap_issues("a b", source="xa\n\nb", matches=matches, gap_variants=gap_variants)
+    assert len(cut) == 1 and not cut[0].endswith(sc.GAP_HINT)
 
 
-def test_verify_cli_passes_the_encoders_flattener(tmp_path, monkeypatch):
+def test_verify_cli_passes_the_encoders_gap_variants(tmp_path, monkeypatch):
     (tmp_path / sc.REGISTER_FILENAME).write_text("version: 1\nentries: []\n")
-    flatten = object()
+    gap_variants = object()
     seen = {}
     monkeypatch.setattr(sc, "encoder_matcher", lambda: substring)
-    monkeypatch.setattr(sc, "encoder_gap_flattener", lambda: flatten)
+    monkeypatch.setattr(sc, "encoder_gap_variants", lambda: gap_variants)
     monkeypatch.setattr(sc, "verify_register", lambda payload, **kwargs: (seen.update(kwargs), ([], ["verified"]))[1])
     assert sc.main(["verify", "--root", str(tmp_path)]) == 0
-    assert seen["flatten_gaps"] is flatten
+    assert seen["gap_variants"] is gap_variants
 
 
 # ---------------------------------------------------------------------------

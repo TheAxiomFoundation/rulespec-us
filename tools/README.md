@@ -191,9 +191,11 @@ Written on one line (`… of— (A) the taxable income …`), the same words don
 match. In a plain, single-quoted or folded (`>-`) scalar, one blank line
 folds to a single line break, which reads as a space, so those styles lose
 the gap too. `check` can't see the corpus, so it can't catch a gap mismatch
-in `texts`. When the words match once every paragraph gap is read as a
-space, `verify`'s issue says to keep the source's paragraph gaps; it flattens
-both texts with the encoder's own normaliser to tell. A snapshot is
+in `texts`. `verify` catches it. Where the excerpt's words run inside one
+source record, it rewrites the excerpt with the source's own space or blank
+line at each of its runs of whitespace, reading both texts with the encoder's
+own normaliser. When one such rewrite verifies under the encoder's matcher,
+the issue says to keep the source's paragraph gaps. A snapshot is
 different: `verify` reads it with every run of whitespace as one space
 (`snapshot_text`), so a `pending_texts` excerpt never has a blank line, and
 `check` refuses one that has.
@@ -302,8 +304,8 @@ pinned commit and fails unless pytest reports it passed; see
 [Test references](#test-references).
 
 Both excerpt checks use axiom-encode's own resolver and proof-atom matcher at
-`axiom_encode_ref`. A corpus excerpt that matches once every paragraph gap is
-read as a space is reported with a hint to keep the source's paragraph gaps
+`axiom_encode_ref`. A corpus excerpt whose words verify with the source's own
+paragraph gaps is reported with a hint to keep those gaps
 (see [Excerpts](#excerpts)). The verify report lists:
 - implementations that do not cite their entry yet;
 - implementations that lag (they follow a reading other than the one they adopt);

@@ -93,10 +93,13 @@ Invariants, for every input:
       exactly when the excerpt has no paragraph gap, which is the pending
       rule. For a source in records, the matcher accepts a run of its words
       exactly when the run stays inside one record and each separator is a
-      gap where the source's is; with both flattened
-      (`encoder_gap_flattener`), it accepts exactly the runs inside one
-      record. So verify's paragraph-gap hint fires exactly when only the gaps
-      differ.
+      gap where the source's is, and verify's paragraph-gap hint fires
+      exactly when the run stays inside one record and some gap differs.
+    - Brute force: verify's hint fires exactly when the excerpt fails and
+      some other choice of a space or a blank line between its words
+      verifies under the encoder's matcher (`encoder_gap_variants`), with
+      numbers, signs and repeated words among them. A variant that only the
+      maqaf binding would accept is out of scope (no Hebrew is drawn).
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the source-conflicts workflow installs it and runs them.
@@ -106,6 +109,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import itertools
 import string
 import sys
 import unicodedata
@@ -1455,13 +1459,12 @@ def test_a_pending_excerpt_matches_its_snapshot_exactly_when_it_has_no_gap(words
     # the excerpt sets a paragraph gap between two of them; flattened, it
     # always does.
     pytest.importorskip("axiom_encode.harness.proof_validator")
-    matches, flatten = sc.encoder_matcher(), sc.encoder_gap_flattener()
+    matches = sc.encoder_matcher()
     snapshot = sc.snapshot_text(("<p>" + "</p>\n\n<p>".join(words) + "</p>").encode(), "x.html")
     start = data.draw(st.integers(0, len(words) - 2))
     end = data.draw(st.integers(start + 2, len(words)))
     excerpt = _joined(words[start:end], [data.draw(st.one_of(SPACE, GAP)) for _ in range(end - start - 1)])
     assert matches(snapshot, excerpt) is not sc.has_paragraph_gap(excerpt), excerpt
-    assert matches(flatten(snapshot), flatten(excerpt))
 
 
 @SETTINGS
@@ -1470,13 +1473,13 @@ def test_the_gap_hint_fires_exactly_when_only_the_gaps_differ(words, data):
     # A source of distinct words set off by spaces, line wraps or paragraph
     # gaps, split into records; an excerpt is a run of its words with its own
     # whitespace. The encoder's matcher accepts the excerpt exactly when each
-    # of its separators is a gap where the source's is; flattened, it accepts
-    # any run inside one record and none across two, so verify's hint
-    # (verify_texts) fires exactly when only the gaps differ.
+    # of its separators is a gap where the source's is, and verify's hint
+    # (verify_texts) fires exactly when the run stays inside one record and
+    # only the gaps differ.
     pytest.importorskip("axiom_encode.harness.proof_validator")
     from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR as SEP
 
-    matches, flatten = sc.encoder_matcher(), sc.encoder_gap_flattener()
+    matches, gap_variants = sc.encoder_matcher(), sc.encoder_gap_variants()
     source_separators = [data.draw(st.one_of(SPACE, GAP, st.just(SEP))) for _ in words[1:]]
     source = _joined(words, source_separators)
     start = data.draw(st.integers(0, len(words) - 2))
@@ -1489,9 +1492,48 @@ def test_the_gap_hint_fires_exactly_when_only_the_gaps_differ(words, data):
         for ours, theirs in zip(excerpt_separators, source_separators[start : end - 1])
     )
     assert matches(source, excerpt) is (inside and gaps_agree), (source, excerpt)
-    assert matches(flatten(source), flatten(excerpt)) is inside, (source, excerpt)
     issues: list[str] = []
     value = {"texts": [{"corpus_citation_path": "us/statute/1/1", "excerpt": excerpt}]}
-    sc.verify_texts(value, "x", resolve={"us/statute/1/1": source}.get, matches=matches, issues=issues, flatten_gaps=flatten)
+    sc.verify_texts(value, "x", resolve={"us/statute/1/1": source}.get, matches=matches, issues=issues, gap_variants=gap_variants)
     assert bool(issues) is not (inside and gaps_agree)
     assert any(issue.endswith(sc.GAP_HINT) for issue in issues) is (inside and not gaps_agree)
+
+
+# Tokens the matcher's boundary rules read: numbers it may group by spaces,
+# signs, currency, percent, punctuation, and repeats.
+TOKENS = st.sampled_from(["a", "b", "1", "12", "100", "1,000", "-", "$5", "12%", "(a)", "x.", "of—"])
+
+
+@SETTINGS
+@given(tokens=st.lists(TOKENS, min_size=2, max_size=8), data=st.data())
+def test_the_gap_hint_fires_exactly_when_a_gap_variant_verifies(tokens, data):
+    # Brute force: the hint fires exactly when the excerpt fails and some
+    # other choice of a space or a blank line between its words verifies
+    # under the encoder's own matcher. The excerpt is a run of the source's
+    # tokens or other tokens; the source sets spaces, wraps, gaps and record
+    # separators between its tokens.
+    pytest.importorskip("axiom_encode.harness.proof_validator")
+    from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR as SEP
+
+    matches, gap_variants = sc.encoder_matcher(), sc.encoder_gap_variants()
+    source = _joined(tokens, [data.draw(st.one_of(SPACE, GAP, st.just(SEP))) for _ in tokens[1:]])
+    if data.draw(st.booleans()):
+        start = data.draw(st.integers(0, len(tokens) - 2))
+        words = tokens[start : data.draw(st.integers(start + 2, min(len(tokens), start + 5)))]
+    else:
+        words = data.draw(st.lists(TOKENS, min_size=2, max_size=5))
+    separators = [data.draw(st.one_of(SPACE, GAP)) for _ in words[1:]]
+    excerpt = _joined(words, separators)
+    own = ["\n\n" if sc.has_paragraph_gap(f"a{separator}b") else " " for separator in separators]
+    others = [
+        _joined(words, list(choice))
+        for choice in itertools.product([" ", "\n\n"], repeat=len(words) - 1)
+        if list(choice) != own
+    ]
+    expected = not matches(source, excerpt) and any(matches(source, other) for other in others)
+    issues: list[str] = []
+    value = {"texts": [{"corpus_citation_path": "us/statute/1/1", "excerpt": excerpt}]}
+    sc.verify_texts(value, "x", resolve={"us/statute/1/1": source}.get, matches=matches, issues=issues, gap_variants=gap_variants)
+    assert any(issue.endswith(sc.GAP_HINT) for issue in issues) is expected, (source, excerpt, issues)
+    # Every variant is one of those other choices.
+    assert set(gap_variants(source, excerpt)) <= set(others)

@@ -2108,23 +2108,46 @@ def encoder_matcher() -> Callable[[str, str], bool]:
     return matches
 
 
-def encoder_gap_flattener() -> Callable[[str], str]:
-    """Text with every paragraph gap read as a space, by axiom-encode's own
-    normaliser: each proof-evidence segment collapsed as the matcher collapses
-    it (collapse_evidence_whitespace), its blank lines made spaces, and the
-    segments kept apart, so no match can run across two source records.
-    verify asks the matcher again with both texts flattened, to say when an
-    excerpt's words match but its paragraph gaps don't."""
+def gap_variants_in(segments: Iterable[str], excerpt: str) -> list[str]:
+    """Each run of the excerpt's words inside one segment, as the segment sets
+    it, that puts its paragraph gaps elsewhere than the excerpt does. Both are
+    collapsed already (collapse_evidence_whitespace), so each run of
+    whitespace is one space or one blank line; each segment is one source
+    record, so no run crosses two."""
 
-    from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR, split_proof_evidence_text
+    words = excerpt.split()
+    if not words:
+        return []
+    run = re.compile("(?: |\n\n)".join(re.escape(word) for word in words))
+    found: dict[str, None] = {}
+    for segment in segments:
+        start = segment.find(words[0])
+        while start != -1:
+            match = run.match(segment, start)
+            if match and match.group() != excerpt:
+                found[match.group()] = None
+            start = segment.find(words[0], start + 1)
+    return list(found)
+
+
+def encoder_gap_variants() -> Callable[[str, str], list[str]]:
+    """gap_variants(source, excerpt): the excerpt's words with the paragraph
+    gaps the source sets between them (gap_variants_in), read by axiom-encode's
+    own normaliser and split into the source's records as the matcher splits
+    them. verify asks the matcher whether any of these verifies, to say when an
+    excerpt's words are right but its paragraph gaps are not. A variant that
+    only the maqaf binding would accept is not among them."""
+
+    from axiom_encode.corpus_resolver import split_proof_evidence_text
     from axiom_encode.harness.proof_validator import collapse_evidence_whitespace
 
-    def flatten(text: str) -> str:
-        return PROOF_EVIDENCE_SEGMENT_SEPARATOR.join(
-            collapse_evidence_whitespace(segment).replace("\n\n", " ") for segment in split_proof_evidence_text(text)
+    def gap_variants(source_text: str, excerpt: str) -> list[str]:
+        return gap_variants_in(
+            (collapse_evidence_whitespace(segment) for segment in split_proof_evidence_text(source_text)),
+            collapse_evidence_whitespace(excerpt),
         )
 
-    return flatten
+    return gap_variants
 
 
 def pinned_corpus_resolver(corpus_path: Path, release: str, content_sha256: str, public_key: str) -> Callable[[str], str | None]:
@@ -2203,19 +2226,20 @@ def shipped_checker(on_default_branch: Callable[[str, str], bool] | None, issues
 
 
 GAP_HINT = (
-    " Its words match once every paragraph gap is read as a space, so keep the source's paragraph gaps: a "
-    "blank line where the source has one (in a literal block, `excerpt: |-`), and nowhere else."
+    " The same words verify with the paragraph gaps the source sets between them, so keep the source's "
+    "paragraph gaps: a blank line where the source has one (in a literal block, `excerpt: |-`), and nowhere else."
 )
 
 
 def verify_texts(
     entry: Mapping[str, Any], label: str, *, resolve: Callable[[str], str | None] | None,
-    matches: Callable[[str, str], bool], issues: list[str], flatten_gaps: Callable[[str], str] | None = None,
+    matches: Callable[[str, str], bool], issues: list[str],
+    gap_variants: Callable[[str, str], list[str]] | None = None,
 ) -> int:
     """Each corpus text's excerpt is verbatim at its citation in the pinned
-    release; returns how many verified. With `flatten_gaps`
-    (encoder_gap_flattener), a mismatch that matches once both texts are
-    flattened adds GAP_HINT."""
+    release; returns how many verified. With `gap_variants`
+    (encoder_gap_variants), a mismatch adds GAP_HINT when one of the
+    excerpt's gap variants verifies."""
 
     verified = 0
     for t_index, text in enumerate(entry.get("texts") or []):
@@ -2232,7 +2256,9 @@ def verify_texts(
         if body is None:
             issues.append(f"{t_label}: {path} is not in the pinned corpus release.")
         elif not matches(body, text["excerpt"]):
-            gaps = flatten_gaps is not None and matches(flatten_gaps(body), flatten_gaps(text["excerpt"]))
+            gaps = gap_variants is not None and any(
+                matches(body, variant) for variant in gap_variants(body, text["excerpt"])
+            )
             issues.append(
                 f"{t_label}: the excerpt is not verbatim at {path} in the pinned corpus release."
                 + (GAP_HINT if gaps else "")
@@ -2308,10 +2334,10 @@ def verify_register(
     matches: Callable[[str, str], bool],
     resolve: Callable[[str], str | None] | None,
     on_default_branch: Callable[[str, str], bool] | None = None,
-    flatten_gaps: Callable[[str], str] | None = None,
+    gap_variants: Callable[[str, str], list[str]] | None = None,
 ) -> tuple[list[str], list[str]]:
     """(issues, report lines). `resolve` None skips corpus texts, reported;
-    `flatten_gaps` (encoder_gap_flattener) lets a corpus mismatch say when
+    `gap_variants` (encoder_gap_variants) lets a corpus mismatch say when
     only its paragraph gaps differ (verify_texts).
 
     Every external commit (implementations, tests, snapshots) must be reachable
@@ -2329,7 +2355,7 @@ def verify_register(
     for index, entry in enumerate(payload.get("entries") or []):
         label = f"{global_id(entry)} (entries[{index}])"
         counts["texts"] += verify_texts(
-            entry, label, resolve=resolve, matches=matches, issues=issues, flatten_gaps=flatten_gaps
+            entry, label, resolve=resolve, matches=matches, issues=issues, gap_variants=gap_variants
         )
         counts["pending_texts"] += verify_pending_texts(
             entry, label, fetch=fetch, matches=matches, shipped=shipped, issues=issues
@@ -2645,7 +2671,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             matches = encoder_matcher()
-            flatten_gaps = encoder_gap_flattener()
+            gap_variants = encoder_gap_variants()
         except ImportError as exc:
             print(f"source-conflicts verify needs axiom-encode importable: {exc}", file=sys.stderr)
             return 2
@@ -2663,7 +2689,7 @@ def main(argv: list[str] | None = None) -> int:
             matches=matches,
             resolve=resolve,
             on_default_branch=github_on_default_branch(token),
-            flatten_gaps=flatten_gaps,
+            gap_variants=gap_variants,
         )
         for line in report:
             print(line)

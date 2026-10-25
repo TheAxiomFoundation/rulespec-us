@@ -988,12 +988,12 @@ def test_verify_checks_the_implementation_defines_its_variable():
 
 
 def test_verify_says_when_only_the_paragraph_gaps_differ():
-    # The register's hint (sc.GAP_HINT), with a stub resolver and flattener.
+    # The register's hint (sc.GAP_HINT), with a stub resolver and gap variants.
     choices, net, _ = verified_inputs()
     choices["entries"][0]["texts"][0]["excerpt"] = "an election under this subsection"
     resolve = {"us/statute/26/63/e/1": "Unless an individual makes an election\n\nunder this subsection"}.get
-    flatten = lambda text: " ".join(text.split())  # noqa: E731
-    issues, _ = hc.verify_choices(choices, fetch=net, matches=substring, resolve=resolve, on_default_branch=lambda r, c: True, flatten_gaps=flatten)
+    gap_variants = lambda source, excerpt: sc.gap_variants_in([source], excerpt)  # noqa: E731
+    issues, _ = hc.verify_choices(choices, fetch=net, matches=substring, resolve=resolve, on_default_branch=lambda r, c: True, gap_variants=gap_variants)
     assert issues == [
         "us:itemized-deduction-election (entries[0]).texts[0]: the excerpt is not verbatim at us/statute/26/63/e/1 "
         "in the pinned corpus release." + sc.GAP_HINT
@@ -1002,15 +1002,15 @@ def test_verify_says_when_only_the_paragraph_gaps_differ():
     assert not issues[0].endswith(sc.GAP_HINT)
 
 
-def test_verify_cli_passes_the_encoders_flattener(tmp_path, monkeypatch):
+def test_verify_cli_passes_the_encoders_gap_variants(tmp_path, monkeypatch):
     (tmp_path / sc.CHOICES_FILENAME).write_text("version: 1\nentries: []\n")
-    flatten = object()
+    gap_variants = object()
     seen = {}
     monkeypatch.setattr(sc, "encoder_matcher", lambda: substring)
-    monkeypatch.setattr(sc, "encoder_gap_flattener", lambda: flatten)
+    monkeypatch.setattr(sc, "encoder_gap_variants", lambda: gap_variants)
     monkeypatch.setattr(hc, "verify_choices", lambda payload, **kwargs: (seen.update(kwargs), ([], ["verified"]))[1])
     assert hc.main(["verify", "--root", str(tmp_path)]) == 0
-    assert seen["flatten_gaps"] is flatten
+    assert seen["gap_variants"] is gap_variants
 
 
 def test_verify_findings():
