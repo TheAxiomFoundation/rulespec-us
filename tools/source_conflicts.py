@@ -1003,6 +1003,63 @@ def check_pending_texts(pending: Any, *, label: str, issues: list[str]) -> list[
     return pending
 
 
+# An excerpt is the source's own words. YAML keeps a backslash as itself in a
+# plain, single-quoted or block scalar, so an excerpt copied from escaped text
+# ("who\nis", "(a)\n\n(1)") carries each escape as two characters and never
+# matches its source. A backslash and n is read as an escape whatever follows
+# it. A backslash and t or r is read as one only where no letter follows,
+# since a source may set a real backslash there ("applicant\recipient" in a
+# Nevada manual, "\times", "C:\temp"). So the one real text this refuses is a
+# backslash before n ("citizen\noncitizen", "\neq"); quote around it.
+ESCAPE_RE = re.compile(r"\\(?:n|[tr](?![^\W\d_]))")
+# What axiom-encode's collapse_evidence_whitespace reads as a paragraph gap: a
+# run of whitespace holding a paragraph separator or two line ends.
+_WHITESPACE_RUN_RE = re.compile(r"\s+")
+_LINE_END_RE = re.compile(r"\r\n|\r(?!\n)|\n")
+_PARAGRAPH_SEPARATORS = frozenset("\u2028\u2029\x0b\x0c\x85")
+
+
+def has_paragraph_gap(text: str) -> bool:
+    """Does the text, stripped as verify strips an excerpt, hold a paragraph
+    gap (a blank line, or a paragraph separator such as a form feed)?"""
+
+    for run in _WHITESPACE_RUN_RE.finditer(text.strip()):
+        if _PARAGRAPH_SEPARATORS.intersection(run.group()) or len(_LINE_END_RE.findall(run.group())) >= 2:
+            return True
+    return False
+
+
+def check_excerpts(entry: Mapping[str, Any], *, label: str, issues: list[str]) -> None:
+    """Two mistakes in `texts` and `pending_texts` excerpts that verify would
+    find and check can see: an escape sequence held as text (ESCAPE_RE), and a
+    paragraph gap in a pending text, whose snapshot verify reads with every run
+    of whitespace as one space (snapshot_text), so the excerpt never matches.
+    Module interpretations are left to axiom-encode, whose validation
+    check_module_interpretation mirrors."""
+
+    for field in ("texts", "pending_texts"):
+        items = entry.get(field)
+        for index, item in enumerate(items if isinstance(items, list) else []):
+            excerpt = item.get("excerpt") if isinstance(item, dict) else None
+            if not isinstance(excerpt, str):
+                continue
+            e_label = f"{label}.{field}[{index}].excerpt"
+            escapes = sorted(set(ESCAPE_RE.findall(excerpt)))
+            if escapes:
+                issues.append(
+                    f"{e_label} holds {', '.join(f'`{escape}`' for escape in escapes)} as text, a backslash and "
+                    "a letter, which YAML keeps outside double quotes; write a real line break or a space "
+                    "instead (a blank line only where the source has a paragraph gap). If the source itself "
+                    "shows it, that is an ingest defect: fix the corpus, or quote around it."
+                )
+            if field == "pending_texts" and has_paragraph_gap(excerpt):
+                issues.append(
+                    f"{e_label} has a blank line or a paragraph separator, but verify reads a snapshot with "
+                    "every run of whitespace as one space, so the excerpt can never match; join its "
+                    "paragraphs with a space."
+                )
+
+
 def cited_corpus_paths(entry: Mapping[str, Any]) -> list[str]:
     """The entry's well-formed corpus citation paths, in order."""
 
@@ -1551,6 +1608,7 @@ def check_entry(entry: Any, *, index: int, ctx: RepoContext, jurisdictions: froz
     if "pending_texts" in entry:
         pending = check_pending_texts(pending, label=f"{label}.pending_texts", issues=issues)
     check_text_kinds(entry, label=label, issues=issues)
+    check_excerpts(entry, label=label, issues=issues)
 
     years = entry.get("years")
     if "years" in entry:
@@ -2036,6 +2094,25 @@ def encoder_matcher() -> Callable[[str, str], bool]:
     return matches
 
 
+def encoder_gap_flattener() -> Callable[[str], str]:
+    """Text with every paragraph gap read as a space, by axiom-encode's own
+    normaliser: each proof-evidence segment collapsed as the matcher collapses
+    it (collapse_evidence_whitespace), its blank lines made spaces, and the
+    segments kept apart, so no match can run across two source records.
+    verify asks the matcher again with both texts flattened, to say when an
+    excerpt's words match but its paragraph gaps don't."""
+
+    from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR, split_proof_evidence_text
+    from axiom_encode.harness.proof_validator import collapse_evidence_whitespace
+
+    def flatten(text: str) -> str:
+        return PROOF_EVIDENCE_SEGMENT_SEPARATOR.join(
+            collapse_evidence_whitespace(segment).replace("\n\n", " ") for segment in split_proof_evidence_text(text)
+        )
+
+    return flatten
+
+
 def pinned_corpus_resolver(corpus_path: Path, release: str, content_sha256: str, public_key: str) -> Callable[[str], str | None]:
     """Resolve a citation in the pinned corpus release exactly as validation does."""
 
@@ -2111,12 +2188,20 @@ def shipped_checker(on_default_branch: Callable[[str, str], bool] | None, issues
     return shipped
 
 
+GAP_HINT = (
+    " Its words match once every paragraph gap is read as a space, so keep the source's paragraph gaps: a "
+    "blank line where the source has one (in a literal block, `excerpt: |-`), and nowhere else."
+)
+
+
 def verify_texts(
     entry: Mapping[str, Any], label: str, *, resolve: Callable[[str], str | None] | None,
-    matches: Callable[[str, str], bool], issues: list[str],
+    matches: Callable[[str, str], bool], issues: list[str], flatten_gaps: Callable[[str], str] | None = None,
 ) -> int:
     """Each corpus text's excerpt is verbatim at its citation in the pinned
-    release; returns how many verified."""
+    release; returns how many verified. With `flatten_gaps`
+    (encoder_gap_flattener), a mismatch that matches once both texts are
+    flattened adds GAP_HINT."""
 
     verified = 0
     for t_index, text in enumerate(entry.get("texts") or []):
@@ -2133,7 +2218,11 @@ def verify_texts(
         if body is None:
             issues.append(f"{t_label}: {path} is not in the pinned corpus release.")
         elif not matches(body, text["excerpt"]):
-            issues.append(f"{t_label}: the excerpt is not verbatim at {path} in the pinned corpus release.")
+            gaps = flatten_gaps is not None and matches(flatten_gaps(body), flatten_gaps(text["excerpt"]))
+            issues.append(
+                f"{t_label}: the excerpt is not verbatim at {path} in the pinned corpus release."
+                + (GAP_HINT if gaps else "")
+            )
         else:
             verified += 1
     return verified
@@ -2205,8 +2294,11 @@ def verify_register(
     matches: Callable[[str, str], bool],
     resolve: Callable[[str], str | None] | None,
     on_default_branch: Callable[[str, str], bool] | None = None,
+    flatten_gaps: Callable[[str], str] | None = None,
 ) -> tuple[list[str], list[str]]:
-    """(issues, report lines). `resolve` None skips corpus texts, reported.
+    """(issues, report lines). `resolve` None skips corpus texts, reported;
+    `flatten_gaps` (encoder_gap_flattener) lets a corpus mismatch say when
+    only its paragraph gaps differ (verify_texts).
 
     Every external commit (implementations, tests, snapshots) must be reachable
     from its repository's default branch: the register records shipped code and
@@ -2222,7 +2314,9 @@ def verify_register(
     counts = {"texts": 0, "pending_texts": 0, "implementations": 0, "tests": 0}
     for index, entry in enumerate(payload.get("entries") or []):
         label = f"{global_id(entry)} (entries[{index}])"
-        counts["texts"] += verify_texts(entry, label, resolve=resolve, matches=matches, issues=issues)
+        counts["texts"] += verify_texts(
+            entry, label, resolve=resolve, matches=matches, issues=issues, flatten_gaps=flatten_gaps
+        )
         counts["pending_texts"] += verify_pending_texts(
             entry, label, fetch=fetch, matches=matches, shipped=shipped, issues=issues
         )
@@ -2537,6 +2631,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             matches = encoder_matcher()
+            flatten_gaps = encoder_gap_flattener()
         except ImportError as exc:
             print(f"source-conflicts verify needs axiom-encode importable: {exc}", file=sys.stderr)
             return 2
@@ -2554,6 +2649,7 @@ def main(argv: list[str] | None = None) -> int:
             matches=matches,
             resolve=resolve,
             on_default_branch=github_on_default_branch(token),
+            flatten_gaps=flatten_gaps,
         )
         for line in report:
             print(line)
