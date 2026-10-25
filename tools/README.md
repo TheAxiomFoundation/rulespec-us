@@ -207,10 +207,10 @@ instead. A backslash and `t` or `r` before a letter is left alone, because a
 source may set a real backslash there (`applicant\recipient`, `\times`,
 `C:\temp`). A real backslash before `n` (`citizen\noncitizen`, `\neq`), or
 before `t` or `r` and no letter, is refused too: quote a span that stops
-before it. If the
-corpus text itself shows an escape, that is an ingest defect to fix in
-axiom-corpus, not text to quote. Module interpretations are left to
-axiom-encode's own validation, which `check_module_interpretation` mirrors.
+before it. If the corpus text itself shows an escape, that is an ingest
+defect to fix in axiom-corpus, not text to quote. Module interpretations are
+left to axiom-encode's own validation, which `check_module_interpretation`
+mirrors.
 
 ### Quotation examples
 
