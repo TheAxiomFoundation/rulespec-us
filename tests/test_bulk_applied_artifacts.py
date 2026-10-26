@@ -1,11 +1,14 @@
 import importlib.util
 import json
+import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from unittest.mock import MagicMock, Mock
 
 import pytest
+import yaml
 
 
 def _load_bulk_module(name: str):
@@ -690,28 +693,60 @@ def test_local_runner_requires_review_before_merge() -> None:
 
 
 def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
+    # Compare with the checked-in table rather than literal pins, so a
+    # configuration-only re-pin of .axiom/workflow-toolchain.toml or the
+    # shared validator needs no test edit. Newer shared validators refuse a
+    # pin change that touches any other file.
     root = Path(__file__).resolve().parents[1]
     monkeypatch.setattr(_local_drain, "CHECKOUT", root)
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.2248"
-    assert toolchain["axiom_encode_ref"] == "2bdc3b421c76299a37839c09ee525f51e2e4e613"
-    assert toolchain["axiom_rules_engine_ref"] == (
-        "89571cc2a938707fd60a5489b951135345697296"
+    table = tomllib.loads(
+        (root / ".axiom/workflow-toolchain.toml").read_text()
+    )["workflow_toolchain"]
+    assert toolchain == table
+    assert re.fullmatch(r"[0-9]+(?:\.[0-9]+){2,}", toolchain["axiom_encode_version"])
+    for key in (
+        "axiom_encode_ref",
+        "axiom_compose_ref",
+        "axiom_rules_engine_ref",
+        "axiom_artifact_rules_engine_ref",
+        "source_staleness_axiom_encode_ref",
+        "axiom_corpus_ref",
+        "rulespec_us_ref",
+    ):
+        assert re.fullmatch(r"[0-9a-f]{40}", toolchain[key]), key
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("axiom_encode_ref", "2bdc3b42"),
+        ("axiom_rules_engine_ref", "89571CC2A938707FD60A5489B951135345697296"),
+        ("axiom_corpus_ref", ""),
+        ("axiom_encode_version", "0.2"),
+    ],
+)
+def test_local_runner_refuses_an_inexact_workflow_toolchain_pin(
+    tmp_path: Path, monkeypatch, key: str, value: str
+) -> None:
+    table = {
+        "axiom_encode_version": "0.2.1",
+        "axiom_encode_ref": "a" * 40,
+        "axiom_rules_engine_ref": "b" * 40,
+        "axiom_corpus_ref": "c" * 40,
+        key: value,
+    }
+    (tmp_path / ".axiom").mkdir()
+    (tmp_path / ".axiom/workflow-toolchain.toml").write_text(
+        "[workflow_toolchain]\n"
+        + "".join(f'{name} = "{pin}"\n' for name, pin in table.items())
     )
-    assert toolchain["axiom_artifact_rules_engine_ref"] == (
-        "98af0dcec5a09e1dca12d1458e08ccb02516c1ef"
-    )
-    assert toolchain["source_staleness_axiom_encode_ref"] == (
-        "b041b6b5a0e39f2c05c93669f354f8a54e9a84c3"
-    )
-    assert toolchain["axiom_corpus_ref"] == (
-        "fd7e7510f78c62eba17be933fc9593412c1c548d"
-    )
-    assert toolchain["rulespec_us_ref"] == (
-        "38d5c8c516f9243cedf8e07a22f96dde9ac66fe3"
-    )
+    monkeypatch.setattr(_local_drain, "CHECKOUT", tmp_path)
+
+    with pytest.raises(SystemExit, match=key):
+        _local_drain.pinned_toolchain()
 
 
 def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
@@ -728,7 +763,17 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert "axiom-compose-ref: ${{ needs.workflow-toolchain.outputs.axiom_compose_ref }}" in validation
     assert "axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}" in validation
     assert '"axiom_compose_ref",' in validation
-    assert "validate-rulespec.yml@30e942938e675ae2b4a23b6154652592dcdc8065" in validation
+    # Collect every call of the shared validator, whatever its ref, so an
+    # extra unpinned call can't sit beside the pinned one.
+    validators = [
+        job["uses"].partition("@")[2]
+        for job in yaml.safe_load(validation)["jobs"].values()
+        if str(job.get("uses", "")).startswith(
+            "TheAxiomFoundation/.github/.github/workflows/validate-rulespec."
+        )
+    ]
+    assert len(validators) == 1, validators
+    assert re.fullmatch(r"[0-9a-f]{40}", validators[0]), validators[0]
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
