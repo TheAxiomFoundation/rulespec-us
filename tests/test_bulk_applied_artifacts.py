@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock
 
 import pytest
+import yaml
 
 
 def _load_bulk_module(name: str):
@@ -762,13 +763,17 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert "axiom-compose-ref: ${{ needs.workflow-toolchain.outputs.axiom_compose_ref }}" in validation
     assert "axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}" in validation
     assert '"axiom_compose_ref",' in validation
-    validators = re.findall(
-        r"^    uses: TheAxiomFoundation/\.github/\.github/workflows/"
-        r"validate-rulespec\.yml@([0-9a-f]{40})$",
-        validation,
-        flags=re.MULTILINE,
-    )
-    assert len(validators) == 1
+    # Collect every call of the shared validator, whatever its ref, so an
+    # extra unpinned call can't sit beside the pinned one.
+    validators = [
+        job["uses"].partition("@")[2]
+        for job in yaml.safe_load(validation)["jobs"].values()
+        if str(job.get("uses", "")).startswith(
+            "TheAxiomFoundation/.github/.github/workflows/validate-rulespec."
+        )
+    ]
+    assert len(validators) == 1, validators
+    assert re.fullmatch(r"[0-9a-f]{40}", validators[0]), validators[0]
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
