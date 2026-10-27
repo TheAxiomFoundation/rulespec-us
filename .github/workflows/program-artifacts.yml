@@ -58,6 +58,7 @@ jobs:
           data = tomllib.loads(path.read_text()).get("workflow_toolchain", {})
           ref_keys = (
               "axiom_compose_ref",
+              "axiom_artifact_compose_ref",
               "axiom_encode_ref",
               "axiom_rules_engine_ref",
               "axiom_artifact_rules_engine_ref",
@@ -77,7 +78,11 @@ jobs:
 
       - name: Install axiom-compose
         env:
-          AXIOM_COMPOSE_REF: ${{ steps.toolchain.outputs.axiom_compose_ref }}
+          # The artifact composer is pinned apart from validation's
+          # axiom_compose_ref: compile-composed needs canonical-import
+          # composer output, and a dependency pin shared with validation can
+          # only move in a configuration-only change.
+          AXIOM_COMPOSE_REF: ${{ steps.toolchain.outputs.axiom_artifact_compose_ref }}
         run: |
           python -m pip install --quiet pyyaml \
             "axiom-compose @ git+https://github.com/TheAxiomFoundation/axiom-compose@${AXIOM_COMPOSE_REF}"
@@ -98,13 +103,16 @@ jobs:
 
       - name: Build engine
         if: steps.engine-cache.outputs.cache-hit != 'true'
-        run: cargo build --release --bin axiom-rules-engine
+        run: cargo build --locked --release --bin axiom-rules-engine -j 4
         working-directory: .engine-src
 
       - name: Compile all program specs
+        env:
+          AXIOM_RULES_ENGINE_SHA: ${{ steps.toolchain.outputs.axiom_artifact_rules_engine_ref }}
         run: |
           AXIOM_RULES_ENGINE_BIN="$PWD/.engine-src/target/release/axiom-rules-engine" \
-            python tools/build_program_artifacts.py --dist dist
+            python tools/build_program_artifacts.py --dist dist \
+              --rulespec-root "$GITHUB_WORKSPACE"
 
       - name: Stage artifacts for deliberate publication
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
