@@ -3,7 +3,7 @@
 
 For each programs/<jurisdiction>/<program>/<period>.yaml spec this composes the
 program (axiom-compose), compiles it to an executable artifact
-(axiom-rules-engine compile), stamps provenance into the artifact metadata, and
+(axiom-rules-engine compile-composed), stamps provenance into the artifact metadata, and
 writes a manifest describing everything that was built.
 
 The output is deterministic for a given (corpus SHA, composer version, engine
@@ -44,10 +44,12 @@ MANIFEST_FORMAT_VERSION = 1
 # mismatch fails the build. Bumping the engine across a format boundary without
 # bumping this is therefore a hard error, not a silently mislabeled release.
 EXPECTED_ARTIFACT_SCHEMA_VERSION = 2
-# The fixed, tested lower bound an artifact requires of the engine. A floor, not
-# the building engine's version — any engine >= this that supports the artifact
-# schema can load it. Raise only when an emitted feature demands a newer engine.
-MIN_ENGINE_VERSION = "0.1.0"
+# Supported consumer baseline for this producer. Semver remains advisory:
+# released 0.2.2 predates the fixed compiler, so exact build provenance and
+# capability negotiation must accompany it. Both capabilities are deliberately
+# required for the whole release, including programs without related aggregates.
+MIN_ENGINE_VERSION = "0.2.2"
+REQUIRED_ENGINE_CAPABILITIES = ("relation_entity_typing", "related_min_max_only")
 
 
 @dataclass
@@ -178,14 +180,17 @@ def build_compat(engine_version: str, engine_sha: str, artifact_schema: int) -> 
     - artifact_schema: the compiled-artifact format generation, READ BACK from
       the artifact the engine actually emitted — never a hardcoded claim.
     - built_by_engine: pure provenance (version + real build sha) — never gates.
-    - requires_engine: the negotiation floor. It carries BOTH dimensions,
-      because they move independently and only one of them gates:
+    - requires_engine: the supported consumer contract. Format and capabilities
+      gate independently; semver is advisory:
 
-      * min_version is a FIXED tested semver lower bound (not the building
-        engine's version). It does not gate loading.
+      * min_version is a FIXED advisory baseline (not the building engine's
+        version). It does not gate loading.
       * artifact_format_version is what the loader matches EXACTLY. An engine
         reporting a different number rejects this artifact however new its
         semver is.
+
+      * capabilities names the supported runtime features of this producer.
+        Consumers must provide every listed capability as well as format 2.
 
       Emitting only min_version is what let engine v0.1.0 (format 1) and these
       artifacts (format 2) both advertise "0.1.0" and read as compatible while
@@ -200,7 +205,7 @@ def build_compat(engine_version: str, engine_sha: str, artifact_schema: int) -> 
         "requires_engine": {
             "min_version": MIN_ENGINE_VERSION,
             "artifact_format_version": artifact_schema,
-            "capabilities": [],
+            "capabilities": list(REQUIRED_ENGINE_CAPABILITIES),
         },
     }
 
@@ -297,19 +302,44 @@ def compose_spec(root: Path, build: SpecBuild, out_path: Path, corpus_state) -> 
     out_path.write_bytes(program.source)
 
 
-def engine_compile(root: Path, module: Path, artifact: Path, engine_bin: str) -> str:
-    """Run the engine compiler; returns its reported engine_version."""
-    env = dict(os.environ, AXIOM_RULESPEC_REPO_ROOTS=str(root))
+def engine_compile(
+    root: Path, module: Path, artifact: Path, engine_bin: str,
+    rulespec_roots: list[Path] | None = None,
+) -> str:
+    """Compile originless composer output using explicit country authorities.
+
+    Each root must be a real canonical rulespec-<country> directory. Callers
+    building from a differently named worktree can supply a staged corpus with
+    --rulespec-root; no ambient sibling checkout or legacy environment fallback
+    participates in import resolution.
+    """
+    env = dict(os.environ)
+    env.pop("AXIOM_RULESPEC_REPO_ROOTS", None)
+    env.pop("AXIOM_RULESPEC_REPO_ROOTS_EXCLUSIVE", None)
+    command = [engine_bin, "compile-composed", "--program", str(module.resolve())]
+    for country_root in rulespec_roots or [root]:
+        command.extend(["--rulespec-root", str(country_root.absolute())])
+    command.extend(["--output", str(artifact.resolve())])
     result = subprocess.run(
-        [engine_bin, "compile", "--program", str(module), "--output", str(artifact)],
+        command,
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     match = re.search(r"^engine_version:\s*(\S+)", result.stdout, re.M)
     return match.group(1) if match else "unknown"
+
+
+def checkpoint(path: Path | None, record: dict) -> None:
+    """Append a complete per-spec outcome immediately, including exact errors."""
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as stream:
+            stream.write(json.dumps(record, sort_keys=True) + "\n")
+            stream.flush()
 
 
 def stamp_provenance(artifact: Path, provenance: dict) -> None:
@@ -334,6 +364,13 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--dist", type=Path, default=None)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--rulespec-root", action="append", type=Path,
+                        help="Absolute canonical country root; repeat for every country (default: --root)")
+    parser.add_argument("--results-jsonl", type=Path,
+                        help="Append checkpointed per-program results, with complete errors")
+    parser.add_argument("--spec", action="append",
+                        help="Build only this root-relative ProgramSpec; repeat to split long runs. "
+                             "The manifest describes only this selection; use a separate --dist per batch")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -343,33 +380,45 @@ def main() -> int:
         return 2
 
     dist = (args.dist or root / "dist").resolve()
-    dist.mkdir(parents=True, exist_ok=True)
+    if not args.check:
+        dist.mkdir(parents=True, exist_ok=True)
 
     builds = discover_specs(root)
+    if args.spec:
+        selected = set(args.spec)
+        unknown = selected - {str(build.spec_path) for build in builds}
+        if unknown:
+            parser.error(f"unknown ProgramSpecs: {sorted(unknown)}")
+        builds = [build for build in builds if str(build.spec_path) in selected]
     allowlist = load_allowlist(root)
     corpus = corpus_provenance(root)
     composer = composer_version()
     toolchain = validation_toolchain(root)
     engine_sha = engine_build_sha(engine_bin)
-    if not engine_sha:
+    if not re.fullmatch(r"[0-9a-f]{40}", engine_sha):
         print(
-            "WARN: could not derive engine build sha (relocated binary?); "
-            "manifest engine.git_sha will be empty",
+            "A full lowercase compiler SHA is required; set AXIOM_RULES_ENGINE_SHA "
+            "for a relocated binary",
             file=sys.stderr,
         )
-    elif toolchain.get("axiom_rules_engine_ref") and engine_sha != toolchain["axiom_rules_engine_ref"]:
+        return 2
+    elif toolchain.get("axiom_artifact_rules_engine_ref") and engine_sha != toolchain["axiom_artifact_rules_engine_ref"]:
         print(
-            f"WARN: built engine {engine_sha[:12]} != validation pin "
-            f"{toolchain['axiom_rules_engine_ref'][:12]} — stamping the real build sha",
+            f"WARN: built engine {engine_sha[:12]} != artifact pin "
+            f"{toolchain['axiom_artifact_rules_engine_ref'][:12]} — stamping the real build sha",
             file=sys.stderr,
         )
 
     # Cross-check before building anything: an engine that can report its own
     # loader contract must agree with what this builder expects to stamp.
-    # Engines predating `capabilities` return None and the emitted artifacts
-    # remain the sole authority (artifact_schema_of, below).
+    # The main compiler contract requires capability negotiation. The helper
+    # still recognizes legacy binaries for diagnostics, but they cannot build
+    # this producer's release.
     caps = engine_capabilities(engine_bin)
-    if caps is not None:
+    if caps is None:
+        print("engine must support `capabilities` for this producer", file=sys.stderr)
+        return 2
+    else:
         reported = caps.get("artifact_format_version")
         if reported != EXPECTED_ARTIFACT_SCHEMA_VERSION:
             print(
@@ -379,6 +428,10 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 2
+        missing = set(REQUIRED_ENGINE_CAPABILITIES) - set(caps.get("capabilities", []))
+        if missing:
+            print(f"engine lacks required capabilities: {sorted(missing)}", file=sys.stderr)
+            return 2
 
     manifest_programs = []
     unexpected_failures: list[str] = []
@@ -386,72 +439,66 @@ def main() -> int:
     artifact_schemas: set[int] = set()
     engine_version = "unknown"
 
-    # Compose and compile in a neutral temp directory OUTSIDE the repo: the
-    # engine discovers additional rulespec repos by walking up from the module
-    # path, so building inside the checkout lets stray sibling checkouts leak
-    # modules into the artifact (observed: a legacy per-state repo resolving an
-    # import the pinned corpus cannot). Neutral cwd keeps local builds
-    # byte-identical to CI.
-    workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-"))
+    # Generated compositions must be outside every configured country root.
+    workspace = tempfile.TemporaryDirectory(prefix="program-artifacts-")
+    workdir = Path(workspace.name)
 
     # The pinned composer treats CorpusState as immutable and compose() as pure.
     # Parse/index this fixed checkout once, rather than once per program.
     from axiom_compose import load_corpus_from_roots
 
     print("Loading shared RuleSpec corpus", flush=True)
-    corpus_state = load_corpus_from_roots([root]) if builds else None
+    corpus_roots = [path.absolute() for path in args.rulespec_root] if args.rulespec_root else [root]
+    corpus_state = load_corpus_from_roots(corpus_roots) if builds else None
 
     for build in builds:
         spec_rel = str(build.spec_path)
         module_path = workdir / f"{build.artifact_name}.rulespec.yaml"
         artifact_path = workdir / f"{build.artifact_name}.compiled.json"
+        stage = "compose"
         try:
             print(f"BUILD {spec_rel}", flush=True)
             compose_spec(root, build, module_path, corpus_state)
-            engine_version = engine_compile(root, module_path, artifact_path, engine_bin)
-        except Exception as error:
-            message = str(error).splitlines()[0][:200]
-            if spec_rel in allowlist:
-                print(f"KNOWN-BROKEN {spec_rel}: {message}")
+            stage = "compile"
+            if args.rulespec_root:
+                compiled_version = engine_compile(root, module_path, artifact_path, engine_bin, args.rulespec_root)
             else:
-                print(f"FAIL {spec_rel}: {message}", file=sys.stderr)
-                unexpected_failures.append(spec_rel)
-            continue
+                compiled_version = engine_compile(root, module_path, artifact_path, engine_bin)
 
-        if spec_rel in allowlist:
-            unexpected_successes.append(spec_rel)
+            # Validate and stamp before publishing either file. A compiler can
+            # exit successfully without producing a usable artifact; that is a
+            # per-program failure and must not prevent the remaining census.
+            stage = "validate"
+            schema = artifact_schema_of(artifact_path)
+            if schema != EXPECTED_ARTIFACT_SCHEMA_VERSION:
+                raise RuntimeError(
+                    f"engine emitted artifact_format_version {schema}, builder expects "
+                    f"{EXPECTED_ARTIFACT_SCHEMA_VERSION}. The engine pin moved across a "
+                    "format boundary; bump EXPECTED_ARTIFACT_SCHEMA_VERSION deliberately "
+                    "and re-cut the engine release."
+                )
+            program = json.loads(artifact_path.read_text())["program"]
+            counts = {
+                "derived": len(program.get("derived", [])),
+                "parameters": len(program.get("parameters", [])),
+                "relations": len(program.get("relations", [])),
+            }
+            compat = build_compat(compiled_version, engine_sha, schema)
+            provenance = {
+                "corpus": corpus,
+                "spec_path": spec_rel,
+                "spec_sha256": sha256_file(root / build.spec_path),
+                "composer_version": composer,
+                "engine_version": compiled_version,
+                "compat": compat,
+            }
+            stamp_provenance(artifact_path, provenance)
 
-        # The four-field compatibility contract, self-describing inside each
-        # artifact so a consumer can negotiate with the engine before loading.
-        schema = artifact_schema_of(artifact_path)
-        if schema != EXPECTED_ARTIFACT_SCHEMA_VERSION:
-            print(
-                f"FAIL {spec_rel}: engine emitted artifact_format_version {schema}, "
-                f"builder expects {EXPECTED_ARTIFACT_SCHEMA_VERSION}. The engine pin moved "
-                f"across a format boundary; bump EXPECTED_ARTIFACT_SCHEMA_VERSION "
-                f"deliberately and re-cut the engine release.",
-                file=sys.stderr,
-            )
-            unexpected_failures.append(spec_rel)
-            continue
-        artifact_schemas.add(schema)
-        compat = build_compat(engine_version, engine_sha, schema)
-        provenance = {
-            "corpus": corpus,
-            "spec_path": spec_rel,
-            "spec_sha256": sha256_file(root / build.spec_path),
-            "composer_version": composer,
-            "engine_version": engine_version,
-            "compat": compat,
-        }
-        stamp_provenance(artifact_path, provenance)
+            if not args.check:
+                shutil.copy2(module_path, dist / module_path.name)
+                artifact_path = Path(shutil.copy2(artifact_path, dist / artifact_path.name))
 
-        shutil.copy2(module_path, dist / module_path.name)
-        artifact_path = Path(shutil.copy2(artifact_path, dist / artifact_path.name))
-
-        program = json.loads(artifact_path.read_text())["program"]
-        manifest_programs.append(
-            {
+            program_entry = {
                 "jurisdiction": build.jurisdiction,
                 "program_id": build.program_id,
                 "period": build.period,
@@ -461,17 +508,35 @@ def main() -> int:
                 "artifact": artifact_path.name,
                 "artifact_sha256": sha256_file(artifact_path),
                 "compat": compat,
-                "counts": {
-                    "derived": len(program.get("derived", [])),
-                    "parameters": len(program.get("parameters", [])),
-                    "relations": len(program.get("relations", [])),
-                },
+                "counts": counts,
             }
-        )
+        except Exception as error:
+            error_message = str(error) or type(error).__name__
+            checkpoint(args.results_jsonl, {"spec_path": spec_rel, "status": "failed",
+                       "stage": stage, "error": error_message, "engine_sha": engine_sha})
+            message = next((line for line in error_message.splitlines() if line.strip()),
+                           type(error).__name__)[:200]
+            if spec_rel in allowlist:
+                print(f"KNOWN-BROKEN {spec_rel}: {message}")
+            else:
+                print(f"FAIL {spec_rel}: {message}", file=sys.stderr)
+                unexpected_failures.append(spec_rel)
+            continue
+
+        if spec_rel in allowlist:
+            unexpected_successes.append(spec_rel)
+        artifact_schemas.add(schema)
+        engine_version = compiled_version
+        manifest_programs.append(program_entry)
         print(
             f"OK   {spec_rel} -> {artifact_path.name} "
             f"({manifest_programs[-1]['counts']['derived']}d)"
         )
+        checkpoint(args.results_jsonl, {"spec_path": spec_rel, "status": "built",
+                   "engine_sha": engine_sha, "artifact": artifact_path.name,
+                   "artifact_sha256": manifest_programs[-1]["artifact_sha256"]})
+
+    workspace.cleanup()
 
     if len(artifact_schemas) > 1:
         print(
@@ -489,7 +554,8 @@ def main() -> int:
         toolchain,
         artifact_schemas.pop() if artifact_schemas else EXPECTED_ARTIFACT_SCHEMA_VERSION,
     )
-    (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if not args.check:
+        (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
     if unexpected_successes:
         print(

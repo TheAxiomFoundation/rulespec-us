@@ -76,10 +76,10 @@ def test_build_compat_contract_shape_and_floor():
     # not the building version. Artifact readers separately require the exact
     # schema generation, so v1 and v2 engines fail closed across this boundary.
     assert compat["built_by_engine"] == {"version": "0.1.0", "git_sha": "e19f1b75cafe"}
-    assert compat["requires_engine"]["min_version"] == bpa.MIN_ENGINE_VERSION == "0.1.0"
-    assert compat["requires_engine"]["capabilities"] == []
+    assert compat["requires_engine"]["min_version"] == bpa.MIN_ENGINE_VERSION == "0.2.2"
+    assert compat["requires_engine"]["capabilities"] == ["relation_entity_typing", "related_min_max_only"]
     # A newer building engine still stamps the fixed floor, not its own version.
-    assert bpa.build_compat("0.9.0", "abc", 2)["requires_engine"]["min_version"] == "0.1.0"
+    assert bpa.build_compat("0.9.0", "abc", 2)["requires_engine"]["min_version"] == "0.2.2"
 
 
 def test_assemble_manifest_stamps_real_engine_sha_not_stale():
@@ -127,7 +127,7 @@ def test_requires_engine_carries_the_gating_schema_not_only_semver():
     assert requires["artifact_format_version"] == 2
     # An engine reporting format 1 must be rejectable from the contract ALONE,
     # without downloading or attempting to load the artifact.
-    engine_reports = {"engine_version": "0.2.0", "artifact_format_version": 1}
+    engine_reports = {"engine_version": "0.3.0", "artifact_format_version": 1}
     assert engine_reports["engine_version"] >= requires["min_version"]  # semver says yes
     assert (
         engine_reports["artifact_format_version"] != requires["artifact_format_version"]
@@ -222,7 +222,9 @@ def test_build_reuses_corpus_and_still_compiles_every_program(tmp_path, monkeypa
     monkeypatch.setattr(bpa, "corpus_provenance", lambda root: {})
     monkeypatch.setattr(bpa, "composer_version", lambda: "test")
     monkeypatch.setattr(bpa, "engine_build_sha", lambda engine: "a" * 40)
-    monkeypatch.setattr(bpa, "engine_capabilities", lambda engine: None)
+    monkeypatch.setattr(bpa, "engine_capabilities", lambda engine: {
+        "artifact_format_version": 2, "capabilities": list(bpa.REQUIRED_ENGINE_CAPABILITIES),
+    })
     monkeypatch.setattr(bpa, "engine_compile", compile_program)
     monkeypatch.setattr(bpa, "artifact_schema_of", lambda artifact: 2)
     assert bpa.main() == 0
