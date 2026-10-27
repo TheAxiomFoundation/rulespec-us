@@ -33,12 +33,15 @@ import yaml
 # These fields are descriptive according to engine spec.rs / model.rs. In
 # particular, do not remove fields recursively: "source" inside an expression
 # can be executable, and every unknown derived field must still be compared.
-DESCRIPTIVE_RULE_FIELDS = frozenset(
-    {"id", "source", "source_url", "corpus_citation_path"}
-)
-# spec.rs IndexedParameterSpec carries the same four fields for consumers;
-# lowering reads a parameter's unit, indexed_by and versions.
+# `id` is executable: model.rs resolve_derived_name / resolve_parameter_name
+# resolve a query's output reference through it.
+DESCRIPTIVE_RULE_FIELDS = frozenset({"source", "source_url", "corpus_citation_path"})
+# spec.rs IndexedParameterSpec carries the same descriptive fields for
+# consumers; lowering reads a parameter's unit, indexed_by and versions.
 DESCRIPTIVE_PARAMETER_FIELDS = DESCRIPTIVE_RULE_FIELDS
+# spec.rs `id` is an Option with serde(default, skip_serializing_if = None):
+# null and omission are one value.
+OPTIONAL_ID = {"id": None}
 # spec.rs ProgramSpec: `module` is pass-through metadata ("execution semantics
 # do not depend on it"). Every other section executes.
 DESCRIPTIVE_PROGRAM_SECTIONS = frozenset({"module"})
@@ -97,8 +100,8 @@ def _derived_by_name(artifact: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _executable_rule(rule: Mapping[str, Any]) -> dict[str, Any]:
-    result = {key: deepcopy(value) for key, value in rule.items()
-              if key not in DESCRIPTIVE_RULE_FIELDS}
+    result = _without_defaults({key: value for key, value in rule.items()
+                                if key not in DESCRIPTIVE_RULE_FIELDS}, OPTIONAL_ID)
     result.setdefault("versions", [])
     # Omission and null represent the same unbounded end in the artifact schema.
     for version in result["versions"]:
@@ -114,8 +117,8 @@ def _without_defaults(value: Mapping[str, Any], defaults: Mapping[str, Any]) -> 
 def _executable_parameter(parameter: Mapping[str, Any]) -> dict[str, Any]:
     result = {key: deepcopy(value) for key, value in parameter.items()
               if key not in DESCRIPTIVE_PARAMETER_FIELDS}
-    # unit and indexed_by are Options, so null and omission are one value.
-    result = _without_defaults(result, {"unit": None, "indexed_by": None})
+    # unit, indexed_by and id are Options, so null and omission are one value.
+    result = _without_defaults(result, {"unit": None, "indexed_by": None, **OPTIONAL_ID})
     result.setdefault("versions", [])
     for version in result["versions"]:
         version.setdefault("effective_to", None)
@@ -156,17 +159,32 @@ def _compare_named(label, old_items, new_items, executable, descriptive_fields=f
     return errors, descriptive
 
 
-def _compare_units(old_units, new_units):
-    """A unit definition acts only through the names that reference it, and
-    every reference is an executable field compared elsewhere. So a unit may
-    be added; an existing definition may not change or disappear."""
+def _strings(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, dict):
+        return set().union(*map(_strings, value.values()))
+    if isinstance(value, list):
+        return set().union(*map(_strings, value))
+    return set()
+
+
+def _compare_units(old_units, new_units, old_references=frozenset()):
+    """A unit definition acts only through the names that reference it. An
+    old reference to an undefined unit fails (engine.rs validate_unit,
+    UnknownUnit), so defining that unit changes execution. A unit may be
+    added only when no old executable string names it; an existing
+    definition may not change or disappear."""
     errors, added = [], []
     old_index, new_index = _grouped(old_units), _grouped(new_units)
     for name in sorted(old_index.keys() | new_index.keys()):
-        if name not in old_index:
+        if name not in old_index and name in old_references:
+            errors.append({"unit": name, "error": "unit added that the old program references",
+                           "new": new_index[name]})
+        elif name not in old_index:
             added.append({"path": f"program.units.{name}", "change": "added",
                           "new": new_index[name],
-                          "reason": "unit definition added; no old reference can reach it"})
+                          "reason": "unit definition added; no old reference names it"})
         elif old_index[name] != new_index.get(name):
             errors.append({"unit": name, "error": "unit definition changed or removed",
                            "old": old_index[name], "new": new_index.get(name)})
@@ -235,7 +253,12 @@ def compare_program(old: Mapping[str, Any], new: Mapping[str, Any]) -> dict[str,
             descriptive.extend({"section": path, **delta}
                                for delta in _deltas(before or {}, after or {}, path))
         elif section == "units":
-            unit_errors, added = _compare_units(before or [], after or [])
+            # Fail closed: any old string outside the pass-through module
+            # counts as a possible reference.
+            references = _strings([value for key, value in old_program.items()
+                                   if key not in DESCRIPTIVE_PROGRAM_SECTIONS]
+                                  + [old_meta.get("input_catalog")])
+            unit_errors, added = _compare_units(before or [], after or [], references)
             errors.extend(unit_errors)
             schema.extend(added)
         elif section == "parameters":

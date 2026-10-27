@@ -439,6 +439,11 @@ def test_a_staged_root_at_the_same_clean_commit_records_its_own_identity(tmp_pat
         assert provenance["corpus_roots"] == expected
 
 
+def _module(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("format: rulespec/v1\nrules: []\n")
+
+
 def _advance(path: Path):
     (path / "README.md").write_text("changed\n")
     _git(path, "commit", "-qam", "later")
@@ -455,6 +460,11 @@ REFUSALS = {
     "staged root is not a checkout": "must be a git checkout",
     "staged root is a subdirectory": "must be the top of its checkout",
     "primary repository absent": "no --rulespec-root is the rulespec-us corpus",
+    # The composer reads modules from disk, not from the index: a same-commit
+    # clone carrying uncommitted encoder output compiles different rules.
+    "staged root has untracked modules": "untracked inputs include ['us/statutes/new.yaml']",
+    "staged root has ignored modules": "untracked inputs include ['us/statutes/ignored.yaml']",
+    "primary has an untracked ProgramSpec": "(dirty=True); a staged root",
 }
 
 
@@ -477,6 +487,14 @@ def test_a_staged_root_that_cannot_carry_the_primary_identity_is_refused(tmp_pat
             _modify(root)
         elif case == "staged root is a subdirectory":
             return [staged / "programs"]
+        elif case == "staged root has untracked modules":
+            _module(staged / "us/statutes/new.yaml")
+        elif case == "staged root has ignored modules":
+            (staged / ".git/info/exclude").write_text("ignored.yaml\n")
+            _module(staged / "us/statutes/ignored.yaml")
+            assert _git(staged, "status", "--porcelain") == ""
+        elif case == "primary has an untracked ProgramSpec":
+            _module(root / "programs/us/third/2026.yaml")
         return [staged]
 
     root, _, loads = _staged_build(tmp_path, monkeypatch, layout)
@@ -493,3 +511,59 @@ def test_the_primary_root_passed_explicitly_keeps_the_primary_identity(tmp_path,
     manifest = json.loads((root / "dist/manifest.json").read_text())
     assert manifest["corpus_roots"] == [{"name": "rulespec-us", **manifest["corpus"]}]
     assert manifest["corpus"]["sha"] == head
+
+
+def test_untracked_output_and_cache_files_leave_a_staged_root_clean(tmp_path, monkeypatch):
+    def layout(root, staged, tmp_path):
+        subprocess.run(["git", "clone", "-q", str(root), str(staged)], check=True)
+        for relative in ("dist/us-first.rulespec.yaml", ".hub-scratch/notes.yaml",
+                         ".pytest_cache/v/cache.yaml", "us/statutes/notes.txt"):
+            (staged / relative).parent.mkdir(parents=True, exist_ok=True)
+            (staged / relative).write_text("scratch\n")
+        return [staged]
+
+    root, head, _ = _staged_build(tmp_path, monkeypatch, layout)
+    assert bpa.main() == 0
+    staged = tmp_path / "staged" / "rulespec-us"
+    assert bpa.untracked_inputs(staged) == []
+    manifest = json.loads((root / "dist/manifest.json").read_text())
+    assert manifest["corpus_roots"] == [{"name": "rulespec-us", "repo": "rulespec-us",
+                                         "sha": head, "dirty": False}]
+
+
+def test_a_primary_root_below_its_checkout_is_refused(tmp_path, monkeypatch, capsys):
+    root, _, loads = _staged_build(tmp_path, monkeypatch, lambda root, staged, tmp_path: [])
+    monkeypatch.setattr(sys, "argv", ["build", "--root", str(root / "programs")])
+    assert bpa.main() == 2
+    assert loads == []
+    assert "--root must be the top of its checkout" in capsys.readouterr().err
+
+
+INPUT_PLACES = ["us/statutes", "us-al/regulations", "programs/us/snap", "statutes", ".",
+                "dist", ".hub-scratch", "node_modules/pkg", "us/statutes/.cache"]
+
+
+@settings(max_examples=25, deadline=None)
+@given(files=st.lists(st.tuples(st.sampled_from(INPUT_PLACES),
+                                st.sampled_from(["yaml", "yml", "txt"]), st.booleans()),
+                      max_size=6, unique_by=lambda item: item[:2]))
+def test_untracked_inputs_are_exactly_the_yaml_in_trees_the_composer_reads(tmp_path_factory, files):
+    """A file counts iff it is untracked or ignored YAML in a tree the
+    composer or compiler reads: a jurisdiction or content-marker directory,
+    programs/, or the checkout's top level."""
+    root = tmp_path_factory.mktemp("inputs") / "rulespec-us"
+    _checkout(root)
+    expected, ignored = set(), []
+    for index, (place, suffix, ignore) in enumerate(files):
+        relative = f"{place}/f{index}.{suffix}".removeprefix("./")
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text("rules: []\n")
+        if ignore:
+            ignored.append(relative)
+        top = relative.split("/", 1)[0]
+        readable = (top in {"us", "us-al", "programs", "statutes"} or "/" not in relative)
+        if readable and suffix != "txt":
+            expected.add(relative)
+    (root / ".git/info/exclude").write_text("".join(f"/{name}\n" for name in ignored))
+    assert set(bpa.untracked_inputs(root)) == expected
+    assert bpa.corpus_provenance(root)["dirty"] == bool(expected)

@@ -99,11 +99,41 @@ def git_output(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+# Where the pinned composer (axiom-compose b9606380 _jurisdiction_roots /
+# _iter_module_files) and the compiler's import resolution read modules from
+# the filesystem: jurisdiction directories, root-level content marker
+# directories and root-level YAML, plus the ProgramSpecs under programs/.
+JURISDICTION_DIR = re.compile(r"[a-z]{2}(?:-[a-z0-9-]+)*")
+CONTENT_MARKER_DIRS = ("statutes", "regulations", "policies", "legislation", "sources")
+
+
+def untracked_inputs(root: Path) -> list[str]:
+    """Untracked or ignored YAML that composing or compiling this root could read.
+
+    The composer walks directories rather than the index, so such a file
+    changes what compiles while HEAD stays the same. Output and cache
+    directories (dist/, .hub-scratch/, tool caches) sit outside these trees.
+    """
+    trees = [entry.name for entry in sorted(root.iterdir()) if entry.is_dir() and (
+        entry.name == "programs" or entry.name in CONTENT_MARKER_DIRS
+        or JURISDICTION_DIR.fullmatch(entry.name))]
+    pathspecs = [*trees, ":(glob)*.yaml", ":(glob)*.yml"]
+    # Without --exclude-standard, --others also lists ignored files.
+    listed = git_output(root, "ls-files", "--others", "-z", "--", *pathspecs)
+    return sorted(name for name in listed.split("\0") if name.endswith((".yaml", ".yml")))
+
+
 def corpus_provenance(root: Path) -> dict:
+    top = Path(git_output(root, "rev-parse", "--show-toplevel")).resolve()
+    if top != root.resolve():
+        raise ValueError(f"{root}: --root must be the top of its checkout ({top})")
     sha = git_output(root, "rev-parse", "HEAD")
-    # Untracked files (e.g. a previous dist/) don't affect what compiles;
-    # only tracked modifications make the corpus state unreproducible.
-    dirty = bool(git_output(root, "status", "--porcelain", "--untracked-files=no"))
+    # The recorded commit reproduces the build only if nothing the composer or
+    # compiler reads differs from it: no tracked modification, and no
+    # untracked or ignored module or ProgramSpec. Other untracked files, such
+    # as a previous dist/, do not affect what compiles.
+    dirty = bool(git_output(root, "status", "--porcelain", "--untracked-files=no")
+                 or untracked_inputs(root))
     origin = ""
     try:
         origin = git_output(root, "remote", "get-url", "origin")
@@ -146,10 +176,12 @@ def corpus_root_identities(root: Path, corpus: dict, rulespec_roots: list[Path] 
         if identity["repo"] == corpus.get("repo") and (
             identity["sha"] != corpus.get("sha") or identity["dirty"] or corpus.get("dirty")
         ):
+            untracked = untracked_inputs(path.resolve()) + untracked_inputs(root)
             raise ValueError(
                 f"{path} is {identity['repo']} at {identity['sha'][:12]} (dirty={identity['dirty']}), "
                 f"but --root is {corpus.get('sha', '')[:12]} (dirty={corpus.get('dirty')}); a staged "
                 "root must be the same clean commit as the checkout its ProgramSpecs come from"
+                + (f"; untracked inputs include {untracked[:3]}" if untracked else "")
             )
         identities.append(identity)
     if not any(identity.get("repo") == corpus.get("repo") for identity in identities):
@@ -441,7 +473,11 @@ def main() -> int:
             parser.error(f"unknown ProgramSpecs: {sorted(unknown)}")
         builds = [build for build in builds if str(build.spec_path) in selected]
     allowlist = load_allowlist(root)
-    corpus = corpus_provenance(root)
+    try:
+        corpus = corpus_provenance(root)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 2
     composer = composer_version()
     toolchain = validation_toolchain(root)
     engine_sha = engine_build_sha(engine_bin)

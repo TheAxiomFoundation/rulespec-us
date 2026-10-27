@@ -406,7 +406,7 @@ def test_cli_exits_nonzero_for_parameter_relation_and_unit_changes(tmp_path, mon
 
 @pytest.mark.parametrize("field,value", [
     ("source", "26 USC 3101(b)"), ("source_url", "https://example.org/3101"),
-    ("corpus_citation_path", "us/statute/26/3101/b"), ("id", "us:statutes/26/3101#rate"),
+    ("corpus_citation_path", "us/statute/26/3101/b"),
 ])
 def test_descriptive_parameter_fields_are_reported_not_errors(field, value):
     old = _full_artifact()
@@ -417,6 +417,75 @@ def test_descriptive_parameter_fields_are_reported_not_errors(field, value):
     assert result["descriptive_changes"] == [{"parameter": "rate", "field": field,
                                               "old": old["program"]["parameters"][0].get(field),
                                               "new": value}]
+
+
+ID_CHANGES = {
+    "changed": ("us:statutes/26/3101#rate", "us:statutes/26/3111#rate"),
+    "missing to present": (None, "us:statutes/26/3101#rate"),
+    "present to missing": ("us:statutes/26/3101#rate", None),
+}
+
+
+def _with_id(item, identity):
+    item = deepcopy(item)
+    if identity is not None:
+        item["id"] = identity
+    return item
+
+
+@pytest.mark.parametrize("change", sorted(ID_CHANGES))
+def test_a_parameter_id_change_is_an_error(change):
+    """A query resolves an output through its id (model.rs resolve_parameter_name)."""
+    before, after = ID_CHANGES[change]
+    old, new = _full_artifact(), _full_artifact()
+    old["program"]["parameters"] = [_with_id(_parameter(), before)]
+    new["program"]["parameters"] = [_with_id(_parameter(), after)]
+    result = semantics.compare_artifacts(old, new, {})
+    assert [error["parameter"] for error in result["errors"]] == ["rate"]
+    assert result["descriptive_changes"] == []
+
+
+@pytest.mark.parametrize("change", sorted(ID_CHANGES))
+def test_a_derived_rule_id_change_is_an_error(change):
+    """model.rs resolve_derived_name resolves a derived output through its id."""
+    before, after = ID_CHANGES[change]
+    rule = _rule()
+    rule["versions"] = [_version(rule, end="2026-12-31")]
+    result = semantics.compare_artifacts(_artifact(_with_id(rule, before)),
+                                         _artifact(_with_id(rule, after)),
+                                         _source(end="2026-12-31"))
+    assert [error.get("path") for error in result["errors"]] == ["id"]
+
+
+def test_a_null_id_and_an_omitted_id_are_one_value():
+    old = _full_artifact()
+    new = deepcopy(old)
+    old["program"]["parameters"][0]["id"] = None
+    assert semantics.compare_artifacts(old, new, {})["errors"] == []
+    rule = _rule()
+    rule["versions"] = [_version(rule, end="2026-12-31")]
+    assert semantics.compare_artifacts(_artifact(dict(rule, id=None)), _artifact(rule),
+                                       _source(end="2026-12-31"))["errors"] == []
+
+
+@pytest.mark.parametrize("reference", ["parameter unit", "derived unit", "input catalog"])
+def test_adding_a_unit_the_old_program_references_is_an_error(reference):
+    """An old reference to an undefined unit fails with UnknownUnit; defining
+    the unit turns that failure into a value."""
+    old = _full_artifact()
+    if reference == "parameter unit":
+        old["program"]["parameters"][0]["unit"] = "CHF"
+    elif reference == "derived unit":
+        old["program"]["derived"] = [dict(_rule(), unit="CHF")]
+    else:
+        old["metadata"]["input_catalog"] = [{"slot": "wages", "unit": "CHF"}]
+    new = deepcopy(old)
+    new["program"]["units"].append({"name": "CHF", "kind": "currency", "minor_units": 2})
+    source = {"credit": semantics.SourceRule("us/statutes/example.yaml",
+                                             {"name": "credit", "kind": "derived"})}
+    result = semantics.compare_artifacts(old, new, source)
+    assert [error.get("unit") for error in result["errors"]] == ["CHF"]
+    assert not any(change["path"] == "program.units.CHF" for change in result["schema_changes"])
 
 
 def test_permitted_schema_changes_are_listed_explicitly():
