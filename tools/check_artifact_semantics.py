@@ -3,10 +3,14 @@
 
 The old 98af0dce compiler drops a derived rule's only *open-ended* version.
 It already preserves a lone version with effective_to (formula.rs:1205).
-This check permits precisely the restoration of the open-ended version, checks
-new single-version dates against their actual source, and requires all other
-derived executable fields (including formula ASTs) to be identical. Descriptive
-rule fields are reported separately, never normalized inside formula ASTs.
+This check permits precisely the restoration of the open-ended version and
+checks new single-version dates against their actual source. Everything else
+the engine executes must be identical: derived formula ASTs, parameters
+(values, dates, unit, index), relations, unit definitions, selected-year
+inputs and the artifact format. Descriptive rule and parameter fields are
+reported separately, never normalized inside formula ASTs. Changes the engine
+does not execute (module metadata, advisory fast-path metadata, producer
+stamps, added unit definitions) are listed under schema_changes.
 
 Both directories should contain the same composer output beside their
 *.compiled.json files. Imported rules are resolved through their canonical id;
@@ -32,6 +36,15 @@ import yaml
 DESCRIPTIVE_RULE_FIELDS = frozenset(
     {"id", "source", "source_url", "corpus_citation_path"}
 )
+# spec.rs IndexedParameterSpec carries the same four fields for consumers;
+# lowering reads a parameter's unit, indexed_by and versions.
+DESCRIPTIVE_PARAMETER_FIELDS = DESCRIPTIVE_RULE_FIELDS
+# spec.rs ProgramSpec: `module` is pass-through metadata ("execution semantics
+# do not depend on it"). Every other section executes.
+DESCRIPTIVE_PROGRAM_SECTIONS = frozenset({"module"})
+# Fields whose serde default makes omission equal to this value.
+RELATION_DEFAULTS = {"slot_entities": [], "derivation": None}
+DERIVATION_DEFAULTS = {"entity": None, "member_relation": None, "slot_entities": []}
 
 
 @dataclass(frozen=True)
@@ -91,6 +104,161 @@ def _executable_rule(rule: Mapping[str, Any]) -> dict[str, Any]:
     for version in result["versions"]:
         version.setdefault("effective_to", None)
     return result
+
+
+def _without_defaults(value: Mapping[str, Any], defaults: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: deepcopy(item) for key, item in value.items()
+            if not (key in defaults and item == defaults[key])}
+
+
+def _executable_parameter(parameter: Mapping[str, Any]) -> dict[str, Any]:
+    result = {key: deepcopy(value) for key, value in parameter.items()
+              if key not in DESCRIPTIVE_PARAMETER_FIELDS}
+    # unit and indexed_by are Options, so null and omission are one value.
+    result = _without_defaults(result, {"unit": None, "indexed_by": None})
+    result.setdefault("versions", [])
+    for version in result["versions"]:
+        version.setdefault("effective_to", None)
+    return result
+
+
+def _executable_relation(relation: Mapping[str, Any]) -> dict[str, Any]:
+    result = _without_defaults(relation, RELATION_DEFAULTS)
+    if isinstance(result.get("derivation"), dict):
+        result["derivation"] = _without_defaults(result["derivation"], DERIVATION_DEFAULTS)
+    return result
+
+
+def _grouped(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Index by name, keeping order; the loader collapses compatible parameter duplicates."""
+    result: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        result.setdefault(item["name"], []).append(item)
+    return result
+
+
+def _compare_named(label, old_items, new_items, executable, descriptive_fields=frozenset()):
+    errors, descriptive = [], []
+    old_index, new_index = _grouped(old_items), _grouped(new_items)
+    for name in sorted(old_index.keys() | new_index.keys()):
+        before, after = old_index.get(name, []), new_index.get(name, [])
+        if len(before) != len(after):
+            errors.append({label: name, "error": f"{label} set changed",
+                           "old_count": len(before), "new_count": len(after)})
+            continue
+        for left, right in zip(before, after):
+            errors.extend({label: name, "error": f"unexpected {label} executable change", **delta}
+                          for delta in _deltas(executable(left), executable(right)))
+            for field in sorted(descriptive_fields):
+                if left.get(field) != right.get(field):
+                    descriptive.append({label: name, "field": field,
+                                        "old": left.get(field), "new": right.get(field)})
+    return errors, descriptive
+
+
+def _compare_units(old_units, new_units):
+    """A unit definition acts only through the names that reference it, and
+    every reference is an executable field compared elsewhere. So a unit may
+    be added; an existing definition may not change or disappear."""
+    errors, added = [], []
+    old_index, new_index = _grouped(old_units), _grouped(new_units)
+    for name in sorted(old_index.keys() | new_index.keys()):
+        if name not in old_index:
+            added.append({"path": f"program.units.{name}", "change": "added",
+                          "new": new_index[name],
+                          "reason": "unit definition added; no old reference can reach it"})
+        elif old_index[name] != new_index.get(name):
+            errors.append({"unit": name, "error": "unit definition changed or removed",
+                           "old": old_index[name], "new": new_index.get(name)})
+    return errors, added
+
+
+def _presence_change(path, old, new, key, reason, *, values=False):
+    change = {"path": path, "change": "added" if key not in old else
+              "removed" if key not in new else "changed", "reason": reason}
+    if values:
+        change.update(old=old.get(key), new=new.get(key))
+    return change
+
+
+def compare_program(old: Mapping[str, Any], new: Mapping[str, Any]) -> dict[str, Any]:
+    """Compare every artifact field outside program.derived.
+
+    compile.rs CompiledProgramArtifact is {artifact_format_version,
+    engine_version, program, metadata}. The loader recomputes
+    metadata.evaluation_order and input_catalog from the program and checks
+    them, so a present value must agree; fast_path is advisory ("Execution
+    never reads it"); other metadata keys, such as the producer's provenance
+    stamp, are not CompiledProgramMetadata fields and the loader ignores them.
+    """
+    errors, descriptive, schema = [], [], []
+    for key in sorted(old.keys() | new.keys()):
+        if key in {"program", "metadata"}:
+            continue
+        if key == "engine_version":
+            if old.get(key) != new.get(key):
+                schema.append(_presence_change(key, old, new, key, "compiler identity", values=True))
+        elif key not in old or key not in new or old[key] != new[key]:
+            errors.append({"path": key, "error": "unexpected artifact field change",
+                           "old": old.get(key), "new": new.get(key)})
+
+    old_meta, new_meta = old.get("metadata") or {}, new.get("metadata") or {}
+    for key in sorted(old_meta.keys() | new_meta.keys()):
+        path = f"metadata.{key}"
+        both = key in old_meta and key in new_meta
+        if key == "evaluation_order" and (not both or old_meta[key] != new_meta[key]):
+            errors.append({"path": path, "error": "evaluation order changed",
+                           "old": old_meta.get(key), "new": new_meta.get(key)})
+        elif key == "input_catalog":
+            if both and old_meta[key] != new_meta[key]:
+                errors.append({"path": path, "error": "input catalog changed"})
+            elif not both:
+                schema.append(_presence_change(path, old_meta, new_meta, key,
+                              "the loader fills an absent catalog from the program"))
+        elif key == "fast_path":
+            if not both or old_meta[key] != new_meta[key]:
+                schema.append(_presence_change(path, old_meta, new_meta, key,
+                              "advisory; execution never reads it", values=True))
+        elif key != "evaluation_order" and (not both or old_meta[key] != new_meta[key]):
+            schema.append(_presence_change(path, old_meta, new_meta, key,
+                          "not a CompiledProgramMetadata field; the loader ignores it"))
+
+    old_program, new_program = old.get("program") or {}, new.get("program") or {}
+    counts = {"parameters_compared": len(new_program.get("parameters") or []),
+              "relations_compared": len(new_program.get("relations") or [])}
+    for section in sorted(old_program.keys() | new_program.keys()):
+        before, after = old_program.get(section), new_program.get(section)
+        path = f"program.{section}"
+        if section == "derived":
+            continue
+        if section in DESCRIPTIVE_PROGRAM_SECTIONS:
+            descriptive.extend({"section": path, **delta}
+                               for delta in _deltas(before or {}, after or {}, path))
+        elif section == "units":
+            unit_errors, added = _compare_units(before or [], after or [])
+            errors.extend(unit_errors)
+            schema.extend(added)
+        elif section == "parameters":
+            found, notes = _compare_named("parameter", before or [], after or [],
+                                          _executable_parameter, DESCRIPTIVE_PARAMETER_FIELDS)
+            errors.extend(found)
+            descriptive.extend(notes)
+        elif section == "relations":
+            found, _ = _compare_named("relation", before or [], after or [], _executable_relation)
+            errors.extend(found)
+        elif section == "selected_year_inputs":
+            errors.extend({"error": "unexpected selected-year input change", **delta}
+                          for delta in _deltas(before or [], after or [], path))
+        elif before is None and after is None:
+            # Not a ProgramSpec field on this engine; null and absent agree.
+            if (section in old_program) != (section in new_program):
+                schema.append(_presence_change(path, old_program, new_program, section,
+                              "unknown section; null and absent are equal", values=True))
+        else:
+            errors.append({"path": path, "error": "unknown program section changed",
+                           "old": before, "new": after})
+    return {**counts, "descriptive_changes": descriptive, "schema_changes": schema,
+            "errors": errors}
 
 
 def _deltas(old: Any, new: Any, path: str = "") -> list[dict[str, Any]]:
@@ -201,10 +369,14 @@ def compare_artifacts(
                 descriptive.append({"rule": name, "field": field,
                                     "old": old_rules[name].get(field),
                                     "new": new_rules[name].get(field)})
+    rest = compare_program(old, new)
     return {"derived_rules": len(new_rules), "single_dated_rules": invariants["single_dated_rules"],
             "bounded_single_rules": invariants["bounded_single_rules"],
+            "parameters_compared": rest["parameters_compared"],
+            "relations_compared": rest["relations_compared"],
             "restored_open_versions": restored, "unchanged_rules": unchanged,
-            "descriptive_changes": descriptive, "errors": errors}
+            "descriptive_changes": descriptive + rest["descriptive_changes"],
+            "schema_changes": rest["schema_changes"], "errors": errors + rest["errors"]}
 
 
 class SourceIndex:
@@ -336,6 +508,10 @@ def main(argv: list[str] | None = None) -> int:
         "new_artifacts": len(new_paths), "old_artifacts": len(old_paths),
         "paired_artifacts": len(paired), "comparisons_completed": len(comparisons),
         "derived_rules_compared": sum(item["derived_rules"] for item in comparisons),
+        "parameters_compared": sum(item["parameters_compared"] for item in comparisons),
+        "relations_compared": sum(item["relations_compared"] for item in comparisons),
+        "schema_changes": sum(len(item["schema_changes"]) for item in comparisons),
+        "descriptive_changes": sum(len(item["descriptive_changes"]) for item in comparisons),
         "restored_open_versions": sum(len(item["restored_open_versions"]) for item in comparisons),
         "bounded_single_rules": sum(item["bounded_single_rules"] for item in comparisons),
         "unchanged_rules": sum(item["unchanged_rules"] for item in comparisons),

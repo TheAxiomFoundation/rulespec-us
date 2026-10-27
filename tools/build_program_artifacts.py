@@ -113,6 +113,51 @@ def corpus_provenance(root: Path) -> dict:
     return {"repo": repo, "sha": sha, "dirty": dirty}
 
 
+def checkout_identity(path: Path) -> dict:
+    """Identify a corpus root by its git checkout; refuse one that has none."""
+    resolved = path.resolve()
+    try:
+        top = Path(git_output(resolved, "rev-parse", "--show-toplevel")).resolve()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError(
+            f"{path}: a --rulespec-root must be a git checkout so its identity can be recorded"
+        ) from error
+    if top != resolved:
+        raise ValueError(f"{path}: a --rulespec-root must be the top of its checkout ({top})")
+    return {"name": resolved.name, **corpus_provenance(resolved)}
+
+
+def corpus_root_identities(root: Path, corpus: dict, rulespec_roots: list[Path] | None) -> list[dict]:
+    """Return the identity of every root the composer and compiler read, in order.
+
+    `corpus` describes --root, where the ProgramSpecs are read. A staged root
+    of the same repository stands in for it only at that identical clean
+    commit; anything else would publish one corpus's rules under another's
+    identity.
+    """
+    if not rulespec_roots:
+        return [{"name": root.name, **corpus}]
+    identities = []
+    for path in rulespec_roots:
+        if path.resolve() == root:
+            identities.append({"name": root.name, **corpus})
+            continue
+        identity = checkout_identity(path)
+        if identity["repo"] == corpus.get("repo") and (
+            identity["sha"] != corpus.get("sha") or identity["dirty"] or corpus.get("dirty")
+        ):
+            raise ValueError(
+                f"{path} is {identity['repo']} at {identity['sha'][:12]} (dirty={identity['dirty']}), "
+                f"but --root is {corpus.get('sha', '')[:12]} (dirty={corpus.get('dirty')}); a staged "
+                "root must be the same clean commit as the checkout its ProgramSpecs come from"
+            )
+        identities.append(identity)
+    if not any(identity.get("repo") == corpus.get("repo") for identity in identities):
+        raise ValueError(f"no --rulespec-root is the {corpus.get('repo')} corpus that --root's "
+                         "ProgramSpecs compose")
+    return identities
+
+
 def composer_version() -> str:
     try:
         from importlib.metadata import version
@@ -263,13 +308,17 @@ def assemble_manifest(
     engine_sha: str,
     toolchain: dict,
     artifact_schema: int,
+    corpus_roots: list | None = None,
 ) -> dict:
     """Assemble the top-level manifest. Pure function so it is directly testable
     with real inputs (the fields below must come from here, not a test's copy)."""
     return {
         "format_version": MANIFEST_FORMAT_VERSION,
-        # What actually composed these artifacts (rulespec-us repo provenance).
+        # The --root checkout: its ProgramSpecs and, through any staged root of
+        # the same repository (held to this exact clean commit), its corpus.
         "corpus": corpus,
+        # Every root the composer and compiler read, in order.
+        "corpus_roots": corpus_roots if corpus_roots is not None else [corpus],
         "composer_version": composer,
         # Kept for backward compatibility (was the only engine identity);
         # `engine.git_sha` is the real, non-stale one consumers should read.
@@ -433,6 +482,11 @@ def main() -> int:
         if missing:
             print(f"engine lacks required capabilities: {sorted(missing)}", file=sys.stderr)
             return 2
+    try:
+        root_identities = corpus_root_identities(root, corpus, args.rulespec_root)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 2
 
     manifest_programs = []
     unexpected_failures: list[str] = []
@@ -487,6 +541,7 @@ def main() -> int:
             compat = build_compat(compiled_version, engine_sha, schema)
             provenance = {
                 "corpus": corpus,
+                "corpus_roots": root_identities,
                 "spec_path": spec_rel,
                 "spec_sha256": sha256_file(root / build.spec_path),
                 "composer_version": composer,
@@ -554,6 +609,7 @@ def main() -> int:
         engine_sha,
         toolchain,
         artifact_schemas.pop() if artifact_schemas else EXPECTED_ARTIFACT_SCHEMA_VERSION,
+        root_identities,
     )
     if not args.check:
         (dist / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

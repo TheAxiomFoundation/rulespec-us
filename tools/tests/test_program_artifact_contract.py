@@ -375,3 +375,121 @@ def test_empty_exception_message_does_not_abort_remaining_programs(tmp_path, mon
     assert records[0]["error"] == "RuntimeError"
     assert records[1]["status"] == "built"
     assert "RuntimeError" in capsys.readouterr().err
+
+
+def _git(path: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(path), "-c", "init.defaultBranch=main", "-c", "core.hooksPath=/dev/null",
+         "-c", "commit.gpgsign=false", "-c", "user.name=fixture", "-c", "user.email=fixture@example.org",
+         *args], check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+
+def _checkout(path: Path) -> str:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "README.md").write_text(f"{path.name}\n")
+    _git(path, "init", "-q")
+    _git(path, "add", "-A")
+    _git(path, "commit", "-qm", "fixture")
+    return _git(path, "rev-parse", "HEAD")
+
+
+def _staged_build(tmp_path, monkeypatch, layout):
+    """Mocked composer/compiler, real git identities for --root and every staged root."""
+    root = tmp_path / "primary" / "rulespec-us"
+    _mock_build(monkeypatch, root)
+    monkeypatch.setattr(bpa, "corpus_provenance", ORIGINAL_CORPUS_PROVENANCE)
+    head = _checkout(root)
+    staged = tmp_path / "staged" / "rulespec-us"
+    loads = []
+    state = sys.modules["axiom_compose"]
+    original_load = state.load_corpus_from_roots
+    state.load_corpus_from_roots = lambda roots: (loads.append(list(roots)), original_load(roots))[1]
+    roots = layout(root, staged, tmp_path)
+    argv = ["build", "--root", str(root)]
+    for path in roots:
+        argv.extend(["--rulespec-root", str(path)])
+    monkeypatch.setattr(sys, "argv", argv)
+    return root, head, loads
+
+
+ORIGINAL_CORPUS_PROVENANCE = bpa.corpus_provenance
+
+
+def test_a_staged_root_at_the_same_clean_commit_records_its_own_identity(tmp_path, monkeypatch):
+    def layout(root, staged, tmp_path):
+        subprocess.run(["git", "clone", "-q", str(root), str(staged)], check=True)
+        nz = tmp_path / "staged" / "rulespec-nz"
+        _checkout(nz)
+        return [staged, nz]
+
+    root, head, loads = _staged_build(tmp_path, monkeypatch, layout)
+    assert bpa.main() == 0
+    staged, nz = tmp_path / "staged" / "rulespec-us", tmp_path / "staged" / "rulespec-nz"
+    assert loads == [[staged.absolute(), nz.absolute()]]
+    expected = [
+        {"name": "rulespec-us", "repo": "rulespec-us", "sha": head, "dirty": False},
+        {"name": "rulespec-nz", "repo": "rulespec-nz", "sha": _git(nz, "rev-parse", "HEAD"), "dirty": False},
+    ]
+    manifest = json.loads((root / "dist/manifest.json").read_text())
+    assert manifest["corpus"] == {"repo": "rulespec-us", "sha": head, "dirty": False}
+    assert manifest["corpus_roots"] == expected
+    for program in manifest["programs"]:
+        provenance = json.loads((root / "dist" / program["artifact"]).read_text())["metadata"]["provenance"]
+        assert provenance["corpus_roots"] == expected
+
+
+def _advance(path: Path):
+    (path / "README.md").write_text("changed\n")
+    _git(path, "commit", "-qam", "later")
+
+
+def _modify(path: Path):
+    (path / "README.md").write_text("uncommitted\n")
+
+
+REFUSALS = {
+    "staged root at another commit": "same clean commit",
+    "staged root dirty": "(dirty=True), but --root",
+    "primary dirty": "(dirty=True); a staged root",
+    "staged root is not a checkout": "must be a git checkout",
+    "staged root is a subdirectory": "must be the top of its checkout",
+    "primary repository absent": "no --rulespec-root is the rulespec-us corpus",
+}
+
+
+@pytest.mark.parametrize("case", sorted(REFUSALS))
+def test_a_staged_root_that_cannot_carry_the_primary_identity_is_refused(tmp_path, monkeypatch, capsys, case):
+    def layout(root, staged, tmp_path):
+        if case == "staged root is not a checkout":
+            staged.mkdir(parents=True)
+            return [staged]
+        if case == "primary repository absent":
+            nz = tmp_path / "staged" / "rulespec-nz"
+            _checkout(nz)
+            return [nz]
+        subprocess.run(["git", "clone", "-q", str(root), str(staged)], check=True)
+        if case == "staged root at another commit":
+            _advance(staged)
+        elif case == "staged root dirty":
+            _modify(staged)
+        elif case == "primary dirty":
+            _modify(root)
+        elif case == "staged root is a subdirectory":
+            return [staged / "programs"]
+        return [staged]
+
+    root, _, loads = _staged_build(tmp_path, monkeypatch, layout)
+    assert bpa.main() == 2
+    assert loads == [], "nothing may be composed under a wrong identity"
+    assert not (root / "dist" / "manifest.json").exists()
+    assert REFUSALS[case] in capsys.readouterr().err
+
+
+def test_the_primary_root_passed_explicitly_keeps_the_primary_identity(tmp_path, monkeypatch):
+    """CI passes --rulespec-root "$GITHUB_WORKSPACE", which is --root itself."""
+    root, head, loads = _staged_build(tmp_path, monkeypatch, lambda root, staged, tmp_path: [root])
+    assert bpa.main() == 0
+    manifest = json.loads((root / "dist/manifest.json").read_text())
+    assert manifest["corpus_roots"] == [{"name": "rulespec-us", **manifest["corpus"]}]
+    assert manifest["corpus"]["sha"] == head

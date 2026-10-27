@@ -301,3 +301,175 @@ def test_cli_reports_source_lookup_failure(tmp_path):
     data = json.loads(report.read_text())
     assert data["summary"]["comparisons_completed"] == 0
     assert data["summary"]["errors"] == 1
+
+
+def _parameter(name="rate", value="0.062", start="1990-01-01", end=None):
+    version = {"effective_from": start, "values": {"0": {"kind": "decimal", "value": value}}}
+    if end is not None:
+        version["effective_to"] = end
+    return {"name": name, "unit": "ratio", "indexed_by": None, "versions": [version],
+            "source": "26 USC 3101(a)", "corpus_citation_path": "us/statute/26/3101/a"}
+
+
+def _relation(name="member_of_household"):
+    return {"name": name, "arity": 2, "slot_entities": ["Person", "Household"]}
+
+
+def _full_artifact():
+    return {
+        "artifact_format_version": 2, "engine_version": "0.2.2",
+        "program": {
+            "module": {"kind": "composition"},
+            "units": [{"name": "USD", "kind": "currency", "minor_units": 2},
+                      {"name": "ratio", "kind": "ratio"}],
+            "relations": [_relation()],
+            "parameters": [_parameter()],
+            "derived": [],
+        },
+        "metadata": {"evaluation_order": [], "input_catalog": [],
+                     "fast_path": {"strategy": "generic_bulk", "compatible": True, "blockers": []}},
+    }
+
+
+def _mutate(artifact, change):
+    program, metadata = artifact["program"], artifact["metadata"]
+    parameter, relation = program["parameters"][0], program["relations"][0]
+    version = parameter["versions"][0]
+    {
+        "parameter value": lambda: version["values"]["0"].update(value="0.99"),
+        "parameter value kind": lambda: version["values"]["0"].update(kind="integer"),
+        "parameter bracket": lambda: version["values"].update({"1": {"kind": "decimal", "value": "0"}}),
+        "parameter start": lambda: version.update(effective_from="1991-01-01"),
+        "parameter end": lambda: version.update(effective_to="2030-12-31"),
+        "parameter version added": lambda: parameter["versions"].append(
+            {"effective_from": "2031-01-01", "values": {"0": {"kind": "decimal", "value": "0.07"}}}),
+        "parameter unit": lambda: parameter.update(unit="USD"),
+        "parameter index": lambda: parameter.update(indexed_by="wages"),
+        "parameter added": lambda: program["parameters"].append(_parameter("other")),
+        "parameter removed": lambda: program["parameters"].clear(),
+        "relation arity": lambda: relation.update(arity=3),
+        "relation slot entity": lambda: relation.update(slot_entities=["Person", "TaxUnit"]),
+        "relation derivation": lambda: relation.update(derivation={
+            "source_relation": "member_of_household", "current_slot": 0, "related_slot": 1,
+            "predicate": {"kind": "literal", "value": {"kind": "bool", "value": True}}}),
+        "relation added": lambda: program["relations"].append(_relation("spouse_of")),
+        "unit changed": lambda: program["units"][0].update(minor_units=0),
+        "unit removed": lambda: program["units"].pop(),
+        "selected year input": lambda: program.update(selected_year_inputs=[{"name": "year"}]),
+        "unknown section": lambda: program.update(extends="us-base"),
+        "format version": lambda: artifact.update(artifact_format_version=999),
+        "unknown envelope field": lambda: artifact.update(defaults={"period": "2026"}),
+        "evaluation order": lambda: metadata.update(evaluation_order=["credit"]),
+        "input catalog": lambda: metadata.update(input_catalog=[
+            {"slot": "wages", "canonical_request_name": "wages", "request_names": ["wages"]}]),
+    }[change]()
+    return artifact
+
+
+EXECUTABLE_CHANGES = [
+    "parameter value", "parameter value kind", "parameter bracket", "parameter start",
+    "parameter end", "parameter version added", "parameter unit", "parameter index",
+    "parameter added", "parameter removed", "relation arity", "relation slot entity",
+    "relation derivation", "relation added", "unit changed", "unit removed",
+    "selected year input", "unknown section", "format version", "unknown envelope field",
+    "evaluation order", "input catalog",
+]
+
+
+@pytest.mark.parametrize("change", EXECUTABLE_CHANGES)
+def test_every_executable_change_outside_derived_rules_is_an_error(change):
+    old = _full_artifact()
+    assert semantics.compare_artifacts(old, deepcopy(old), {})["errors"] == []
+    result = semantics.compare_artifacts(old, _mutate(deepcopy(old), change), {})
+    assert result["errors"], change
+
+
+@pytest.mark.parametrize("change", ["parameter value", "relation slot entity", "unit changed"])
+def test_cli_exits_nonzero_for_parameter_relation_and_unit_changes(tmp_path, monkeypatch, change):
+    """The audit's command-line result, not only its report, must reject these."""
+    monkeypatch.setattr(semantics.SourceIndex, "rules_for_artifact",
+                        lambda self, artifact, composition: {})
+    old_dir, new_dir = tmp_path / "old", tmp_path / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    old = _full_artifact()
+    (old_dir / "program.compiled.json").write_text(json.dumps(old))
+    arguments = ["--old-dir", str(old_dir), "--new-dir", str(new_dir),
+                 "--rulespec-root", str(tmp_path), "--output", str(tmp_path / "report.json")]
+    (new_dir / "program.compiled.json").write_text(json.dumps(old))
+    assert semantics.main(arguments) == 0
+    (new_dir / "program.compiled.json").write_text(json.dumps(_mutate(deepcopy(old), change)))
+    assert semantics.main(arguments) == 1
+    summary = json.loads((tmp_path / "report.json").read_text())["summary"]
+    assert summary["errors"] >= 1 and summary["parameters_compared"] == 1
+
+
+@pytest.mark.parametrize("field,value", [
+    ("source", "26 USC 3101(b)"), ("source_url", "https://example.org/3101"),
+    ("corpus_citation_path", "us/statute/26/3101/b"), ("id", "us:statutes/26/3101#rate"),
+])
+def test_descriptive_parameter_fields_are_reported_not_errors(field, value):
+    old = _full_artifact()
+    new = deepcopy(old)
+    new["program"]["parameters"][0][field] = value
+    result = semantics.compare_artifacts(old, new, {})
+    assert result["errors"] == []
+    assert result["descriptive_changes"] == [{"parameter": "rate", "field": field,
+                                              "old": old["program"]["parameters"][0].get(field),
+                                              "new": value}]
+
+
+def test_permitted_schema_changes_are_listed_explicitly():
+    old = _full_artifact()
+    old["program"]["extends"] = None
+    del old["metadata"]["input_catalog"]
+    old["metadata"]["comparison_build"] = {"engine_sha": "9" * 40}
+    new = _full_artifact()
+    new["engine_version"] = "0.3.0"
+    new["program"]["units"].append({"name": "CHF", "kind": "currency", "minor_units": 2})
+    new["program"]["module"]["interpretations"] = ["one reading"]
+    new["metadata"]["fast_path"] = {"strategy": "generic_bulk", "compatible": False,
+                                    "blockers": ["credit: related"]}
+    new["metadata"]["provenance"] = {"corpus": {"sha": "c" * 40}}
+    result = semantics.compare_artifacts(old, new, {})
+    assert result["errors"] == []
+    assert {(change["path"], change["change"]) for change in result["schema_changes"]} == {
+        ("engine_version", "changed"), ("program.extends", "removed"),
+        ("program.units.CHF", "added"), ("metadata.input_catalog", "added"),
+        ("metadata.comparison_build", "removed"), ("metadata.fast_path", "changed"),
+        ("metadata.provenance", "added"),
+    }
+    assert [change["section"] for change in result["descriptive_changes"]] == ["program.module"]
+
+
+@pytest.mark.parametrize("omitted", ["slot_entities", "derivation", "unit", "indexed_by", "effective_to"])
+def test_serde_defaults_are_not_reported_as_changes(omitted):
+    old = _full_artifact()
+    new = deepcopy(old)
+    if omitted in {"slot_entities", "derivation"}:
+        old["program"]["relations"][0] = {"name": "pairs", "arity": 2}
+        new["program"]["relations"][0] = {"name": "pairs", "arity": 2,
+                                          **{omitted: semantics.RELATION_DEFAULTS[omitted]}}
+    elif omitted == "effective_to":
+        new["program"]["parameters"][0]["versions"][0]["effective_to"] = None
+    else:
+        old["program"]["parameters"][0][omitted] = None
+        del new["program"]["parameters"][0][omitted]
+    assert semantics.compare_artifacts(old, new, {})["errors"] == []
+
+
+@given(old_value=st.decimals(allow_nan=False, allow_infinity=False, places=4),
+       new_value=st.decimals(allow_nan=False, allow_infinity=False, places=4),
+       start=st.dates(min_value=date(1900, 1, 1), max_value=date(2099, 1, 1)),
+       descriptive=st.sampled_from(sorted(semantics.DESCRIPTIVE_PARAMETER_FIELDS)),
+       text=st.text(max_size=12))
+def test_a_parameter_comparison_errs_exactly_when_an_executable_value_differs(
+    old_value, new_value, start, descriptive, text
+):
+    old = _full_artifact()
+    old["program"]["parameters"] = [_parameter(value=str(old_value), start=start.isoformat())]
+    new = deepcopy(old)
+    new["program"]["parameters"][0]["versions"][0]["values"]["0"]["value"] = str(new_value)
+    new["program"]["parameters"][0][descriptive] = text
+    errors = semantics.compare_artifacts(old, new, {})["errors"]
+    assert bool(errors) == (str(old_value) != str(new_value))
