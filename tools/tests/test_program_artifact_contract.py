@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_program_artifacts as bpa  # noqa: E402
 
 
-ENGINE_SHA = "32bc1c124724ebbb2187a196a3b228cfb2a14721"
+ENGINE_SHA = "363c6a6c56f7ad130996b63f7a09cfd4c3d9b021"
 CAPABILITIES = {
     "engine_version": "0.2.2",
     "artifact_format_version": 2,
