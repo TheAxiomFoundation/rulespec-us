@@ -462,8 +462,8 @@ REFUSALS = {
     "primary repository absent": "no --rulespec-root is the rulespec-us corpus",
     # The composer reads modules from disk, not from the index: a same-commit
     # clone carrying uncommitted encoder output compiles different rules.
-    "staged root has untracked modules": "untracked inputs include ['us/statutes/new.yaml']",
-    "staged root has ignored modules": "untracked inputs include ['us/statutes/ignored.yaml']",
+    "staged root has untracked modules": "inputs git status does not show include ['us/statutes/new.yaml']",
+    "staged root has ignored modules": "inputs git status does not show include ['us/statutes/ignored.yaml']",
     "primary has an untracked ProgramSpec": "(dirty=True); a staged root",
 }
 
@@ -567,3 +567,48 @@ def test_untracked_inputs_are_exactly_the_yaml_in_trees_the_composer_reads(tmp_p
     (root / ".git/info/exclude").write_text("".join(f"/{name}\n" for name in ignored))
     assert set(bpa.untracked_inputs(root)) == expected
     assert bpa.corpus_provenance(root)["dirty"] == bool(expected)
+
+
+def _hidden_input_checkout(tmp_path: Path) -> Path:
+    root = tmp_path / "rulespec-us"
+    _module(root / "us/statutes/a.yaml")
+    (root / "docs").mkdir()
+    (root / "docs/notes.md").write_text("notes\n")
+    _checkout(root)
+    return root
+
+
+def test_an_embedded_repository_in_an_input_tree_makes_the_root_dirty(tmp_path):
+    root = _hidden_input_checkout(tmp_path)
+    _module(root / "us/regulations/b.yaml")
+    _checkout(root / "us/regulations")  # git status shows nothing for its modules
+    assert bpa.untracked_inputs(root) == ["us/regulations/"]
+    assert bpa.corpus_provenance(root)["dirty"] is True
+
+
+@pytest.mark.parametrize("flag", ["--assume-unchanged", "--skip-worktree"])
+def test_an_input_edit_hidden_by_an_index_flag_makes_the_root_dirty(tmp_path, flag):
+    root = _hidden_input_checkout(tmp_path)
+    _git(root, "update-index", flag, "us/statutes/a.yaml")
+    (root / "us/statutes/a.yaml").write_text("format: rulespec/v1\nrules: []\nvalue: 0.99\n")
+    assert _git(root, "status", "--porcelain") == ""
+    assert bpa.untracked_inputs(root) == ["us/statutes/a.yaml"]
+    assert bpa.corpus_provenance(root)["dirty"] is True
+
+
+def test_a_sparse_checkout_that_omits_an_input_makes_the_root_dirty(tmp_path):
+    root = _hidden_input_checkout(tmp_path)
+    _git(root, "sparse-checkout", "set", "--no-cone", "/README.md", "/docs/")
+    assert not (root / "us/statutes/a.yaml").exists()
+    assert bpa.untracked_inputs(root) == ["us/statutes/a.yaml"]
+    assert bpa.corpus_provenance(root)["dirty"] is True
+
+
+def test_flags_and_embedded_repositories_outside_the_input_trees_leave_the_root_clean(tmp_path):
+    root = _hidden_input_checkout(tmp_path)
+    _git(root, "update-index", "--skip-worktree", "docs/notes.md")
+    (root / "docs/notes.md").write_text("edited\n")
+    _checkout(root / "dist")
+    _checkout(root / "node_modules/pkg")
+    assert bpa.untracked_inputs(root) == []
+    assert bpa.corpus_provenance(root)["dirty"] is False

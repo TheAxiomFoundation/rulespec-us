@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -35,6 +35,8 @@ def _version(rule, start="2026-01-01", end=None):
             "semantics": rule["semantics"], "expr": deepcopy(rule["expr"])}
 
 
+# Host load can push one example past the 200 ms default.
+@settings(deadline=None)
 @given(start=st.dates(min_value=date(1900, 1, 1), max_value=date(2099, 1, 1)),
        value=st.integers(min_value=-(2**63), max_value=2**63 - 1))
 def test_single_open_version_only_changes_effective_date(start, value):
@@ -46,6 +48,8 @@ def test_single_open_version_only_changes_effective_date(start, value):
     assert result["restored_open_versions"][0]["effective_from"] == start.isoformat()
 
 
+# Host load can push one example past the 200 ms default.
+@settings(deadline=None)
 @given(start=st.dates(min_value=date(1900, 1, 1), max_value=date(2098, 1, 1)),
        days=st.integers(min_value=0, max_value=365))
 def test_bounded_single_version_is_already_preserved_by_old_compiler(start, days):
@@ -527,6 +531,8 @@ def test_serde_defaults_are_not_reported_as_changes(omitted):
     assert semantics.compare_artifacts(old, new, {})["errors"] == []
 
 
+# Host load can push one example past the 200 ms default.
+@settings(deadline=None)
 @given(old_value=st.decimals(allow_nan=False, allow_infinity=False, places=4),
        new_value=st.decimals(allow_nan=False, allow_infinity=False, places=4),
        start=st.dates(min_value=date(1900, 1, 1), max_value=date(2099, 1, 1)),
@@ -542,3 +548,37 @@ def test_a_parameter_comparison_errs_exactly_when_an_executable_value_differs(
     new["program"]["parameters"][0][descriptive] = text
     errors = semantics.compare_artifacts(old, new, {})["errors"]
     assert bool(errors) == (str(old_value) != str(new_value))
+
+
+@pytest.mark.parametrize("pad", ["target", "value", "both"])
+def test_padded_sets_references_are_replayed_as_the_engine_trims_them(tmp_path, pad):
+    """axiom-rules-engine 363c6a6c trims both references (src/rulespec.rs) and
+    then gives the target the value rule's semantics and versions."""
+    source = tmp_path / "us/statutes/example.yaml"
+    source.parent.mkdir(parents=True)
+    source.touch()
+    composition = tmp_path / "assembled.rulespec.yaml"
+    target, value = "us:statutes/example#target", "us:statutes/example#value"
+    if pad in {"target", "both"}:
+        target = f" {target} "
+    if pad in {"value", "both"}:
+        value = f" {value} "
+    declarations = [
+        {"name": "target", "kind": "derived", "versions": [{"effective_from": "2020-01-01", "formula": "7"}]},
+        {"name": "value", "kind": "derived", "versions": [{"effective_from": "2022-01-01", "formula": "7"}]},
+        {"name": "set_target", "kind": "source_relation",
+         "source_relation": {"type": "sets", "target": target, "value": value}},
+    ]
+    index = semantics.SourceIndex([tmp_path])
+    index.documents[source] = {"rules": declarations}
+    index.documents[composition] = {"imports": ["us:statutes/example"], "rules": []}
+    program_rule = {"entity": "Person", "dtype": "integer", "unit": None, "period": "Year",
+                    "semantics": "scalar",
+                    "expr": {"kind": "literal", "value": {"kind": "integer", "value": 7}}}
+    sources = index.rules_for_artifact(
+        {"artifact_format_version": 2, "program": {"derived": [
+            {"id": "us:statutes/example#target", "name": "target", **program_rule},
+            {"id": "us:statutes/example#value", "name": "value", **program_rule}]}},
+        composition)
+    assert sources["target"].rule["name"] == "value"
+    assert sources["target"].rule["versions"][0]["effective_from"] == "2022-01-01"

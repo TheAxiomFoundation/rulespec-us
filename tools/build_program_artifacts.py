@@ -107,20 +107,47 @@ JURISDICTION_DIR = re.compile(r"[a-z]{2}(?:-[a-z0-9-]+)*")
 CONTENT_MARKER_DIRS = ("statutes", "regulations", "policies", "legislation", "sources")
 
 
-def untracked_inputs(root: Path) -> list[str]:
-    """Untracked or ignored YAML that composing or compiling this root could read.
+def is_input_tree(name: str) -> bool:
+    """A top-level directory the composer or compiler reads modules from."""
+    return name == "programs" or name in CONTENT_MARKER_DIRS or bool(JURISDICTION_DIR.fullmatch(name))
 
-    The composer walks directories rather than the index, so such a file
-    changes what compiles while HEAD stays the same. Output and cache
-    directories (dist/, .hub-scratch/, tool caches) sit outside these trees.
+
+def untracked_inputs(root: Path) -> list[str]:
+    """Compiler inputs that this root's HEAD does not record and git status does not show.
+
+    The composer walks directories rather than the index, so each of these
+    changes what compiles while HEAD stays the same:
+    - untracked or ignored YAML in a tree the composer or compiler reads;
+    - tracked YAML in those trees, or at the top level, flagged
+      assume-unchanged (lowercase `ls-files -v` tag) or skip-worktree ("S"),
+      whose edits, or absence under a sparse checkout, git status hides;
+    - an embedded repository inside those trees, listed as its directory.
+    Output and cache directories (dist/, .hub-scratch/, tool caches) sit
+    outside these trees.
     """
-    trees = [entry.name for entry in sorted(root.iterdir()) if entry.is_dir() and (
-        entry.name == "programs" or entry.name in CONTENT_MARKER_DIRS
-        or JURISDICTION_DIR.fullmatch(entry.name))]
+    trees = [entry.name for entry in sorted(root.iterdir())
+             if entry.is_dir() and is_input_tree(entry.name)]
     pathspecs = [*trees, ":(glob)*.yaml", ":(glob)*.yml"]
     # Without --exclude-standard, --others also lists ignored files.
     listed = git_output(root, "ls-files", "--others", "-z", "--", *pathspecs)
-    return sorted(name for name in listed.split("\0") if name.endswith((".yaml", ".yml")))
+    inputs = [name for name in listed.split("\0") if name.endswith((".yaml", ".yml"))]
+    # The whole index, not the trees on disk: a sparse checkout can leave an
+    # entire input tree off disk.
+    flagged = git_output(root, "ls-files", "-v", "-z")
+    inputs += [entry[2:] for entry in flagged.split("\0")
+               if entry and (entry[0].islower() or entry[0] == "S")
+               and entry[2:].endswith((".yaml", ".yml"))
+               and ("/" not in entry[2:] or is_input_tree(entry[2:].split("/", 1)[0]))]
+    # With these combined pathspecs, `ls-files --others` does not list an
+    # embedded repository at all, so look for one on disk.
+    for tree in trees:
+        for directory, names, files in os.walk(root / tree):
+            if ".git" in names or ".git" in files:
+                inputs.append(f"{Path(directory).relative_to(root).as_posix()}/")
+                names[:] = []
+                continue
+            names[:] = [name for name in names if name != ".git"]
+    return sorted(inputs)
 
 
 def corpus_provenance(root: Path) -> dict:
@@ -129,9 +156,10 @@ def corpus_provenance(root: Path) -> dict:
         raise ValueError(f"{root}: --root must be the top of its checkout ({top})")
     sha = git_output(root, "rev-parse", "HEAD")
     # The recorded commit reproduces the build only if nothing the composer or
-    # compiler reads differs from it: no tracked modification, and no
-    # untracked or ignored module or ProgramSpec. Other untracked files, such
-    # as a previous dist/, do not affect what compiles.
+    # compiler reads differs from it: no tracked modification, no untracked or
+    # ignored module or ProgramSpec, no input hidden by an index flag, and no
+    # embedded repository. Other untracked files, such as a previous dist/, do
+    # not affect what compiles.
     dirty = bool(git_output(root, "status", "--porcelain", "--untracked-files=no")
                  or untracked_inputs(root))
     origin = ""
@@ -181,7 +209,7 @@ def corpus_root_identities(root: Path, corpus: dict, rulespec_roots: list[Path] 
                 f"{path} is {identity['repo']} at {identity['sha'][:12]} (dirty={identity['dirty']}), "
                 f"but --root is {corpus.get('sha', '')[:12]} (dirty={corpus.get('dirty')}); a staged "
                 "root must be the same clean commit as the checkout its ProgramSpecs come from"
-                + (f"; untracked inputs include {untracked[:3]}" if untracked else "")
+                + (f"; inputs git status does not show include {untracked[:3]}" if untracked else "")
             )
         identities.append(identity)
     if not any(identity.get("repo") == corpus.get("repo") for identity in identities):

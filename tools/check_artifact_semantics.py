@@ -485,7 +485,10 @@ class SourceIndex:
         for path, document in self._ordered_documents(composition):
             for declaration in document.get("rules", []):
                 relation = declaration.get("source_relation") or {}
-                target, value = relation.get("target"), relation.get("value")
+                # The engine trims both references before resolving them
+                # (axiom-rules-engine 363c6a6c src/rulespec.rs), so compare trimmed.
+                target, value = (item.strip() if isinstance(item, str) else item
+                                 for item in (relation.get("target"), relation.get("value")))
                 if relation.get("type") != "sets" or target == value:
                     continue
                 if target in identities and value in identities:
