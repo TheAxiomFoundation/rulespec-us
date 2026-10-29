@@ -25,6 +25,10 @@ Invariants, each for every input Hypothesis draws:
    `meets_standard` fails, and net income over the household always meets it.
 8. Totality: `check_choices` returns a list of strings, and never raises, on
    any JSON-shaped payload.
+9. Excerpts, as the register checks them (sc.check_excerpts): an entry whose
+   excerpt has no backslash draws no escape issue, and one with a backslash
+   and n inserted anywhere in a `texts` or `pending_texts` excerpt always
+   does, naming the field.
 """
 
 from __future__ import annotations
@@ -310,3 +314,25 @@ def test_every_entry_field_shape_combination_is_total():
             value[key] = shape
             issues = hc.check_choices({"version": 1, "entries": [value, copy.deepcopy(value)]}, ctx)
             assert isinstance(issues, list) and all(isinstance(issue, str) for issue in issues), (key, shape)
+
+
+@PROPERTY
+@given(
+    excerpt=st.text(st.characters(exclude_characters="\\", exclude_categories=("Cs",)), max_size=40).filter(str.strip),
+    field=st.sampled_from(["texts", "pending_texts"]),
+    data=st.data(),
+)
+def test_escaped_excerpts_are_reported_exactly_when_escaped(excerpt, field, data):
+    pending = {"citation": "Form 1", "kind": "form", "url": "https://x.org/f", "excerpt": "e",
+               "snapshot": {"repo": "PolicyEngine/policyengine-us", "commit": "a" * 40, "path": "x.html", "sha256": "b" * 64}}
+    value = base_entry({"kind": "boolean", "per": "tax-unit"}, False, True)
+    value["pending_texts"] = [pending]
+    value[field][0]["excerpt"] = excerpt
+    with tempfile.TemporaryDirectory() as directory:
+        ctx = _repo(directory)
+        label = f"Entry `a-choice` (entries[0]).{field}[0].excerpt holds "
+        assert not any(issue.startswith(label) for issue in hc.check_choices({"version": 1, "entries": [value]}, ctx))
+        cut = data.draw(st.integers(0, len(excerpt)))
+        value[field][0]["excerpt"] = excerpt[:cut] + "\\n" + excerpt[cut:]
+        issues = hc.check_choices({"version": 1, "entries": [value]}, ctx)
+        assert any(issue.startswith(label + "`\\n`") for issue in issues), issues
