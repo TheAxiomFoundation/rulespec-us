@@ -5,8 +5,9 @@ early and answers a year the law never reached. Reverting the section 63(c)
 amounts to 2018 left every companion case green while section 6012 returned
 the 2025 threshold for 2018 filers. These tests fail on that reversion.
 
-Each entry names the act that fixes the date. A rule that gains coverage for
-another period needs a new version, and this table needs updating with it.
+Each entry names the act that fixes the date, or says why coverage stops short
+of the act. A rule that gains coverage for another period needs a new version,
+and this table needs updating with it.
 """
 
 from __future__ import annotations
@@ -22,6 +23,9 @@ PL_108_311 = ("2005-01-01", None)  # Pub. L. 108-311 s. 207(26), s. 208
 PL_99_514 = ("1987-01-01", None)  # Pub. L. 99-514 s. 102(a), s. 151(a)
 PL_119_21 = ("2025-01-01", None)  # Pub. L. 119-21 s. 70102(b), (c)
 SECTION_6012_F = ("2018-01-01", "2025-12-31")  # 26 USC 6012(f) lead-in
+# Section 6012(d) has no sunset. The disclosure formula reads the subsection (f)
+# rule, so its coverage stops with that rule until section 6012(a)(1) lands.
+SECTION_6012_D_COVERAGE = SECTION_6012_F
 
 ENACTED_INTERVALS = {
     "us/statutes/26/7703.yaml": {
@@ -49,7 +53,7 @@ ENACTED_INTERVALS = {
         "unmarried_individual_exception_to_return_requirement_under_2018_2025_rule": SECTION_6012_F,
         "joint_return_exception_to_return_requirement_under_2018_2025_rule": SECTION_6012_F,
         "individual_income_tax_return_required_under_2018_2025_rule": SECTION_6012_F,
-        "tax_exempt_interest_required_to_be_shown_on_return": SECTION_6012_F,
+        "tax_exempt_interest_required_to_be_shown_on_return": SECTION_6012_D_COVERAGE,
     },
 }
 
