@@ -23,8 +23,23 @@ axiom-rules-engine at the pin in `.axiom/workflow-toolchain.toml`:
   word in a string or comment is not a reference, nor is a called function.
   Only `parameter` and `derived` rules carry versions the engine enforces at
   run time; relation rules do not.
+* Namespaces. `kind` does not decide what a name binds to. A rule with `values`
+  in any version is a parameter table, of either kind, and its versions without
+  `values` do not exist at run time. Otherwise a rule with an `entity`, or with
+  a version that is not a lone literal, is derived; the rest are parameters.
+  Parameters of one name merge, and a table of that name removes the others.
+* Binding. A name in a scalar position binds to a parameter before a derived
+  rule, and one in a judgment position binds only to a derived rule. Telling
+  the positions apart takes a parser, so a name defined both ways reads both,
+  and a parameter read in a judgment position, which lowers to an input, still
+  counts. This can only add edges, and `differential` reports each one.
 * Dates. `from` and `to` are aliases of `effective_from` and `effective_to`, and
   a rule with no `versions` may state one version at the top level.
+
+A gap here is one a module reaches through its own imports, compiled as its own
+root. A root flattens every module it imports, so under a composition a rule can
+also bind a name its own module never imports. Those bindings are not import
+edges, and this check does not gate them.
 
 The comparison is per version, not per rule. When a later version of a rule
 adds a reference to an import that starts with it, no date reaches a gap; that
@@ -33,9 +48,13 @@ records the earliest such rule version, so its gap is the widest one.
 
 `differential` checks the static model against the engine, because a static
 reimplementation drifts from the engine it describes. It compiles each module,
-stored compositions through their own surface, reads the references out of the
-lowered program, and requires them to equal the static ones. It compiles a
-scratch copy of the tree with citation metadata removed: that metadata decides
+stored compositions through their own surface, reads every name the lowered
+program binds in that module's own rules, and requires those bindings to equal
+the static ones by name, namespace and start date. The engine reattaches ids by
+name, so it cannot say which module a colliding name came from; the static model
+alone decides whether a binding crosses an import. The run must also cover the
+tree: every module needs a result, and every edge a compiled module. It compiles
+a scratch copy of the tree with citation metadata removed: that metadata decides
 nothing here, and retired forms of it would otherwise stop the engine from
 loading most of the references this check exists to compare.
 
@@ -76,7 +95,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
@@ -108,6 +127,14 @@ CITATION_KEYS = frozenset({"corpus_citation_path", "corpus_citation_paths", "met
 # RuleKind::Derived). A derived relation's predicate takes one formula version
 # whose date the engine does not read.
 VERSIONED_KINDS = frozenset({"parameter", "derived"})
+
+# The two namespaces a lowered formula reads, whatever a rule's `kind` says.
+PARAMETER = "parameter"
+DERIVED = "derived"
+
+# `differential` refuses a run that compiled less of the tree than this. The
+# pinned engine compiled 4,864 of 4,879 modules when this was set.
+MINIMUM_COMPILED_SHARE = 0.99
 
 # Keywords, and the two names the engine lowers to period bounds. The lexer
 # turns `true` and friends into keyword tokens, so they never name a rule.
@@ -150,6 +177,16 @@ TOKEN = re.compile(
     re.VERBOSE | re.DOTALL,
 )
 
+# formula.rs is_literal_expr over the lexer's output: one number, string or
+# boolean, and nothing but trivia around it. A leading `-` is an operator.
+_TRIVIA = r'''(?:\s+|\#[^\n]*|""".*?(?:"""|\Z))*'''
+LITERAL = re.compile(
+    _TRIVIA
+    + r'''(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\d[\d_]*(?:\.\d[\d_]*)?|true|True|false|False)'''
+    + _TRIVIA,
+    re.DOTALL,
+)
+
 
 @dataclass(frozen=True)
 class Version:
@@ -161,6 +198,8 @@ class Version:
 class Rule:
     name: str
     versions: tuple[Version, ...]
+    namespace: str = DERIVED
+    table: bool = False
 
     @property
     def start(self) -> date:
@@ -175,12 +214,13 @@ class Module:
 
 @dataclass(frozen=True, order=True)
 class Reference:
-    """One rule version reading a rule that another module defines."""
+    """One rule version reading a name, in the namespace that name binds to."""
 
     rule: str
     version_start: date
     target: str
     target_start: date
+    namespace: str = DERIVED
 
 
 @dataclass(frozen=True, order=True)
@@ -222,9 +262,7 @@ def _as_date(value: Any, where: str) -> date:
         raise ValueError(f"{where}: {value!r} is not a date") from error
 
 
-def _rule_versions(rule: Mapping[str, Any], where: str) -> tuple[Version, ...]:
-    """RuleDefinition::effective_versions, keeping the versions that carry a date."""
-    raw = rule.get("versions") or [rule]
+def _dated(raw: Iterable[Mapping[str, Any]], where: str) -> tuple[Version, ...]:
     versions = []
     for version in raw:
         start = version.get("effective_from", version.get("from"))
@@ -237,21 +275,52 @@ def _rule_versions(rule: Mapping[str, Any], where: str) -> tuple[Version, ...]:
     return tuple(versions)
 
 
+def _is_literal(version: Mapping[str, Any]) -> bool:
+    """A YAML number or boolean reaches the formula layer as its literal text. An
+    unquoted date is the one other scalar here, and the engine lexes it as a date."""
+    formula = version.get("formula")
+    if isinstance(formula, str):
+        return LITERAL.fullmatch(formula) is not None
+    return not isinstance(formula, date)
+
+
+def parse_rule(rule: Mapping[str, Any], where: str) -> Rule | None:
+    """A rule as the engine lowers it, or None when it holds no version to compare.
+
+    This follows to_program_spec_with_options, is_parameter_table and
+    to_indexed_parameter_spec in rulespec.rs and lower_module in formula.rs. A
+    version with no date, or a rule with no version, is one the engine refuses.
+    """
+    if rule.get("kind") not in VERSIONED_KINDS:
+        return None
+    name = str(rule["name"])
+    declared = rule.get("versions") or []
+    tabled = [version for version in declared if version.get("values")]
+    if tabled:
+        return Rule(name, _dated(tabled, where), PARAMETER, table=True)
+    raw = declared or [rule]
+    versions = _dated(raw, where)
+    if not versions:
+        return None
+    if rule.get("entity") or not all(_is_literal(version) for version in raw):
+        return Rule(name, versions, DERIVED)
+    return Rule(name, versions, PARAMETER)
+
+
 def parse_module(text: str, where: str = "<module>") -> Module:
     """The parts of a module that decide its edges; a module with no date to read
     is one the engine refuses, which the engine-root-load gate reports."""
     document = yaml.load(text, Loader=SafeLoader)
     if not isinstance(document, Mapping):
         raise ValueError(f"{where}: not a RuleSpec mapping")
-    rules = []
-    for rule in document.get("rules") or []:
-        if rule.get("kind") not in VERSIONED_KINDS:
-            continue
-        name = str(rule["name"])
-        versions = _rule_versions(rule, f"{where} rule {name}")
-        if versions:
-            rules.append(Rule(name, versions))
-    return Module(tuple(str(i) for i in document.get("imports") or ()), tuple(rules))
+    parsed = (
+        parse_rule(rule, f"{where} rule {rule.get('name')}")
+        for rule in document.get("rules") or []
+    )
+    return Module(
+        tuple(str(i) for i in document.get("imports") or ()),
+        tuple(rule for rule in parsed if rule is not None),
+    )
 
 
 def load_modules(root: Path) -> dict[str, Module]:
@@ -282,13 +351,31 @@ def import_closure(target: str, modules: Mapping[str, Module]) -> frozenset[str]
     return frozenset(seen)
 
 
-def import_references(modules: Mapping[str, Module]) -> set[Reference]:
-    """Every (rule version, imported rule) pair, resolved as the engine resolves it.
+def _binding_groups(
+    visible: Iterable[tuple[str, Rule]],
+) -> Iterator[tuple[str, list[tuple[str, Rule]]]]:
+    """The definitions one formula name can read, one group per namespace.
 
-    A name the module defines itself is a local reference. Otherwise a name two
-    imported modules define is one the engine merges (parameters, when their
-    declarations agree) or refuses (derived rules), so the earliest definition
-    is the one in force first.
+    Parameters of one name merge into one (compile.rs
+    normalize_parameter_duplicates), and a table of that name removes the
+    scalar ones (`program.parameters.retain`). A second derived definition is a
+    compile error, so the derived group holds one rule in any module that loads.
+    """
+    candidates = list(visible)
+    parameters = [item for item in candidates if item[1].namespace == PARAMETER]
+    derived = [item for item in candidates if item[1].namespace == DERIVED]
+    tables = [item for item in parameters if item[1].table]
+    if parameters:
+        yield PARAMETER, tables or parameters
+    if derived:
+        yield DERIVED, derived
+
+
+def all_references(modules: Mapping[str, Module]) -> set[Reference]:
+    """Every (rule version, name) binding, local ones included, for each module
+    compiled as its own root. Only derived rules read names: a parameter's
+    versions are literals or values. A binding that any local definition feeds
+    counts as local, and its target names this module.
     """
     definitions: dict[str, list[tuple[str, Rule]]] = defaultdict(list)
     for origin, module in modules.items():
@@ -296,26 +383,39 @@ def import_references(modules: Mapping[str, Module]) -> set[Reference]:
             definitions[rule.name].append((origin, rule))
     references: set[Reference] = set()
     for origin, module in modules.items():
-        closure = import_closure(origin, modules)
-        if not closure:
-            continue
-        local = {rule.name for rule in module.rules}
+        scope = import_closure(origin, modules) | {origin}
         for rule in module.rules:
+            if rule.namespace != DERIVED:
+                continue
             for version in rule.versions:
-                for name in formula_references(version.formula) - local:
-                    visible = [
-                        (candidate.start, f"{owner}#{candidate.name}")
-                        for owner, candidate in definitions.get(name, ())
-                        if owner in closure
-                    ]
-                    if visible:
-                        target_start, target = min(visible)
+                for name in formula_references(version.formula):
+                    visible = (item for item in definitions.get(name, ()) if item[0] in scope)
+                    for namespace, group in _binding_groups(visible):
+                        target_start, target = min(
+                            (candidate.start, f"{owner}#{name}") for owner, candidate in group
+                        )
+                        if any(owner == origin for owner, _ in group):
+                            target = f"{origin}#{name}"
                         references.add(
                             Reference(
-                                f"{origin}#{rule.name}", version.start, target, target_start
+                                f"{origin}#{rule.name}",
+                                version.start,
+                                target,
+                                target_start,
+                                namespace,
                             )
                         )
     return references
+
+
+def import_references(modules: Mapping[str, Module]) -> set[Reference]:
+    """The bindings that cross an import, which are the ones this check owns. A
+    local one belongs to the encoder's temporal-dependency-coverage validator."""
+    return {
+        item
+        for item in all_references(modules)
+        if item.rule.split("#", 1)[0] != item.target.split("#", 1)[0]
+    }
 
 
 def late_start_edges(references: Iterable[Reference]) -> set[Edge]:
@@ -487,41 +587,60 @@ HARNESS_SOURCE = r"""//! Written by rulespec-us tools/late_start_imports.py; see
 //! usage: rulespec_import_references <absolute rulespec-<cc> root> <module list> <composed scratch dir>
 //!
 //! The module list holds one root-relative module path per line. Every module
-//! yields one JSON line on stdout: its compile error, or each reference its own
-//! rule versions make to a rule the lowered program says another module defined.
-//! A module the engine refuses on the atomic surface because it itself declares
-//! `module.kind` is compiled from a copy under the scratch directory instead
-//! (composed programs must sit outside every root); its own rules carry no id.
+//! yields one JSON line on stdout: its compile error, or each name its own rule
+//! versions read, with the namespace the lowered program bound it to and the
+//! earliest version of what that namespace holds. A module the engine refuses on
+//! the atomic surface because it itself declares `module.kind` is compiled from
+//! a copy under the scratch directory instead (composed programs must sit
+//! outside every root); its own rules carry no id.
 //!
-//! The engine reattaches ids by name, so when a local parameter table and an
-//! imported derived rule share a name, the derived rule carries the local id
-//! and its origin cannot be read. Such rules are named under `shadowed`, not
-//! attributed to this module.
+//! The engine reattaches ids by name, so when a parameter and a derived rule
+//! share a name both carry the same id, and the id cannot say which module either
+//! came from. `collisions` lists those names for the caller to weigh.
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::PathBuf;
 
 use axiom_rules_engine::compile::{CompileError, CompiledProgramArtifact};
 use axiom_rules_engine::rulespec::{CanonicalRuleSpecRoots, RuleSpecError};
+use chrono::NaiveDate;
 use serde_json::{Value, json};
 
-/// Every rule a lowered expression reads, by its tagged spec shape.
-fn collect(value: &Value, names: &mut BTreeSet<String>) {
+/// Every name a lowered expression reads, by namespace, from its tagged spec.
+fn collect(value: &Value, read: &mut BTreeSet<(&'static str, String)>) {
     match value {
         Value::Object(map) => {
-            let key = match map.get("kind").and_then(Value::as_str) {
-                Some("derived") => "name",
-                Some("parameter_lookup") => "parameter",
-                _ => "",
+            let tagged = match map.get("kind").and_then(Value::as_str) {
+                Some("derived") => Some(("derived", "name")),
+                Some("parameter_lookup") => Some(("parameter", "parameter")),
+                Some("input") => Some(("input", "name")),
+                _ => None,
             };
-            if let Some(name) = map.get(key).and_then(Value::as_str) {
-                names.insert(name.to_string());
+            if let Some((namespace, key)) = tagged
+                && let Some(name) = map.get(key).and_then(Value::as_str)
+            {
+                read.insert((namespace, name.to_string()));
             }
-            map.values().for_each(|child| collect(child, names));
+            map.values().for_each(|child| collect(child, read));
         }
-        Value::Array(items) => items.iter().for_each(|child| collect(child, names)),
+        Value::Array(items) => items.iter().for_each(|child| collect(child, read)),
         _ => {}
     }
+}
+
+fn earliest<'a>(
+    starts: impl Iterator<Item = (&'a str, Option<NaiveDate>)>,
+) -> BTreeMap<&'a str, NaiveDate> {
+    let mut found: BTreeMap<&str, NaiveDate> = BTreeMap::new();
+    for (name, start) in starts {
+        if let Some(start) = start {
+            found
+                .entry(name)
+                .and_modify(|known| *known = (*known).min(start))
+                .or_insert(start);
+        }
+    }
+    found
 }
 
 fn main() {
@@ -572,42 +691,44 @@ fn main() {
             }
         };
         let program = &artifact.program;
-        let parameters = program.parameters.iter().map(|parameter| {
+        let parameters = earliest(program.parameters.iter().map(|parameter| {
             let start = parameter.versions.iter().map(|v| v.effective_from).min();
-            (parameter.name.as_str(), (parameter.id.as_deref(), start))
-        });
-        let derived = program.derived.iter().map(|rule| {
+            (parameter.name.as_str(), start)
+        }));
+        let derived = earliest(program.derived.iter().map(|rule| {
             let start = rule.versions.iter().map(|v| v.effective_from).min();
-            (rule.name.as_str(), (rule.id.as_deref(), start))
-        });
-        let catalog: BTreeMap<_, _> = parameters.chain(derived).collect();
-        let is_own = |id: Option<&str>| id.is_none_or(|id| id.starts_with(&own));
+            (rule.name.as_str(), start)
+        }));
+        let collisions: Vec<&str> = parameters
+            .keys()
+            .filter(|name| derived.contains_key(*name))
+            .copied()
+            .collect();
         let mut references = Vec::new();
-        let mut shadowed = Vec::new();
         for rule in &program.derived {
-            if !is_own(rule.id.as_deref()) {
-                continue;
-            }
-            if program.parameters.iter().any(|parameter| parameter.name == rule.name) {
-                shadowed.push(rule.name.clone());
+            if !rule.id.as_deref().is_none_or(|id| id.starts_with(&own)) {
                 continue;
             }
             for version in &rule.versions {
                 let semantics = serde_json::to_value(&version.semantics).expect("semantics as json");
-                let mut names = BTreeSet::new();
-                collect(&semantics, &mut names);
-                for name in names {
-                    let Some((id, Some(start))) = catalog.get(name.as_str()) else {
-                        continue;
+                let mut read = BTreeSet::new();
+                collect(&semantics, &mut read);
+                for (namespace, name) in read {
+                    let start = match namespace {
+                        "parameter" => parameters.get(name.as_str()).map(|start| start.to_string()),
+                        "derived" => derived.get(name.as_str()).map(|start| start.to_string()),
+                        _ => None,
                     };
-                    if !is_own(*id) {
-                        references.push(json!({
-                            "rule": format!("{own}{}", rule.name),
-                            "version_start": version.effective_from.to_string(),
-                            "target": id,
-                            "target_start": start.to_string(),
-                        }));
+                    if namespace != "input" && start.is_none() {
+                        panic!("{module}: {} reads {namespace} {name}, which has no version", rule.name);
                     }
+                    references.push(json!({
+                        "rule": format!("{own}{}", rule.name),
+                        "version_start": version.effective_from.to_string(),
+                        "name": name,
+                        "namespace": namespace,
+                        "target_start": start,
+                    }));
                 }
             }
         }
@@ -615,7 +736,7 @@ fn main() {
             "module": module,
             "ok": true,
             "references": references,
-            "shadowed": shadowed,
+            "collisions": collisions,
         });
         writeln!(out, "{line}").expect("write result line");
     }
@@ -624,14 +745,31 @@ fn main() {
 """
 
 
-def parse_engine_references(
-    lines: Iterable[str],
-) -> tuple[set[str], set[Reference], list[str]]:
-    """The modules the engine compiled, the references it resolved in them, and
-    the rule ids it could not attribute."""
-    compiled: set[str] = set()
-    references: set[Reference] = set()
-    shadowed: list[str] = []
+@dataclass(frozen=True, order=True)
+class Binding:
+    """One name a rule version reads: the key both models answer for."""
+
+    rule: str
+    version_start: date
+    name: str
+    namespace: str
+    target_start: date | None = None
+
+
+@dataclass
+class EngineRun:
+    """What the harness reported. `collisions` holds `<module>#<name>` ids."""
+
+    results: set[str]
+    compiled: set[str]
+    refused: dict[str, str]
+    bindings: set[Binding]
+    inputs: set[Binding]
+    collisions: set[str]
+
+
+def parse_engine_references(lines: Iterable[str]) -> EngineRun:
+    run = EngineRun(set(), set(), {}, set(), set(), set())
     for number, raw in enumerate(lines, start=1):
         if not raw.strip():
             continue
@@ -640,30 +778,105 @@ def parse_engine_references(
             raise SystemExit(f"engine refused the checkout as a root: {record['root_error']}")
         if not isinstance(record.get("ok"), bool) or "module" not in record:
             raise SystemExit(f"malformed result on line {number}: {raw}")
-        if not record["ok"]:
-            continue
         origin = canonical_target(record["module"])
-        compiled.add(origin)
-        shadowed += [f"{origin}#{name}" for name in record["shadowed"]]
-        references.update(
-            Reference(
+        if origin in run.results:
+            raise SystemExit(f"second result for {record['module']} on line {number}")
+        run.results.add(origin)
+        if not record["ok"]:
+            run.refused[origin] = record.get("error", "")
+            continue
+        run.compiled.add(origin)
+        run.collisions.update(f"{origin}#{name}" for name in record["collisions"])
+        for item in record["references"]:
+            start = item["target_start"]
+            binding = Binding(
                 item["rule"],
                 date.fromisoformat(item["version_start"]),
-                item["target"],
-                date.fromisoformat(item["target_start"]),
+                item["name"],
+                item["namespace"],
+                None if start is None else date.fromisoformat(start),
             )
-            for item in record["references"]
+            (run.inputs if item["namespace"] == "input" else run.bindings).add(binding)
+    return run
+
+
+def coverage_failures(
+    run: EngineRun, tracked: Iterable[str], edges: Iterable[Edge]
+) -> list[str]:
+    """Why this run cannot vouch for the static model, however well it agreed."""
+    expected = {canonical_target(path) for path in tracked}
+    failures = []
+    if missing := expected - run.results:
+        failures.append(f"no result for {len(missing)} module(s): {sorted(missing)[:10]}")
+    if unexpected := run.results - expected:
+        failures.append(f"results for untracked module(s): {sorted(unexpected)[:10]}")
+    if len(run.compiled) < MINIMUM_COMPILED_SHARE * len(expected):
+        failures.append(
+            f"the engine compiled {len(run.compiled)} of {len(expected)} modules, below"
+            f" the {MINIMUM_COMPILED_SHARE:.0%} floor"
         )
-    return compiled, references, shadowed
+    uncovered = sorted(
+        edge.rule for edge in edges if edge.rule.split("#", 1)[0] not in run.compiled
+    )
+    if uncovered:
+        failures.append(f"{len(uncovered)} edge(s) in modules the engine refused: {uncovered[:10]}")
+    return failures
+
+
+def _binding(reference: Reference) -> Binding:
+    return Binding(
+        reference.rule,
+        reference.version_start,
+        reference.target.split("#", 1)[1],
+        reference.namespace,
+        reference.target_start,
+    )
+
+
+@dataclass
+class Differences:
+    only_engine: set[Binding]
+    only_static: set[Binding]
+    # Static bindings the model reads by design and the lowered program does
+    # not: both sides of a collision, and a parameter read in a judgment
+    # position, which lowers to an input. Each can only add an edge.
+    over_reported: set[Binding]
 
 
 def reference_differences(
-    compiled: set[str], engine: set[Reference], static: set[Reference]
-) -> tuple[set[Reference], set[Reference]]:
-    """References only the engine resolved, and only this tool resolved, over the
-    modules the engine compiled. Modules it refuses have no engine side."""
-    in_scope = {item for item in static if item.rule.split("#", 1)[0] in compiled}
-    return engine - in_scope, in_scope - engine
+    run: EngineRun, static: set[Reference], modules: Mapping[str, Module]
+) -> Differences:
+    """Compare the two models over the modules the engine compiled.
+
+    A rule's id can come from a colliding name, so the harness may report an
+    imported derived rule as a module's own. Its bindings say nothing about that
+    module, and they drop out here.
+    """
+
+    def declared(rule: str) -> bool:
+        origin, name = rule.split("#", 1)
+        return any(
+            item.name == name and item.namespace == DERIVED for item in modules[origin].rules
+        )
+
+    in_scope = {
+        _binding(item) for item in static if item.rule.split("#", 1)[0] in run.compiled
+    }
+    engine = {
+        item for item in run.bindings if item.rule not in run.collisions or declared(item.rule)
+    }
+    inputs = {(item.rule, item.version_start, item.name) for item in run.inputs}
+    only_static = in_scope - engine
+    over_reported = {
+        item
+        for item in only_static
+        if f"{item.rule.split('#', 1)[0]}#{item.name}" in run.collisions
+        or (
+            item.namespace == PARAMETER
+            and (item.rule, item.version_start, item.name) in inputs
+        )
+    }
+    return Differences(engine - in_scope, only_static - over_reported, over_reported)
 
 
 def without_citation_metadata(document: Any) -> Any:
@@ -726,24 +939,40 @@ def differential(engine_src: Path, root: Path, output: Path) -> int:
         sys.stdout.write(completed.stdout)
         raise SystemExit(f"harness exited {completed.returncode}")
     output.write_text(completed.stdout, encoding="utf-8")
-    compiled, engine, shadowed = parse_engine_references(completed.stdout.splitlines())
-    only_engine, only_static = reference_differences(
-        compiled, engine, import_references(load_modules(root))
-    )
+    run = parse_engine_references(completed.stdout.splitlines())
+    static_modules = load_modules(root)
+    static = all_references(static_modules)
+    failures = coverage_failures(run, modules, late_start_edges(import_references(static_modules)))
+    differences = reference_differences(run, static, static_modules)
     print(
-        f"The engine compiled {len(compiled)} of {len(modules)} modules without citation "
-        f"metadata and resolved {len(engine)} cross-module references in them."
+        f"The engine compiled {len(run.compiled)} of {len(modules)} modules without citation "
+        f"metadata and bound {len(run.bindings)} names in their own rules."
     )
-    if shadowed:
-        print(f"{len(shadowed)} rule(s) left out, shadowed by a parameter's name: {shadowed}")
-    for label, items in (("engine", only_engine), ("static model", only_static)):
+    for module, error in sorted(run.refused.items())[:20]:
+        reason = error.splitlines()[0].rsplit("`: ", 1)[-1] if error else ""
+        print(f"  refused {module}: {reason}")
+    if run.collisions:
+        print(f"{len(run.collisions)} name(s) bound in both namespaces: {sorted(run.collisions)}")
+    if differences.over_reported:
+        print(f"{len(differences.over_reported)} static binding(s) over-reported by design:")
+        for item in sorted(differences.over_reported)[:20]:
+            print(f"  {item.rule} {item.version_start} -> {item.namespace} {item.name}")
+    for label, items in (
+        ("engine", differences.only_engine),
+        ("static model", differences.only_static),
+    ):
         if items:
-            print(f"\n{len(items)} reference(s) only the {label} found:")
-            for item in sorted(items)[:50]:
-                print(f"  {item.rule} {item.version_start} -> {item.target} {item.target_start}")
-    if only_engine or only_static:
+            print(f"\n{len(items)} binding(s) only the {label} found:")
+            for item in sorted(items, key=str)[:50]:
+                print(
+                    f"  {item.rule} {item.version_start} -> {item.namespace} {item.name}"
+                    f" {item.target_start}"
+                )
+    for failure in failures:
+        print(f"\nThis run does not cover the tree: {failure}")
+    if differences.only_engine or differences.only_static or failures:
         return 1
-    print("The static references equal the engine's.")
+    print("The static bindings equal the engine's.")
     return 0
 
 

@@ -3,12 +3,17 @@
 Invariants, for every input:
 
 1. Run-time meaning: a (rule, target) pair is an edge iff some date reaches a
-   gap. A reference simulation below follows the engine directly: it flattens
-   imports, picks the version a date selects, and looks for a referenced rule
-   with no version yet. The tool must agree with it exactly, in both
-   directions, and record the first gap date as the edge's version start.
+   gap. A reference simulation below follows the engine directly over generated
+   YAML: it flattens imports, sorts each rule into a namespace, picks the
+   version a date selects, and looks for what that version binds with no
+   version yet. Its input is acyclic, because the engine refuses a cycle. It
+   covers tables, value-less versions and names defined in both namespaces,
+   which it reads in both, as the tool does. The tool must agree with it
+   exactly, in both directions, and record the first gap date as the edge's
+   version start.
 2. Scope: a `#fragment` never changes the result, a name outside the import
-   closure is never a reference, and a name the module defines is never one.
+   closure is never a reference, and a binding a local definition feeds is
+   never one.
 3. Edges are a subset of the rule-level reading of "starts late": per-version
    comparison only removes pairs no date can reach.
 4. Monotonicity: moving a target's start later never removes an edge, and
@@ -37,9 +42,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+import yaml
 
 hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import HealthCheck, assume, given, settings, target, strategies as st  # noqa: E402
+from hypothesis import HealthCheck, assume, find, given, settings, target, strategies as st  # noqa: E402
 
 TOOL_PATH = Path(__file__).resolve().parent.parent / "tools" / "late_start_imports.py"
 _spec = importlib.util.spec_from_file_location("late_start_imports", TOOL_PATH)
@@ -54,30 +60,79 @@ NAMES = ("p", "q", "r", "s")
 STARTS = tuple(date(year, 1, 1) for year in (2000, 2010, 2020, 2030))
 
 # A formula is generated from the names it reads, so the reference simulation
-# never depends on the lexer it is checking. The sizes keep graphs dense: most
-# draws hold an edge, so the properties below are not checked on empty cases.
+# never depends on the lexer it is checking. The sizes keep graphs dense: about
+# a third of draws hold an edge, so the properties below see real cases.
+#
+# Every rule below names a shape, which fixes what the YAML says. `kind` differs
+# from the namespace on purpose, because the engine ignores it here:
+#   derived   kind derived, an entity, reads names: derived namespace
+#   computed  kind parameter, no entity, reads names: derived namespace
+#   constant  kind parameter, an entity, a literal: derived namespace
+#   scalar    kind parameter, no entity, a literal: parameter namespace
+#   flagless  kind derived, no entity, a literal: parameter namespace
+#   valued    a parameter table
+#   stale     a table whose first date holds only a formula, which the engine drops
+READING = ("derived", "computed")
+LITERAL = ("scalar", "flagless")
+TABLE = ("valued", "stale")
 reads = st.sets(st.sampled_from(NAMES), min_size=1, max_size=3)
-versions = st.dictionaries(st.sampled_from(STARTS), reads, min_size=1, max_size=3)
-rules = st.dictionaries(st.sampled_from(NAMES), versions, min_size=1, max_size=2)
-imports = st.sets(st.sampled_from(TARGETS), min_size=1, max_size=3)
-specs = st.fixed_dictionaries({owner: st.tuples(imports, rules) for owner in TARGETS})
+dated_reads = st.dictionaries(st.sampled_from(STARTS), reads, min_size=1, max_size=3)
+dated_values = st.sets(st.sampled_from(STARTS), min_size=1, max_size=2)
+reading_rule = st.tuples(st.sampled_from(READING), dated_reads)
+value_rule = st.tuples(st.sampled_from(("constant", *LITERAL, *TABLE)), dated_values)
+rule_shapes = st.one_of(reading_rule, reading_rule, value_rule)
+rules = st.dictionaries(st.sampled_from(NAMES), rule_shapes, min_size=1, max_size=2)
+
+
+def imports_for(index: int):
+    """Only later modules, so no graph holds a cycle, which the engine refuses."""
+    later = TARGETS[index + 1 :]
+    return st.sets(st.sampled_from(later), min_size=1, max_size=3) if later else st.just(set())
+
+
+specs = st.fixed_dictionaries(
+    {owner: st.tuples(imports_for(index), rules) for index, owner in enumerate(TARGETS)}
+)
 
 
 def formula(names) -> str:
     return " + ".join(sorted(names)) or "0"
 
 
+def rule_yaml(name, shape, body) -> dict:
+    kind = "derived" if shape in ("derived", "flagless") else "parameter"
+    rule = {"name": name, "kind": kind}
+    if shape in ("derived", "constant"):
+        rule["entity"] = "Person"
+    if shape in READING:
+        rule["versions"] = [
+            {"from": start.isoformat(), "formula": formula(read)}
+            for start, read in sorted(body.items())
+        ]
+    elif shape in ("constant", *LITERAL):
+        rule["versions"] = [{"from": start.isoformat(), "formula": "1"} for start in sorted(body)]
+    else:
+        rule["indexed_by"] = "size"
+        rule["versions"] = [
+            {"from": start.isoformat(), "values": {0: 1}} for start in sorted(body)
+        ]
+        if shape == "stale":
+            rule["versions"].insert(0, {"from": "1990-01-01", "formula": "p + q"})
+    return rule
+
+
 def build(spec) -> dict[str, "lsi.Module"]:
+    """Through the YAML parser, so these properties cover the sorting into namespaces."""
     return {
-        target: lsi.Module(
-            tuple(sorted(imported)),
-            tuple(
-                lsi.Rule(
-                    name,
-                    tuple(lsi.Version(start, formula(read)) for start, read in sorted(dated.items())),
-                )
-                for name, dated in sorted(defined.items())
-            ),
+        target: lsi.parse_module(
+            yaml.safe_dump(
+                {
+                    "imports": sorted(imported),
+                    "rules": [
+                        rule_yaml(name, *defined[name]) for name in sorted(defined)
+                    ],
+                }
+            )
         )
         for target, (imported, defined) in spec.items()
     }
@@ -98,38 +153,72 @@ def closure(target, spec) -> set[str]:
     return seen
 
 
+def namespaces(name, scope, spec) -> list[list[tuple[str, date]]]:
+    """What a formula name can read in this flattened program: one list per
+    namespace, each of (module, version start) for the versions that survive."""
+    shapes = [(owner, spec[owner][1][name]) for owner in sorted(scope) if name in spec[owner][1]]
+    tables = [(owner, body) for owner, (shape, body) in shapes if shape in TABLE]
+    literals = [(owner, body) for owner, (shape, body) in shapes if shape in LITERAL]
+    computed = [
+        (owner, body) for owner, (shape, body) in shapes if shape in (*READING, "constant")
+    ]
+    groups = [tables or literals, computed]
+    return [[(owner, start) for owner, body in group for start in body] for group in groups if group]
+
+
 def simulated_edges(spec) -> dict[tuple[str, str], date]:
     """Each (rule, target) a date stops on, with the first such date.
 
     On each date a rule answers from its latest started version (Derived::
     semantics_at), so only names that version reads are reached. The stop is
-    a reached name with no version started yet, from another module.
+    a reached name with no version started yet, in a namespace no local rule feeds.
     """
     days = sorted(set(STARTS) | {start + timedelta(days=1) for start in STARTS})
     stops: dict[tuple[str, str], date] = {}
     for origin, (_, defined) in spec.items():
-        scope = closure(origin, spec)
-        for name, dated in defined.items():
+        scope = closure(origin, spec) | {origin}
+        for name, (shape, dated) in defined.items():
+            if shape not in READING:
+                continue
             for day in days:
                 started = [start for start in dated if start <= day]
                 if not started:
                     continue
                 for read in dated[max(started)]:
-                    if read in defined:
-                        continue
-                    owners = [
-                        (min(spec[owner][1][read]), f"{owner}#{read}")
-                        for owner in sorted(scope)
-                        if read in spec[owner][1]
-                    ]
-                    if owners and min(owners)[0] > day:
-                        key = (f"{origin}#{name}", min(owners)[1])
-                        stops[key] = min(stops.get(key, day), day)
+                    for group in namespaces(read, scope, spec):
+                        first, owner = min((start, owner) for owner, start in group)
+                        if first > day and origin not in {item[0] for item in group}:
+                            key = (f"{origin}#{name}", f"{owner}#{read}")
+                            stops[key] = min(stops.get(key, day), day)
     return stops
 
 
 def edges_of(modules):
     return lsi.late_start_edges(lsi.import_references(modules))
+
+
+def test_the_generators_reach_acyclic_graphs_with_tables_and_collisions():
+    """The hard shapes must occur often enough to test, and no cycle may."""
+    def cyclic(spec):
+        return any(owner in closure(owner, spec) for owner in spec)
+
+    def shapes(spec):
+        return {shape for _, defined in spec.values() for shape, _ in defined.values()}
+
+    def collides(spec):
+        for owner in spec:
+            scope = closure(owner, spec) | {owner}
+            for name in NAMES:
+                if len(namespaces(name, scope, spec)) == 2:
+                    return True
+        return False
+
+    for reached in (
+        lambda spec: "stale" in shapes(spec) and bool(simulated_edges(spec)),
+        collides,
+        lambda spec: any(spec[owner][0] for owner in TARGETS[:-1]),
+    ):
+        assert not cyclic(find(specs, reached))
 
 
 @settings(semantic_properties, max_examples=500)
@@ -161,7 +250,16 @@ def test_references_stay_inside_the_import_closure_and_outside_the_module(spec):
         origin, _ = reference.rule.split("#")
         owner, name = reference.target.split("#")
         assert owner in lsi.import_closure(origin, modules)
-        assert name not in {rule.name for rule in modules[origin].rules}
+        assert owner != origin
+        # A local definition in the bound namespace survives only as a scalar
+        # that an imported table of its name removed.
+        local = [
+            rule
+            for rule in modules[origin].rules
+            if rule.name == name and rule.namespace == reference.namespace
+        ]
+        target_rule = next(rule for rule in modules[owner].rules if rule.name == name)
+        assert not local or (target_rule.table and not any(rule.table for rule in local))
 
 
 @semantic_properties
@@ -179,6 +277,39 @@ def test_edges_are_a_subset_of_the_rule_level_reading(spec):
         if starts[item.rule] < item.target_start
     }
     assert {(edge.rule, edge.target) for edge in edges_of(modules)} <= rule_level
+
+
+@semantic_properties
+@given(specs)
+def test_import_references_are_the_crossing_part_of_all_references(spec):
+    modules = build(spec)
+    crossing = lsi.import_references(modules)
+    everything = lsi.all_references(modules)
+    assert crossing <= everything
+    assert all(
+        item.rule.split("#")[0] == item.target.split("#")[0] for item in everything - crossing
+    )
+
+
+@semantic_properties
+@given(specs)
+def test_a_table_never_reads_and_never_starts_before_its_values(spec):
+    modules = build(spec)
+    tables = {
+        (owner, name): body
+        for owner, (_, defined) in spec.items()
+        for name, (shape, body) in defined.items()
+        if shape in TABLE
+    }
+    for (owner, name), body in tables.items():
+        rule = next(item for item in modules[owner].rules if item.name == name)
+        assert rule.table and rule.namespace == lsi.PARAMETER
+        assert rule.start == min(body)
+        assert not any(version.formula for version in rule.versions)
+    assert not any(
+        item.rule in {f"{owner}#{name}" for owner, name in tables}
+        for item in lsi.all_references(modules)
+    )
 
 
 def _with_rule(modules, origin, name, rule):
@@ -199,16 +330,27 @@ def test_moving_a_target_later_never_removes_an_edge(spec, data):
     edges = edges_of(modules)
     assume(edges)
     edge = data.draw(st.sampled_from(sorted(edges)))
-    owner, name = edge.target.split("#")
-    # A later start can change which module a shared name resolves to, which
-    # is a different target, so hold the name to one definition.
-    assume(sum(item.name == name for m in modules.values() for item in m.rules) == 1)
-    rule = next(item for item in modules[owner].rules if item.name == name)
-    later = lsi.Rule(
-        rule.name,
-        tuple(replace(version, start=version.start + timedelta(days=365)) for version in rule.versions),
+    _, name = edge.target.split("#")
+
+    # Every definition moves, so a shared name still resolves to the same target.
+    def later(rule):
+        return replace(
+            rule,
+            versions=tuple(
+                replace(version, start=version.start + timedelta(days=365))
+                for version in rule.versions
+            ),
+        )
+
+    moved = edges_of(
+        {
+            owner: replace(
+                module,
+                rules=tuple(later(rule) if rule.name == name else rule for rule in module.rules),
+            )
+            for owner, module in modules.items()
+        }
     )
-    moved = edges_of(_with_rule(modules, owner, name, later))
     assert (edge.rule, edge.target) in {(item.rule, item.target) for item in moved}
 
 
@@ -221,9 +363,9 @@ def test_moving_a_late_version_earlier_never_removes_its_edge(spec, data):
     edge = data.draw(st.sampled_from(sorted(edges)))
     origin, name = edge.rule.split("#")
     rule = next(item for item in modules[origin].rules if item.name == name)
-    earlier = lsi.Rule(
-        rule.name,
-        tuple(
+    earlier = replace(
+        rule,
+        versions=tuple(
             replace(version, start=version.start - timedelta(days=365))
             if version.start == edge.version_start
             else version
@@ -247,7 +389,7 @@ def test_the_result_does_not_depend_on_declaration_order(spec, rng: random.Rando
         target: lsi.Module(
             tuple(shuffled(modules[target].imports)),
             tuple(
-                lsi.Rule(rule.name, tuple(shuffled(rule.versions)))
+                replace(rule, versions=tuple(shuffled(rule.versions)))
                 for rule in shuffled(modules[target].rules)
             ),
         )

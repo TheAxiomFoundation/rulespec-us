@@ -94,9 +94,20 @@ validator checks references inside one file and stops at imports.
 `tools/late_start_imports.py` finds these edges statically, so it needs no
 engine build and it also covers modules the engine does not load. It resolves a
 formula's names the way the engine does: against the whole import closure,
-because a `#fragment` does not narrow what a formula sees. It compares each
-version with its target, not each rule. A later rule version that starts with a
-later target is the correct way to encode a change, and no date reaches a gap.
+because a `#fragment` does not narrow what a formula sees, and by namespace, not
+by `kind`. A rule with `values` is a table, and it starts at its first `values`.
+Otherwise a rule with an `entity` or a computed version is derived, and the rest
+are parameters. A parameter takes a name from a derived rule, even a local one,
+in a scalar position. The tool compares each version with its target, not each
+rule. A later rule version that starts with a later target is the correct way to
+encode a change, and no date reaches a gap.
+
+The check covers what a module reaches through its own imports. It does not
+cover a name that only a composing root supplies: a root flattens every module
+it imports, so under it a rule can bind a name its own module reads as an input.
+That rule stops on the root's dates before the supplier starts, and the check
+reports nothing. It also leaves out a table key that starts later than its
+table, and any path a date never takes through a conditional.
 
 Edges must equal `tools/known-late-start-imports.txt`
 (`<rule id>\t<target id>\t<version start>\t<target start>`) exactly:
@@ -123,10 +134,16 @@ python tools/late_start_imports.py baseline > tools/known-late-start-imports.txt
 
 The workflow's `engine-differential` job checks the static model against the
 pinned engine. It compiles each module, stored compositions through their own
-surface, reads the references out of the lowered program, and requires them to
-equal the static ones. It compiles a scratch copy of the tree with citation
-metadata removed, because retired forms of that metadata would otherwise stop
-the engine from loading most of the references it compares.
+surface, reads every name the lowered program binds in that module's own rules,
+and requires those bindings to equal the static ones by name, namespace and start
+date. The run fails unless every module has a result, the engine compiled at
+least 99% of them, and every edge sits in a compiled module. It compiles a
+scratch copy of the tree with citation metadata removed, because retired forms of
+that metadata would otherwise stop the engine from loading most of what it
+compares. The static model may report more than the engine in two cases, both on
+purpose and both printed: a name defined in both namespaces reads both, because
+only a parser could tell which position reads which, and a parameter read in a
+judgment position counts, though the engine lowers it to an input.
 
 ```bash
 python tools/late_start_imports.py differential --engine-src ../axiom-rules-engine \

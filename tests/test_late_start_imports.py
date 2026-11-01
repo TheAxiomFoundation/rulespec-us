@@ -43,6 +43,10 @@ def _rule(name: str, *versions: tuple[date, str]) -> "lsi.Rule":
     return lsi.Rule(name, tuple(lsi.Version(start, formula) for start, formula in versions))
 
 
+def _parameter(name: str, start: date, table: bool = False) -> "lsi.Rule":
+    return lsi.Rule(name, (lsi.Version(start),), lsi.PARAMETER, table)
+
+
 def _edge(rule="us:a#r", target="us:b#t", version_start=Y2018, target_start=Y2026):
     return lsi.Edge(rule, target, version_start, target_start)
 
@@ -144,7 +148,72 @@ rules:
 """
     )
     assert module.imports == ()
-    assert module.rules == (_rule("table", (Y2018, "")),)
+    assert module.rules == (_parameter("table", Y2018, table=True),)
+
+
+@pytest.mark.parametrize(
+    ("rule", "namespace", "table", "start"),
+    [
+        ("{kind: parameter, from: 2018-01-01, formula: 5}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '0.5'}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: 'true'}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: true}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '\"text\"'}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '# note\n\n5\n'}", "parameter", False, Y2018),
+        ("{kind: derived, from: 2018-01-01, formula: 5}", "parameter", False, Y2018),
+        ("{kind: parameter, entity: Person, from: 2018-01-01, formula: 5}", "derived", False, Y2018),
+        ("{kind: parameter, entity: '', from: 2018-01-01, formula: 5}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: a + 1}", "derived", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: -5}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '-5'}", "derived", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: 2018-01-01}", "derived", False, Y2018),
+        (
+            "{kind: parameter, versions: [{from: 2018-01-01, formula: 1},"
+            " {from: 2026-01-01, formula: a}]}",
+            "derived",
+            False,
+            Y2018,
+        ),
+        ("{kind: derived, versions: [{from: 2018-01-01, values: {0: 1}}]}", "parameter", True, Y2018),
+        (
+            "{kind: parameter, versions: [{from: 2018-01-01, formula: a},"
+            " {from: 2026-01-01, values: {0: 1}}]}",
+            "parameter",
+            True,
+            Y2026,
+        ),
+        (
+            "{kind: parameter, entity: Person, versions: [{from: 2018-01-01, values: {0: 1}}]}",
+            "parameter",
+            True,
+            Y2018,
+        ),
+        (
+            "{kind: parameter, versions: [{from: 2018-01-01, values: {}},"
+            " {from: 2026-01-01, formula: 1}]}",
+            "parameter",
+            False,
+            Y2018,
+        ),
+    ],
+)
+def test_the_namespace_follows_the_engine_and_not_the_kind(rule, namespace, table, start):
+    parsed = lsi.parse_module(f"rules:\n  - {{name: r, {rule[1:]}\n")
+    assert [(item.namespace, item.table, item.start) for item in parsed.rules] == [
+        (namespace, table, start)
+    ]
+
+
+def test_a_table_keeps_no_formula_from_a_version_the_engine_drops():
+    parsed = lsi.parse_module(
+        "rules:\n"
+        "  - name: rate\n"
+        "    kind: parameter\n"
+        "    versions:\n"
+        "      - {from: 2018-01-01, formula: other_rule}\n"
+        "      - {from: 2026-01-01, values: {0: 1}}\n"
+    )
+    assert parsed.rules == (_parameter("rate", Y2026, table=True),)
 
 
 @pytest.mark.parametrize("text", ["- a\n", "just text\n", ""])
@@ -277,16 +346,110 @@ def test_a_name_outside_the_import_closure_is_not_a_reference():
     assert lsi.import_references(modules) == set()
 
 
-def test_a_name_two_imports_define_resolves_to_the_earliest_definition():
+def test_parameters_two_imports_define_merge_into_the_earliest():
     modules = {
-        "us:b": lsi.Module(rules=(_rule("shared", (Y2026, "1")),)),
-        "us:c": lsi.Module(rules=(_rule("shared", (date(2010, 1, 1), "1")),)),
+        "us:b": lsi.Module(rules=(_parameter("shared", Y2026),)),
+        "us:c": lsi.Module(rules=(_parameter("shared", date(2010, 1, 1)),)),
         "us:a": lsi.Module(imports=("us:b", "us:c"), rules=(_rule("r", (Y2018, "shared")),)),
     }
     assert lsi.import_references(modules) == {
-        lsi.Reference("us:a#r", Y2018, "us:c#shared", date(2010, 1, 1))
+        lsi.Reference("us:a#r", Y2018, "us:c#shared", date(2010, 1, 1), lsi.PARAMETER)
     }
     assert _edges(modules) == set()
+
+
+def test_an_imported_parameter_wins_over_a_local_derived_rule_of_its_name():
+    # formula.rs lower_to_scalar checks parameters first, so the local rule
+    # does not hide this. The engine stops: parameter `shared` has no value.
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("shared", Y2026),)),
+        "us:a": lsi.Module(
+            imports=("us:b",),
+            rules=(_rule("shared", (date(2010, 1, 1), "1")), _rule("r", (Y2018, "shared"))),
+        ),
+    }
+    assert _edges(modules) == {_edge(target="us:b#shared")}
+
+
+def test_an_imported_parameter_wins_over_an_imported_derived_rule_of_its_name():
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("shared", Y2026),)),
+        "us:c": lsi.Module(rules=(_rule("shared", (date(2010, 1, 1), "1")),)),
+        "us:a": lsi.Module(imports=("us:b", "us:c"), rules=(_rule("r", (Y2018, "shared")),)),
+    }
+    assert _edges(modules) == {_edge(target="us:b#shared")}
+
+
+def test_a_name_defined_both_ways_reads_both_because_position_decides():
+    # A judgment position reads the derived rule and a scalar one the
+    # parameter. Without a parser the tool holds both to account.
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("shared", date(2010, 1, 1)),)),
+        "us:c": lsi.Module(rules=(_rule("shared", (Y2026, "1")),)),
+        "us:a": lsi.Module(imports=("us:b", "us:c"), rules=(_rule("r", (Y2018, "shared")),)),
+    }
+    assert _edges(modules) == {_edge(target="us:c#shared")}
+
+
+def test_a_local_parameter_feeds_a_merged_name_and_is_no_import_edge():
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("shared", Y2026),)),
+        "us:a": lsi.Module(
+            imports=("us:b",),
+            rules=(_parameter("shared", Y2018), _rule("r", (Y2018, "shared"))),
+        ),
+    }
+    assert _edges(modules) == set()
+
+
+def test_a_table_removes_the_scalar_parameters_of_its_name():
+    # `program.parameters.retain` drops the scalar's earlier versions.
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("rate", Y2026, table=True),)),
+        "us:c": lsi.Module(rules=(_parameter("rate", date(2010, 1, 1)),)),
+        "us:a": lsi.Module(imports=("us:b", "us:c"), rules=(_rule("r", (Y2018, "rate[0]")),)),
+    }
+    assert _edges(modules) == {_edge(target="us:b#rate")}
+
+
+def test_a_table_starts_at_its_first_values_not_its_first_date():
+    table = lsi.parse_module(
+        "rules:\n"
+        "  - name: rate\n"
+        "    kind: parameter\n"
+        "    indexed_by: size\n"
+        "    versions:\n"
+        "      - {from: 1990-01-01, formula: '1'}\n"
+        "      - {from: 2026-01-01, values: {0: 2}}\n"
+    )
+    modules = {
+        "us:b": table,
+        "us:a": lsi.Module(imports=("us:b",), rules=(_rule("r", (Y2018, "rate[0]")),)),
+    }
+    assert _edges(modules) == {_edge(target="us:b#rate")}
+
+
+def test_a_parameter_never_reads_a_name():
+    modules = {
+        "us:b": LATE_TARGET,
+        "us:a": lsi.Module(
+            imports=("us:b",),
+            rules=(lsi.Rule("r", (lsi.Version(Y2018, "later_amount"),), lsi.PARAMETER),),
+        ),
+    }
+    assert lsi.all_references(modules) == set()
+
+
+def test_all_references_keep_local_bindings_for_the_differential():
+    modules = {
+        "us:a": lsi.Module(
+            rules=(_rule("r", (Y2018, "own + input_name")), _parameter("own", Y2026)),
+        ),
+    }
+    assert lsi.all_references(modules) == {
+        lsi.Reference("us:a#r", Y2018, "us:a#own", Y2026, lsi.PARAMETER)
+    }
+    assert lsi.import_references(modules) == set()
 
 
 def test_a_word_in_a_comment_or_string_is_not_a_reference():
@@ -527,31 +690,40 @@ def test_harness_uses_the_engine_compile_entry_points():
     assert "ModuleKindOnAtomicSurface" in source
 
 
-def _result(module: str, *references: dict, **extra) -> str:
+def _result(module: str, *references: dict, collisions=()) -> str:
     return json.dumps(
-        {"module": module, "ok": True, "references": list(references), "shadowed": [], **extra}
+        {"module": module, "ok": True, "references": list(references), "collisions": list(collisions)}
     )
 
 
-REFERENCE = {
-    "rule": "us:a#r",
-    "version_start": "2018-01-01",
-    "target": "us:b#t",
-    "target_start": "2026-01-01",
-}
+def _read(rule="us:a#r", name="t", namespace="derived", start="2026-01-01") -> dict:
+    return {
+        "rule": rule,
+        "version_start": "2018-01-01",
+        "name": name,
+        "namespace": namespace,
+        "target_start": start,
+    }
 
 
-def test_parse_engine_references_reads_compiled_modules_only():
+def _binding(rule="us:a#r", name="t", namespace="derived", start=Y2026) -> "lsi.Binding":
+    return lsi.Binding(rule, Y2018, name, namespace, start)
+
+
+def test_parse_engine_references_reads_every_result():
     lines = [
-        _result("us/a.yaml", REFERENCE),
+        _result("us/a.yaml", _read(), _read(name="i", namespace="input", start=None)),
         json.dumps({"module": "us/b.yaml", "ok": False, "error": "refused"}),
-        _result("us/c.yaml", shadowed=["hidden"]),
+        _result("us/c.yaml", collisions=["hidden"]),
         "",
     ]
-    compiled, references, shadowed = lsi.parse_engine_references(lines)
-    assert compiled == {"us:a", "us:c"}
-    assert references == {lsi.Reference("us:a#r", Y2018, "us:b#t", Y2026)}
-    assert shadowed == ["us:c#hidden"]
+    run = lsi.parse_engine_references(lines)
+    assert run.results == {"us:a", "us:b", "us:c"}
+    assert run.compiled == {"us:a", "us:c"}
+    assert run.refused == {"us:b": "refused"}
+    assert run.bindings == {_binding()}
+    assert run.inputs == {_binding(name="i", namespace="input", start=None)}
+    assert run.collisions == {"us:c#hidden"}
 
 
 @pytest.mark.parametrize(
@@ -567,15 +739,173 @@ def test_parse_engine_references_refuses_what_it_cannot_read(line, message):
         lsi.parse_engine_references([line])
 
 
-def test_reference_differences_compare_only_modules_the_engine_compiled():
-    both = lsi.Reference("us:a#r", Y2018, "us:b#t", Y2026)
-    only_engine = lsi.Reference("us:a#s", Y2018, "us:b#t", Y2026)
-    only_static = lsi.Reference("us:a#u", Y2018, "us:b#t", Y2026)
-    refused = lsi.Reference("us:refused#r", Y2018, "us:b#t", Y2026)
-    assert lsi.reference_differences({"us:a"}, {both, only_engine}, {both, only_static, refused}) == (
-        {only_engine},
-        {only_static},
+def test_parse_engine_references_refuses_a_second_result_for_a_module():
+    with pytest.raises(SystemExit, match="second result"):
+        lsi.parse_engine_references([_result("us/a.yaml"), _result("us/a.yaml")])
+
+
+def _run(*compiled, bindings=(), inputs=(), collisions=(), results=None) -> "lsi.EngineRun":
+    return lsi.EngineRun(
+        set(results if results is not None else compiled),
+        set(compiled),
+        {},
+        set(bindings),
+        set(inputs),
+        set(collisions),
     )
+
+
+def _static(rule="us:a#r", target="us:b#t", namespace="derived") -> "lsi.Reference":
+    return lsi.Reference(rule, Y2018, target, Y2026, namespace)
+
+
+NO_MODULES = {"us:a": lsi.Module(), "us:b": lsi.Module()}
+
+
+def test_reference_differences_compare_only_modules_the_engine_compiled():
+    run = _run("us:a", bindings={_binding(), _binding(rule="us:a#s")})
+    differences = lsi.reference_differences(
+        run,
+        {_static(), _static(rule="us:a#u"), _static(rule="us:refused#r")},
+        NO_MODULES,
+    )
+    assert differences.only_engine == {_binding(rule="us:a#s")}
+    assert differences.only_static == {_binding(rule="us:a#u")}
+    assert differences.over_reported == set()
+
+
+def test_reference_differences_key_on_name_namespace_and_start():
+    for different in (
+        _static(target="us:b#other"),
+        _static(namespace="parameter"),
+        lsi.Reference("us:a#r", Y2018, "us:b#t", Y2018),
+    ):
+        differences = lsi.reference_differences(
+            _run("us:a", bindings={_binding()}), {different}, NO_MODULES
+        )
+        assert differences.only_engine and differences.only_static
+
+
+def test_reference_differences_ignore_which_module_defined_the_name():
+    # The engine's ids cannot answer that when names collide.
+    differences = lsi.reference_differences(
+        _run("us:a", bindings={_binding()}), {_static(target="us:a#t")}, NO_MODULES
+    )
+    assert not differences.only_engine and not differences.only_static
+
+
+def test_both_sides_of_a_collision_may_be_over_reported():
+    run = _run("us:a", bindings={_binding()}, collisions={"us:a#t"})
+    differences = lsi.reference_differences(
+        run, {_static(), _static(namespace="parameter")}, NO_MODULES
+    )
+    assert differences.only_static == set()
+    assert differences.over_reported == {_binding(namespace="parameter")}
+
+
+def test_a_parameter_read_the_engine_lowered_to_an_input_is_over_reported():
+    run = _run("us:a", inputs={_binding(namespace="input", start=None)})
+    differences = lsi.reference_differences(run, {_static(namespace="parameter")}, NO_MODULES)
+    assert differences.only_static == set()
+    assert differences.over_reported == {_binding(namespace="parameter")}
+
+
+def test_a_derived_read_the_engine_lowered_to_an_input_is_a_difference():
+    run = _run("us:a", inputs={_binding(namespace="input", start=None)})
+    differences = lsi.reference_differences(run, {_static()}, NO_MODULES)
+    assert differences.only_static == {_binding()}
+
+
+def test_an_imported_rule_wearing_a_colliding_local_id_says_nothing_about_this_module():
+    run = _run(
+        "us:a",
+        bindings={_binding(rule="us:a#shared", name="t")},
+        collisions={"us:a#shared"},
+    )
+    modules = {"us:a": lsi.Module(rules=(_parameter("shared", Y2018),))}
+    assert lsi.reference_differences(run, set(), modules).only_engine == set()
+
+
+def test_a_declared_rule_with_a_colliding_name_still_counts():
+    run = _run(
+        "us:a",
+        bindings={_binding(rule="us:a#shared", name="t")},
+        collisions={"us:a#shared"},
+    )
+    modules = {"us:a": lsi.Module(rules=(_rule("shared", (Y2018, "t")),))}
+    assert lsi.reference_differences(run, set(), modules).only_engine == {
+        _binding(rule="us:a#shared", name="t")
+    }
+
+
+TRACKED = [f"us/statutes/{index}.yaml" for index in range(200)]
+TARGETS = {lsi.canonical_target(path) for path in TRACKED}
+
+
+def test_coverage_passes_on_a_full_run():
+    assert lsi.coverage_failures(_run(*TARGETS), TRACKED, {_edge("us:statutes/0#r")}) == []
+
+
+def test_coverage_allows_a_refused_module_with_no_edge():
+    run = _run(*sorted(TARGETS)[1:], results=TARGETS)
+    assert lsi.coverage_failures(run, TRACKED, set()) == []
+
+
+def test_coverage_fails_a_run_with_no_results():
+    failures = lsi.coverage_failures(_run(), TRACKED, set())
+    assert any("no result for 200 module(s)" in failure for failure in failures)
+    assert any("below the 99% floor" in failure for failure in failures)
+
+
+def test_coverage_fails_when_the_engine_refuses_most_of_the_tree():
+    run = _run(*sorted(TARGETS)[:100], results=TARGETS)
+    failures = lsi.coverage_failures(run, TRACKED, set())
+    assert any("compiled 100 of 200" in failure for failure in failures)
+
+
+def test_coverage_fails_when_a_module_has_no_result():
+    run = _run(*sorted(TARGETS)[1:])
+    assert any("no result for 1 module(s)" in item for item in lsi.coverage_failures(run, TRACKED, set()))
+
+
+def test_coverage_fails_on_a_result_for_an_untracked_module():
+    run = _run(*TARGETS, "us:statutes/untracked")
+    assert any("untracked" in item for item in lsi.coverage_failures(run, TRACKED, set()))
+
+
+def test_coverage_fails_on_an_edge_in_a_refused_module():
+    refused = sorted(TARGETS)[0]
+    run = _run(*(TARGETS - {refused}), results=TARGETS)
+    failures = lsi.coverage_failures(run, TRACKED, {_edge(f"{refused}#r")})
+    assert any("1 edge(s) in modules the engine refused" in failure for failure in failures)
+
+
+def test_the_differential_refuses_a_run_that_compiled_nothing(tmp_path, monkeypatch, capsys):
+    """A green exit needs coverage, not only agreement on an empty set."""
+    root = tmp_path / "rulespec-us"
+    _write(root, "us/statutes/1/target.yaml", TARGET)
+    _write(root, "us/statutes/1/importer.yaml", MODULE_TEMPLATE.format(start="2018-01-01"))
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    (engine / "Cargo.toml").write_text("", encoding="utf-8")
+    refused = json.dumps({"module": "us/statutes/1/importer.yaml", "ok": False, "error": "drift"})
+
+    real_run = subprocess.run
+
+    def fake_run(command, **kwargs):
+        if command[0] == "git":
+            return real_run(command, **kwargs)
+        if command[0] == "cargo":
+            return subprocess.CompletedProcess(command, 0)
+        return subprocess.CompletedProcess(command, 0, stdout=refused + "\n", stderr="")
+
+    monkeypatch.setattr(lsi.subprocess, "run", fake_run)
+    assert lsi.differential(engine, root, tmp_path / "out.jsonl") == 1
+    output = capsys.readouterr().out
+    assert "This run does not cover the tree" in output
+    assert "equal the engine" not in output
 
 
 def test_scratch_copy_keeps_executable_content_and_drops_citations(tmp_path):
