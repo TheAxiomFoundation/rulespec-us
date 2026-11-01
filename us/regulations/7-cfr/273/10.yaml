@@ -220,6 +220,26 @@ rules:
         formula: |-
           snap_gross_monthly_earned_income + snap_total_monthly_unearned_income - snap_income_exclusions
 
+  - name: snap_earned_income_subject_to_deduction_for_net_income
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: 7 CFR 273.10(e)(1)(i)(B)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us/regulation/7/273/10
+              excerpt: Multiply the total gross monthly earned income by 20 percent
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          snap_gross_monthly_earned_income
+
   - name: snap_earned_income_deduction_for_net_income
     kind: derived
     entity: Household
@@ -244,7 +264,7 @@ rules:
     versions:
       - effective_from: '2025-10-01'
         formula: |-
-          floor(snap_gross_monthly_earned_income * snap_earned_income_deduction_rate_for_net_income)
+          floor(snap_earned_income_subject_to_deduction_for_net_income * snap_earned_income_deduction_rate_for_net_income)
 
   - name: snap_excess_medical_deduction_for_net_income
     kind: derived
@@ -463,3 +483,53 @@ rules:
       - effective_from: '2025-10-01'
         formula: |-
           if household_initial_month and snap_calculated_monthly_allotment_before_minimums < snap_initial_month_minimum_issuance: 0 else: if (not household_initial_month) and household_size <= snap_minimum_benefit_household_size_limit and snap_calculated_monthly_allotment_before_minimums < snap_minimum_benefit: snap_minimum_benefit else: snap_calculated_monthly_allotment_before_minimums
+
+  # An approved standard medical deduction replaces the excess medical
+  # deduction in this net-income computation. The default is unchanged.
+  - name: snap_approved_medical_demonstration_delegation
+    kind: source_relation
+    source: 7 USC 2026(b)(1); 7 CFR 273.10(e)(1)(i)(D)
+    source_relation:
+      type: delegates
+      authority: federal
+      target: us:regulations/7-cfr/273/10#snap_excess_medical_deduction_for_net_income
+    metadata:
+      proof:
+        atoms:
+          - path: source_relation.target
+            kind: definition
+            source:
+              corpus_citation_path: us/statute/7/2026
+              span: 7 USC 2026(b)(1), approved demonstration projects only
+
+  # The deduction never applies to subsidized work supplementation wages
+  # (7 CFR 273.7(l)(1)(i)(G)); only households in an approved state program
+  # have them. A composition that carries those wages sets this base. The
+  # default, which assumes no such wages, is all gross earned income.
+  - name: snap_work_supplementation_earned_income_delegation
+    kind: source_relation
+    source: 7 CFR 273.7(l)(1)(i)(G); 7 USC 2014(e)(2)
+    source_relation:
+      type: delegates
+      authority: federal
+      target: us:regulations/7-cfr/273/10#snap_earned_income_subject_to_deduction_for_net_income
+    metadata:
+      proof:
+        atoms:
+          - path: source_relation.target
+            kind: definition
+            source:
+              corpus_citation_path: us/regulation/7/273/7
+              span: 7 CFR 273.7(l)(1)(i)(G), the earned income deduction does not apply to the subsidized portion of wages
+
+  # This computation is the income after all other applicable deductions that
+  # 7 USC 2014(e)(6)(A) refers to. The relation is documentation only; a
+  # composition opts in through the delegation named as its basis.
+  - name: implements_7_usc_2014_e_6_a_pre_shelter_income
+    kind: source_relation
+    source: 7 CFR 273.10(e)(1)(i)(A)-(H)
+    source_relation:
+      type: implements
+      target: us:statutes/7/2014/e/6/A
+      basis:
+        delegation: us:statutes/7/2014/e/6/A#snap_regulatory_pre_shelter_income_delegation
