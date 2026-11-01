@@ -82,6 +82,57 @@ python tools/engine_root_load.py baseline --results /tmp/engine-root-load.jsonl 
   > tools/known-engine-load-failures.txt   # after deliberately fixing modules
 ```
 
+# Late-start imports
+
+A late-start import edge is a rule version that reads a rule or parameter from
+another module whose earliest version starts after that rule version does. On
+any date in between, the engine picks the rule version and then stops on the
+import, and it says so only at run time. That is how 26 USC 6012 stopped on
+26 USC 7703 (issue #1971). The encoder's `temporal-dependency-coverage`
+validator checks references inside one file and stops at imports.
+
+`tools/late_start_imports.py` finds these edges statically, so it needs no
+engine build and it also covers modules the engine does not load. It resolves a
+formula's names the way the engine does: against the whole import closure,
+because a `#fragment` does not narrow what a formula sees. It compares each
+version with its target, not each rule. A later rule version that starts with a
+later target is the correct way to encode a change, and no date reaches a gap.
+
+Edges must equal `tools/known-late-start-imports.txt`
+(`<rule id>\t<target id>\t<version start>\t<target start>`) exactly:
+
+- an edge that is not listed fails `tests/test_late_start_imports.py`, which
+  runs in the required `validate` check;
+- a listed edge that no longer holds, or whose dates moved, fails the same
+  test, so a repair changes its line in the same pull request;
+- in the `late-start-imports` workflow, a pull request may not add a
+  `(rule, target)` pair against its protected base, because regenerating the
+  list would otherwise accept any edge. A listed pair may change dates.
+
+Fix a new edge by starting the rule version no earlier than its target, giving
+the target a version for those dates, or reading the target only from a later
+rule version. Sometimes the edge is right: a date repair can expose a gap that
+was already in the encoding, and the module then fails closed where it used to
+answer wrongly. Regenerate the list, and add the `late-start-import-accepted`
+label to the pull request with a line saying why.
+
+```bash
+python tools/late_start_imports.py check --base-ref origin/main
+python tools/late_start_imports.py baseline > tools/known-late-start-imports.txt
+```
+
+The workflow's `engine-differential` job checks the static model against the
+pinned engine. It compiles each module, stored compositions through their own
+surface, reads the references out of the lowered program, and requires them to
+equal the static ones. It compiles a scratch copy of the tree with citation
+metadata removed, because retired forms of that metadata would otherwise stop
+the engine from loading most of the references it compares.
+
+```bash
+python tools/late_start_imports.py differential --engine-src ../axiom-rules-engine \
+  --output /tmp/late-start-differential.jsonl
+```
+
 # Source-conflict register
 
 `known-source-conflicts.yaml` records the places where a jurisdiction's
