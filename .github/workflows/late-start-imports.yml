@@ -8,7 +8,8 @@ name: Late-start imports
 # workflow adds what that test cannot do: a pull request may not add a
 # (rule, target) pair against its protected base unless it carries the
 # late-start-import-accepted label, and the static model must equal the pinned
-# engine's own name bindings. See tools/late_start_imports.py.
+# engine's own name bindings, on the tree and on generated and known hard
+# programs. See tools/late_start_imports.py.
 
 on:
   pull_request:
@@ -93,8 +94,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install the tool's dependency
-        run: python -m pip install --quiet pyyaml==6.0.3
+      - name: Install the tool's dependencies
+        run: python -m pip install --quiet pyyaml==6.0.3 pytest hypothesis
 
       - name: Resolve pinned engine
         id: toolchain
@@ -141,6 +142,16 @@ jobs:
             --root "$GITHUB_WORKSPACE/rulespec-us" \
             --output "$RUNNER_TEMP/late-start-differential.jsonl" \
             | tee "$RUNNER_TEMP/late-start-differential.txt"
+
+      - name: Compare generated programs and known hard shapes with the engine
+        # A red tree comparison must not hide these, because they name the shape.
+        if: ${{ !cancelled() }}
+        env:
+          LATE_START_HARNESS: ${{ github.workspace }}/axiom-rules-engine/target/release/examples/rulespec_import_references
+        run: |
+          python -m pytest -q -p no:cacheprovider rulespec-us/tests/test_late_start_imports_engine.py
+          python -m pytest -q -p no:cacheprovider rulespec-us/tests/test_late_start_imports_properties.py \
+            -k test_the_pinned_engine_binds_what_the_tool_reads
 
       - name: Summarize
         if: always()

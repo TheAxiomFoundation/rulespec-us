@@ -92,22 +92,35 @@ import, and it says so only at run time. That is how 26 USC 6012 stopped on
 validator checks references inside one file and stops at imports.
 
 `tools/late_start_imports.py` finds these edges statically, so it needs no
-engine build and it also covers modules the engine does not load. It resolves a
-formula's names the way the engine does: against the whole import closure,
+engine build and it also covers modules the engine does not load. It reads YAML
+the way the engine's parser does, so an unquoted `yes` stays a string. It resolves
+a formula's names the way the engine does: against the whole import closure,
 because a `#fragment` does not narrow what a formula sees, and by namespace, not
 by `kind`. A rule with `values` is a table, and it starts at its first `values`.
 Otherwise a rule with an `entity` or a computed version is derived, and the rest
 are parameters. A parameter takes a name from a derived rule, even a local one,
-in a scalar position. The tool compares each version with its target, not each
-rule. A later rule version that starts with a later target is the correct way to
-encode a change, and no date reaches a gap.
+in a scalar position. Parameters of one name merge, so a name counts as imported
+when any imported definition feeds it. A `sets` source relation gives its target
+the value's versions, and a formula that reads the target meets the value's start.
+The tool compares each version with its target, not each rule. A later rule
+version that starts with a later target is the correct way to encode a change:
+that version cannot read a gap.
+
+An edge means a version can read the gap, not that every query does. The tool has
+no parser, so a branch no date takes still counts, a name defined in both
+namespaces reads both, and a name a formula uses as a relation counts as a read.
 
 The check covers what a module reaches through its own imports. It does not
 cover a name that only a composing root supplies: a root flattens every module
 it imports, so under it a rule can bind a name its own module reads as an input.
 That rule stops on the root's dates before the supplier starts, and the check
-reports nothing. It also leaves out a table key that starts later than its
-table, and any path a date never takes through a conditional.
+reports nothing. It also leaves out a table key that starts later than its table.
+
+The `engine-differential` job holds this model to the pinned engine. The engine
+lowers every module, and the bindings it reports for the rules each module
+declares must equal the tool's by name, namespace and start date. It lowers
+generated programs and known hard shapes the same way. Point `LATE_START_HARNESS`
+at the built harness to run those tests locally.
 
 Edges must equal `tools/known-late-start-imports.txt`
 (`<rule id>\t<target id>\t<version start>\t<target start>`) exactly:

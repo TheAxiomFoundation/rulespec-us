@@ -15,6 +15,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -72,8 +73,13 @@ LATE_TARGET = lsi.Module(rules=(_rule("later_amount", (Y2026, "100")), _rule("ot
         ("1 # a\n+ b", {"b"}),
         ('"""a\nb""" + c', {"c"}),
         ('"""a', set()),
-        ("a/b + c", {"c"}),
+        ("a/b + c", {"a/b", "c"}),
         ("a / b", {"a", "b"}),
+        ("a/b(c)", {"c"}),
+        ("max # note\n(a)", {"a"}),
+        ("(max)(a)", {"a"}),
+        ("((max))(a, b)", {"a", "b"}),
+        ("(a) + (b)", {"a", "b"}),
         ("2018-01-01", set()),
         ("1_000 + a", {"a"}),
         ("2018_a", {"a"}),
@@ -85,6 +91,82 @@ LATE_TARGET = lsi.Module(rules=(_rule("later_amount", (Y2026, "100")), _rule("ot
 )
 def test_formula_references_follow_the_engine_lexer(formula, expected):
     assert lsi.formula_references(formula) == expected
+
+
+@pytest.mark.parametrize(
+    ("formula", "literal"),
+    [
+        ("5", True),
+        ("0.5", True),
+        ("1_000", True),
+        ('"text"', True),
+        ("'text'", True),
+        ("true", True),
+        ("False", True),
+        ("(2)", True),
+        ("((2))", True),
+        ("( # note\n 2 )", True),
+        ('"""note"""\n5', True),
+        ("a", False),
+        ("-5", False),
+        ("(-5)", False),
+        ("1 + 2", False),
+        ("(1) + (2)", False),
+        ("(1", False),
+        ("()", False),
+        ("", False),
+        ("2018-01-01", False),
+    ],
+)
+def test_is_literal_follows_what_the_parser_leaves(formula, literal):
+    assert lsi.is_literal(formula) is literal
+
+
+def test_a_long_run_of_whitespace_does_not_stall_the_lexer():
+    started = time.perf_counter()
+    assert not lsi.is_literal("1" + " " * 100_000 + "+ imported")
+    assert lsi.formula_references("1" + " " * 100_000 + "+ imported") == {"imported"}
+    assert time.perf_counter() - started < 5
+
+
+@pytest.mark.parametrize(
+    ("scalar", "expected"),
+    [
+        ("yes", "yes"),
+        ("No", "No"),
+        ("on", "on"),
+        ("2018-01-01", "2018-01-01"),
+        ("12:30:00", "12:30:00"),
+        ("1_000", "1_000"),
+        ("007", "007"),
+        ("-007", "-007"),
+        ("0x", "0x"),
+        ('"5"', "5"),
+        ("'true'", "true"),
+        ("", None),
+        ("~", None),
+        ("null", None),
+        ("NULL", None),
+        ("true", True),
+        ("TRUE", True),
+        ("False", False),
+        ("5", 5),
+        ("+5", 5),
+        ("-5", -5),
+        ("0", 0),
+        ("0x10", 16),
+        ("-0x10", -16),
+        ("0o17", 15),
+        ("0b11", 3),
+        ("1.5", 1.5),
+        (".5", 0.5),
+        ("1.", 1.0),
+        ("1e3", 1000.0),
+    ],
+)
+def test_scalars_load_the_way_serde_yaml_reads_them(scalar, expected):
+    loaded = yaml.load(f"key: {scalar}\n", Loader=lsi.EngineLoader)["key"]
+    assert loaded == expected and type(loaded) is type(expected)
 
 
 def test_parse_module_reads_both_date_spellings():
@@ -117,7 +199,7 @@ rules:
         ("top_level", date(2020, 1, 1)),
     ]
     assert module.rules[0].versions[0].formula == "a"
-    assert module.rules[1].versions[0].formula == ""
+    assert module.rules[1].versions[0].formula == "1"
     assert module.rules[2].versions[0].formula == "b"
 
 
@@ -164,9 +246,19 @@ rules:
         ("{kind: parameter, entity: Person, from: 2018-01-01, formula: 5}", "derived", False, Y2018),
         ("{kind: parameter, entity: '', from: 2018-01-01, formula: 5}", "parameter", False, Y2018),
         ("{kind: parameter, from: 2018-01-01, formula: a + 1}", "derived", False, Y2018),
-        ("{kind: parameter, from: 2018-01-01, formula: -5}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: -5}", "derived", False, Y2018),
         ("{kind: parameter, from: 2018-01-01, formula: '-5'}", "derived", False, Y2018),
         ("{kind: parameter, from: 2018-01-01, formula: 2018-01-01}", "derived", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '(2)'}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '((2))'}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: yes}", "derived", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: TRUE}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: 0x10}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: 1e3}", "parameter", False, Y2018),
+        ("{kind: parameter, from: 2018-01-01, formula: '1e3'}", "derived", False, Y2018),
+        ("{kind: parameter, entity: 0, from: 2018-01-01, formula: 5}", "derived", False, Y2018),
+        ("{kind: parameter, entity: false, from: 2018-01-01, formula: 5}", "derived", False, Y2018),
+        ("{kind: parameter, entity: ~, from: 2018-01-01, formula: 5}", "parameter", False, Y2018),
         (
             "{kind: parameter, versions: [{from: 2018-01-01, formula: 1},"
             " {from: 2026-01-01, formula: a}]}",
@@ -189,7 +281,7 @@ rules:
             Y2018,
         ),
         (
-            "{kind: parameter, versions: [{from: 2018-01-01, values: {}},"
+            "{kind: parameter, versions: [{from: 2018-01-01, values: {}, formula: 2},"
             " {from: 2026-01-01, formula: 1}]}",
             "parameter",
             False,
@@ -202,6 +294,14 @@ def test_the_namespace_follows_the_engine_and_not_the_kind(rule, namespace, tabl
     assert [(item.namespace, item.table, item.start) for item in parsed.rules] == [
         (namespace, table, start)
     ]
+
+
+def test_an_unquoted_word_pyyaml_calls_a_boolean_stays_a_reference():
+    # The pinned engine stops with: derived `yes` has no formula version.
+    parsed = lsi.parse_module(
+        "rules: [{name: r, kind: derived, versions: [{from: 2018-01-01, formula: yes}]}]\n"
+    )
+    assert parsed.rules == (_rule("r", (Y2018, "yes")),)
 
 
 def test_a_table_keeps_no_formula_from_a_version_the_engine_drops():
@@ -237,6 +337,16 @@ def test_import_closure_is_transitive_drops_fragments_and_survives_cycles():
         "us:c": lsi.Module(imports=("us:a", "us:missing")),
     }
     assert lsi.import_closure("us:a", modules) == {"us:b", "us:c"}
+
+
+def test_flattened_merges_imports_first_and_each_module_once():
+    modules = {
+        "us:a": lsi.Module(imports=("us:b", "us:c#t")),
+        "us:b": lsi.Module(imports=("us:d",)),
+        "us:c": lsi.Module(imports=("us:d", "us:a")),
+        "us:d": lsi.Module(),
+    }
+    assert lsi.flattened("us:a", modules) == ["us:d", "us:b", "us:c", "us:a"]
 
 
 def test_the_6012_shape_is_an_edge():
@@ -402,6 +512,37 @@ def test_a_local_parameter_feeds_a_merged_name_and_is_no_import_edge():
     assert _edges(modules) == set()
 
 
+def test_a_local_parameter_does_not_hide_a_regression_in_its_imported_half():
+    # The engine merges them, so version 2000 meets 2020 and stops.
+    start = date(2000, 1, 1)
+
+    def modules(imported):
+        return {
+            "us:b": lsi.Module(rules=(_parameter("shared", imported),)),
+            "us:a": lsi.Module(
+                imports=("us:b",),
+                rules=(_parameter("shared", date(2030, 1, 1)), _rule("r", (start, "shared"))),
+            ),
+        }
+
+    assert _edges(modules(date(1990, 1, 1))) == set()
+    assert _edges(modules(date(2020, 1, 1))) == {
+        lsi.Edge("us:a#r", "us:b#shared", start, date(2020, 1, 1))
+    }
+
+
+def test_an_edge_on_a_merged_name_records_the_start_a_formula_meets():
+    start = date(2000, 1, 1)
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("shared", Y2026),)),
+        "us:a": lsi.Module(
+            imports=("us:b",),
+            rules=(_parameter("shared", Y2018), _rule("r", (start, "shared"))),
+        ),
+    }
+    assert _edges(modules) == {lsi.Edge("us:a#r", "us:b#shared", start, Y2018)}
+
+
 def test_a_table_removes_the_scalar_parameters_of_its_name():
     # `program.parameters.retain` drops the scalar's earlier versions.
     modules = {
@@ -450,6 +591,151 @@ def test_all_references_keep_local_bindings_for_the_differential():
         lsi.Reference("us:a#r", Y2018, "us:a#own", Y2026, lsi.PARAMETER)
     }
     assert lsi.import_references(modules) == set()
+
+
+def test_two_namespaces_tied_at_one_version_record_the_wider_gap():
+    # The order must not decide the line, whatever the hash seed does.
+    start = date(2000, 1, 1)
+    narrow = lsi.Reference("us:a#r", start, "us:b#p", date(2020, 1, 1), lsi.PARAMETER)
+    wide = lsi.Reference("us:a#r", start, "us:b#p", date(2030, 1, 1), lsi.DERIVED)
+    expected = {lsi.Edge("us:a#r", "us:b#p", start, date(2030, 1, 1))}
+    assert lsi.late_start_edges([narrow, wide]) == expected
+    assert lsi.late_start_edges([wide, narrow]) == expected
+
+
+def test_an_earlier_version_beats_a_wider_gap():
+    earlier = lsi.Reference("us:a#r", date(2000, 1, 1), "us:b#p", date(2020, 1, 1))
+    wider = lsi.Reference("us:a#r", date(2010, 1, 1), "us:b#p", date(2030, 1, 1))
+    expected = {lsi.Edge("us:a#r", "us:b#p", date(2000, 1, 1), date(2020, 1, 1))}
+    assert lsi.late_start_edges([earlier, wider]) == expected
+    assert lsi.late_start_edges([wider, earlier]) == expected
+
+
+def test_parse_module_reads_a_sets_relation_on_a_rule_of_any_kind():
+    module = lsi.parse_module(
+        "rules:\n"
+        "  - name: assignment\n"
+        "    kind: source_relation\n"
+        "    source_relation: {type: sets, target: 'us:b#rate', value: ' us:c#value '}\n"
+        "  - name: r\n"
+        "    kind: derived\n"
+        "    from: 2018-01-01\n"
+        "    formula: rate\n"
+        "    source_relation: {type: sets, target: 'us:b#other', value: 'us:c#value'}\n"
+    )
+    assert module.sets == (("us:b#rate", "us:c#value"), ("us:b#other", "us:c#value"))
+
+
+@pytest.mark.parametrize(
+    "relation",
+    [
+        "{type: restates, target: 'us:b#rate', value: 'us:c#value'}",
+        "{type: sets, target: 'us:b', value: 'us:c#value'}",
+        "{type: sets, target: 'us:b#rate', value: 'us:c'}",
+        "{type: sets, target: 'us:b#rate', value: 'us:b#rate'}",
+        "{type: sets, target: 'us:b#rate'}",
+    ],
+)
+def test_a_sets_relation_the_engine_skips_is_no_relation(relation):
+    module = lsi.parse_module(
+        f"rules: [{{name: s, kind: source_relation, source_relation: {relation}}}]\n"
+    )
+    assert module.sets == ()
+
+
+RATE = lsi.Module(rules=(_parameter("rate", date(1990, 1, 1)),))
+VALUE = lsi.Module(rules=(_parameter("value", Y2026),))
+
+
+def test_a_sets_relation_gives_the_target_the_values_start():
+    # The pinned engine stops with: parameter `rate` has no value.
+    modules = {
+        "us:b": RATE,
+        "us:c": VALUE,
+        "us:a": lsi.Module(
+            imports=("us:b", "us:c"),
+            rules=(_rule("r", (Y2018, "rate")),),
+            sets=(("us:b#rate", "us:c#value"),),
+        ),
+    }
+    assert _edges(modules) == {_edge(target="us:c#value")}
+    assert lsi.all_references(modules) == {
+        lsi.Reference("us:a#r", Y2018, "us:c#value", Y2026, lsi.PARAMETER, "rate")
+    }
+
+
+def test_a_sets_relation_acts_only_in_a_root_that_flattens_it():
+    modules = {
+        "us:b": RATE,
+        "us:c": VALUE,
+        "us:s": lsi.Module(imports=("us:b", "us:c"), sets=(("us:b#rate", "us:c#value"),)),
+        "us:a": lsi.Module(imports=("us:b",), rules=(_rule("r", (Y2018, "rate")),)),
+    }
+    assert _edges(modules) == set()
+
+
+def test_a_local_value_still_crosses_on_the_imported_name_it_replaces():
+    modules = {
+        "us:b": RATE,
+        "us:a": lsi.Module(
+            imports=("us:b",),
+            rules=(_parameter("value", Y2026), _rule("r", (Y2018, "rate"))),
+            sets=(("us:b#rate", "us:a#value"),),
+        ),
+    }
+    assert _edges(modules) == {_edge(target="us:b#rate")}
+
+
+def test_a_sets_relation_finds_only_the_definition_that_kept_the_id():
+    # apply_rule_ids leaves the last definition's id on a merged name, so the
+    # engine finds no `us:b#rate` here and the relation changes nothing.
+    modules = {
+        "us:b": RATE,
+        "us:d": lsi.Module(rules=(_parameter("rate", date(1980, 1, 1)),)),
+        "us:c": VALUE,
+        "us:a": lsi.Module(
+            imports=("us:b", "us:d", "us:c"),
+            rules=(_rule("r", (Y2018, "rate")),),
+            sets=(("us:b#rate", "us:c#value"),),
+        ),
+    }
+    assert _edges(modules) == set()
+
+
+def test_sets_relations_chain_in_merge_order():
+    modules = {
+        "us:b": RATE,
+        "us:c": lsi.Module(rules=(_parameter("middle", date(2000, 1, 1)),)),
+        "us:d": VALUE,
+        "us:e": lsi.Module(sets=(("us:c#middle", "us:d#value"),)),
+        "us:f": lsi.Module(sets=(("us:b#rate", "us:c#middle"),)),
+        "us:a": lsi.Module(
+            imports=("us:b", "us:c", "us:d", "us:e", "us:f"),
+            rules=(_rule("r", (Y2018, "rate")),),
+        ),
+    }
+    assert _edges(modules) == {_edge(target="us:d#value")}
+    reversed_order = {
+        **modules,
+        "us:a": lsi.Module(
+            imports=("us:b", "us:c", "us:d", "us:f", "us:e"),
+            rules=(_rule("r", (Y2018, "rate")),),
+        ),
+    }
+    assert _edges(reversed_order) == set()
+
+
+def test_a_rule_a_relation_sets_reads_what_its_value_reads():
+    modules = {
+        "us:b": LATE_TARGET,
+        "us:c": lsi.Module(rules=(_rule("value", (Y2018, "later_amount")),)),
+        "us:s": lsi.Module(sets=(("us:a#r", "us:c#value"),)),
+        "us:a": lsi.Module(
+            imports=("us:b", "us:c", "us:s"),
+            rules=(_rule("r", (date(1990, 1, 1), "1")),),
+        ),
+    }
+    assert _edges(modules) == {_edge(target="us:b#later_amount")}
 
 
 def test_a_word_in_a_comment_or_string_is_not_a_reference():
@@ -690,9 +976,20 @@ def test_harness_uses_the_engine_compile_entry_points():
     assert "ModuleKindOnAtomicSurface" in source
 
 
-def _result(module: str, *references: dict, collisions=()) -> str:
+def test_harness_finds_a_modules_rules_by_name_and_not_by_id():
+    assert "declared_names" in lsi.HARNESS_SOURCE
+    assert "rule.id" not in lsi.HARNESS_SOURCE
+
+
+def _result(module: str, *references: dict, collisions=(), rules=()) -> str:
     return json.dumps(
-        {"module": module, "ok": True, "references": list(references), "collisions": list(collisions)}
+        {
+            "module": module,
+            "ok": True,
+            "rules": list(rules),
+            "references": list(references),
+            "collisions": list(collisions),
+        }
     )
 
 
@@ -714,7 +1011,11 @@ def test_parse_engine_references_reads_every_result():
     lines = [
         _result("us/a.yaml", _read(), _read(name="i", namespace="input", start=None)),
         json.dumps({"module": "us/b.yaml", "ok": False, "error": "refused"}),
-        _result("us/c.yaml", collisions=["hidden"]),
+        _result(
+            "us/c.yaml",
+            collisions=["hidden"],
+            rules=[{"name": "hidden", "namespace": "parameter"}],
+        ),
         "",
     ]
     run = lsi.parse_engine_references(lines)
@@ -724,6 +1025,7 @@ def test_parse_engine_references_reads_every_result():
     assert run.bindings == {_binding()}
     assert run.inputs == {_binding(name="i", namespace="input", start=None)}
     assert run.collisions == {"us:c#hidden"}
+    assert run.rules == {("us:c#hidden", "parameter")}
 
 
 @pytest.mark.parametrize(
@@ -744,7 +1046,9 @@ def test_parse_engine_references_refuses_a_second_result_for_a_module():
         lsi.parse_engine_references([_result("us/a.yaml"), _result("us/a.yaml")])
 
 
-def _run(*compiled, bindings=(), inputs=(), collisions=(), results=None) -> "lsi.EngineRun":
+def _run(
+    *compiled, bindings=(), inputs=(), collisions=(), results=None, rules=()
+) -> "lsi.EngineRun":
     return lsi.EngineRun(
         set(results if results is not None else compiled),
         set(compiled),
@@ -752,6 +1056,7 @@ def _run(*compiled, bindings=(), inputs=(), collisions=(), results=None) -> "lsi
         set(bindings),
         set(inputs),
         set(collisions),
+        set(rules),
     )
 
 
@@ -759,7 +1064,10 @@ def _static(rule="us:a#r", target="us:b#t", namespace="derived") -> "lsi.Referen
     return lsi.Reference(rule, Y2018, target, Y2026, namespace)
 
 
-NO_MODULES = {"us:a": lsi.Module(), "us:b": lsi.Module()}
+MODULES = {
+    "us:a": lsi.Module(rules=tuple(_rule(name, (Y2018, "t")) for name in "rsu")),
+    "us:b": lsi.Module(),
+}
 
 
 def test_reference_differences_compare_only_modules_the_engine_compiled():
@@ -767,7 +1075,7 @@ def test_reference_differences_compare_only_modules_the_engine_compiled():
     differences = lsi.reference_differences(
         run,
         {_static(), _static(rule="us:a#u"), _static(rule="us:refused#r")},
-        NO_MODULES,
+        MODULES,
     )
     assert differences.only_engine == {_binding(rule="us:a#s")}
     assert differences.only_static == {_binding(rule="us:a#u")}
@@ -781,7 +1089,7 @@ def test_reference_differences_key_on_name_namespace_and_start():
         lsi.Reference("us:a#r", Y2018, "us:b#t", Y2018),
     ):
         differences = lsi.reference_differences(
-            _run("us:a", bindings={_binding()}), {different}, NO_MODULES
+            _run("us:a", bindings={_binding()}), {different}, MODULES
         )
         assert differences.only_engine and differences.only_static
 
@@ -789,34 +1097,57 @@ def test_reference_differences_key_on_name_namespace_and_start():
 def test_reference_differences_ignore_which_module_defined_the_name():
     # The engine's ids cannot answer that when names collide.
     differences = lsi.reference_differences(
-        _run("us:a", bindings={_binding()}), {_static(target="us:a#t")}, NO_MODULES
+        _run("us:a", bindings={_binding()}), {_static(target="us:a#t")}, MODULES
     )
     assert not differences.only_engine and not differences.only_static
 
 
-def test_both_sides_of_a_collision_may_be_over_reported():
+def test_reference_differences_read_the_name_a_sets_relation_replaced():
+    static = lsi.Reference("us:a#r", Y2018, "us:c#value", Y2026, lsi.DERIVED, "t")
+    differences = lsi.reference_differences(_run("us:a", bindings={_binding()}), {static}, MODULES)
+    assert not differences.only_engine and not differences.only_static
+
+
+def test_the_other_side_of_a_collision_is_over_reported_beside_the_read_the_engine_made():
     run = _run("us:a", bindings={_binding()}, collisions={"us:a#t"})
     differences = lsi.reference_differences(
-        run, {_static(), _static(namespace="parameter")}, NO_MODULES
+        run, {_static(), _static(namespace="parameter")}, MODULES
     )
     assert differences.only_static == set()
     assert differences.over_reported == {_binding(namespace="parameter")}
 
 
+def test_a_collision_excuses_no_read_the_engine_never_made():
+    # Round 2: a composition's own rules fell out of the report, and a colliding
+    # name then excused the binding left behind.
+    run = _run("us:a", collisions={"us:a#t"})
+    differences = lsi.reference_differences(run, {_static()}, MODULES)
+    assert differences.only_static == {_binding()}
+    assert differences.over_reported == set()
+
+
+def test_a_collision_excuses_no_input_read():
+    run = _run(
+        "us:a", inputs={_binding(namespace="input", start=None)}, collisions={"us:a#t"}
+    )
+    differences = lsi.reference_differences(run, {_static()}, MODULES)
+    assert differences.only_static == {_binding()}
+
+
 def test_a_parameter_read_the_engine_lowered_to_an_input_is_over_reported():
     run = _run("us:a", inputs={_binding(namespace="input", start=None)})
-    differences = lsi.reference_differences(run, {_static(namespace="parameter")}, NO_MODULES)
+    differences = lsi.reference_differences(run, {_static(namespace="parameter")}, MODULES)
     assert differences.only_static == set()
     assert differences.over_reported == {_binding(namespace="parameter")}
 
 
 def test_a_derived_read_the_engine_lowered_to_an_input_is_a_difference():
     run = _run("us:a", inputs={_binding(namespace="input", start=None)})
-    differences = lsi.reference_differences(run, {_static()}, NO_MODULES)
+    differences = lsi.reference_differences(run, {_static()}, MODULES)
     assert differences.only_static == {_binding()}
 
 
-def test_an_imported_rule_wearing_a_colliding_local_id_says_nothing_about_this_module():
+def test_an_imported_derived_rule_beside_a_local_parameter_says_nothing_about_this_module():
     run = _run(
         "us:a",
         bindings={_binding(rule="us:a#shared", name="t")},
@@ -836,6 +1167,20 @@ def test_a_declared_rule_with_a_colliding_name_still_counts():
     assert lsi.reference_differences(run, set(), modules).only_engine == {
         _binding(rule="us:a#shared", name="t")
     }
+
+
+def test_a_declared_rule_the_program_does_not_hold_that_way_is_a_difference():
+    modules = {"us:a": lsi.Module(rules=(_rule("r", (Y2018, "1")), _parameter("q", Y2018)))}
+    held = {("us:a#r", "derived"), ("us:a#q", "parameter")}
+    assert lsi.reference_differences(_run("us:a", rules=held), set(), modules).missing_rules == set()
+    missing = lsi.reference_differences(
+        _run("us:a", rules={("us:a#r", "derived")}), set(), modules
+    )
+    assert missing.missing_rules == {("us:a#q", "parameter")}
+    moved = lsi.reference_differences(
+        _run("us:a", rules={("us:a#r", "parameter"), ("us:a#q", "parameter")}), set(), modules
+    )
+    assert moved.missing_rules == {("us:a#r", "derived")}
 
 
 TRACKED = [f"us/statutes/{index}.yaml" for index in range(200)]
@@ -906,6 +1251,52 @@ def test_the_differential_refuses_a_run_that_compiled_nothing(tmp_path, monkeypa
     output = capsys.readouterr().out
     assert "This run does not cover the tree" in output
     assert "equal the engine" not in output
+
+
+def test_the_differential_fails_on_a_rule_the_program_does_not_hold(
+    tmp_path, monkeypatch, capsys
+):
+    root = tmp_path / "rulespec-us"
+    _write(root, "us/statutes/1/target.yaml", TARGET)
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    (engine / "Cargo.toml").write_text("", encoding="utf-8")
+    real_run = subprocess.run
+
+    def fake_run(command, **kwargs):
+        if command[0] == "git":
+            return real_run(command, **kwargs)
+        if command[0] == "cargo":
+            return subprocess.CompletedProcess(command, 0)
+        stdout = _result("us/statutes/1/target.yaml") + "\n"
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(lsi.subprocess, "run", fake_run)
+    assert lsi.differential(engine, root, tmp_path / "out.jsonl") == 1
+    assert "us:statutes/1/target#later_amount as a parameter" in capsys.readouterr().out
+
+
+def test_scratch_copy_keeps_every_scalar_the_engine_would_read(tmp_path):
+    text = (
+        "rules:\n"
+        "  - name: 'yes'\n"
+        "    kind: derived\n"
+        "    versions:\n"
+        "      - {from: 2018-01-01, to: '2019-01-01', formula: yes}\n"
+        "      - {from: 2020-01-01, formula: 1e3}\n"
+        "      - {from: 2021-01-01, formula: '1e3'}\n"
+        "      - {from: 2022-01-01, formula: -5}\n"
+        "      - {from: 2023-01-01, formula: true}\n"
+    )
+    _write(tmp_path, "us/a.yaml", text)
+    root = lsi.write_scratch_root(tmp_path, ["us/a.yaml"], tmp_path / "scratch")
+    written = (root / "us/a.yaml").read_text(encoding="utf-8")
+    assert yaml.load(written, Loader=lsi.EngineLoader)["rules"] == (
+        yaml.load(text, Loader=lsi.EngineLoader)["rules"]
+    )
+    assert '"1e3"' in written and '"yes"' in written
 
 
 def test_scratch_copy_keeps_executable_content_and_drops_citations(tmp_path):
