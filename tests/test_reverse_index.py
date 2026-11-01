@@ -35,13 +35,11 @@ def test_is_jurisdiction_dir_matches_convention():
 def test_citation_paths_collects_module_and_proof_atoms():
     payload = {
         "module": {
-            "source_verification": {
-                "corpus_citation_path": "us/statute/26/32",
-                "corpus_citation_paths": [
-                    "us/statute/26/32",
-                    " us/statute/26/63 ",
-                ],
-            },
+            "source_documents": [
+                {"corpus_citation_path": "us/statute/26/32"},
+                {"corpus_citation_path": " us/statute/26/63 "},
+            ],
+            "source_verification": {"corpus_citation_path": "us/statute/26/32"},
         },
         "rules": [
             {
@@ -66,10 +64,8 @@ def test_citation_paths_collects_module_and_proof_atoms():
 def test_citation_paths_ignores_blank_and_non_string():
     payload = {
         "module": {
-            "source_verification": {
-                "corpus_citation_path": "  ",
-                "corpus_citation_paths": ["", 123],
-            }
+            "source_documents": [{"corpus_citation_path": ""}, {"corpus_citation_path": 123}, "x"],
+            "source_verification": {"corpus_citation_path": "  "},
         },
         "rules": [
             {"metadata": {"proof": {"atoms": [{"source": {"corpus_citation_path": 123}}]}}}
