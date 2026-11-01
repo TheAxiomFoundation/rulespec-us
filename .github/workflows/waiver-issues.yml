@@ -1,0 +1,93 @@
+name: Waiver issues
+
+# Asks GitHub whether each waived module in known-validation-gaps.yaml cites an
+# open issue (tools/waiver_issues.py). The shared validate workflow checks the
+# shape of the issue URL and never asks about the issue. An issue closes outside
+# any pull request, so a daily run catches it. This is not a required check, so
+# a GitHub outage or a closed issue blocks no merge of unrelated work, but the
+# merge rule for a ledger pull request is that every check is green. A red
+# scheduled or main run opens one alarm issue. The tool's offline tests run
+# inside the required Repository Checks pytest leg.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - known-validation-gaps.yaml
+      - tools/waiver_issues.py
+      - tools/source_conflicts.py
+      - tests/test_waiver_issues.py
+      - .github/workflows/waiver-issues.yml
+  push:
+    branches: [main]
+    paths:
+      - known-validation-gaps.yaml
+      - tools/waiver_issues.py
+      - tools/source_conflicts.py
+      - .github/workflows/waiver-issues.yml
+  schedule:
+    # Daily: an issue can close without any change to this repository.
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: waiver-issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the tool's dependency
+        run: python -m pip install pyyaml==6.0.3
+
+      - name: Ask GitHub about the cited issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/waiver_issues.py
+
+  alarm:
+    needs: [verify]
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.verify.result != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Open or refresh the waiver-issues alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          title="A validation waiver cites an issue that is not open"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still red on $(date -u +%Y-%m-%dT%H:%MZ) (${EVENT_NAME}): ${RUN_URL}"
+          else
+            {
+              echo "The waiver-issues workflow failed on main (${EVENT_NAME}): ${RUN_URL}"
+              echo
+              echo "The run's log lists each issue that is not open and the modules that cite"
+              echo "it. Point those waivers at an open issue that covers them, through the"
+              echo "stage and consume steps in tools/README.md. If the log shows only an API"
+              echo "failure, rerun the workflow. Close this issue once the workflow is green."
+            } > "$RUNNER_TEMP/body.md"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi

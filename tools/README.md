@@ -706,3 +706,30 @@ AXIOM_CORPUS_RELEASE_PUBLIC_KEY=... python tools/household_choices.py verify \
   --corpus-path ../axiom-corpus          # needs axiom-encode importable
 python tools/household_choices.py aggregate --markdown /tmp/choices.md
 ```
+
+# Waiver issue check
+
+`known-validation-gaps.yaml` waives modules that fail validation, and each
+record names an owner, an issue and an expiry date. The shared validate
+workflow checks the shape of the issue URL and never asks about the issue.
+`tools/waiver_issues.py` asks GitHub. It reads each module's current record,
+which is `pending` when the module has one and `active` otherwise, and passes
+only when GitHub calls the cited issue open. A closed issue, a pull request, a
+moved or missing issue and an API failure all fail.
+
+`.github/workflows/waiver-issues.yml` runs the check on ledger pull requests,
+on main, and daily, because an issue closes outside any pull request. A red
+scheduled or main run opens one alarm issue. The check sits outside the required
+set, so a GitHub outage blocks no unrelated merge. It judges state only: a
+reviewer still decides whether an open issue concerns the module.
+
+To point a waiver at another issue, land two pull requests. The waiver ratchet
+treats any changed `active` field as growth, so the change goes through
+`pending`:
+
+1. **Stage.** Add a `pending` record that copies the `active` record with the
+   new `issue`, and update `validation_waiver_set_sha256` in
+   `.axiom/toolchain.toml`. The pull request changes those two files and no
+   others, and only that line of the toolchain file. CI then runs every shard.
+2. **Consume.** Once the stage lands, make `active` equal the landed `pending`,
+   delete `pending`, and update the digest again.
