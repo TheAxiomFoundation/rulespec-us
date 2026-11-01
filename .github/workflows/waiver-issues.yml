@@ -6,8 +6,9 @@ name: Waiver issues
 # any pull request, so a daily run catches it. This is not a required check, so
 # a GitHub outage or a closed issue blocks no merge of unrelated work, but the
 # merge rule for a ledger pull request is that every check is green. A red
-# scheduled or main run opens one alarm issue. The tool's offline tests run
-# inside the required Repository Checks pytest leg.
+# scheduled or main run opens one alarm issue. tests/test_waiver_issues.py also
+# runs in the required Repository Checks pytest leg, which installs no
+# Hypothesis, so this workflow is the only place the property tests run.
 
 on:
   pull_request:
@@ -16,7 +17,7 @@ on:
       - known-validation-gaps.yaml
       - tools/waiver_issues.py
       - tools/source_conflicts.py
-      - tests/test_waiver_issues.py
+      - tests/test_waiver_issues*.py
       - .github/workflows/waiver-issues.yml
   push:
     branches: [main]
@@ -24,6 +25,7 @@ on:
       - known-validation-gaps.yaml
       - tools/waiver_issues.py
       - tools/source_conflicts.py
+      - tests/test_waiver_issues*.py
       - .github/workflows/waiver-issues.yml
   schedule:
     # Daily: an issue can close without any change to this repository.
@@ -51,8 +53,11 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install the tool's dependency
-        run: python -m pip install pyyaml==6.0.3
+      - name: Install the tool and its tests' dependencies
+        run: python -m pip install pytest==9.1.1 pyyaml==6.0.3 hypothesis==6.170.5
+
+      - name: Test the tool
+        run: python -m pytest -q -p no:cacheprovider tests/test_waiver_issues.py tests/test_waiver_issues_properties.py
 
       - name: Ask GitHub about the cited issues
         env:
@@ -64,6 +69,10 @@ jobs:
     if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && needs.verify.result != 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One at a time, so a second failed run finds the first run's issue.
+    concurrency:
+      group: waiver-issues-alarm
+      cancel-in-progress: false
     permissions:
       issues: write
     steps:
@@ -75,8 +84,9 @@ jobs:
         run: |
           set -euo pipefail
           title="A validation waiver cites an issue that is not open"
-          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
-            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          # Lists instead of searching: the search index lags a new issue.
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 \
+            --json number,title --jq "map(select(.title == \"$title\"))[0].number // empty")"
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
               --body "Still red on $(date -u +%Y-%m-%dT%H:%MZ) (${EVENT_NAME}): ${RUN_URL}"

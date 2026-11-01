@@ -1,27 +1,14 @@
-"""Tests for tools/waiver_issues.py, offline: GitHub's answers are stubs.
+"""Example tests for tools/waiver_issues.py, offline: GitHub's answers are stubs.
 
-Invariants, each for every input Hypothesis draws:
-
-1. Exactness: `check` reports nothing exactly when every module's current
-   record cites an issue GitHub calls open.
-2. Coverage: every module that cites an issue that isn't open appears in that
-   issue's report, and no module that cites an open issue appears in any.
-3. Current record: a module's `pending` record decides, whatever its `active`
-   record cites; the `active` record decides only when no `pending` exists.
-4. One question each: every cited issue is asked about exactly once, however
-   many modules cite it, and no other issue is asked about.
-5. Fail closed: no answer passes unless it is a JSON object with state `open`
-   and no `pull_request` key.
-6. Determinism: the report doesn't depend on the ledger's module order.
-7. Totality: `check` returns a list of strings, and never raises, on any
-   JSON-shaped ledger.
-8. Differential (when axiom-encode is importable): the tool and the encoder's
-   ISSUE_RE accept the same URLs.
+These need no Hypothesis, so they run in the required Repository Checks pytest
+leg. tests/test_waiver_issues_properties.py holds the property tests, which run
+in .github/workflows/waiver-issues.yml.
 """
 
 from __future__ import annotations
 
 import email.message
+import http.client
 import http.server
 import importlib.util
 import re
@@ -32,9 +19,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
-hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import HealthCheck, given, settings, strategies as st  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOOLS = REPO_ROOT / "tools"
@@ -51,21 +35,18 @@ def _load(name: str, path: Path):
 
 sc = _load("source_conflicts", TOOLS / "source_conflicts.py")
 wi = _load("waiver_issues", TOOLS / "waiver_issues.py")
-PROPERTY = settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 ISSUES = "https://github.com/TheAxiomFoundation/rulespec-us/issues/"
+OLD = "sha256:" + "a" * 64
+NEW = "sha256:" + "b" * 64
 
 
 def url(number: int) -> str:
     return f"{ISSUES}{number}"
 
 
-def api_path(number: int) -> str:
-    return f"/repos/TheAxiomFoundation/rulespec-us/issues/{number}"
-
-
-def record(number: int) -> dict:
+def record(number: int, fingerprint: str = OLD) -> dict:
     return {
-        "fingerprint": "sha256:" + "0" * 64,
+        "fingerprint": fingerprint,
         "owner": "@PavelMakarchuk",
         "issue": url(number),
         "expires": "2026-12-21",
@@ -77,14 +58,13 @@ def ledger_of(entries: dict) -> dict:
 
 
 def stub(states: dict[int, str]):
-    """A GitHub that holds these issues and counts the questions it gets."""
+    """A GitHub that holds these issues and records the questions it gets."""
 
     asked: list[str] = []
 
     def get(path: str) -> dict:
         asked.append(path)
-        number = int(path.rsplit("/", 1)[1])
-        return {"state": states[number]}
+        return {"state": states[int(path.rsplit("/", 1)[1])]}
 
     get.asked = asked
     return get
@@ -118,13 +98,44 @@ def test_closed_issue_names_the_issue_and_every_citing_module():
 
 def test_a_re_point_between_stage_and_consume_passes():
     entry = {"active": record(1), "pending": record(2)}
-    assert wi.check(ledger_of({"a.yaml": entry}), stub({1: "closed", 2: "open"})) == []
+    get = stub({1: "closed", 2: "open"})
+    assert wi.check(ledger_of({"a.yaml": entry}), get) == []
+    assert get.asked == ["/repos/TheAxiomFoundation/rulespec-us/issues/2"]
 
 
-def test_a_pending_record_that_cites_a_closed_issue_fails():
+def test_a_re_point_to_a_closed_issue_fails():
     entry = {"active": record(1), "pending": record(2)}
     assert wi.check(ledger_of({"a.yaml": entry}), stub({1: "open", 2: "closed"})) == [
         f"{url(2)} is 'closed', not open; cited by 1: a.yaml"
+    ]
+
+
+def test_a_pending_record_on_a_new_fingerprint_leaves_the_active_record_live():
+    entry = {"active": record(1, OLD), "pending": record(2, NEW)}
+    assert wi.check(ledger_of({"a.yaml": entry}), stub({1: "closed", 2: "open"})) == [
+        f"{url(1)} is 'closed', not open; cited by 1: a.yaml"
+    ]
+
+
+def test_a_pending_record_on_a_new_fingerprint_must_also_cite_an_open_issue():
+    entry = {"active": record(1, OLD), "pending": record(2, NEW)}
+    assert wi.check(ledger_of({"a.yaml": entry}), stub({1: "open", 2: "closed"})) == [
+        f"{url(2)} is 'closed', not open; cited by 1: a.yaml"
+    ]
+
+
+def test_records_without_a_fingerprint_do_not_count_as_sharing_one():
+    active, pending = record(1), record(2)
+    del active["fingerprint"], pending["fingerprint"]
+    get = stub({1: "open", 2: "open"})
+    assert wi.check(ledger_of({"a.yaml": {"active": active, "pending": pending}}), get) == []
+    assert len(get.asked) == 2
+
+
+def test_a_module_citing_one_issue_twice_counts_once():
+    entry = {"active": record(1, OLD), "pending": record(1, NEW)}
+    assert wi.check(ledger_of({"a.yaml": entry}), stub({1: "closed"})) == [
+        f"{url(1)} is 'closed', not open; cited by 1: a.yaml"
     ]
 
 
@@ -147,6 +158,7 @@ def test_a_pull_request_is_not_an_issue():
         (urllib.error.URLError("no route"), "no route"),
         (TimeoutError("timed out"), "timed out"),
         (ValueError("not JSON"), "not JSON"),
+        (http.client.IncompleteRead(b"{"), "IncompleteRead"),
     ],
 )
 def test_an_unreadable_issue_fails(error, expected):
@@ -209,11 +221,9 @@ def test_a_ledger_without_the_mapping_fails(ledger):
         {"active": {"issue": url(1) + "#comment"}},
     ],
 )
-def test_a_record_without_an_issue_url_fails_and_asks_nothing(entry):
-    get = stub({1: "open"})
-    problems = wi.check(ledger_of({"a.yaml": entry}), get)
+def test_a_record_without_an_issue_url_fails(entry):
+    problems = wi.check(ledger_of({"a.yaml": entry}), stub({1: "open"}))
     assert len(problems) == 1 and problems[0].startswith("a.yaml: ")
-    assert get.asked == []
 
 
 def test_main_exit_codes(tmp_path, capsys):
@@ -229,7 +239,7 @@ def test_every_module_in_the_real_ledger_cites_a_well_formed_issue():
     ledger = yaml.safe_load(text)
     cited, problems = wi.citations(ledger)
     assert problems == []
-    assert sorted(module for modules in cited.values() for module in modules) == sorted(ledger["validate_failures"])
+    assert set().union(*cited.values()) == set(ledger["validate_failures"])
     # An independent reading: every URL the tool cites sits on an issue line.
     assert set(cited) <= set(re.findall(r'^\s+issue: "([^"]+)"$', text, re.M))
 
@@ -240,9 +250,12 @@ def test_workflow_stays_read_only_and_watches_the_ledger():
     triggers = workflow[True]
     assert set(triggers) == {"pull_request", "push", "schedule", "workflow_dispatch"}
     for event in ("pull_request", "push"):
-        assert {"known-validation-gaps.yaml", "tools/waiver_issues.py", "tools/source_conflicts.py"} <= set(
-            triggers[event]["paths"]
-        )
+        assert {
+            "known-validation-gaps.yaml",
+            "tools/waiver_issues.py",
+            "tools/source_conflicts.py",
+            "tests/test_waiver_issues*.py",
+        } <= set(triggers[event]["paths"])
     assert workflow["permissions"] == {"contents": "read"}
     jobs = workflow["jobs"]
     assert jobs["verify"]["permissions"] == {"contents": "read", "issues": "read"}
@@ -252,91 +265,42 @@ def test_workflow_stays_read_only_and_watches_the_ledger():
     assert checkout["with"]["persist-credentials"] is False
 
 
-ISSUE_NUMBERS = st.integers(1, 6)
-STATES = st.sampled_from(["open", "closed"])
-ENTRIES = st.dictionaries(
-    st.from_regex(r"[a-z]{1,4}\.yaml", fullmatch=True),
-    st.tuples(st.none() | ISSUE_NUMBERS, st.none() | ISSUE_NUMBERS)
-    .filter(lambda pair: pair != (None, None))
-    .map(lambda pair: {k: record(n) for k, n in zip(("active", "pending"), pair) if n is not None}),
-    max_size=8,
-)
-WORLD = st.dictionaries(ISSUE_NUMBERS, STATES, min_size=6)
-JSONISH = st.recursive(
-    st.none() | st.booleans() | st.integers(-5, 5) | st.text(max_size=8),
-    lambda inner: st.lists(inner, max_size=3) | st.dictionaries(st.text(max_size=8), inner, max_size=3),
-    max_leaves=8,
-)
-FIELDS = st.sampled_from(["validate_failures", "active", "pending", "issue"])
+def test_workflow_runs_the_property_tests_with_hypothesis_installed():
+    steps = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["verify"]["steps"]
+    runs = [step.get("run", "") for step in steps]
+    assert any("hypothesis==" in run and "pytest==" in run for run in runs)
+    assert any("tests/test_waiver_issues.py" in run and "tests/test_waiver_issues_properties.py" in run for run in runs)
 
 
-def current_number(entry: dict) -> int:
-    return int((entry["pending"] if "pending" in entry else entry["active"])["issue"].rsplit("/", 1)[1])
+def test_one_alarm_at_a_time_finds_the_last_alarm_without_the_search_index():
+    alarm = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["alarm"]
+    assert alarm["concurrency"] == {"group": "waiver-issues-alarm", "cancel-in-progress": False}
+    script = alarm["steps"][0]["run"]
+    assert "gh issue list" in script and "--search" not in script
+    assert 'select(.title == \\"$title\\")' in script
 
 
-@PROPERTY
-@given(ENTRIES, WORLD)
-def test_exact_and_covering(entries, states):
-    problems = wi.check(ledger_of(entries), stub(states))
-    current = {module: current_number(entry) for module, entry in entries.items()}
-    bad = {number for number in current.values() if states[number] != "open"}
-    assert (problems == []) == (bad == set())  # Invariant 1
-    assert len(problems) == len(bad)
-    for module, number in current.items():  # Invariants 2 and 3
-        lines = [line for line in problems if line.startswith(f"{url(number)} ")]
-        if number in bad:
-            assert module in lines[0].split("cited by ", 1)[1].split(": ", 1)[1].split(", ")
-        else:
-            assert lines == []
-
-
-@PROPERTY
-@given(ENTRIES, WORLD)
-def test_one_question_each(entries, states):
-    get = stub(states)
-    wi.check(ledger_of(entries), get)
-    assert sorted(get.asked) == sorted({api_path(current_number(entry)) for entry in entries.values()})
-
-
-@PROPERTY
-@given(JSONISH)
-def test_only_an_open_issue_passes(answer):
-    passes = wi.issue_problem(url(1), lambda path: answer) is None
-    assert passes == (isinstance(answer, dict) and answer.get("state") == "open" and "pull_request" not in answer)
-
-
-@PROPERTY
-@given(st.fixed_dictionaries({"state": JSONISH}, optional={"pull_request": JSONISH}))
-def test_only_the_state_open_passes_on_an_object(answer):
-    passes = wi.issue_problem(url(1), lambda path: answer) is None
-    assert passes == (answer["state"] == "open" and "pull_request" not in answer)
-
-
-@PROPERTY
-@given(ENTRIES, WORLD, st.randoms(use_true_random=False))
-def test_order_does_not_change_the_report(entries, states, rng):
-    shuffled = list(entries.items())
-    rng.shuffle(shuffled)
-    assert wi.check(ledger_of(dict(shuffled)), stub(states)) == wi.check(ledger_of(entries), stub(states))
-
-
-@PROPERTY
-@given(st.one_of(JSONISH, st.dictionaries(FIELDS, JSONISH, max_size=4), st.builds(ledger_of, st.dictionaries(st.text(max_size=4), st.dictionaries(FIELDS, JSONISH, max_size=3) | JSONISH, max_size=4))))
-def test_check_is_total(ledger):
-    problems = wi.check(ledger, lambda path: {"state": "open"})
-    assert isinstance(problems, list) and all(isinstance(problem, str) for problem in problems)
-
-
-@PROPERTY
-@given(
-    st.one_of(
-        st.builds(url, st.integers(1, 10**6)),
-        st.from_regex(r"https://github\.com/TheAxiomFoundation/[A-Za-z0-9_.-]{1,8}/issues/[0-9]{1,4}", fullmatch=True),
-        st.text(max_size=20),
-        st.just(ISSUES + "0"),
-        st.just(ISSUES + "01"),
-    )
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        url(1),
+        url(1248),
+        "https://github.com/TheAxiomFoundation/rulespec-us-ca/issues/7",
+        "https://github.com/TheAxiomFoundation/a.b_c-d/issues/12",
+        "https://github.com/TheAxiomFoundation/../issues/1",
+        ISSUES + "0",
+        ISSUES + "01",
+        url(1) + "/",
+        url(1) + "#x",
+        url(1) + "\n",
+        "http://github.com/TheAxiomFoundation/rulespec-us/issues/1",
+        "https://github.com/TheAxiomFoundation/rulespec-us/pull/1",
+        "https://github.com/someone-else/rulespec-us/issues/1",
+        "",
+    ],
 )
 def test_tool_and_encoder_accept_the_same_urls(candidate):
+    """Differential, where axiom-encode is importable: the required pytest leg."""
+
     waivers = pytest.importorskip("axiom_encode.validation_waivers")
     assert (wi.ISSUE_RE.fullmatch(candidate) is not None) == (waivers.ISSUE_RE.fullmatch(candidate) is not None)

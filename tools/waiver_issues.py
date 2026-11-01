@@ -6,12 +6,16 @@ workflow checks that the issue field has the shape of an issue URL. Nothing
 there asks GitHub about the issue, so a waiver can go on citing an issue that
 has closed.
 
-This tool asks. It reads each module's current record, which is its `pending`
-record when it has one and its `active` record otherwise, and passes only when
-GitHub says the cited issue is open. `pending` wins because a re-point lands in
-two steps: the stage step adds a `pending` record and leaves the old `active`
-record in place, and the consume step promotes it. A module between the two
-steps cites the issue its next record names.
+This tool asks, and passes only when GitHub says every governing record cites
+an open issue. An `active` record governs the module as it stands, and a
+`pending` record governs it as it will stand after a toolchain change, so both
+must cite an open issue. One case differs: a `pending` record with the
+`active` record's fingerprint replaces it for the same module state. A re-point
+lands that way. The stage step adds the `pending` record and leaves the old
+`active` record in place, the consume step promotes it, and the module between
+the two steps cites the issue its `pending` record names. A `pending` record
+with a new fingerprint can't replace a live `active` record, because consuming
+it fails while the module still produces the old fingerprint.
 
 The check needs the network and asks about state only. It can't say whether an
 open issue concerns the module, and an issue closes outside any pull request.
@@ -26,6 +30,7 @@ moved or missing issue, an exhausted rate limit, or an API outage.
 from __future__ import annotations
 
 import argparse
+import http.client
 import os
 import re
 import sys
@@ -51,22 +56,35 @@ ISSUE_RE = re.compile(
 )
 
 
-def citations(ledger: Any) -> tuple[dict[str, list[str]], list[str]]:
-    """Each cited URL with the modules whose current record cites it, and shape problems."""
+def governing_records(entry: Any) -> list[Any]:
+    """The records of one ledger entry that must cite an open issue."""
+
+    if not isinstance(entry, Mapping):
+        return [None]
+    records = [entry[key] for key in ("active", "pending") if key in entry]
+    if len(records) == 2 and all(isinstance(record, Mapping) for record in records):
+        active, pending = records
+        if active.get("fingerprint") is not None and active.get("fingerprint") == pending.get("fingerprint"):
+            return [pending]
+    return records or [None]
+
+
+def citations(ledger: Any) -> tuple[dict[str, set[str]], list[str]]:
+    """Each cited URL with the modules whose governing records cite it, and shape problems."""
 
     failures = ledger.get("validate_failures") if isinstance(ledger, Mapping) else None
     if not isinstance(failures, Mapping):
         return {}, [f"{LEDGER} has no validate_failures mapping"]
-    cited: dict[str, list[str]] = {}
+    cited: dict[str, set[str]] = {}
     problems: list[str] = []
     for module, entry in failures.items():
-        record = entry.get("pending", entry.get("active")) if isinstance(entry, Mapping) else None
-        issue = record.get("issue") if isinstance(record, Mapping) else None
-        match = ISSUE_RE.fullmatch(issue) if isinstance(issue, str) else None
-        if match is None or match["repo"] in {".", ".."}:
-            problems.append(f"{module}: its current record cites no issue URL: {issue!r}")
-        else:
-            cited.setdefault(issue, []).append(str(module))
+        for record in governing_records(entry):
+            issue = record.get("issue") if isinstance(record, Mapping) else None
+            match = ISSUE_RE.fullmatch(issue) if isinstance(issue, str) else None
+            if match is None or match["repo"] in {".", ".."}:
+                problems.append(f"{module}: a governing record cites no issue URL: {issue!r}")
+            else:
+                cited.setdefault(issue, set()).add(str(module))
     return cited, problems
 
 
@@ -85,7 +103,7 @@ def issue_problem(url: str, get: Callable[[str], Any]) -> str | None:
         if 300 <= exc.code < 400:
             return f"{url} moved: GitHub redirected the request ({exc.code})"
         return f"{url} can't be read: GitHub answered {exc.code} ({exc.reason})"
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as exc:
         return f"{url} can't be read: {exc}"
     if not isinstance(answer, Mapping):
         return f"{url} can't be read: the answer is not a JSON object"
@@ -118,7 +136,7 @@ def main(argv: list[str] | None = None, get: Callable[[str], Any] | None = None)
         print(f"{len(problems)} problem(s) in {LEDGER}", file=sys.stderr)
         return 1
     cited, _ = citations(ledger)
-    print(f"{sum(map(len, cited.values()))} waived modules cite {len(cited)} issues, all open")
+    print(f"{len(set().union(*cited.values()))} waived modules cite {len(cited)} issues, all open")
     return 0
 
 
