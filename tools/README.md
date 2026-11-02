@@ -737,6 +737,6 @@ the protected base, so the change goes through `pending`:
    delete `pending`, and update the digest again.
 
 If the module already holds a `pending` record on a new fingerprint, the stage
-step overwrites it, so stage that record again in a third pull request. A
-consume pull request can't add one, because activating a `pending` record must
-leave none behind.
+step overwrites it, so stage that record again, citing an open issue, in a third
+pull request. A consume pull request can't add one, because activating a
+`pending` record must leave none behind.
