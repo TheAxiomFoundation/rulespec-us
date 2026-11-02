@@ -1,42 +1,52 @@
 """Property-based tests for the late-start import ratchet (tools/late_start_imports.py).
 
-Invariants, for every input:
+Invariants:
 
-1. Run-time meaning: each (rule, target) a date stops on is an edge, with the
-   first such date as its version start, and any other edge is a name the tool
-   reads in both namespaces. A reference simulation below binds names the way
-   lower_to_scalar does, by position, which the tool cannot: every generated
-   formula reads in a scalar position, so a parameter wins. It flattens imports,
-   sorts each rule into a namespace, picks the version a date selects, and
-   looks for what that version binds with no version yet. Generated formulas
-   take every branch, so "stops" and "can read the gap" agree here; the tool
-   makes no claim about a branch a date never takes. The specs hold only what
-   the engine loads: no import cycle, and one derived rule per name per program.
-2. Scope: a `#fragment` never changes the result, a name outside the import
-   closure is never a reference, and a binding that nothing imported feeds is
-   never one.
-3. Edges are a subset of the rule-level reading of "starts late": per-version
-   comparison only removes pairs no date can reach.
-4. Monotonicity: moving a target's start later never removes an edge, and
-   moving a rule version's start earlier, past nothing, never removes one.
-5. Determinism: the result does not depend on the order of modules, imports,
-   rules or versions, and reduction to edges does not depend on the order of
-   references.
+1. Run-time meaning. For every generated program without a `sets` relation, the
+   dates on which each rule stops on each name it reads equal the tool's stop
+   dates, except that a name defined in both namespaces may stop on more dates
+   in the tool, which reads it both ways. A reference simulation below finds
+   those dates without the tool's interval code: it binds names the way
+   lower_to_scalar does, by position (every generated formula reads in a scalar
+   position, so a parameter wins), flattens imports, sorts each rule into a
+   namespace, and on each stretch of dates where nothing changes picks the
+   version the engine picks and looks for a name it reads with no version
+   then. Generated formulas take every branch, so "stops" and "can read the
+   gap" agree here; the tool makes no claim about a branch a date never takes.
+2. Edges render stop dates: each edge starts on a stop date of its rule for a
+   name its target supplies, and each (rule, name) with stop dates has an edge
+   whose target supplies that name.
+3. Scope: a `#fragment` never changes the result, and a crossing reference
+   names a definition in the import closure, or in its own module only when a
+   `sets` relation put it in place of an imported definition.
+4. Monotonicity: taking dates from a name's versions never removes another
+   rule's stop date, and starting a rule's earliest version earlier never
+   removes one of that rule's own.
+5. Determinism: the result does not depend on the order of modules, rules or
+   versions, nor on the order of imports where no `sets` relation acts (there,
+   merge order decides, as it does in the engine). Reduction to edges does not
+   depend on the order of references.
 6. Lexing: words in strings and comments are never references, and the names
    of called functions are never references, however they are parenthesized.
-7. Baseline round trip: parse(render(S)) == S and render is canonical.
-8. The gate passes iff the edges equal the baseline and, with a protected base,
-   the baseline adds no (rule, target) pair unless the change is accepted. An
-   unlisted edge, a listed edge that no longer holds and a moved date each fail
-   it; the accepted label excuses only an added pair.
+7. Interval algebra: `merged`, `subtract`, `windows` and `widened` agree with a
+   day-by-day count on every input.
+8. Baseline round trip: parse(render(S)) == S and render is canonical.
+9. The gate passes iff the edges equal the baseline and no (rule, name) stops
+   on a date the protected base does not. An unlisted edge and a listed edge
+   that no longer holds each fail it whatever the label says.
+
+The generated programs hold only what the engine loads: no import cycle, one
+derived rule per name per program, no derived cycle, and `sets` relations only
+where every root that flattens them resolves both sides to one kind. They
+carry end dates, tables, collisions between namespaces and `sets` relations.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the late-start-imports workflow installs it and runs them.
 
 `test_the_pinned_engine_binds_what_the_tool_reads` needs no simulation: the
 engine-differential job points LATE_START_HARNESS at the compiled harness, and
-the engine lowers these same generated programs. The simulation states what a
-run does with those bindings; the engine vouches for the bindings themselves.
+the engine lowers the same generated programs, `sets` relations and end dates
+included, and must bind every name with the versions the tool says.
 """
 
 from __future__ import annotations
@@ -65,15 +75,23 @@ _spec.loader.exec_module(lsi)
 semantic_properties = settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 
 HARNESS = os.environ.get("LATE_START_HARNESS")
+OPEN = lsi.OPEN
 
 TARGETS = ("us:statutes/a", "us:statutes/b", "us:statutes/c", "us:statutes/d")
 NAMES = ("p", "q", "r", "s")
 STARTS = tuple(date(year, 1, 1) for year in (2000, 2010, 2020, 2030))
 
+
+def end_of(start: date) -> date:
+    """An ended version runs four years: before the next start, as the engine
+    requires of an explicit end."""
+    return date(start.year + 4, 1, 1) - timedelta(days=1)
+
+
 # A formula is generated from the names it reads, so the reference simulation
-# never depends on the lexer it is checking. The sizes keep graphs dense: about
-# a third of draws hold an edge, so the properties below see real cases. A rule
-# never reads its own name, which the engine refuses.
+# never depends on the lexer it is checking. The sizes keep graphs dense: most
+# draws hold an edge, so the properties below see real cases. A rule never
+# reads its own name, which the engine refuses.
 #
 # Every rule below names a shape, which fixes what the YAML says. `kind` differs
 # from the namespace on purpose, because the engine ignores it here:
@@ -84,17 +102,23 @@ STARTS = tuple(date(year, 1, 1) for year in (2000, 2010, 2020, 2030))
 #   flagless  kind derived, no entity, a literal: parameter namespace
 #   valued    a parameter table
 #   stale     a table whose first date holds only a formula, which the engine drops
+#
+# A module is (imports, rules, ended, relations): `ended` holds the (name, start)
+# of each version that ends after four years, and `relations` each `sets`
+# relation as (target module, target name, value module, value name).
 READING = ("derived", "computed")
 LITERAL = ("scalar", "flagless")
 TABLE = ("valued", "stale")
 DERIVED_SHAPES = (*READING, "constant")
+VALUE_SHAPES = ("constant", *LITERAL, *TABLE)
 reads = st.sets(st.sampled_from(NAMES), min_size=1, max_size=3)
 dated_reads = st.dictionaries(st.sampled_from(STARTS), reads, min_size=1, max_size=3)
 dated_values = st.sets(st.sampled_from(STARTS), min_size=1, max_size=2)
 reading_rule = st.tuples(st.sampled_from(READING), dated_reads)
-value_rule = st.tuples(st.sampled_from(("constant", *LITERAL, *TABLE)), dated_values)
+value_rule = st.tuples(st.sampled_from(VALUE_SHAPES), dated_values)
 rule_shapes = st.one_of(reading_rule, reading_rule, value_rule)
 rules = st.dictionaries(st.sampled_from(NAMES), rule_shapes, min_size=1, max_size=2)
+ended = st.frozensets(st.tuples(st.sampled_from(NAMES), st.sampled_from(STARTS)), max_size=3)
 
 
 def imports_for(index: int):
@@ -103,11 +127,23 @@ def imports_for(index: int):
     return st.sets(st.sampled_from(later), min_size=1, max_size=3) if later else st.just(set())
 
 
+def relations_for(index: int):
+    here = st.sampled_from(TARGETS[index:])
+    return st.lists(
+        st.tuples(here, st.sampled_from(NAMES), here, st.sampled_from(NAMES)), max_size=2
+    ).map(tuple)
+
+
 def loadable(spec):
     """What the engine refuses goes: a second derived rule of a name in one
     flattened program becomes a scalar, and so does a reading rule left in a
-    derived cycle, which `reads_from` finds."""
-    spec = {owner: (imported, dict(defined)) for owner, (imported, defined) in spec.items()}
+    derived cycle, which `derived_cycle` finds. A `sets` relation stays only
+    when its value reads nothing, both sides sit in the module or its closure,
+    and every root that flattens it resolves both sides to one kind."""
+    spec = {
+        owner: (imported, dict(defined), stopped, relations)
+        for owner, (imported, defined, stopped, relations) in spec.items()
+    }
     for root in TARGETS:
         kept: dict[str, str] = {}
         for owner in sorted(closure(root, spec) | {root}):
@@ -117,7 +153,37 @@ def loadable(spec):
         while cycle := derived_cycle(root, spec):
             owner, name = cycle
             spec[owner][1][name] = ("scalar", set(spec[owner][1][name][1]))
-    return spec
+    for owner, (imported, defined, stopped, relations) in list(spec.items()):
+        scope = closure(owner, spec) | {owner}
+        spec[owner] = (
+            imported,
+            defined,
+            stopped,
+            tuple(
+                relation
+                for relation in relations
+                if relation[0] in scope
+                and relation[2] in scope
+                and relation[1] in spec[relation[0]][1]
+                and spec[relation[2]][1].get(relation[3], ("", ()))[0] in VALUE_SHAPES
+                and relation[:2] != relation[2:]
+            ),
+        )
+    while True:
+        modules = build(spec)
+        refused = [
+            root
+            for root in TARGETS
+            if lsi.program(root, lsi.flattened(root, modules), modules) is None
+        ]
+        if not refused:
+            return spec
+        owner = max(
+            (owner for owner in closure(refused[0], spec) | {refused[0]} if spec[owner][3]),
+            key=TARGETS.index,
+        )
+        imported, defined, stopped, relations = spec[owner]
+        spec[owner] = (imported, defined, stopped, relations[:-1])
 
 
 def derived_cycle(root, spec) -> tuple[str, str] | None:
@@ -128,7 +194,7 @@ def derived_cycle(root, spec) -> tuple[str, str] | None:
     for owner in sorted(scope):
         for name, (shape, body) in spec[owner][1].items():
             if shape in READING:
-                follows[name] = (owner, {read for reads in body.values() for read in reads})
+                follows[name] = (owner, {read for reads in body.values() for read in reads} - {name})
 
     def reaches(start, name, seen):
         if name not in follows or name in seen:
@@ -147,53 +213,90 @@ def derived_cycle(root, spec) -> tuple[str, str] | None:
 
 
 specs = st.fixed_dictionaries(
-    {owner: st.tuples(imports_for(index), rules) for index, owner in enumerate(TARGETS)}
+    {
+        owner: st.tuples(imports_for(index), rules, ended, relations_for(index))
+        for index, owner in enumerate(TARGETS)
+    }
 ).map(loadable)
+
+
+def without_relations(spec):
+    return {owner: (*body[:3], ()) for owner, body in spec.items()}
+
+
+plain_specs = specs.map(without_relations)
 
 
 def formula(names, own) -> str:
     return " + ".join(sorted(set(names) - {own})) or "1 + 1"
 
 
-def rule_yaml(name, shape, body) -> dict:
+def dated(start: date, name: str, stopped) -> dict:
+    version = {"from": start.isoformat()}
+    if (name, start) in stopped:
+        version["to"] = end_of(start).isoformat()
+    return version
+
+
+def rule_yaml(name, shape, body, stopped) -> dict:
     kind = "derived" if shape in ("derived", "flagless") else "parameter"
     rule = {"name": name, "kind": kind}
     if shape in ("derived", "constant"):
         rule.update(entity="Person", dtype="Integer", period="Month")
     if shape in READING:
         rule["versions"] = [
-            {"from": start.isoformat(), "formula": formula(read, name)}
+            {**dated(start, name, stopped), "formula": formula(read, name)}
             for start, read in sorted(body.items())
         ]
     elif shape in ("constant", *LITERAL):
-        rule["versions"] = [{"from": start.isoformat(), "formula": "1"} for start in sorted(body)]
+        rule["versions"] = [
+            {**dated(start, name, stopped), "formula": "1"} for start in sorted(body)
+        ]
     else:
         rule["indexed_by"] = "size"
         rule["versions"] = [
-            {"from": start.isoformat(), "values": {0: 1}} for start in sorted(body)
+            {**dated(start, name, stopped), "values": {0: 1}} for start in sorted(body)
         ]
         if shape == "stale":
             rule["versions"].insert(0, {"from": "1990-01-01", "formula": "p + q"})
     return rule
 
 
-def module_text(imported, defined) -> str:
+def relation_yaml(index, number, relation) -> dict:
+    target, value = f"{relation[0]}#{relation[1]}", f"{relation[2]}#{relation[3]}"
+    return {
+        "name": f"assignment_{index}_{number}",
+        "kind": "source_relation",
+        "source_relation": {
+            "type": "sets",
+            "target": target,
+            "value": value,
+            "basis": {"delegation": target},
+        },
+    }
+
+
+def module_text(owner, imported, defined, stopped, relations) -> str:
+    index = TARGETS.index(owner)
     return yaml.safe_dump(
         {
             "format": "rulespec/v1",
             "module": {},
             "imports": sorted(imported),
-            "rules": [rule_yaml(name, *defined[name]) for name in sorted(defined)],
+            "rules": [
+                *(relation_yaml(index, number, item) for number, item in enumerate(relations)),
+                *(rule_yaml(name, *defined[name], stopped) for name in sorted(defined)),
+            ],
         }
     )
 
 
 def build(spec) -> dict[str, "lsi.Module"]:
     """Through the YAML parser, so these properties cover the sorting into namespaces."""
-    return {target: lsi.parse_module(module_text(*body)) for target, body in spec.items()}
+    return {owner: lsi.parse_module(module_text(owner, *body)) for owner, body in spec.items()}
 
 
-def closure(target, spec) -> set[str]:
+def closure(owner, spec) -> set[str]:
     """The engine's flattening: each imported module and everything it imports."""
     seen: set[str] = set()
 
@@ -203,8 +306,8 @@ def closure(target, spec) -> set[str]:
                 seen.add(imported)
                 visit(imported)
 
-    visit(target)
-    seen.discard(target)
+    visit(owner)
+    seen.discard(owner)
     return seen
 
 
@@ -214,16 +317,23 @@ def definitions(name, scope, spec) -> list[tuple[str, str, object]]:
     ]
 
 
-def scalar_group(name, scope, spec, tables_only=False) -> list[tuple[str, date]]:
+def spans(owner, name, starts, spec) -> list[tuple[date, date]]:
+    stopped = spec[owner][2]
+    return [(start, end_of(start) if (name, start) in stopped else OPEN) for start in starts]
+
+
+def scalar_group(name, scope, spec, tables_only=False) -> list[tuple[str, date, date]]:
     """What lower_to_scalar binds a name to: a parameter if any exists, so a table
     or else the merged scalars, and only then a derived rule. Each entry is
-    (module, version start), for the versions that survive lowering."""
+    (module, from, to), for the versions that survive lowering."""
     found = definitions(name, scope, spec)
     tables = [(owner, body) for owner, shape, body in found if shape in TABLE]
     literals = [(owner, body) for owner, shape, body in found if shape in LITERAL]
     derived = [(owner, body) for owner, shape, body in found if shape in DERIVED_SHAPES]
     chosen = tables or literals or ([] if tables_only else derived)
-    return [(owner, start) for owner, body in chosen for start in body]
+    return [
+        (owner, start, end) for owner, body in chosen for start, end in spans(owner, name, body, spec)
+    ]
 
 
 def in_both_namespaces(name, scope, spec) -> bool:
@@ -231,83 +341,146 @@ def in_both_namespaces(name, scope, spec) -> bool:
     return bool(shapes & {*TABLE, *LITERAL}) and bool(shapes & set(DERIVED_SHAPES))
 
 
-def simulated_edges(spec) -> dict[tuple[str, str], date]:
-    """Each (rule, target) a date stops on, with the first such date.
+# Nothing changes inside these stretches: each starts on a version's start or
+# on the day after a version ends.
+CUTS = sorted({*STARTS, *(end_of(start) + timedelta(days=1) for start in STARTS)})
+STRETCHES = [
+    (cut, CUTS[index + 1] - timedelta(days=1) if index + 1 < len(CUTS) else OPEN)
+    for index, cut in enumerate(CUTS)
+]
 
-    On each date a rule answers from its latest started version (Derived::
-    semantics_at), so only names that version reads are reached. The stop is a
-    reached name bound to nothing started yet, when an imported module feeds it.
+
+def applies(start: date, end: date, day: date) -> bool:
+    return start <= day <= end
+
+
+def simulated_stops(spec) -> dict[tuple[str, str], tuple[tuple[date, date], ...]]:
+    """Per (rule, name), the dates a run stops on a name an import feeds.
+
+    On each date a rule answers from the version the engine picks: of those that
+    apply, the latest started (Derived::semantics_at). The stop is a name that
+    version reads, bound to nothing that applies then, when an imported module
+    feeds the name.
     """
-    days = sorted(set(STARTS) | {start + timedelta(days=1) for start in STARTS})
-    stops: dict[tuple[str, str], date] = {}
-    for origin, (_, defined) in spec.items():
+    stops: dict[tuple[str, str], list[tuple[date, date]]] = {}
+    for origin, (_, defined, _, _) in spec.items():
         scope = closure(origin, spec) | {origin}
-        for name, (shape, dated) in defined.items():
+        for name, (shape, body) in defined.items():
             if shape not in READING:
                 continue
-            for day in days:
-                started = [start for start in dated if start <= day]
-                if not started:
+            versions = [
+                (start, end, body[start]) for start, end in spans(origin, name, body, spec)
+            ]
+            for first, last in STRETCHES:
+                picked = [item for item in versions if applies(item[0], item[1], first)]
+                if not picked:
                     continue
-                for read in dated[max(started)]:
+                for read in max(picked)[2]:
                     if read == name:
                         continue
                     group = scalar_group(read, scope, spec)
-                    imported = [(start, owner) for owner, start in group if owner != origin]
-                    if imported and min(start for _, start in group) > day:
-                        key = (f"{origin}#{name}", f"{min(imported)[1]}#{read}")
-                        stops[key] = min(stops.get(key, day), day)
-    return stops
+                    if not any(owner != origin for owner, _, _ in group):
+                        continue
+                    if not any(applies(start, end, first) for _, start, end in group):
+                        stops.setdefault((f"{origin}#{name}", read), []).append((first, last))
+    return {key: lsi.merged(runs) for key, runs in stops.items()}
 
 
 def edges_of(modules):
     return lsi.late_start_edges(lsi.import_references(modules))
 
 
-def test_the_generators_reach_tables_and_collisions_and_stay_loadable():
-    """The hard shapes must occur often enough to test, and no program the engine
-    refuses may."""
+def stops_of(modules):
+    return lsi.stop_dates(lsi.import_references(modules))
 
-    def shapes(spec):
-        return {shape for _, defined in spec.values() for shape, _ in defined.values()}
 
-    def collides(spec):
-        return any(
-            in_both_namespaces(name, closure(owner, spec) | {owner}, spec)
-            for owner in spec
-            for name in NAMES
-        )
+def _shapes(spec):
+    return {shape for _, defined, _, _ in spec.values() for shape, _ in defined.values()}
 
-    for reached in (
-        lambda spec: "stale" in shapes(spec) and bool(simulated_edges(spec)),
-        collides,
+
+def _collides(spec):
+    return any(
+        in_both_namespaces(name, closure(owner, spec) | {owner}, spec)
+        for owner in spec
+        for name in NAMES
+    )
+
+
+def _reach(condition):
+    """A seeded search, so a generator that stops reaching a shape fails every
+    run instead of now and then."""
+    return find(
+        specs,
+        condition,
+        settings=settings(deadline=None, database=None, max_examples=3000),
+        random=random.Random(0),
+    )
+
+
+@pytest.mark.parametrize(
+    "reached",
+    [
+        lambda spec: "stale" in _shapes(spec) and bool(simulated_stops(without_relations(spec))),
+        _collides,
         lambda spec: any(spec[owner][0] for owner in TARGETS[:-1]),
-    ):
-        spec = find(specs, reached, settings=settings(deadline=None, database=None))
-        for owner, (imported, _) in spec.items():
-            assert all(TARGETS.index(item) > TARGETS.index(owner) for item in imported)
-        for root in TARGETS:
-            scope = closure(root, spec) | {root}
-            for name in NAMES:
-                derived = [
-                    owner
-                    for owner, shape, _ in definitions(name, scope, spec)
-                    if shape in DERIVED_SHAPES
-                ]
-                assert len(derived) <= 1
+        lambda spec: any(edge.resumes == OPEN for edge in edges_of(build(spec))),
+        lambda spec: any(
+            run[0] not in STARTS for runs in stops_of(build(spec)).values() for run in runs
+        ),
+        lambda spec: any(body[3] for body in spec.values())
+        and stops_of(build(spec)) != stops_of(build(without_relations(spec))),
+    ],
+    ids=["stale-table", "collision", "imports", "never-resumes", "interior-gap", "sets"],
+)
+def test_the_generators_reach_each_hard_shape_and_stay_loadable(reached):
+    spec = _reach(reached)
+    for owner, (imported, _, _, _) in spec.items():
+        assert all(TARGETS.index(item) > TARGETS.index(owner) for item in imported)
+    modules = build(spec)
+    for root in TARGETS:
+        assert lsi.program(root, lsi.flattened(root, modules), modules) is not None
+        scope = closure(root, spec) | {root}
+        for name in NAMES:
+            derived = [
+                owner
+                for owner, shape, _ in definitions(name, scope, spec)
+                if shape in DERIVED_SHAPES
+            ]
+            assert len(derived) <= 1
+        assert derived_cycle(root, spec) is None
 
 
 @settings(semantic_properties, max_examples=500)
-@given(specs)
-def test_each_stop_is_an_edge_and_each_other_edge_is_a_name_read_both_ways(spec):
-    found = {(edge.rule, edge.target): edge.version_start for edge in edges_of(build(spec))}
-    stops = simulated_edges(spec)
+@given(plain_specs)
+def test_each_stop_date_is_the_tools_and_each_other_one_reads_a_name_both_ways(spec):
+    found = stops_of(build(spec))
+    stops = simulated_stops(spec)
     target(float(len(found)))
-    assert stops.items() <= found.items()
-    for rule, reached in found.keys() - stops.keys():
+    for key in found.keys() | stops.keys():
+        rule, name = key
         origin = rule.split("#")[0]
-        name = reached.split("#")[1]
-        assert in_both_namespaces(name, closure(origin, spec) | {origin}, spec)
+        if in_both_namespaces(name, closure(origin, spec) | {origin}, spec):
+            assert lsi.subtract(stops.get(key, ()), found.get(key, ())) == ()
+        else:
+            assert found.get(key) == stops.get(key)
+
+
+@semantic_properties
+@given(specs)
+def test_edges_render_the_stop_dates(spec):
+    references = lsi.import_references(build(spec))
+    stops = lsi.stop_dates(references)
+    names: dict[tuple[str, str], set[str]] = {}
+    for item in references:
+        names.setdefault((item.rule, item.target), set()).add(item.read_name)
+    edges = lsi.late_start_edges(references)
+    for edge in edges:
+        assert any(
+            lsi.subtract([(edge.start, edge.start)], stops.get((edge.rule, name), ())) == ()
+            for name in names[(edge.rule, edge.target)]
+        )
+    carried = {(edge.rule, name) for edge in edges for name in names[(edge.rule, edge.target)]}
+    assert set(stops) <= carried
 
 
 @pytest.mark.skipif(not HARNESS, reason="the engine-differential job builds the harness")
@@ -317,11 +490,11 @@ def test_the_pinned_engine_binds_what_the_tool_reads(spec):
     with tempfile.TemporaryDirectory(prefix="late-start-generated-") as scratch:
         root = Path(scratch) / "tree"
         paths = []
-        for module, body in spec.items():
-            relative = lsi.module_path(f"{module}#x")
+        for owner, body in spec.items():
+            relative = lsi.module_path(f"{owner}#x")
             paths.append(relative)
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
-            (root / relative).write_text(module_text(*body), encoding="utf-8")
+            (root / relative).write_text(module_text(owner, *body), encoding="utf-8")
         run = lsi.parse_engine_references(
             lsi.run_harness(Path(HARNESS), root, paths).splitlines()
         )
@@ -332,6 +505,7 @@ def test_the_pinned_engine_binds_what_the_tool_reads(spec):
     assert differences.only_engine == set()
     assert differences.only_static == set()
     assert differences.missing_rules == set()
+    assert differences.extra_rules == set()
 
 
 @semantic_properties
@@ -339,10 +513,10 @@ def test_the_pinned_engine_binds_what_the_tool_reads(spec):
 def test_a_fragment_never_changes_the_result(spec, fragment):
     modules = build(spec)
     fragmented = {
-        target: replace(
+        owner: replace(
             module, imports=tuple(f"{specifier}#{fragment}" for specifier in module.imports)
         )
-        for target, module in modules.items()
+        for owner, module in modules.items()
     }
     assert lsi.import_references(fragmented) == lsi.import_references(modules)
 
@@ -354,26 +528,10 @@ def test_a_crossing_reference_names_a_definition_inside_the_import_closure(spec)
     for reference in lsi.import_references(modules):
         origin, _ = reference.rule.split("#")
         owner, name = reference.target.split("#")
-        assert owner in lsi.import_closure(origin, modules)
-        assert owner != origin
+        assert owner in lsi.import_closure(origin, modules) | {origin}
         assert any(rule.name == name for rule in modules[owner].rules)
-
-
-@semantic_properties
-@given(specs)
-def test_edges_are_a_subset_of_the_rule_level_reading(spec):
-    modules = build(spec)
-    starts = {
-        f"{origin}#{rule.name}": rule.start
-        for origin, module in modules.items()
-        for rule in module.rules
-    }
-    rule_level = {
-        (item.rule, item.target)
-        for item in lsi.import_references(modules)
-        if starts[item.rule] < item.target_start
-    }
-    assert {(edge.rule, edge.target) for edge in edges_of(modules)} <= rule_level
+        if owner == origin:
+            assert reference.name not in ("", name)
 
 
 @semantic_properties
@@ -394,7 +552,7 @@ def test_a_table_never_reads_and_never_starts_before_its_values(spec):
     modules = build(spec)
     tables = {
         (owner, name): body
-        for owner, (_, defined) in spec.items()
+        for owner, (_, defined, _, _) in spec.items()
         for name, (shape, body) in defined.items()
         if shape in TABLE
     }
@@ -409,27 +567,15 @@ def test_a_table_never_reads_and_never_starts_before_its_values(spec):
     )
 
 
-def _with_rule(modules, origin, name, rule):
-    module = modules[origin]
-    return {
-        **modules,
-        origin: replace(
-            module,
-            rules=tuple(rule if item.name == name else item for item in module.rules),
-        ),
-    }
+def _restricted(stops, keep):
+    return {key: runs for key, runs in stops.items() if keep(key)}
 
 
 @semantic_properties
-@given(specs, st.data())
-def test_moving_a_target_later_never_removes_an_edge(spec, data):
+@given(specs, st.sampled_from(NAMES))
+def test_taking_dates_from_a_name_never_removes_another_rules_stop(spec, name):
     modules = build(spec)
-    edges = edges_of(modules)
-    assume(edges)
-    edge = data.draw(st.sampled_from(sorted(edges)))
-    _, name = edge.target.split("#")
 
-    # Every definition moves, so a shared name still resolves to the same target.
     def later(rule):
         return replace(
             rule,
@@ -439,38 +585,49 @@ def test_moving_a_target_later_never_removes_an_edge(spec, data):
             ),
         )
 
-    moved = edges_of(
-        {
-            owner: replace(
-                module,
-                rules=tuple(later(rule) if rule.name == name else rule for rule in module.rules),
-            )
-            for owner, module in modules.items()
-        }
-    )
-    assert (edge.rule, edge.target) in {(item.rule, item.target) for item in moved}
+    moved = {
+        owner: replace(
+            module,
+            rules=tuple(later(rule) if rule.name == name else rule for rule in module.rules),
+        )
+        for owner, module in modules.items()
+    }
+
+    def other(key):
+        return key[0].split("#", 1)[1] != name
+
+    before = _restricted(stops_of(modules), other)
+    assert lsi.widened(before, stops_of(moved)) == {}
 
 
 @semantic_properties
 @given(specs, st.data())
-def test_moving_a_late_version_earlier_never_removes_its_edge(spec, data):
+def test_starting_a_rule_earlier_never_removes_its_own_stop(spec, data):
     modules = build(spec)
-    edges = edges_of(modules)
-    assume(edges)
-    edge = data.draw(st.sampled_from(sorted(edges)))
-    origin, name = edge.rule.split("#")
+    stops = stops_of(modules)
+    assume(stops)
+    rule_id = data.draw(st.sampled_from(sorted({rule for rule, _ in stops})))
+    origin, name = rule_id.split("#")
     rule = next(item for item in modules[origin].rules if item.name == name)
+    first = min(rule.versions)
     earlier = replace(
         rule,
         versions=tuple(
             replace(version, start=version.start - timedelta(days=365))
-            if version.start == edge.version_start
+            if version == first
             else version
             for version in rule.versions
         ),
     )
-    moved = edges_of(_with_rule(modules, origin, name, earlier))
-    assert (edge.rule, edge.target) in {(item.rule, item.target) for item in moved}
+    module = modules[origin]
+    moved = {
+        **modules,
+        origin: replace(
+            module, rules=tuple(earlier if item.name == name else item for item in module.rules)
+        ),
+    }
+    own = _restricted(stops, lambda key: key[0] == rule_id)
+    assert lsi.widened(own, stops_of(moved)) == {}
 
 
 @semantic_properties
@@ -482,15 +639,19 @@ def test_the_result_does_not_depend_on_declaration_order(spec, rng: random.Rando
         return items
 
     modules = build(spec)
+    merge_order_matters = any(module.sets for module in modules.values())
     reordered = {
-        target: lsi.Module(
-            tuple(shuffled(modules[target].imports)),
-            tuple(
+        owner: replace(
+            modules[owner],
+            imports=tuple(
+                modules[owner].imports if merge_order_matters else shuffled(modules[owner].imports)
+            ),
+            rules=tuple(
                 replace(rule, versions=tuple(shuffled(rule.versions)))
-                for rule in shuffled(modules[target].rules)
+                for rule in shuffled(modules[owner].rules)
             ),
         )
-        for target in shuffled(modules)
+        for owner in shuffled(modules)
     }
     assert lsi.import_references(reordered) == lsi.import_references(modules)
     references = sorted(lsi.import_references(modules))
@@ -517,7 +678,9 @@ def test_strings_comments_and_calls_are_never_references(names, extras, rng):
     rng.shuffle(parts)
     # An operator on each line, so that a name is never a callee by accident and
     # a comment cannot swallow the next part.
-    assert lsi.formula_references("\n+ ".join(parts)) == names
+    formula_text = "\n+ ".join(parts)
+    assert lsi.closes_its_strings(formula_text)
+    assert lsi.formula_references(formula_text) == names
 
 
 @semantic_properties
@@ -527,6 +690,95 @@ def test_parentheses_never_change_what_is_a_literal(depth, literal):
     assert not lsi.is_literal("(" * depth + "-" + literal + ")" * depth)
 
 
+# Intervals over a short horizon, counted day by day. OPEN stands past it.
+ORIGIN = date(2000, 1, 1)
+HORIZON = 40
+offsets = st.integers(min_value=0, max_value=HORIZON - 1)
+
+
+def _interval(pair):
+    start, length = pair
+    return (
+        ORIGIN + timedelta(days=start),
+        OPEN if length is None else ORIGIN + timedelta(days=start + length),
+    )
+
+
+intervals = st.tuples(offsets, st.one_of(st.none(), st.integers(0, 12))).map(_interval)
+interval_lists = st.lists(intervals, max_size=5)
+
+
+def _days(runs) -> set[date]:
+    last = ORIGIN + timedelta(days=HORIZON + 15)
+    return {
+        start + timedelta(days=offset)
+        for start, end in runs
+        for offset in range((min(end, last) - start).days + 1)
+    }
+
+
+def _canonical(runs) -> bool:
+    return all(
+        start <= end and (index == 0 or runs[index - 1][1] + timedelta(days=1) < start)
+        for index, (start, end) in enumerate(runs)
+    )
+
+
+@semantic_properties
+@given(interval_lists)
+def test_merged_runs_hold_the_same_days_sorted_and_apart(runs):
+    result = lsi.merged(runs)
+    assert _days(result) == _days(runs) and _canonical(result)
+
+
+@semantic_properties
+@given(interval_lists, interval_lists)
+def test_subtract_leaves_exactly_the_days_the_second_lacks(left, right):
+    result = lsi.subtract(left, right)
+    assert _days(result) == _days(left) - _days(right) and _canonical(result)
+
+
+@semantic_properties
+@given(st.dictionaries(offsets, st.one_of(st.none(), st.integers(0, 12)), min_size=1, max_size=4))
+def test_windows_give_each_day_to_the_latest_started_version_that_applies(starts):
+    versions = [
+        lsi.Version(*(lambda span: (span[0], "", span[1]))(_interval(item)))
+        for item in starts.items()
+    ]
+    picked = lsi.windows(versions)
+    for day in sorted(_days([(version.start, version.end) for version in versions])):
+        applying = [version for version in versions if version.start <= day <= version.end]
+        owner = max(applying, key=lambda version: version.start)
+        assert day in _days(picked[owner])
+        assert not any(day in _days(runs) for version, runs in picked.items() if version != owner)
+
+
+stop_maps = st.dictionaries(
+    st.sampled_from([("us:a#r", "t"), ("us:a#r", "u"), ("us:a#s", "t")]),
+    interval_lists.map(lsi.merged).filter(bool),
+    max_size=3,
+)
+
+
+@semantic_properties
+@given(stop_maps, stop_maps)
+def test_widened_is_empty_iff_every_stop_date_is_the_bases(head, base):
+    found = lsi.widened(head, base)
+    assert (found == {}) == all(
+        _days(runs) <= _days(base.get(key, ())) for key, runs in head.items()
+    )
+    for key, runs in found.items():
+        assert _days(runs) == _days(head[key]) - _days(base.get(key, ()))
+
+
+@semantic_properties
+@given(stop_maps, stop_maps, stop_maps)
+def test_widened_composes(head, middle, base):
+    if lsi.widened(head, middle) == {} and lsi.widened(middle, base) == {}:
+        assert lsi.widened(head, base) == {}
+    assert lsi.widened(head, head) == {}
+
+
 dates = st.dates(min_value=date(1, 1, 1), max_value=date(2100, 1, 1))
 ids = st.builds(
     lambda jurisdiction, path, name: f"{jurisdiction}:statutes/{path}#{name}",
@@ -534,15 +786,14 @@ ids = st.builds(
     st.text(alphabet="abc012/-.:", min_size=1, max_size=10),
     st.text(alphabet="abc_012", min_size=1, max_size=10),
 )
-late_pairs = st.tuples(dates, dates).filter(lambda pair: pair[0] != pair[1]).map(sorted)
+gap_dates = st.one_of(
+    st.tuples(dates, dates).filter(lambda pair: pair[0] != pair[1]).map(sorted),
+    dates.map(lambda start: [start, OPEN]),
+)
 edge_values = st.builds(
-    lambda rule, target, pair: lsi.Edge(rule, target, pair[0], pair[1]), ids, ids, late_pairs
+    lambda rule, target, pair: lsi.Edge(rule, target, pair[0], pair[1]), ids, ids, gap_dates
 )
 edge_sets = st.sets(edge_values, max_size=30)
-
-
-def _keys(entries):
-    return {(entry.rule, entry.target) for entry in entries}
 
 
 @semantic_properties
@@ -556,44 +807,24 @@ def test_baseline_round_trip(entries):
 
 
 @semantic_properties
-@given(edge_sets, edge_sets, st.one_of(st.none(), edge_sets), st.booleans())
-def test_gate_passes_iff_equal_and_shrinking(edges, baseline, base, allow_added):
-    verdict = lsi.compare(edges, baseline, base, allow_added)
-    expected = edges == baseline and (
-        base is None or allow_added or _keys(baseline) <= _keys(base)
-    )
-    assert verdict.ok == expected
-
-
-@semantic_properties
-@given(edge_sets, edge_values, st.booleans())
-def test_an_unlisted_edge_always_fails_even_when_accepted(baseline, extra, allow_added):
-    assume(extra not in baseline)
-    verdict = lsi.compare(baseline | {extra}, baseline, baseline, allow_added)
-    assert not verdict.ok and verdict.new == {extra}
-
-
-@semantic_properties
-@given(edge_sets.filter(bool), st.data(), st.booleans())
-def test_a_listed_edge_that_no_longer_holds_always_fails_even_when_accepted(baseline, data, allow_added):
-    gone = data.draw(st.sampled_from(sorted(baseline)))
-    verdict = lsi.compare(baseline - {gone}, baseline, baseline, allow_added)
-    assert not verdict.ok and verdict.stale == {gone}
+@given(edge_sets, edge_sets, stop_maps)
+def test_gate_passes_iff_equal_and_nothing_widened(edges, baseline, wider):
+    verdict = lsi.compare(edges, baseline, wider)
+    assert verdict.ok == (edges == baseline and not wider)
+    assert verdict.new == edges - baseline and verdict.stale == baseline - edges
 
 
 @semantic_properties
 @given(edge_sets, edge_values)
-def test_a_regenerated_new_pair_fails_until_accepted(base, extra):
-    assume((extra.rule, extra.target) not in _keys(base))
-    grown = base | {extra}
-    verdict = lsi.compare(grown, grown, base)
-    assert not verdict.ok and verdict.added == {extra}
-    assert lsi.compare(grown, grown, base, allow_added=True).ok
+def test_an_unlisted_edge_always_fails(baseline, extra):
+    assume(extra not in baseline)
+    verdict = lsi.compare(baseline | {extra}, baseline)
+    assert not verdict.ok and verdict.new == {extra}
 
 
 @semantic_properties
 @given(edge_sets.filter(bool), st.data())
-def test_a_listed_pair_may_change_dates_when_regenerated(base, data):
-    entry = data.draw(st.sampled_from(sorted(base)))
-    current = (base - {entry}) | {replace(entry, target_start=entry.target_start + timedelta(days=1))}
-    assert lsi.compare(current, current, base).ok
+def test_a_listed_edge_that_no_longer_holds_always_fails(baseline, data):
+    gone = data.draw(st.sampled_from(sorted(baseline)))
+    verdict = lsi.compare(baseline - {gone}, baseline)
+    assert not verdict.ok and verdict.stale == {gone}

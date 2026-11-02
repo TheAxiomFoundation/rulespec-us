@@ -84,79 +84,101 @@ python tools/engine_root_load.py baseline --results /tmp/engine-root-load.jsonl 
 
 # Late-start imports
 
-A late-start import edge is a rule version that reads a rule or parameter from
-another module whose earliest version starts after that rule version does. On
-any date in between, the engine picks the rule version and then stops on the
+A late-start import edge is a run of dates on which a rule version applies,
+reads a rule or parameter from another module, and finds that name with no
+version. Usually the import starts after the rule version does; a gap between
+two of the import's versions, or an import that ends first, stops the engine the
+same way. On those dates the engine picks the rule version and then stops on the
 import, and it says so only at run time. That is how 26 USC 6012 stopped on
 26 USC 7703 (issue #1971). The encoder's `temporal-dependency-coverage`
 validator checks references inside one file and stops at imports.
 
 `tools/late_start_imports.py` finds these edges statically, so it needs no
-engine build and it also covers modules the engine does not load. It reads YAML
-the way the engine's parser does, so an unquoted `yes` stays a string. It resolves
-a formula's names the way the engine does: against the whole import closure,
-because a `#fragment` does not narrow what a formula sees, and by namespace, not
-by `kind`. A rule with `values` is a table, and it starts at its first `values`.
-Otherwise a rule with an `entity` or a computed version is derived, and the rest
-are parameters. A parameter takes a name from a derived rule, even a local one,
-in a scalar position. Parameters of one name merge, so a name counts as imported
-when any imported definition feeds it. A `sets` source relation gives its target
-the value's versions, and a formula that reads the target meets the value's start.
-The tool compares each version with its target, not each rule. A later rule
-version that starts with a later target is the correct way to encode a change:
-that version cannot read a gap.
+engine build and it also covers modules the engine does not load. It follows
+the pinned engine:
 
-An edge means a version can read the gap, not that every query does. The tool has
-no parser, so a branch no date takes still counts, a name defined in both
-namespaces reads both, and a name a formula uses as a relation counts as a read.
+- **YAML.** It reads YAML the way the engine's parser does: an unquoted `yes`
+  stays a string, and `name: TRUE` names a rule `TRUE`. It refuses a module that
+  writes out a YAML tag or leaves a formula string open, rather than guess.
+- **Names.** It resolves a formula's names against the whole import closure,
+  because a `#fragment` does not narrow what a formula sees, and by namespace,
+  not by `kind`. A rule with `values` is a table, and it starts at its first
+  `values`. Otherwise a rule with an `entity` or a computed version is derived,
+  and the rest are parameters. Parameters of one name merge, so a name counts as
+  imported when any imported definition feeds it.
+- **Dates.** A version applies from `effective_from` through `effective_to`, and
+  on each date the engine picks the applicable version that starts last. The
+  tool compares the dates each rule version applies with every version of what
+  it reads, so a later rule version that starts with a later target reads no
+  gap. That is the correct way to encode a change.
+- **Relations.** A version that asks for a derived relation reads what the
+  relation's predicate reads, on the same dates. A `sets` source relation gives
+  its target the value's versions in the module's own root, the way the engine
+  finds and copies them.
 
-The check covers what a module reaches through its own imports. It does not
-cover a name that only a composing root supplies: a root flattens every module
-it imports, so under it a rule can bind a name its own module reads as an input.
-That rule stops on the root's dates before the supplier starts, and the check
-reports nothing. It also leaves out a table key that starts later than its table.
+An edge means a version can read the gap, not that every query does. The tool
+has no parser, so a branch no date takes still counts, and a name defined in
+both namespaces reads both.
 
-The `engine-differential` job holds this model to the pinned engine. The engine
-lowers every module, and the bindings it reports for the rules each module
-declares must equal the tool's by name, namespace and start date. It lowers
-generated programs and known hard shapes the same way. Point `LATE_START_HARNESS`
-at the built harness to run those tests locally.
+The check reads each module's rules under that module's own root, which is how
+the engine compiles it. It does not cover a rule's bindings under a root that
+imports its module:
 
-Edges must equal `tools/known-late-start-imports.txt`
-(`<rule id>\t<target id>\t<version start>\t<target start>`) exactly:
+- a composing root can supply a name the module reads as an input, and the rule
+  then stops on the root's dates before that supplier starts;
+- a `sets` relation in the importing root can replace a name's versions. For
+  example, `us-ga:policies/dfcs/snap/3617` replaces the versions of 7 CFR
+  273.9's `snap_standard_utility_allowance_state_option`, and under that root
+  the 273.9 rule that reads it stops in October 2025.
 
-- an edge that is not listed fails `tests/test_late_start_imports.py`, which
-  runs in the required `validate` check;
-- a listed edge that no longer holds, or whose dates moved, fails the same
-  test, so a repair changes its line in the same pull request;
-- in the `late-start-imports` workflow, a pull request may not add a
-  `(rule, target)` pair against its protected base, because regenerating the
-  list would otherwise accept any edge. A listed pair may change dates.
+It also leaves out a table key that starts later than its table.
+
+Edges must equal `tools/known-late-start-imports.txt`, one per line:
+`<rule id>\t<target id>\t<first date>\t<date the target next has a version>`,
+with `never` when it has none.
+
+- An edge the list leaves out fails `tests/test_late_start_imports.py`, which
+  runs in the required `validate` check.
+- A listed edge that no longer holds, or whose dates moved, fails the same test,
+  so a repair changes its line in the same pull request.
+- In the `late-start-imports` workflow, a pull request may not add a stop date
+  to any `(rule, name)` against its protected base, because regenerating the
+  list would otherwise accept any edge. The workflow computes the base's stop
+  dates from the base commit's modules, not from its list. It compares by the
+  name a formula reads, so moving which module supplies a name can narrow a gap
+  without a label.
 
 Fix a new edge by starting the rule version no earlier than its target, giving
-the target a version for those dates, or reading the target only from a later
-rule version. Sometimes the edge is right: a date repair can expose a gap that
-was already in the encoding, and the module then fails closed where it used to
-answer wrongly. Regenerate the list, and add the `late-start-import-accepted`
-label to the pull request with a line saying why.
+the target a version for those dates, or reading the target only from a rule
+version that applies when the target does. Sometimes the edge is right: a date
+repair can expose a gap that was already in the encoding, and the module then
+fails closed where it used to answer wrongly. Regenerate the list, and add the
+`late-start-import-accepted` label to the pull request with a line saying why.
 
 ```bash
 python tools/late_start_imports.py check --base-ref origin/main
 python tools/late_start_imports.py baseline > tools/known-late-start-imports.txt
 ```
 
-The workflow's `engine-differential` job checks the static model against the
-pinned engine. It compiles each module, stored compositions through their own
-surface, reads every name the lowered program binds in that module's own rules,
-and requires those bindings to equal the static ones by name, namespace and start
-date. The run fails unless every module has a result, the engine compiled at
-least 99% of them, and every edge sits in a compiled module. It compiles a
-scratch copy of the tree with citation metadata removed, because retired forms of
-that metadata would otherwise stop the engine from loading most of what it
-compares. The static model may report more than the engine in two cases, both on
-purpose and both printed: a name defined in both namespaces reads both, because
-only a parser could tell which position reads which, and a parameter read in a
-judgment position counts, though the engine lowers it to an input.
+The workflow's `engine-differential` job holds the static model to the pinned
+engine. It compiles each module, stored compositions through their own surface,
+and reads every name the lowered program binds in that module's own rules,
+following derived relations into their predicates. Those bindings must equal the
+static ones by rule, version dates, name, namespace and every version of what
+the name binds to. For each name a module declares, the namespaces and versions
+the program holds must also equal the static model's, both ways. The run fails
+unless every module has a result, the engine compiled at least 99% of them, and
+every edge sits in a compiled module. It compiles a scratch copy of the tree
+with citation metadata removed, because retired forms of that metadata would
+otherwise stop the engine from loading most of what it compares. The static
+model may report more than the engine in two cases, both on purpose and both
+printed: a name defined in both namespaces reads both, because only a parser
+could tell which position reads which, and a parameter read in a judgment
+position counts, though the engine lowers it to an input.
+
+The same job lowers generated programs and known hard shapes through the
+engine. Point `LATE_START_HARNESS` at the built harness to run those tests
+locally.
 
 ```bash
 python tools/late_start_imports.py differential --engine-src ../axiom-rules-engine \

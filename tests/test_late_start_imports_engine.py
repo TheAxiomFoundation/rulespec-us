@@ -48,13 +48,20 @@ def derived(name: str, start: date, formula: str, dtype: str = "Integer") -> str
     )
 
 
-def parameter(name: str, start: date, formula: str) -> str:
+def parameter(name: str, start: date, formula: str, *more: tuple[date, date | None, str]) -> str:
+    """`more` adds versions as (from, to, formula); the first version has no end
+    unless it comes first in `more` instead."""
+    versions = [(start, None, formula), *more] if start else list(more)
     return (
         f"  - name: {name}\n"
         "    kind: parameter\n"
         "    versions:\n"
-        f"      - from: '{start}'\n"
-        f"        formula: {formula}\n"
+        + "".join(
+            f"      - from: '{begin}'\n"
+            + (f"        to: '{end}'\n" if end else "")
+            + f"        formula: {text}\n"
+            for begin, end, text in versions
+        )
     )
 
 
@@ -98,6 +105,7 @@ def compared(tmp_path: Path, texts: dict[str, str]) -> tuple[set, "lsi.EngineRun
     assert differences.only_engine == set()
     assert differences.only_static == set()
     assert differences.missing_rules == set()
+    assert differences.extra_rules == set()
     return lsi.late_start_edges(lsi.import_references(modules)), run
 
 
@@ -128,7 +136,7 @@ def test_a_compositions_own_rules_report_though_they_took_imported_ids(tmp_path)
         },
     )
     assert edges == {edge("caller#answer", "target#shared", Y2000, Y2020)}
-    assert ("us:statutes/1/caller#answer", "derived") in run.rules
+    assert ("us:statutes/1/caller#answer", "derived") in {(rule, space) for rule, space, _ in run.rules}
     assert any(item.rule.endswith("caller#answer") for item in run.bindings)
 
 
@@ -213,7 +221,8 @@ def test_a_sets_relation_between_derived_rules_as_the_tree_writes_it(tmp_path):
             ),
         },
     )
-    assert edges == {edge("state#answer", "option#state_option", Y2000, Y2020)}
+    # The line names the value the formula meets, though this module holds it.
+    assert edges == {edge("state#answer", "state#state_value", Y2000, Y2020)}
 
 
 def test_a_rule_a_relation_sets_reads_what_its_value_reads(tmp_path):
@@ -311,3 +320,161 @@ def test_a_local_parameter_beside_an_imported_derived_rule_of_its_name(tmp_path)
     )
     assert edges == set()
     assert "us:statutes/1/caller#shared" in run.collisions
+
+
+# Round 3 shapes. Each stops the pinned engine on a date inside the edge.
+
+
+def test_an_end_dated_local_parameter_beside_a_late_import(tmp_path):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(parameter("shared", Y2020, "'2'")),
+            "caller": module(
+                parameter("shared", None, "", (Y1990, date(1999, 12, 31), "'1'")),
+                derived("answer", Y2000, "shared"),
+                imports=("target",),
+            ),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#shared", Y2000, Y2020)}
+
+
+def test_a_gap_between_two_versions_of_an_import(tmp_path):
+    edges, run = compared(
+        tmp_path,
+        {
+            "target": module(
+                parameter("t", None, "", (Y1990, date(1995, 12, 31), "'1'"), (Y2020, None, "'2'"))
+            ),
+            "caller": module(derived("answer", Y2000, "t"), imports=("target",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#t", Y2000, Y2020)}
+    assert {item.coverage for item in run.bindings} == {
+        ((Y1990, date(1995, 12, 31)), (Y2020, lsi.OPEN))
+    }
+
+
+def test_an_import_that_ends_first(tmp_path):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(parameter("t", None, "", (Y1990, date(2025, 12, 31), "'1'"))),
+            "caller": module(derived("answer", Y2000, "t"), imports=("target",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#t", date(2026, 1, 1), lsi.OPEN)}
+
+
+def test_a_rule_version_reads_only_on_the_dates_it_is_picked(tmp_path):
+    caller = derived("answer", Y2000, "late").replace(
+        "        formula: late\n",
+        "        formula: late\n      - from: '2010-01-01'\n        to: '2014-12-31'\n        formula: '1'\n",
+    )
+    edges, run = compared(
+        tmp_path,
+        {
+            "target": module(parameter("late", date(2016, 1, 1), "'1'")),
+            "caller": module(caller, imports=("target",)),
+        },
+    )
+    assert edges == {
+        edge("caller#answer", "target#late", Y2000, date(2016, 1, 1)),
+        edge("caller#answer", "target#late", date(2015, 1, 1), date(2016, 1, 1)),
+    }
+
+
+def test_a_derived_relation_reads_what_its_predicate_reads(tmp_path):
+    relation = (
+        "  - name: candidate_row\n"
+        "    kind: data_relation\n"
+        "    data_relation:\n"
+        "      predicate: candidate_row\n"
+        "      arity: 2\n"
+        "  - name: member_of_applicant\n"
+        "    kind: derived_relation\n"
+        "    derived_relation:\n"
+        "      arity: 2\n"
+        "      source_relation: us:statutes/1/caller#relation.candidate_row\n"
+        "      current_slot: 1\n"
+        "      related_slot: 0\n"
+        "    versions:\n"
+        "      - effective_from: '2000-01-01'\n"
+        "        formula: candidate_ok\n"
+    )
+    edges, run = compared(
+        tmp_path,
+        {
+            "late": module(derived("candidate_ok", Y2020, "true", "Judgment")),
+            "caller": module(
+                relation, derived("answer", Y2000, "len(member_of_applicant)"), imports=("late",)
+            ),
+        },
+    )
+    assert edges == {edge("caller#answer", "late#candidate_ok", Y2000, Y2020)}
+    assert {item.name for item in run.bindings} == {"candidate_ok"}
+
+
+def test_a_string_field_keeps_an_unquoted_name_as_written(tmp_path):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(derived("TRUE", Y2020, "'true'", "Boolean")),
+            # Quoted: a formula reads a value, where an unquoted TRUE is `true`.
+            "caller": module(derived("answer", Y2000, "'TRUE'", "Boolean"), imports=("target",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#TRUE", Y2000, Y2020)}
+
+
+def test_a_sets_relation_copies_the_first_entry_of_its_value(tmp_path):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "rate": module(parameter("rate", Y1990, "'2'")),
+            "first": module(parameter("new_rate", Y2020, "'3'")),
+            "second": module(parameter("new_rate", Y1990, "'3'")),
+            "caller": module(
+                sets("assignment", "us:statutes/1/rate#rate", "us:statutes/1/second#new_rate"),
+                derived("answer", Y2000, "rate + 0"),
+                imports=("rate", "first", "second"),
+            ),
+        },
+    )
+    assert edges == {edge("caller#answer", "first#new_rate", Y2000, Y2020)}
+
+
+def test_a_sets_relation_replaces_only_the_parameter_of_its_name(tmp_path):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "t": module(parameter("t", Y1990, "'2'"), derived("t", Y2020, "true", "Judgment")),
+            "v": module(parameter("v", Y1990, "'3'"), derived("v", Y1990, "true", "Judgment")),
+            "caller": module(
+                sets("assignment", "us:statutes/1/t#t", "us:statutes/1/v#v"),
+                derived("answer", Y2000, "'if t: 1 else: 2'"),
+                imports=("t", "v"),
+            ),
+        },
+    )
+    # The judgment read of the derived `t` still meets 2020; the scalar side
+    # now carries `v`'s versions.
+    assert edges == {edge("caller#answer", "t#t", Y2000, Y2020)}
+
+
+def test_a_relation_rule_gives_a_name_its_id(tmp_path):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "rate": module(parameter("rate", Y1990, "'2'")),
+            "value": module(parameter("new_rate", Y2020, "'3'")),
+            "relation": module(
+                sets("rate", "us:statutes/1/relation#rate", "us:statutes/1/value#new_rate"),
+                imports=("rate", "value"),
+            ),
+            "caller": module(derived("answer", Y2000, "rate + 0"), imports=("relation",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "value#new_rate", Y2000, Y2020)}
+
