@@ -38,7 +38,8 @@ pre-consolidation layout; only file locations changed.
   module yet (axiom-programs#14).
 - `known-validation-gaps.yaml`: pre-existing content debt surfaced when
   repository-wide discipline first ran across all jurisdictions
-  (rulespec-us#394).
+  (rulespec-us#394). `tools/waiver_issues.py` fails when a waiver cites an
+  issue that isn't open.
 - `known-missing-money-atoms.yaml`: policy-bearing monetary values
   (currency parameters, currency parameter-table cells, and currency
   literals in derived formulas) that still lack a proof atom citing a
