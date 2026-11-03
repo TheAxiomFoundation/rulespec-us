@@ -772,7 +772,18 @@ def test_hygiene(tmp_path, text):
     assert has(issues, "; household-choices.yaml is public.")
 
 
-@pytest.mark.parametrize("question", ["Is it worth $1,200?", "Is it worth 200 dollars?", "Is it worth USD 200?"])
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Is it worth $1,200?",
+        "Is it worth 200 dollars?",
+        "Is it worth USD 200?",
+        "Is it worth three thousand dollars?",
+        "Is it worth 3 thousand dollars?",
+        "Is it worth \uff043,000?",
+        "Is it worth \ufe693,000?",
+    ],
+)
 def test_prose_states_no_money(tmp_path, question):
     issues = check(make_repo(tmp_path), entry(question=question))
     assert has(issues, "describe the effect without an amount")

@@ -902,6 +902,209 @@ def test_canonical_money_at_a_sentence_end(tmp_path):
     assert check(make_repo(tmp_path), value) == []
 
 
+@pytest.mark.parametrize(
+    ("spelling", "fragment"),
+    [
+        # Review of 2026-10-21: on main these four returned nothing from either
+        # screen, so an entry with no money case could state them.
+        ("\uff043,000", "states $3000, which no money case backs"),  # fullwidth dollar sign
+        ("\ufe693,000", "states $3000, which no money case backs"),  # small dollar sign
+        ("three thousand dollars", "writes money as `three thousand dollars`"),
+        ("3 thousand dollars", "writes money as `3 thousand dollars`"),
+    ],
+)
+def test_spellings_that_escaped_both_screens(tmp_path, spelling, fragment):
+    assert sc._dollar_values(spelling) or sc._unsupported_money(spelling), spelling
+    value = entry()
+    del value["money_case"]
+    value["alternatives"][0]["effect"] = f"The family is paid {spelling} less."
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"alternatives[0].effect {fragment}" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        # Number words, scale words or both, before any unit.
+        "two hundred dollars",
+        "2 hundred dollars",
+        "a hundred dollars",
+        "twenty-five dollars",
+        "one hundred and twenty-five dollars",
+        "Two Hundred Dollars",
+        "fifty cents",
+        "1.5 thousand dollars",
+        "1.5k dollars",
+        "3million dollars",
+        # Digits with a unit glued on, qualified or hyphenated.
+        "200USD",
+        "200 US dollars",
+        "200 U.S. dollars",
+        "a 200-dollar",
+        "200bucks",
+        "50\u00a2",
+        # Other signs, and digits from another script.
+        "U.S.$200",
+        "\U0001f4b2200",
+        "50\uffe0",
+        "\u0662\u0660\u0660 dollars",
+        # Compatibility forms in another spelling.
+        "\uff04 200",
+        "USD\uff12\uff10\uff10",
+        # Invisible characters inside a spelling.
+        "200 dol\u00adlars",
+        "200 dol\u200blars",
+        "two\u2060 hundred dollars",
+        # A $ figure with a scale word, which DOLLAR_RE reads as its digits.
+        "$2 hundred",
+        "$2 million",
+        "$2-million",
+    ],
+)
+def test_money_has_one_spelling_however_it_is_written(tmp_path, spelling):
+    # Same escape as the 2026-10-21 review found, in other spellings. The entry
+    # has a money case, so only the spelling is wrong.
+    value = entry()
+    value["alternatives"][0]["effect"] = f"The family is paid {spelling} less."
+    assert any("writes money as" in issue for issue in check(make_repo(tmp_path), value)), spelling
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "\uff041,500.00",
+        "\ufe691,500",
+        "$\uff11,\uff15\uff10\uff10",
+        "\uff04\uff11\uff0c\uff15\uff10\uff10",
+        "$1,\u200b500",
+        "$1,500\u00ad",
+    ],
+)
+def test_compatibility_forms_of_the_one_spelling(tmp_path, spelling):
+    # Both screens read prose NFKC-normalised and without invisible
+    # characters: \uff04 and \ufe69 are $, fullwidth digits and commas are
+    # ASCII ones. Intended: these are the one spelling, so like $1,500 each
+    # needs a money case that states it, and passes with one.
+    ctx = make_repo(tmp_path)
+    backed = entry()
+    backed["money_case"]["description"] = "A survivor family: $1,500.00 against $1,479."
+    backed["reading"] = f"Protect {spelling} from the earlier month."
+    assert check(ctx, backed) == []
+    unbacked = entry()
+    unbacked["reading"] = f"Protect {spelling} from the earlier month."
+    assert any("reading states $1500, which no money case backs" in issue for issue in check(ctx, unbacked))
+
+
+def test_a_scale_word_makes_a_figure_a_spelling_of_its_own(tmp_path):
+    # DOLLAR_RE reads "$3 million" as $3, so on main a money case of $3 backed
+    # it. The scale word makes it a spelling of its own.
+    value = entry()
+    value["money_case"]["description"] = "A family: $3 against nothing."
+    value["money_case"]["amount"] = "3.00"
+    value["alternatives"][0]["effect"] = "The state pays $3 million more."
+    issues = check(make_repo(tmp_path), value)
+    assert any("alternatives[0].effect writes money as `$3 million`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("question",),
+        ("reading",),
+        ("basis",),
+        ("alternatives", 0, "reading"),
+        ("alternatives", 0, "effect"),
+        ("implementations", 0, "basis"),
+        ("years", "note"),
+        ("unpublished_sources", 0, "description"),
+        ("money_case", "description"),
+    ],
+)
+def test_every_prose_field_screens_spelled_money(tmp_path, path):
+    value = entry(years={"from": 2024, "type": "program", "note": "July to June."}, unpublished_sources=[dict(UNPUBLISHED)])
+    target = value
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = "It pays three thousand dollars more."
+    label = "".join(f"[{part}]" if isinstance(part, int) else f".{part}" for part in path)
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"{label} writes money as `three thousand dollars`" in issue for issue in issues), (label, issues)
+
+
+def test_a_spelling_across_a_line_break_is_named_whole(tmp_path):
+    value = entry()
+    value["alternatives"][0]["effect"] = "It pays one hundred\nand twenty-five dollars less."
+    issues = check(make_repo(tmp_path), value)
+    assert any("writes money as `one hundred and twenty-five dollars`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "A dollar-for-dollar reduction follows.",
+        "Floor the monthly share to whole dollars.",
+        "Drop the cents: truncate toward zero.",
+        "Some families lose thousands of dollars a year.",
+        "Each dollar of earnings above the limit counts.",
+        "The notice states the amounts in dollars and cents.",
+        "For taxable years beginning after nineteen hundred ninety-six.",
+        "The 2-percent floor applies to one deduction.",
+        "A 401k plan balance counts.",
+    ],
+)
+def test_prose_about_money_without_a_figure_passes(tmp_path, text):
+    # A magnitude, or a unit on its own, names no figure; a number without a
+    # unit is no money.
+    value = entry()
+    del value["money_case"]
+    value["basis"] = text
+    assert check(make_repo(tmp_path), value) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "spelled"),
+    [
+        ("More than one dollar amount appears.", "one dollar"),
+        ("Several thousand dollars change hands.", "thousand dollars"),
+    ],
+)
+def test_counts_and_approximations_before_a_unit_are_refused(tmp_path, text, spelled):
+    # Intended: a number before a unit reads as a figure. The screen can't tell
+    # "more than one dollar amount" (a count) from "a five hundred dollar
+    # threshold" (a figure; legal text has many), and "several thousand
+    # dollars" still states an amount. Write "more than one amount" or
+    # "thousands of dollars".
+    value = entry()
+    del value["money_case"]
+    value["basis"] = text
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"basis writes money as `{spelled}`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("one " * 50_000 + "x", []),
+        ("1," * 100_000, []),
+        ("$" + "1," * 100_000, ["$1,1,1,1,1,1"]),
+        ("one hundred and " * 12_500 + "dollarsx", []),
+        ("a " * 100_000, []),
+    ],
+    ids=["number-words", "digit-commas", "sign-then-digits", "words-then-near-unit", "articles"],
+)
+def test_money_scans_stay_fast(text, expected):
+    # Coarse wall-clock guard: each run of number words or digits is one
+    # match, read whole, so a scan of about 200,000 characters takes well
+    # under a second. A screen that rescans a run from each of its
+    # characters is quadratic and takes minutes here.
+    import time
+
+    started = time.perf_counter()
+    assert sc._unsupported_money(text) == expected
+    sc._dollar_values(text)
+    assert time.perf_counter() - started < 10
+
+
 def test_the_register_refuses_anchors_and_cycles(tmp_path):
     # Final review of 6a21582e: a recursive alias made check raise RecursionError.
     path = tmp_path / sc.REGISTER_FILENAME

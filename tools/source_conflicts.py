@@ -927,7 +927,7 @@ _MORE_WORDS = rf"(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}|{_SCALE_WORD})\b)*"
 MONEY_LIKE_RE = re.compile(
     rf"""(?ix)
     \$[0-9][0-9,.]*[\s-]*{_SCALE_WORD}\b
-    | \bU\.?S\.?\$ | [$\u00a2\U0001F4B2] | \bUSD\b | \bUSD\s*\d
+    | (?P<sign>\bU\.?S\.?\$ | [$\u00a2\U0001F4B2] | \bUSD\b | \bUSD\s*\d)
     | (?P<number>
         \b\d[\d,.]*(?:(?:mm|mn|bn|k|m|b)\b)?(?:[\s-]*{_SCALE_WORD}\b)*
         | \ba[\s-]+{_SCALE_WORD}\b{_MORE_WORDS}
@@ -976,10 +976,12 @@ def _unsupported_money(text: str) -> list[str]:
             continue
         if match.group(0) == "$" and match.start() in canonical:
             continue
-        # The whole spelling on one line, then context up to 12 characters
-        # in all, so "$ 200" shows its figure.
+        # The whole spelling, on one line. A sign or code shows what follows
+        # it, up to 12 characters in all, so "$ 200" shows its figure.
         spelled = " ".join(match.group(0).split())
-        found.append(spelled + text[match.end() : match.start() + 12].split("\n")[0])
+        if match.group("sign"):
+            spelled += text[match.end() : match.start() + 12].split("\n")[0]
+        found.append(spelled)
     return found
 
 

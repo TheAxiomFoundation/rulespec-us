@@ -82,6 +82,19 @@ Invariants, for every input:
     - The floor is main's scanner exactly (`_main_words` equals a verbatim
       copy of main's function), so the count is never below main's; and
       widening the single openers never lowers it.
+18. Money spellings:
+    - Whatever the amount and however prose spells it ($ and digits, or a
+      compatibility form of them: fullwidth or small signs, digits, commas
+      and stops, invisible characters among them; or another spelling: a
+      code, a word, a number in words, a scale word, a cent sign), `check`
+      refuses an entry with no money case that states it in any prose field,
+      and names the field and the amount ($ and digits) or the spelling.
+    - With a money case, `check` accepts $ and digits and their compatibility
+      forms exactly when the case's amount or description states the same
+      amount, and refuses every other spelling whatever backs it.
+    - Both screens read a text, its four normalisation forms and the text in
+      compatibility forms with invisible characters inserted alike.
+    - A number in digits or words with no money unit after it states no money.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the source-conflicts workflow installs it and runs them.
@@ -1339,3 +1352,257 @@ def test_every_recognisable_quotation_counts_in_full(case):
     # included) counts at least its own words.
     text, words = case
     assert sc.quoted_words(text) >= words, text
+
+
+# 18. Money spellings
+# An independent spelling of whole numbers in English: tens and units joined
+# by a hyphen or a space, and "and" after a hundred or not.
+ONES = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+    "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+]
+TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+SCALES = [(10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred")]
+
+
+def in_words(n: int, hyphen: str = "-", conjunction: str = " and ") -> str:
+    if n < 20:
+        return ONES[n]
+    if n < 100:
+        return TENS[n // 10] + (hyphen + ONES[n % 10] if n % 10 else "")
+    if n < 1000:
+        rest = n % 100
+        return f"{ONES[n // 100]} hundred" + (conjunction + in_words(rest, hyphen, conjunction) if rest else "")
+    size, name = next((size, name) for size, name in SCALES if n >= size)
+    rest = n % size
+    return f"{in_words(n // size, hyphen, conjunction)} {name}" + (" " + in_words(rest, hyphen, conjunction) if rest else "")
+
+
+# Each character's compatibility forms, which NFKC reads as the character:
+# fullwidth and small signs, commas, stops and hyphens; no-break and
+# ideographic spaces; fullwidth and mathematical digits; fullwidth letters.
+COMPATIBLE = {
+    "$": ["$", "\uff04", "\ufe69"],
+    ",": [",", "\uff0c", "\ufe50"],
+    ".": [".", "\uff0e", "\ufe52"],
+    "-": ["-", "\uff0d", "\ufe63"],
+    " ": [" ", "\u00a0", "\u3000"],
+    **{digit: [digit, chr(0xFF10 + int(digit)), chr(0x1D7CE + int(digit))] for digit in string.digits},
+    **{letter: [letter, chr(ord(letter) + 0xFEE0)] for letter in string.ascii_letters},
+}
+# Unicode's Default_Ignorable_Code_Point characters (DerivedCoreProperties.txt),
+# one or two from each range: soft hyphen, grapheme joiner, Arabic letter
+# mark, Hangul fillers, Khmer inherent vowels, Mongolian selectors and vowel
+# separator, zero-width characters, bidirectional controls, invisible
+# operators, variation selectors, a byte order mark, an unassigned one,
+# shorthand format controls, musical beams and tags.
+INVISIBLES = [
+    "\u00ad", "\u034f", "\u061c", "\u115f", "\u1160", "\u17b4", "\u180b", "\u180e", "\u200b",
+    "\u200d", "\u200f", "\u202a", "\u202e", "\u2060", "\u2064", "\u2066", "\u206f", "\u3164",
+    "\ufe00", "\ufe0f", "\ufeff", "\uffa0", "\ufff0", "\U0001bca0", "\U0001d173", "\U000e0001", "\U000e0041",
+    "\U000e0100",
+]
+
+
+def test_disguises_read_as_what_they_stand_for():
+    # The premise of the properties below: each form is a compatibility form
+    # of its character, and the screens drop each invisible character.
+    assert all(unicodedata.normalize("NFKC", form) == char for char, forms in COMPATIBLE.items() for form in forms)
+    assert all(sc._money_text(f"a{char}b") == "ab" for char in INVISIBLES)
+
+
+@st.composite
+def disguised(draw, text):
+    """`text` as a reader sees it, written otherwise: each character perhaps a
+    compatibility form of itself, with invisible characters perhaps before it."""
+
+    out = []
+    for char in text:
+        if draw(st.booleans()):
+            out.append(draw(st.sampled_from(INVISIBLES)))
+        out.append(draw(st.sampled_from(COMPATIBLE.get(char, [char]))))
+    return "".join(out)
+
+
+amounts = st.one_of(
+    st.integers(0, 10**12 - 1),
+    st.integers(1, 999).map(lambda k: k * 1000),
+    st.integers(1, 999).map(lambda k: k * 10**6),
+    st.sampled_from([1, 100, 1000, 10**6, 10**9]),
+)
+
+
+def _amount(dollars: int, cents: int = 0) -> str:
+    """An amount as `_dollar_values` reads it: no commas, no trailing zeros."""
+
+    return f"{dollars}.{cents:02d}".rstrip("0") if cents else str(dollars)
+
+
+def _figure(amount: str) -> str:
+    """The one spelling of an amount: $, grouped digits and two-digit cents."""
+
+    dollars, _, cents = amount.partition(".")
+    return f"${int(dollars):,}" + (f".{cents.ljust(2, '0')}" if cents else "")
+
+
+@st.composite
+def money_spellings(draw):
+    """An amount spelled a way the screens read: (text, amount, canonical,
+    whole). `amount` is what the text states, as `_dollar_values` reads it;
+    `canonical` says whether the text is the one spelling ($ and digits, or a
+    compatibility form of it); `whole` is how a refusal of another spelling
+    shows it, or None where the refusal shows what follows a sign or code."""
+
+    dollars = draw(amounts)
+    cents = draw(st.one_of(st.just(0), st.integers(1, 99)))
+    grouped = f"{dollars:,}"
+    if draw(st.booleans()):
+        digits = draw(st.sampled_from([grouped, str(dollars)]))
+        tail = f".{cents:02d}" if cents else draw(st.sampled_from(["", ".00"]))
+        return draw(disguised(f"${digits}{tail}")), _amount(dollars, cents), True, None
+    stated = _amount(dollars)
+    words = in_words(dollars, draw(st.sampled_from(["-", " "])), draw(st.sampled_from([" and ", " "])))
+    spellings = [
+        (f"{grouped} dollars", stated, f"{grouped} dollars"),
+        (f"{grouped}USD", stated, f"{grouped}USD"),
+        (f"{grouped} U.S. dollars", stated, f"{grouped} U.S. dollars"),
+        (f"{grouped} American dollars", stated, f"{grouped} American dollars"),
+        (f"a {grouped}-dollar credit", stated, f"{grouped}-dollar"),
+        (f"{grouped} bucks", stated, f"{grouped} bucks"),
+        (f"{words} dollars", stated, f"{words} dollars"),
+        (f"{words}-dollar", stated, f"{words}-dollar"),
+        (f"USD {grouped}", stated, None),
+        (f"US${grouped}", stated, None),
+        (f"U.S.${grouped}", stated, None),
+        (f"$ {grouped}", stated, None),
+        (f"\U0001f4b2{grouped}", stated, None),
+        (f"${grouped}k", _amount(dollars * 1000), None),
+    ]
+    for size, name in SCALES:
+        if dollars and dollars % size == 0:
+            spellings.append((f"{dollars // size:,} {name} dollars", stated, f"{dollars // size:,} {name} dollars"))
+            spellings.append((f"${dollars // size:,} {name}", stated, f"${dollars // size:,} {name}"))
+    if dollars in {100, 1000, 10**6, 10**9}:
+        scale = in_words(dollars).split()[-1]
+        spellings.append((f"a {scale} dollars", stated, f"a {scale} dollars"))
+    if dollars and dollars % 1000 == 0:
+        spellings.append((f"{dollars // 1000:,}k dollars", stated, f"{dollars // 1000:,}k dollars"))
+    if cents:
+        spellings += [
+            (f"{cents} cents", _amount(0, cents), f"{cents} cents"),
+            (f"{in_words(cents)} cents", _amount(0, cents), f"{in_words(cents)} cents"),
+            (f"{cents}\u00a2", _amount(0, cents), f"{cents}\u00a2"),
+            (f"{cents}\uffe0", _amount(0, cents), f"{cents}\u00a2"),
+        ]
+    text, amount, whole = draw(st.sampled_from(spellings))
+    return draw(disguised(text)), amount, False, whole
+
+
+# Words that neither join a spelling nor make one: no number, scale word,
+# unit, sign or code.
+SAFE_WORDS = ["The", "state", "pays", "a", "credit", "of", "per", "month", "under", "this", "reading", "and", "each",
+              "household", "more", "than", "(see", "below)"]
+safe_words = st.lists(st.sampled_from(SAFE_WORDS), max_size=5).map(" ".join)
+
+
+def _place(value, data, words):
+    """Put `words` in one of the entry's prose fields, and return that field's
+    label as issues name it."""
+
+    paths = [("question",), ("reading",), ("basis",), ("alternatives", 0, "reading"), ("alternatives", 0, "effect")]
+    if "basis" in value.get("implementations", [{}])[0]:
+        paths.append(("implementations", 0, "basis"))
+    if "note" in value.get("years", {}):
+        paths.append(("years", "note"))
+    if value.get("unpublished_sources"):
+        paths.append(("unpublished_sources", 0, "description"))
+    path = data.draw(st.sampled_from(paths))
+    assert _set_path(value, path, words)
+    return "(entries[0])" + "".join(f"[{key}]" if isinstance(key, int) else f".{key}" for key in path)
+
+
+@SETTINGS
+@given(value=entries(), case=money_spellings(), before=safe_words, after=safe_words, data=st.data())
+def test_money_without_a_money_case_is_refused(tmp_path, value, case, before, after, data):
+    text, amount, canonical, whole = case
+    value = copy.deepcopy(value)
+    value.pop("money_case", None)
+    field = _place(value, data, " ".join(part for part in (before, text, after) if part))
+    issues = sc.check_register({"version": 1, "entries": [value]}, repo(tmp_path), scan_modules=False)
+    if canonical:
+        assert len(issues) == 1 and f"{field} states ${amount}, which no money case backs" in issues[0], issues
+    else:
+        assert any(f"{field} writes money as `" in issue for issue in issues), issues
+        if whole is not None:
+            assert any(f"{field} writes money as `{whole}`;" in issue for issue in issues), issues
+
+
+@SETTINGS
+@given(
+    value=entries().filter(lambda value: "tests" in value),
+    case=money_spellings(),
+    backing=st.sampled_from(["amount", "description", None]),
+    before=safe_words,
+    after=safe_words,
+    data=st.data(),
+)
+def test_only_the_one_spelling_passes_and_only_when_backed(tmp_path, value, case, backing, before, after, data):
+    text, amount, canonical, _ = case
+    value = copy.deepcopy(value)
+    # No generated spelling states 10**12 dollars.
+    value["money_case"] = {
+        "description": "The credit under this reading.",
+        "amount": str(10**12),
+        "currency": "USD",
+        "period": sc.PERIODS[0],
+        "computed_by": value["tests"][0]["name"],
+    }
+    if backing == "amount":
+        value["money_case"]["amount"] = amount
+    elif backing == "description":
+        value["money_case"]["description"] = data.draw(disguised(f"The credit under this reading is {_figure(amount)} a year."))
+    field = _place(value, data, " ".join(part for part in (before, text, after) if part))
+    issues = sc.check_register({"version": 1, "entries": [value]}, repo(tmp_path), scan_modules=False)
+    if not canonical:
+        assert any(f"{field} writes money as `" in issue for issue in issues), issues
+    elif backing:
+        assert issues == [], issues
+    else:
+        assert len(issues) == 1 and f"{field} states ${amount}, which no money case backs" in issues[0], issues
+
+
+# Text near money, with what the normalisation meets: compatibility forms,
+# combining marks, a ligature, a grapheme joiner, fillers and a tag.
+MONEY_TOKENS = [
+    "$", "\uff04", "\ufe69", "\U0001f4b2", "\u00a2", "\uffe0", "3", "\uff13", "\U0001d7d1", "\u00b3", "000",
+    "50", ",", "\uff0c", ".", "\uff0e", " ", "\u00a0", "\u3000", "-", "dollars", "dol", "lars", "USD", "US",
+    "U.S.", "three", "thousand", "hundred", "and", "a", "k", "million", "cents", "bucks", "e", "\u0301", "\u0338",
+    "\u00ad", "\u034f", "\u200b", "\u2060", "\ufeff", "\u3164", "\uffa0", "\U000e0001", "\ufb01",
+]
+money_texts = st.one_of(st.lists(st.sampled_from(MONEY_TOKENS), max_size=24).map("".join), st.text(max_size=40))
+
+
+@settings(max_examples=1000, deadline=None)
+@given(text=money_texts, data=st.data())
+def test_screens_read_every_form_of_a_text_alike(text, data):
+    variants = [unicodedata.normalize(form, text) for form in ("NFC", "NFD", "NFKC", "NFKD")]
+    for variant in [*variants, data.draw(disguised(text))]:
+        assert sc._unsupported_money(variant) == sc._unsupported_money(text), (text, variant)
+        assert sc._dollar_values(variant) == sc._dollar_values(text), (text, variant)
+
+
+@SETTINGS
+@given(
+    dollars=amounts,
+    noun=st.sampled_from(["households", "people", "months", "percent", "claims", "years"]),
+    hyphen=st.sampled_from(["-", " "]),
+    conjunction=st.sampled_from([" and ", " "]),
+    data=st.data(),
+)
+def test_a_number_without_a_money_unit_is_no_money(dollars, noun, hyphen, conjunction, data):
+    numbers = [f"{dollars:,}", str(dollars), in_words(dollars, hyphen, conjunction)]
+    numbers += [f"{dollars // size:,} {name}" for size, name in SCALES if dollars and dollars % size == 0]
+    if dollars in {100, 1000, 10**6, 10**9}:
+        numbers.append(f"a {in_words(dollars).split()[-1]}")
+    text = data.draw(disguised(f"The rule covers {data.draw(st.sampled_from(numbers))} {noun} a year."))
+    assert sc._unsupported_money(text) == [] and sc._dollar_values(text) == set(), text
