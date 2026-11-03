@@ -917,24 +917,36 @@ _NUMBER_WORD = (
 )
 _SCALE_WORD = r"(?:hundred|thousand|million|billion|trillion)"
 _MORE_WORDS = rf"(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}|{_SCALE_WORD})\b)*"
+_UNIT_WORD = r"(?:dollars?|cents?|bucks|usd)\b"
+# Scale abbreviations: "3k", "3 M", "3MM", "3 bn", "$2T". One reads as a scale
+# where its word ends or where a unit runs on from it ("3kUSD"). A hyphen to a
+# word other than a unit makes it part of a name ("K-1", "T-bill"), which
+# passes.
+_ABBREVIATION = r"(?:mln|mil|mm|mn|m|bln|bil|bn|b|tn|t|k)"
+_SCALE = rf"(?:{_SCALE_WORD}\b|{_ABBREVIATION}(?:\b(?!-(?!{_UNIT_WORD})\w)|(?={_UNIT_WORD})))"
+# A $ figure's digits, with commas or points between them. A point after the
+# last digit ends a sentence, so "$3,000. M." is $3,000 and a list label.
+_FIGURE = r"[0-9](?:[0-9,.]*[0-9])?"
 # The screen refuses anything else that reads as money, so no figure escapes
 # the money-case rule by its spelling: "USD 200", "200 dollars", "$ 200",
 # "$.50", "$-200", "$1.5k", "US$200", "3,000USD", "3,000 US dollars",
 # "a 3,000-dollar credit", "50¢", "three thousand dollars", "3 thousand
-# dollars", "a thousand dollars", "fifty cents". It also refuses a $ figure
-# with a scale word, which DOLLAR_RE would read as its digits alone:
-# "$3 million". A magnitude names no figure and passes: "thousands of
-# dollars", "dollar-for-dollar", "whole dollars".
+# dollars", "a thousand dollars", "fifty cents", "3 M dollars", "3kUSD". It
+# also refuses a $ figure with a scale, which DOLLAR_RE would read as its
+# digits alone, and a $ range with a scale after its second figure:
+# "$3 million", "$3 M", "$3-5 million". A magnitude names no figure and
+# passes: "thousands of dollars", "dollar-for-dollar", "whole dollars".
 MONEY_LIKE_RE = re.compile(
     rf"""(?ix)
-    \$[0-9][0-9,.]*[\s-]*{_SCALE_WORD}\b
+    \${_FIGURE}(?:[\s-]*(?:{_SCALE_WORD}|{_ABBREVIATION})\b)?
+      (?:(?:\s*-+\s*|\s+to\s+)\$?{_FIGURE})?[\s-]*{_SCALE}
     | (?P<sign>\bU\.?S\.?\$ | [$\u00a2\U0001F4B2] | \bUSD\b | \bUSD\s*\d)
     | (?P<number>
-        \b\d[\d,.]*(?:(?:mm|mn|bn|k|m|b)\b)?(?:[\s-]*{_SCALE_WORD}\b)*
+        \b\d[\d,.]*(?:[\s-]*{_SCALE})*
         | \ba[\s-]+{_SCALE_WORD}\b{_MORE_WORDS}
         | \b(?:{_NUMBER_WORD}|{_SCALE_WORD})\b{_MORE_WORDS}
       )
-      (?P<unit>(?:[\s-]+(?:U\.?\s?S\.?|American))?[\s-]*(?:(?:dollars?|cents?|bucks|usd)\b|\u00a2))?
+      (?P<unit>(?:[\s-]+(?:U\.?\s?S\.?|American))?[\s-]*(?:{_UNIT_WORD}|\u00a2))?
     """
 )
 # Unicode's Default_Ignorable_Code_Point characters (DerivedCoreProperties.txt):

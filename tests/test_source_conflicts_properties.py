@@ -86,17 +86,19 @@ Invariants, for every input:
     - Whatever the amount and however prose spells it ($ and digits, or a
       compatibility form of them: fullwidth or small signs, digits, commas
       and stops, invisible characters among them; or another spelling: a
-      code, a word, a number in words, a scale word, a cent sign, in any of
-      those forms and with any dash for a hyphen), `check` refuses an entry
-      with no money case that states it in any prose field, and names the
-      field and the amount ($ and digits) or the spelling.
+      code, a word, a number in words, a scale word or abbreviation, a $
+      range with a scale, a cent sign, in any of those forms and with any
+      dash for a hyphen), `check` refuses an entry with no money case that
+      states it in any prose field, and names the field and the amount ($
+      and digits) or the spelling.
     - With a money case, `check` accepts $ and digits and their compatibility
       forms exactly when the case's amount or description states the same
       amount, and refuses every other spelling whatever backs it.
     - Both screens read a text, its four normalisation forms and the text
       with compatibility forms, dashes for hyphens and invisible characters
       inserted alike.
-    - A number in digits or words with no money unit after it states no money.
+    - A number in digits or words, with any scale word or abbreviation,
+      states no money when no money unit follows it.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the source-conflicts workflow installs it and runs them.
@@ -109,6 +111,7 @@ import importlib.util
 import string
 import sys
 import unicodedata
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -1365,6 +1368,13 @@ ONES = [
 ]
 TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
 SCALES = [(10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred")]
+# Abbreviations of those scales and of a trillion, as finance and the press
+# write them.
+ABBREVIATIONS = [
+    ("k", 1000), ("K", 1000), ("m", 10**6), ("M", 10**6), ("MM", 10**6), ("mn", 10**6), ("mln", 10**6),
+    ("mil", 10**6), ("b", 10**9), ("B", 10**9), ("bn", 10**9), ("bln", 10**9), ("bil", 10**9),
+    ("t", 10**12), ("T", 10**12), ("tn", 10**12),
+]
 
 
 def in_words(n: int, hyphen: str = "-", conjunction: str = " and ") -> str:
@@ -1445,6 +1455,15 @@ def _amount(dollars: int, cents: int = 0) -> str:
     return f"{dollars}.{cents:02d}".rstrip("0") if cents else str(dollars)
 
 
+def _count(dollars: int, size: int) -> str | None:
+    """`dollars` as a count of `size` with at most three decimals ("1.5" for
+    1,500,000 in millions), or None when that takes more."""
+
+    if not dollars or dollars * 1000 % size:
+        return None
+    return format((Decimal(dollars) / size).normalize(), ",f")
+
+
 def _figure(amount: str) -> str:
     """The one spelling of an amount: $, grouped digits and two-digit cents."""
 
@@ -1483,12 +1502,27 @@ def money_spellings(draw):
         (f"U.S.${grouped}", stated, None),
         (f"$ {grouped}", stated, None),
         (f"\U0001f4b2{grouped}", stated, None),
-        (f"${grouped}k", _amount(dollars * 1000), None),
+        (f"${grouped}k", _amount(dollars * 1000), f"${grouped}k"),
     ]
     for size, name in SCALES:
         if dollars and dollars % size == 0:
-            spellings.append((f"{dollars // size:,} {name} dollars", stated, f"{dollars // size:,} {name} dollars"))
-            spellings.append((f"${dollars // size:,} {name}", stated, f"${dollars // size:,} {name}"))
+            count = f"{dollars // size:,}"
+            spellings += [
+                (f"{count} {name} dollars", stated, f"{count} {name} dollars"),
+                (f"${count} {name}", stated, f"${count} {name}"),
+                (f"$1-{count} {name}", stated, f"$1-{count} {name}"),
+                (f"$1 to {count} {name}", stated, f"$1 to {count} {name}"),
+            ]
+    abbreviation, size = draw(st.sampled_from(ABBREVIATIONS))
+    if count := _count(dollars, size):
+        scaled = count + draw(st.sampled_from(["", " "])) + abbreviation
+        spellings += [
+            (f"{scaled} dollars", stated, f"{scaled} dollars"),
+            (f"{scaled}USD", stated, f"{scaled}USD"),
+            (f"a {scaled}-dollar credit", stated, f"{scaled}-dollar"),
+            (f"${scaled}", stated, f"${scaled}"),
+            (f"$1-{scaled}", stated, f"$1-{scaled}"),
+        ]
     if dollars in {100, 1000, 10**6, 10**9}:
         scale = in_words(dollars).split()[-1]
         spellings.append((f"a {scale} dollars", stated, f"a {scale} dollars"))
@@ -1513,8 +1547,8 @@ safe_words = st.lists(st.sampled_from(SAFE_WORDS), max_size=5).map(" ".join)
 
 
 def _place(value, data, words):
-    """Put `words` in one of the entry's prose fields, and return that field's
-    label as issues name it."""
+    """Put `words` in one of the entry's prose fields (the question, in an
+    explicit example), and return that field's label as issues name it."""
 
     paths = [("question",), ("reading",), ("basis",), ("alternatives", 0, "reading"), ("alternatives", 0, "effect")]
     if "basis" in value.get("implementations", [{}])[0]:
@@ -1523,13 +1557,48 @@ def _place(value, data, words):
         paths.append(("years", "note"))
     if value.get("unpublished_sources"):
         paths.append(("unpublished_sources", 0, "description"))
-    path = data.draw(st.sampled_from(paths))
+    path = paths[0] if data is None else data.draw(st.sampled_from(paths))
     assert _set_path(value, path, words)
     return "(entries[0])" + "".join(f"[{key}]" if isinstance(key, int) else f".{key}" for key in path)
 
 
+# A plain entry with pinned tests, for the explicit examples below.
+EXAMPLE_ENTRY = {
+    "id": "example-entry",
+    "jurisdiction": "us",
+    "program": "snap",
+    "question": "Which reading applies?",
+    "texts": [{"corpus_citation_path": "us/statute/7/2014", "excerpt": "The text."}],
+    "reading": "This reading.",
+    "alternatives": [{"id": "other-reading", "reading": "Another reading."}],
+    "basis": "The text says so.",
+    "status": "open",
+    "outcome": sc.OUTCOMES[0],
+    "implementations": [
+        {"repo": "PolicyEngine/microcosm-dynamics", "commit": "a" * 40, "path": "src/x.py", "follows": "reading",
+         "cites_entry": True},
+    ],
+    "tests": [
+        {"repo": "PolicyEngine/microcosm-dynamics", "commit": "a" * 40, "path": "tests/test_x.py",
+         "name": "test_default", "pins": ["reading"]},
+        {"repo": "PolicyEngine/microcosm-dynamics", "commit": "a" * 40, "path": "tests/test_x.py",
+         "name": "test_alt_0", "pins": ["other-reading"]},
+    ],
+}
+
+
+def test_the_example_entry_passes(tmp_path):
+    assert sc.check_register({"version": 1, "entries": [EXAMPLE_ENTRY]}, repo(tmp_path), scan_modules=False) == []
+
+
 @SETTINGS
 @given(value=entries(), case=money_spellings(), before=safe_words, after=safe_words, data=st.data())
+# Review of 2026-11-03: generated runs can miss these, so each runs every time.
+@example(value=EXAMPLE_ENTRY, case=("one hundred and twenty-five dollars", "125", False, "one hundred and twenty-five dollars"),
+         before="", after="", data=None)
+@example(value=EXAMPLE_ENTRY, case=("3kUSD", "3000", False, "3kUSD"), before="", after="", data=None)
+@example(value=EXAMPLE_ENTRY, case=("3k\u200bUSD", "3000", False, "3kUSD"), before="", after="", data=None)
+@example(value=EXAMPLE_ENTRY, case=("$3 M", "3000000", False, "$3 M"), before="", after="", data=None)
 def test_money_without_a_money_case_is_refused(tmp_path, value, case, before, after, data):
     text, amount, canonical, whole = case
     value = copy.deepcopy(value)
@@ -1553,6 +1622,10 @@ def test_money_without_a_money_case_is_refused(tmp_path, value, case, before, af
     after=safe_words,
     data=st.data(),
 )
+# Review of 2026-11-03: "$3 M" passed with a money case of $3, the figure
+# DOLLAR_RE reads in it.
+@example(value=EXAMPLE_ENTRY, case=("$3 M", "3", False, "$3 M"), backing="amount", before="", after="", data=None)
+@example(value=EXAMPLE_ENTRY, case=("$3 M", "3000000", False, "$3 M"), backing="amount", before="", after="", data=None)
 def test_only_the_one_spelling_passes_and_only_when_backed(tmp_path, value, case, backing, before, after, data):
     text, amount, canonical, _ = case
     value = copy.deepcopy(value)
@@ -1585,7 +1658,7 @@ MONEY_TOKENS = [
     "50", ",", "\uff0c", ".", "\uff0e", " ", "\u00a0", "\u3000", "-", "dollars", "dol", "lars", "USD", "US",
     "U.S.", "three", "thousand", "hundred", "and", "a", "k", "million", "cents", "bucks", "e", "\u0301", "\u0338",
     "\u00ad", "\u034f", "\u200b", "\u2060", "\ufeff", "\u3164", "\uffa0", "\U000e0001", "\ufb01",
-    "\u2010", "\u2011", "\u2013", "\u2212",
+    "\u2010", "\u2011", "\u2013", "\u2212", "M", "MM", "bn", "K", "T", "to",
 ]
 money_texts = st.one_of(st.lists(st.sampled_from(MONEY_TOKENS), max_size=24).map("".join), st.text(max_size=40))
 
@@ -1612,5 +1685,8 @@ def test_a_number_without_a_money_unit_is_no_money(dollars, noun, hyphen, conjun
     numbers += [f"{dollars // size:,} {name}" for size, name in SCALES if dollars and dollars % size == 0]
     if dollars in {100, 1000, 10**6, 10**9}:
         numbers.append(f"a {in_words(dollars).split()[-1]}")
+    abbreviation, size = data.draw(st.sampled_from(ABBREVIATIONS))
+    if count := _count(dollars, size):
+        numbers.append(count + data.draw(st.sampled_from(["", " "])) + abbreviation)
     text = data.draw(disguised(f"The rule covers {data.draw(st.sampled_from(numbers))} {noun} a year."))
     assert sc._unsupported_money(text) == [] and sc._dollar_values(text) == set(), text

@@ -911,6 +911,11 @@ def test_canonical_money_at_a_sentence_end(tmp_path):
         ("\ufe693,000", "states $3000, which no money case backs"),  # small dollar sign
         ("three thousand dollars", "writes money as `three thousand dollars`"),
         ("3 thousand dollars", "writes money as `3 thousand dollars`"),
+        # Review of 2026-11-03: a scale abbreviation escaped both screens here,
+        # and main refused the third only by its code.
+        ("3kUSD", "writes money as `3kUSD`"),
+        ("$3 M", "writes money as `$3 M`"),
+        ("3k\u200bUSD", "writes money as `3kUSD`"),  # zero-width space
     ],
 )
 def test_spellings_that_escaped_both_screens(tmp_path, spelling, fragment):
@@ -964,6 +969,25 @@ def test_spellings_that_escaped_both_screens(tmp_path, spelling, fragment):
         "a 200\u2013dollar",
         "twenty\u2010five dollars",
         "200\u2212dollar",
+        # A scale abbreviation, glued or spaced, before a unit or a code.
+        "3MUSD",
+        "3 kUSD",
+        "3bn\u00adUSD",
+        "3kdollars",
+        "3 M dollars",
+        "1.5 MM dollars",
+        "3 bn dollars",
+        "a 3 k-dollar",
+        # A $ figure with a scale abbreviation, which DOLLAR_RE reads as its
+        # digits, and a $ range with a scale after its second figure.
+        "$3 MM",
+        "$3 bn",
+        "$1 T",
+        "$3\u2060 M",
+        "$3-5 million",
+        "$3 to 5 million",
+        "$3\u20135 M",
+        "$3 M-5 M",
     ],
 )
 def test_money_has_one_spelling_however_it_is_written(tmp_path, spelling):
@@ -1012,6 +1036,62 @@ def test_a_scale_word_makes_a_figure_a_spelling_of_its_own(tmp_path):
 
 
 @pytest.mark.parametrize(
+    ("amount", "description"),
+    [("3.00", "A family: $3 against nothing."), ("3000000.00", "A family: $3,000,000 against nothing.")],
+)
+def test_a_scale_abbreviation_makes_a_figure_a_spelling_of_its_own(tmp_path, amount, description):
+    # Review of 2026-11-03: DOLLAR_RE reads "$3 M" as $3, so a money case of $3
+    # backed it. Like a scale word, the abbreviation makes it a spelling of its
+    # own, whatever the money case states.
+    value = entry()
+    value["money_case"]["description"] = description
+    value["money_case"]["amount"] = amount
+    value["alternatives"][0]["effect"] = "The state pays $3 M more."
+    issues = check(make_repo(tmp_path), value)
+    assert any("alternatives[0].effect writes money as `$3 M`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    ("text", "figure", "amount"),
+    [
+        # A hyphen to a word makes a letter part of a name: Schedule K-1, a
+        # Treasury bill.
+        ("A partner's $5,000 K-1 loss counts.", "$5,000", "5000"),
+        ("A $100 T-bill counts as a resource.", "$100", "100"),
+        # A letter after a sentence's last figure labels the next item, as in
+        # state program manuals.
+        ("The manual lists $346.50. b. A grant follows.", "$346.50", "346.5"),
+        ("Shares above $3,000. M. Per capita payments follow.", "$3,000", "3000"),
+    ],
+)
+def test_a_letter_in_a_name_or_after_a_sentence_is_no_scale(tmp_path, text, figure, amount):
+    # Each figure is the one spelling: a money case that states it backs it,
+    # and without one the entry fails for the figure, not for its spelling.
+    ctx = make_repo(tmp_path)
+    backed = entry()
+    backed["money_case"]["description"] = f"A family: {figure} against nothing."
+    backed["basis"] = text
+    assert check(ctx, backed) == []
+    unbacked = entry()
+    del unbacked["money_case"]
+    unbacked["basis"] = text
+    issues = check(ctx, unbacked)
+    assert any(f"basis states ${amount}, which no money case backs" in issue for issue in issues), issues
+    assert not [issue for issue in issues if "writes money as" in issue], issues
+
+
+def test_a_letter_right_after_a_figure_reads_as_a_scale(tmp_path):
+    # Intended: a letter that may abbreviate a scale, right after a figure,
+    # reads as one, even where it labels a list item. The screen can't tell
+    # "$13,000 b. A couple" from "$3 M. The state", and an unread scale lets a
+    # figure escape. Write "(b)", or end the sentence after the figure.
+    value = entry()
+    value["basis"] = "The limits are $13,000 b. A couple may keep more."
+    issues = check(make_repo(tmp_path), value)
+    assert any("basis writes money as `$13,000 b`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
     "path",
     [
         ("question",),
@@ -1055,6 +1135,8 @@ def test_a_spelling_across_a_line_break_is_named_whole(tmp_path):
         "For taxable years beginning after nineteen hundred ninety-six.",
         "The 2-percent floor applies to one deduction.",
         "A 401k plan balance counts.",
+        "The program serves 3 M people.",
+        "Schedule K-1 reports each partner's share.",
     ],
 )
 def test_prose_about_money_without_a_figure_passes(tmp_path, text):
@@ -1094,8 +1176,15 @@ def test_counts_and_approximations_before_a_unit_are_refused(tmp_path, text, spe
         ("$" + "1," * 100_000, ["$1,1,1,1,1,1"]),
         ("one hundred and " * 12_500 + "dollarsx", []),
         ("a " * 100_000, []),
+        (("$1" + " " * 1000 + "x") * 200, []),
+        ("$1-" + "1," * 100_000, []),
+        ("1 k " * 50_000, []),
+        ("$1 k " * 40_000, ["$1 k"] * 40_000),
     ],
-    ids=["number-words", "digit-commas", "sign-then-digits", "words-then-near-unit", "articles"],
+    ids=[
+        "number-words", "digit-commas", "sign-then-digits", "words-then-near-unit", "articles",
+        "sign-then-spaces", "range-then-digits", "abbreviations", "scaled-signs",
+    ],
 )
 def test_money_scans_stay_fast(text, expected):
     # Coarse wall-clock guard: each run of number words or digits is one

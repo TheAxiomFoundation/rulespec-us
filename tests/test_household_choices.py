@@ -780,6 +780,8 @@ def test_hygiene(tmp_path, text):
         "Is it worth USD 200?",
         "Is it worth three thousand dollars?",
         "Is it worth 3 thousand dollars?",
+        "Is it worth $3 M?",
+        "Is it worth 3kUSD?",
         "Is it worth \uff043,000?",
         "Is it worth \ufe693,000?",
     ],
