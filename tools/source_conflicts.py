@@ -910,31 +910,76 @@ def _check_record(record: Any, *, label: str, confirmation: bool, issues: list[s
 # The one way the register writes money: $, digits (commas between groups of
 # three allowed), and optionally two-digit cents. A sentence may end after it.
 DOLLAR_RE = re.compile(r"\$((?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]{2})?)(?![0-9A-Za-z_]|[.,][0-9])")
+# Spelled-out amounts are built from these words.
+_NUMBER_WORD = (
+    r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen"
+    r"|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+)
+_SCALE_WORD = r"(?:hundred|thousand|million|billion|trillion)"
+_MORE_WORDS = rf"(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}|{_SCALE_WORD})\b)*"
 # Anything else that reads as money is refused, so no figure escapes the
 # money-case rule by its spelling: "USD 200", "200 dollars", "$ 200", "$.50",
-# "$-200", "$1.5k", "US$200".
+# "$-200", "$1.5k", "US$200", "3,000USD", "3,000 US dollars", "a 3,000-dollar
+# credit", "50¢", "three thousand dollars", "3 thousand dollars", "a thousand
+# dollars", "fifty cents". So is a $ figure with a scale word, which DOLLAR_RE
+# would read as its digits alone: "$3 million". A magnitude names no figure
+# and passes: "thousands of dollars", "dollar-for-dollar", "whole dollars".
 MONEY_LIKE_RE = re.compile(
-    r"(?i)\bUS\$|\$|\bUSD\b|\b[0-9][0-9,.]*\s*(?:dollars?|cents?|bucks)\b|\bUSD\s*[0-9]"
+    rf"""(?ix)
+    \$[0-9][0-9,.]*[\s-]*{_SCALE_WORD}\b
+    | \bU\.?S\.?\$ | [$\u00a2\U0001F4B2] | \bUSD\b | \bUSD\s*\d
+    | (?P<number>
+        \b\d[\d,.]*(?:(?:mm|mn|bn|k|m|b)\b)?(?:[\s-]*{_SCALE_WORD}\b)*
+        | \ba[\s-]+{_SCALE_WORD}\b{_MORE_WORDS}
+        | \b(?:{_NUMBER_WORD}|{_SCALE_WORD})\b{_MORE_WORDS}
+      )
+      (?P<unit>(?:[\s-]+(?:U\.?\s?S\.?|American))?[\s-]*(?:(?:dollars?|cents?|bucks|usd)\b|\u00a2))?
+    """
 )
+# Unicode's Default_Ignorable_Code_Point characters (DerivedCoreProperties.txt):
+# soft hyphens, zero-width spaces and joiners, bidirectional controls,
+# variation selectors and tags. None is visible, so none may split a spelling
+# a reader sees whole ("3000 dol<soft hyphen>lars").
+_INVISIBLE_RE = re.compile(
+    "[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f"
+    "\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]"
+)
+
+
+def _money_text(text: str) -> str:
+    """Text as both money screens read it: without invisible characters, then
+    NFKC-normalised, so a compatibility form reads as what it stands for: ＄
+    (U+FF04) and ﹩ (U+FE69) as $, fullwidth digits and commas as ASCII ones."""
+
+    return unicodedata.normalize("NFKC", _INVISIBLE_RE.sub("", text))
 
 
 def _dollar_values(text: str) -> set[str]:
     """Dollar amounts in text, normalised: "$4,200.00" and "$4,200" -> "4200"."""
 
     return {
-        format(Decimal(match.group(1).replace(",", "")).normalize(), "f") for match in DOLLAR_RE.finditer(text)
+        format(Decimal(match.group(1).replace(",", "")).normalize(), "f")
+        for match in DOLLAR_RE.finditer(_money_text(text))
     }
 
 
 def _unsupported_money(text: str) -> list[str]:
     """Spellings of money other than the one DOLLAR_RE accepts."""
 
+    text = _money_text(text)
     canonical = {match.start() for match in DOLLAR_RE.finditer(text)}
     found = []
     for match in MONEY_LIKE_RE.finditer(text):
+        # A number without a unit is no money. Each run of number words or
+        # digits is read once, whole, so a long run costs one pass.
+        if match.group("number") is not None and match.group("unit") is None:
+            continue
         if match.group(0) == "$" and match.start() in canonical:
             continue
-        found.append(text[match.start() : match.start() + 12].split("\n")[0])
+        # The whole spelling on one line, then context up to 12 characters
+        # in all, so "$ 200" shows its figure.
+        spelled = " ".join(match.group(0).split())
+        found.append(spelled + text[match.end() : match.start() + 12].split("\n")[0])
     return found
 
 
