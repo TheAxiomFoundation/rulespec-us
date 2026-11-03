@@ -917,13 +917,14 @@ _NUMBER_WORD = (
 )
 _SCALE_WORD = r"(?:hundred|thousand|million|billion|trillion)"
 _MORE_WORDS = rf"(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}|{_SCALE_WORD})\b)*"
-# Anything else that reads as money is refused, so no figure escapes the
-# money-case rule by its spelling: "USD 200", "200 dollars", "$ 200", "$.50",
-# "$-200", "$1.5k", "US$200", "3,000USD", "3,000 US dollars", "a 3,000-dollar
-# credit", "50¢", "three thousand dollars", "3 thousand dollars", "a thousand
-# dollars", "fifty cents". So is a $ figure with a scale word, which DOLLAR_RE
-# would read as its digits alone: "$3 million". A magnitude names no figure
-# and passes: "thousands of dollars", "dollar-for-dollar", "whole dollars".
+# The screen refuses anything else that reads as money, so no figure escapes
+# the money-case rule by its spelling: "USD 200", "200 dollars", "$ 200",
+# "$.50", "$-200", "$1.5k", "US$200", "3,000USD", "3,000 US dollars",
+# "a 3,000-dollar credit", "50¢", "three thousand dollars", "3 thousand
+# dollars", "a thousand dollars", "fifty cents". It also refuses a $ figure
+# with a scale word, which DOLLAR_RE would read as its digits alone:
+# "$3 million". A magnitude names no figure and passes: "thousands of
+# dollars", "dollar-for-dollar", "whole dollars".
 MONEY_LIKE_RE = re.compile(
     rf"""(?ix)
     \$[0-9][0-9,.]*[\s-]*{_SCALE_WORD}\b
@@ -978,8 +979,8 @@ def _unsupported_money(text: str) -> list[str]:
     canonical = {match.start() for match in DOLLAR_RE.finditer(text)}
     found = []
     for match in MONEY_LIKE_RE.finditer(text):
-        # A number without a unit is no money. Each run of number words or
-        # digits is read once, whole, so a long run costs one pass.
+        # A number without a unit is no money. The screen reads each run of
+        # number words or digits once, whole, so a long run costs one pass.
         if match.group("number") is not None and match.group("unit") is None:
             continue
         if match.group(0) == "$" and match.start() in canonical:
