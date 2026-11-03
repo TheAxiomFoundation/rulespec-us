@@ -944,14 +944,22 @@ _INVISIBLE_RE = re.compile(
     "[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f"
     "\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]"
 )
+# Unicode's dash punctuation (general category Pd) as NFKC leaves it, and the
+# minus sign. Each reads as a hyphen, so a figure joined to its unit by a
+# non-breaking hyphen or an en dash reads whole: "a 3,000\u2011dollar credit".
+_DASH_RE = re.compile(
+    "[\u058a\u05be\u1400\u1806\u2010-\u2015\u2212"
+    "\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d\u301c\u3030\u30a0\U00010d6e\U00010ead]"
+)
 
 
 def _money_text(text: str) -> str:
-    """Text as both money screens read it: without invisible characters, then
-    NFKC-normalised, so a compatibility form reads as what it stands for: ＄
-    (U+FF04) and ﹩ (U+FE69) as $, fullwidth digits and commas as ASCII ones."""
+    """Text as both money screens read it: without invisible characters,
+    NFKC-normalised, with every dash a hyphen. A compatibility form reads as
+    what it stands for: ＄ (U+FF04) and ﹩ (U+FE69) as $, fullwidth digits and
+    commas as ASCII ones."""
 
-    return unicodedata.normalize("NFKC", _INVISIBLE_RE.sub("", text))
+    return _DASH_RE.sub("-", unicodedata.normalize("NFKC", _INVISIBLE_RE.sub("", text)))
 
 
 def _dollar_values(text: str) -> set[str]:

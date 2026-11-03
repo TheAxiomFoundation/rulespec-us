@@ -86,14 +86,16 @@ Invariants, for every input:
     - Whatever the amount and however prose spells it ($ and digits, or a
       compatibility form of them: fullwidth or small signs, digits, commas
       and stops, invisible characters among them; or another spelling: a
-      code, a word, a number in words, a scale word, a cent sign), `check`
-      refuses an entry with no money case that states it in any prose field,
-      and names the field and the amount ($ and digits) or the spelling.
+      code, a word, a number in words, a scale word, a cent sign, in any of
+      those forms and with any dash for a hyphen), `check` refuses an entry
+      with no money case that states it in any prose field, and names the
+      field and the amount ($ and digits) or the spelling.
     - With a money case, `check` accepts $ and digits and their compatibility
       forms exactly when the case's amount or description states the same
       amount, and refuses every other spelling whatever backs it.
-    - Both screens read a text, its four normalisation forms and the text in
-      compatibility forms with invisible characters inserted alike.
+    - Both screens read a text, its four normalisation forms and the text
+      with compatibility forms, dashes for hyphens and invisible characters
+      inserted alike.
     - A number in digits or words with no money unit after it states no money.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
@@ -1402,6 +1404,9 @@ INVISIBLES = [
     "\ufe00", "\ufe0f", "\ufeff", "\uffa0", "\ufff0", "\U0001bca0", "\U0001d173", "\U000e0001", "\U000e0041",
     "\U000e0100",
 ]
+# Unicode's dash punctuation (general category Pd) and the minus sign, which
+# the screens read as a hyphen.
+DASHES = ["\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212", "\u058a", "\u2e3a", "\u301c", "\ufe58"]
 
 
 def test_disguises_read_as_what_they_stand_for():
@@ -1409,18 +1414,20 @@ def test_disguises_read_as_what_they_stand_for():
     # of its character, and the screens drop each invisible character.
     assert all(unicodedata.normalize("NFKC", form) == char for char, forms in COMPATIBLE.items() for form in forms)
     assert all(sc._money_text(f"a{char}b") == "ab" for char in INVISIBLES)
+    assert all(unicodedata.category(dash) == "Pd" or dash == "\u2212" for dash in DASHES)
 
 
 @st.composite
 def disguised(draw, text):
     """`text` as a reader sees it, written otherwise: each character perhaps a
-    compatibility form of itself, with invisible characters perhaps before it."""
+    compatibility form of itself (a hyphen perhaps a dash), with invisible
+    characters perhaps before it."""
 
     out = []
     for char in text:
         if draw(st.booleans()):
             out.append(draw(st.sampled_from(INVISIBLES)))
-        out.append(draw(st.sampled_from(COMPATIBLE.get(char, [char]))))
+        out.append(draw(st.sampled_from(COMPATIBLE.get(char, [char]) + (DASHES if char == "-" else []))))
     return "".join(out)
 
 
@@ -1578,6 +1585,7 @@ MONEY_TOKENS = [
     "50", ",", "\uff0c", ".", "\uff0e", " ", "\u00a0", "\u3000", "-", "dollars", "dol", "lars", "USD", "US",
     "U.S.", "three", "thousand", "hundred", "and", "a", "k", "million", "cents", "bucks", "e", "\u0301", "\u0338",
     "\u00ad", "\u034f", "\u200b", "\u2060", "\ufeff", "\u3164", "\uffa0", "\U000e0001", "\ufb01",
+    "\u2010", "\u2011", "\u2013", "\u2212",
 ]
 money_texts = st.one_of(st.lists(st.sampled_from(MONEY_TOKENS), max_size=24).map("".join), st.text(max_size=40))
 

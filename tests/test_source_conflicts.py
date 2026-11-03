@@ -959,6 +959,11 @@ def test_spellings_that_escaped_both_screens(tmp_path, spelling, fragment):
         "$2 hundred",
         "$2 million",
         "$2-million",
+        # A dash or a minus sign for a hyphen.
+        "a 200\u2011dollar",
+        "a 200\u2013dollar",
+        "twenty\u2010five dollars",
+        "200\u2212dollar",
     ],
 )
 def test_money_has_one_spelling_however_it_is_written(tmp_path, spelling):
