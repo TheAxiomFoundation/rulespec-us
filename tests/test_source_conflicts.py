@@ -895,6 +895,17 @@ def test_money_has_one_spelling(tmp_path, spelling):
     assert any("writes money as" in issue for issue in check(make_repo(tmp_path), value)), spelling
 
 
+@pytest.mark.parametrize(("amount", "figure"), [("0.3", "$0.30"), ("1500.5", "$1,500.50"), ("1500.500", "$1,500.50")])
+def test_a_money_case_amount_backs_its_value_whatever_its_decimals(tmp_path, amount, figure):
+    # The amount is a decimal string: on main only an amount with no decimals
+    # or two backed a figure, so "0.3" left "$0.30" in prose unbacked.
+    value = entry()
+    value["money_case"]["description"] = "A family against another."
+    value["money_case"]["amount"] = amount
+    value["alternatives"][0]["effect"] = f"The family is paid {figure} less."
+    assert check(make_repo(tmp_path), value) == []
+
+
 def test_canonical_money_at_a_sentence_end(tmp_path):
     value = entry()
     value["money_case"]["description"] = "A family: $1,234.56 against $1,213.56."
@@ -988,6 +999,23 @@ def test_spellings_that_escaped_both_screens(tmp_path, spelling, fragment):
         "$3 to 5 million",
         "$3\u20135 M",
         "$3 M-5 M",
+        # A $ range joined by "or" or "and", or with its second number in
+        # words.
+        "$3 or 5 million",
+        "between $3 and 5 M",
+        "$3 to five million",
+        "$3-twenty-five million",
+        "$1 to a million",
+        # Number words before a scale abbreviation, and the longer
+        # abbreviations.
+        "three M dollars",
+        "twenty-five bn USD",
+        "a five k-dollar",
+        "3 mln dollars",
+        "$3 mil",
+        "3 bln USD",
+        "$3 bil",
+        "2 tn dollars",
     ],
 )
 def test_money_has_one_spelling_however_it_is_written(tmp_path, spelling):
@@ -1092,6 +1120,48 @@ def test_a_letter_right_after_a_figure_reads_as_a_scale(tmp_path):
 
 
 @pytest.mark.parametrize(
+    ("text", "spelled"),
+    [
+        ("The state pays $300 to 2 million households.", "$300 to 2 million"),
+        ("The state pays $300 and 2 million households claim it.", "$300 and 2 million"),
+        ("The state pays $300 to two million households.", "$300 to two million"),
+    ],
+)
+def test_a_scaled_count_after_a_figure_reads_as_a_range(tmp_path, text, spelled):
+    # Intended: a number with a scale, joined to a $ figure by a dash, "to",
+    # "or" or "and", reads as the second number of a range, even when it
+    # counts something. The screen can't tell "pays $300 to 2 million
+    # households" from "costs $3 to 5 million", and an unread range lets a
+    # figure escape. Write "pays 2 million households $300 each".
+    ctx = make_repo(tmp_path)
+    value = entry()
+    value["basis"] = text
+    issues = check(ctx, value)
+    assert any(f"basis writes money as `{spelled}`;" in issue for issue in issues), issues
+    value["basis"] = "The state pays 2 million households $300 each."
+    assert not [issue for issue in check(ctx, value) if "writes money as" in issue]
+
+
+@pytest.mark.parametrize(
+    ("spelling", "shown"),
+    [
+        ("50¢", "50¢"),
+        ("50￠", "50¢"),  # fullwidth cent sign
+        ("3 mln dollars", "3 mln dollars"),
+        ("$3 or five million", "$3 or five million"),
+        ("three M dollars", "three M dollars"),
+    ],
+)
+def test_a_refusal_shows_the_spelling_whole(tmp_path, spelling, shown):
+    # A refusal shows the whole spelling, the figure with its unit or scale,
+    # not the sign or unit alone.
+    value = entry()
+    value["alternatives"][0]["effect"] = f"The family is paid {spelling} less."
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"alternatives[0].effect writes money as `{shown}`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
     "path",
     [
         ("question",),
@@ -1180,10 +1250,15 @@ def test_counts_and_approximations_before_a_unit_are_refused(tmp_path, text, spe
         ("$1-" + "1," * 100_000, []),
         ("1 k " * 50_000, []),
         ("$1 k " * 40_000, ["$1 k"] * 40_000),
+        (("one" + " " * 1000 + "x") * 200, []),
+        (("$1 to one" + " " * 1000 + "x") * 200, []),
+        ("$1 to " + "one " * 50_000, []),
+        ("$1 and " * 40_000, []),
     ],
     ids=[
         "number-words", "digit-commas", "sign-then-digits", "words-then-near-unit", "articles",
-        "sign-then-spaces", "range-then-digits", "abbreviations", "scaled-signs",
+        "sign-then-spaces", "range-then-digits", "abbreviations", "scaled-signs", "words-then-spaces",
+        "word-range-then-spaces", "range-then-words", "joined-ranges",
     ],
 )
 def test_money_scans_stay_fast(text, expected):

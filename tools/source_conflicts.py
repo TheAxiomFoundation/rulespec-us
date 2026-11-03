@@ -910,7 +910,7 @@ def _check_record(record: Any, *, label: str, confirmation: bool, issues: list[s
 # The one way the register writes money: $, digits (commas between groups of
 # three allowed), and optionally two-digit cents. A sentence may end after it.
 DOLLAR_RE = re.compile(r"\$((?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]{2})?)(?![0-9A-Za-z_]|[.,][0-9])")
-# Spelled-out amounts are built from these words.
+# These words spell out an amount.
 _NUMBER_WORD = (
     r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen"
     r"|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
@@ -923,28 +923,37 @@ _UNIT_WORD = r"(?:dollars?|cents?|bucks|usd)\b"
 # word other than a unit makes it part of a name ("K-1", "T-bill"), which
 # passes.
 _ABBREVIATION = r"(?:mln|mil|mm|mn|m|bln|bil|bn|b|tn|t|k)"
-_SCALE = rf"(?:{_SCALE_WORD}\b|{_ABBREVIATION}(?:\b(?!-(?!{_UNIT_WORD})\w)|(?={_UNIT_WORD})))"
+_ABBREVIATED_SCALE = rf"{_ABBREVIATION}(?:\b(?!-(?!{_UNIT_WORD})\w)|(?={_UNIT_WORD}))"
+_SCALE = rf"(?:{_SCALE_WORD}\b|{_ABBREVIATED_SCALE})"
 # A $ figure's digits, with commas or points between them. A point after the
 # last digit ends a sentence, so "$3,000. M." is $3,000 and a list label.
 _FIGURE = r"[0-9](?:[0-9,.]*[0-9])?"
+# What joins a $ figure to the second number of a range: "$3-5 million",
+# "$3 to 5 million", "$3 or five million", "between $3 and 5 million". A count
+# with a scale after a $ figure reads as that second number too ("pays $300 to
+# 2 million households"), so the screen refuses it.
+_RANGE = r"(?:\s*-+\s*|\s+(?:to|or|and)\s+)"
 # The screen refuses anything else that reads as money, so no figure escapes
 # the money-case rule by its spelling: "USD 200", "200 dollars", "$ 200",
 # "$.50", "$-200", "$1.5k", "US$200", "3,000USD", "3,000 US dollars",
 # "a 3,000-dollar credit", "50¢", "three thousand dollars", "3 thousand
-# dollars", "a thousand dollars", "fifty cents", "3 M dollars", "3kUSD". It
-# also refuses a $ figure with a scale, which DOLLAR_RE would read as its
-# digits alone, and a $ range with a scale after its second figure:
-# "$3 million", "$3 M", "$3-5 million". A magnitude names no figure and
-# passes: "thousands of dollars", "dollar-for-dollar", "whole dollars".
+# dollars", "a thousand dollars", "fifty cents", "3 M dollars", "3kUSD",
+# "three M dollars". It also refuses a $ figure with a scale, which DOLLAR_RE
+# would read as its digits alone, and a $ range with a scale after its second
+# number: "$3 million", "$3 M", "$3-5 million", "$3 or five million". A
+# magnitude names no figure and passes: "thousands of dollars",
+# "dollar-for-dollar", "whole dollars".
 MONEY_LIKE_RE = re.compile(
     rf"""(?ix)
     \${_FIGURE}(?:[\s-]*(?:{_SCALE_WORD}|{_ABBREVIATION})\b)?
-      (?:(?:\s*-+\s*|\s+to\s+)\$?{_FIGURE})?[\s-]*{_SCALE}
+      (?:{_RANGE}\$?{_FIGURE})?[\s-]*{_SCALE}
+    | \${_FIGURE}(?:[\s-]*(?:{_SCALE_WORD}|{_ABBREVIATION})\b)?
+      {_RANGE}(?:a|{_NUMBER_WORD})\b{_MORE_WORDS}[\s-]+{_SCALE_WORD}\b
     | (?P<sign>\bU\.?S\.?\$ | [$\u00a2\U0001F4B2] | \bUSD\b | \bUSD\s*\d)
     | (?P<number>
         \b\d[\d,.]*(?:[\s-]*{_SCALE})*
         | \ba[\s-]+{_SCALE_WORD}\b{_MORE_WORDS}
-        | \b(?:{_NUMBER_WORD}|{_SCALE_WORD})\b{_MORE_WORDS}
+        | \b(?:{_NUMBER_WORD}|{_SCALE_WORD})\b{_MORE_WORDS}(?:[\s-]*{_ABBREVIATED_SCALE})?
       )
       (?P<unit>(?:[\s-]+(?:U\.?\s?S\.?|American))?[\s-]*(?:{_UNIT_WORD}|\u00a2))?
     """
@@ -1786,6 +1795,10 @@ def check_entry(entry: Any, *, index: int, ctx: RepoContext, jurisdictions: froz
     # threshold"). No lexical test can tell a quoted threshold from a computed
     # amount, so prose amounts are never backed by an excerpt.
     covered = _dollar_values(str(money.get("description", ""))) | _dollar_values(f"${money.get('amount', '')}")
+    # The amount is a decimal string, so it states its value whatever its
+    # decimals: "0.3" backs "$0.30".
+    if isinstance(money.get("amount"), str) and DECIMAL_RE.fullmatch(money["amount"]):
+        covered.add(format(Decimal(money["amount"]).normalize(), "f"))
     spelled = list(_prose_fields(entry, label))
     if isinstance(money.get("description"), str):
         spelled.append((f"{label}.money_case.description", money["description"]))
