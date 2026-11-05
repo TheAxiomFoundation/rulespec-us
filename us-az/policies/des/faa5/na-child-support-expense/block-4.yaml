@@ -1,0 +1,283 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The court-ordered child support amount and the pay history must be verified before allowing the child support expense.
+    Verification of the last 30 calendar days, or longer when needed, is required when the child or cash medical support expense is paid consistently by the participant on a monthly or more than monthly basis.
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+    source_sha256: be26f35c9dbf356f37b3b4bb28348b34de63507530140803dc3d3c39a49526cb
+  proof_validation:
+    required: true
+# Coverage starts 2025-10-01 for the requested FY2026 implementation.
+# This is not a determination of legal commencement. The supplied review
+# identifies the authenticated parent HTML's revision date as 2024-10-21.
+# Its block-3 citation identifies previously assembled parent context, not
+# operative authority for this block-4 encoding. The July 2026 date is extraction
+# context, not legal commencement.
+#
+# Each Payment row represents the payment history and obligation under review.
+# Evidence classifications concern one document associated with that row.
+# payment_frequency describes that same history; less-than-monthly is represented
+# exclusively by its string category, avoiding a contradictory parallel flag.
+# Consistency and zero-paid-month facts are independent: both lookbacks can apply.
+#
+# Listed evidence classification is not an exhaustive admissibility decision.
+# Verification facts may be established using other acceptable pay-history evidence.
+# Verification does not establish substantive allowability or household eligibility.
+# Three-month averaging arithmetic and rounding are not supplied by this source.
+# No allowance arithmetic or block-3 exclusions are encoded or imported.
+#
+# Workspace inspection and compiler execution were unavailable because the tool
+# host could not start. No compilation, fixture, proof, complete-source validation,
+# or end-to-end parity result is claimed.
+inputs:
+  - name: court_ordered_amount_verified
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: pay_history_verified
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: paid_consistently_by_participant
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: payment_frequency
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: payment_is_unpredictable
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: history_has_zero_paid_month
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: needed_history_calendar_days
+    entity: Payment
+    dtype: Count
+    period: Month
+  - name: evidence_matches_obligation
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: evidence_category
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: support_taken_out_of_benefit
+    entity: Payment
+    dtype: Boolean
+    period: Month
+rules:
+  - name: regular_history_minimum_calendar_days
+    kind: parameter
+    dtype: Count
+    source: Arizona DES FAA5 NA Child Support Expense, block-4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Verification of the last 30 calendar days, or longer when needed, is required"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          30
+  - name: irregular_history_consecutive_months
+    kind: parameter
+    dtype: Count
+    source: Arizona DES FAA5 NA Child Support Expense, block-4
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Verification of the most recent prior three consecutive months is needed to average the expense"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          3
+  - name: required_verification_parts_complete
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 opening paragraph and NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "The court-ordered child support amount and the pay history must be verified before allowing the child support expense."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          court_ordered_amount_verified and pay_history_verified
+  - name: regular_history_verification_required
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 regular-payment paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "paid consistently by the participant on a monthly or more than monthly basis."
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          paid_consistently_by_participant
+          and (payment_frequency == "monthly" or payment_frequency == "more_than_monthly")
+  - name: required_recent_history_calendar_days
+    kind: derived
+    entity: Payment
+    dtype: Count
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 regular-payment paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Verification of the last 30 calendar days, or longer when needed, is required"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if regular_history_verification_required: max(regular_history_minimum_calendar_days, needed_history_calendar_days) else: 0
+  - name: averaging_history_verification_required
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 irregular-payment paragraph and four bullets
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "when one or more of the following occurs regarding the child support payment:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Paid less often than monthly"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Paid with no established frequency"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Unpredictable"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "One or more months had no payment (zero paid month)"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          payment_frequency == "less_than_monthly"
+          or payment_frequency == "no_established_frequency"
+          or payment_is_unpredictable
+          or history_has_zero_paid_month
+  - name: required_most_recent_prior_consecutive_months
+    kind: derived
+    entity: Payment
+    dtype: Count
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 irregular-payment paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Verification of the most recent prior three consecutive months is needed to average the expense"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if averaging_history_verification_required: irregular_history_consecutive_months else: 0
+  - name: listed_obligation_evidence
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 court-ordered amount evidence list
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Verification of the court-ordered child support amount that can be used includes the following:"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          evidence_matches_obligation
+          and (
+            evidence_category == "court_issued_child_support_order"
+            or evidence_category == "arizona_clerk_official_record_showing_support_paid"
+            or evidence_category == "other_state_official_record_showing_support_paid"
+            or evidence_category == "dcss_document_showing_support_required"
+          )
+  - name: listed_pay_history_evidence
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Child Support Expense, block-4 non-exhaustive pay-history evidence list
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Verification of the pay history includes, and is not limited to, any of the following:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-4
+              excerpt: "Social Security Administration (SSA) benefits or Supplemental Security Income (SSI) pay history from the SOLQI screen or the SSA award letter when the child support is taken out of the benefit"
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          evidence_matches_obligation
+          and (
+            evidence_category == "dcss_document_showing_current_support_paid"
+            or evidence_category == "money_order_receipt_to_custodial_parent"
+            or evidence_category == "state_centralized_payment_center_receipt_or_pay_history"
+            or evidence_category == "paycheck_stub_with_garnishment"
+            or evidence_category == "az_child_support_services_portal_screenshot"
+            or (
+              (evidence_category == "ssa_or_ssi_solqi_pay_history"
+                or evidence_category == "ssa_award_letter")
+              and support_taken_out_of_benefit
+            )
+          )
