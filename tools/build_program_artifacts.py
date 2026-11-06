@@ -289,12 +289,11 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def compose_spec(root: Path, build: SpecBuild, out_path: Path) -> None:
-    from axiom_compose import compose, load_corpus_from_roots, load_spec
+def compose_spec(root: Path, build: SpecBuild, out_path: Path, corpus_state) -> None:
+    from axiom_compose import compose, load_spec
 
     spec = load_spec(root / build.spec_path)
-    corpus = load_corpus_from_roots([root])
-    program = compose(spec, corpus)
+    program = compose(spec, corpus_state)
     out_path.write_bytes(program.source)
 
 
@@ -395,12 +394,20 @@ def main() -> int:
     # byte-identical to CI.
     workdir = Path(tempfile.mkdtemp(prefix="program-artifacts-"))
 
+    # The pinned composer treats CorpusState as immutable and compose() as pure.
+    # Parse/index this fixed checkout once, rather than once per program.
+    from axiom_compose import load_corpus_from_roots
+
+    print("Loading shared RuleSpec corpus", flush=True)
+    corpus_state = load_corpus_from_roots([root]) if builds else None
+
     for build in builds:
         spec_rel = str(build.spec_path)
         module_path = workdir / f"{build.artifact_name}.rulespec.yaml"
         artifact_path = workdir / f"{build.artifact_name}.compiled.json"
         try:
-            compose_spec(root, build, module_path)
+            print(f"BUILD {spec_rel}", flush=True)
+            compose_spec(root, build, module_path, corpus_state)
             engine_version = engine_compile(root, module_path, artifact_path, engine_bin)
         except Exception as error:
             message = str(error).splitlines()[0][:200]
