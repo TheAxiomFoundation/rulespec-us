@@ -1,0 +1,156 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Any of the following medical supply costs are allowable when authorized by a U.S. medically qualified source:
+    NOTE This does not include the cost of special diets.
+
+    This module determines component allowability only. Each Payment row represents
+    one independent expense component, including an incurred supply cost or rental
+    fee. Split mixed invoices into separate rows before classification.
+
+    Category selectors identify the actual item: syringes, oxygen, sickroom_equipment,
+    other_medical_supply, equipment, dentures, eyeglasses, contact_lenses, hearing_aids,
+    telephonic_aids_for_hearing_impaired, or prostheses. Other strings are outside
+    this list. other_medical_supply includes supplies whose specific names are not
+    listed. equipment denotes the prescribed-equipment branch. Overlapping factual
+    categories should be classified under an applicable source branch.
+
+    Transaction selectors identify purchase, initial_purchase, replacement, repair,
+    rental, or another actual transaction. initial_purchase is also a purchase.
+    The syringes, oxygen, and sickroom-equipment branches have no additional
+    transaction restriction. The equipment branch covers equipment cost and rental
+    fees; its selector must describe an actual equipment cost.
+
+    Authorization by a U.S. medically qualified source is an externally established
+    fact under the applicable definition, distinct from prescription and necessity.
+    Eyewear prescriber selectors are ophthalmologist, optometrist, or another
+    actual profession; prescription must concern this same eyewear component.
+
+    Parent elderly/disability classification, ownership and billing, out-of-pocket
+    treatment, reimbursement and other parent exclusions, verification, timing,
+    aggregation, disregard, and standard-deduction selection remain caller obligations.
+    No household deduction or amount is computed here.
+
+    The formula coverage floor is August 1, 2026, the first full month following
+    the July 17 evidence snapshot. It is not a legal commencement date.
+    Earlier applicability is unproven; July has no formula version.
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+    source_sha256: 6edaaf64980656ed6502224ec930841ac30cd53a7212db258b02e34a66cdcc8e
+  proof_validation:
+    required: true
+inputs:
+  - name: snap_medical_supply_category
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: snap_medical_supply_transaction
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: snap_medical_supply_authorized_by_us_medically_qualified_source
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_supply_medically_necessary
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_supply_prescribed
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_supply_prescriber_profession
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: snap_medical_supply_is_special_diet_cost
+    entity: Payment
+    dtype: Boolean
+    period: Month
+rules:
+  - name: snap_medical_supply_component_allowable
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block-9
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+              excerpt: "Any of the following medical supply costs are allowable when authorized by a U.S. medically qualified source:"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+              excerpt: "Purchase of other medically necessary medical supplies"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+              excerpt: "Cost of or rental fees for prescribed equipment"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+              excerpt: "Initial purchase, replacement, or repair of any of the following:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+              excerpt: "Eyeglasses or contact lenses, when prescribed by an ophthalmologist or optometrist"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-9
+              excerpt: "NOTE This does not include the cost of special diets."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          snap_medical_supply_authorized_by_us_medically_qualified_source
+          and not snap_medical_supply_is_special_diet_cost
+          and (
+            snap_medical_supply_category == "syringes"
+            or snap_medical_supply_category == "oxygen"
+            or snap_medical_supply_category == "sickroom_equipment"
+            or (
+              snap_medical_supply_category == "other_medical_supply"
+              and snap_medical_supply_medically_necessary
+              and (
+                snap_medical_supply_transaction == "purchase"
+                or snap_medical_supply_transaction == "initial_purchase"
+              )
+            )
+            or (
+              snap_medical_supply_category == "equipment"
+              and snap_medical_supply_prescribed
+            )
+            or (
+              (
+                snap_medical_supply_transaction == "initial_purchase"
+                or snap_medical_supply_transaction == "replacement"
+                or snap_medical_supply_transaction == "repair"
+              )
+              and (
+                snap_medical_supply_category == "dentures"
+                or snap_medical_supply_category == "hearing_aids"
+                or snap_medical_supply_category == "telephonic_aids_for_hearing_impaired"
+                or snap_medical_supply_category == "prostheses"
+                or (
+                  (
+                    snap_medical_supply_category == "eyeglasses"
+                    or snap_medical_supply_category == "contact_lenses"
+                  )
+                  and snap_medical_supply_prescribed
+                  and (
+                    snap_medical_supply_prescriber_profession == "ophthalmologist"
+                    or snap_medical_supply_prescriber_profession == "optometrist"
+                  )
+                )
+              )
+            )
+          )
