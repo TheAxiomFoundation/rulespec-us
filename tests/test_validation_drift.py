@@ -17,14 +17,9 @@ NOW = datetime(2026, 11, 6, 6, 23, tzinfo=timezone.utc)
 CURRENT = {
     "encoder_main": "b" * 40,
     "axiom_rules_engine_ref": "e" * 40,
+    "axiom_compose_ref": "f" * 40,
     "axiom_corpus_ref": "c" * 40,
     "corpus_release": ["2026-11-01", "d" * 64],
-}
-LEDGER = {
-    "validate_failures": {
-        "us/statutes/7/2015.yaml": {"active": {}},
-        "us-ma/regulations/106-cmr/1.yaml": {"active": {}},
-    }
 }
 
 
@@ -51,7 +46,6 @@ def _plan(previous, prs, **kwargs):
         previous=previous,
         current=kwargs.pop("current", CURRENT),
         encoder_prs=prs,
-        ledger=kwargs.pop("ledger", LEDGER),
         now=NOW,
         **kwargs,
     )
@@ -68,10 +62,22 @@ def test_nothing_changed_skips():
     assert _plan(_state(encoder_main=CURRENT["encoder_main"]), [])["scope"] == "skip"
 
 
-def test_loosen_checks_the_waived_files():
+def test_loosen_runs_everything_until_waived_files_can_be_validated():
     result = _plan(_state(), [_pr(1, "none"), _pr(2, "loosen")])
-    assert result["scope"] == "waived"
-    assert result["targets"] == sorted(LEDGER["validate_failures"])
+    assert result["scope"] == "full"
+
+
+def test_encoder_commit_without_a_merged_pr_runs_everything():
+    result = _plan(_state(), [_pr(1, "none"), {"number": None, "commit": "c" * 40}])
+    assert result["scope"] == "full"
+
+
+def test_future_state_is_not_trusted():
+    future = _state(
+        encoder_main=CURRENT["encoder_main"],
+        last_full_at=(NOW + timedelta(days=30)).isoformat(),
+    )
+    assert _plan(future, [])["scope"] == "full"
 
 
 @pytest.mark.parametrize("effect", ["tighten", None, "maybe"])
@@ -85,6 +91,7 @@ def test_tighten_or_undeclared_runs_everything(effect):
     "changes",
     [
         {"axiom_rules_engine_ref": "f" * 40},
+        {"axiom_compose_ref": "0" * 40},
         {"axiom_corpus_ref": "f" * 40},
         {"corpus_release": ["2026-10-01", "d" * 64]},
         {"last_full_at": (NOW - timedelta(days=7)).isoformat()},
@@ -109,16 +116,6 @@ def test_forced_full_run():
     assert _plan(previous, [], force_full=True)["scope"] == "full"
 
 
-def test_loosen_without_waived_files_skips():
-    result = _plan(_state(), [_pr(1, "loosen")], ledger={"validate_failures": {}})
-    assert result["scope"] == "skip"
-
-
-def test_unsafe_waived_path_fails():
-    with pytest.raises(ValueError, match="invalid waived path"):
-        _plan(_state(), [_pr(1, "loosen")], ledger={"validate_failures": {"../x.yaml": {}}})
-
-
 def test_declared_effect_ignores_template_comments():
     assert drift.declared_effect("<!-- Validation effect: none -->") is None
     assert drift.declared_effect("Validation effect: `Tighten`\n") == "tighten"
@@ -127,48 +124,55 @@ def test_declared_effect_ignores_template_comments():
 LOG = """validate (us)\tRun validation\t2026-11-06T06:40:01.1234567Z Validating 3 files
 validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z
 validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z 2 of 3 file(s) failed:
-validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z   - us/statutes/7/2015.yaml
+validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z   - /home/runner/work/rulespec-us/rulespec-us/us/statutes/7/2015.yaml
 validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z   - us-ma/regulations/106-cmr/1.yaml
 validate (us)\tRun validation\t2026-11-06T06:40:10.0000000Z ##[error]Process completed with exit code 1.
 validate (us)\tOther\t2026-11-06T06:40:11.0000000Z   - us/not/after/header.yaml
 """
 
 
+WORKSPACE = "/home/runner/work/rulespec-us/rulespec-us"
+
+
 def test_failing_files_are_read_from_validate_output():
-    assert drift.failing_files(LOG) == [
+    # The shared validator passes absolute workspace paths.
+    assert drift.failing_files(LOG, WORKSPACE) == [
         "us-ma/regulations/106-cmr/1.yaml",
         "us/statutes/7/2015.yaml",
     ]
 
 
-def test_report_opens_one_issue_per_failing_file_and_closes_fixed_ones():
+def test_report_opens_new_issues_updates_known_ones_and_closes_none():
     plan_result = {"scope": "full", "targets": [], "reasons": ["weekly"]}
     result = drift.report(
         plan_result=plan_result,
         log=LOG,
         validate_result="failure",
         open_issue_paths=["us/statutes/7/2015.yaml", "us/statutes/1.yaml"],
-        all_files=["us/statutes/1.yaml", "us/statutes/7/2015.yaml"],
         run_url="https://example.invalid/run",
+        workspace=WORKSPACE,
     )
     assert [item["title"] for item in result["open"]] == [
         "Validation drift: us-ma/regulations/106-cmr/1.yaml",
-        "Validation drift: us/statutes/7/2015.yaml",
     ]
-    assert result["close"] == ["us/statutes/1.yaml"]
+    assert result["update"] == ["us/statutes/7/2015.yaml"]
+    assert "close" not in result
     assert result["labels"] == ["validation-drift", "re-encode-queue"]
 
 
-def test_waived_scope_closes_only_issues_in_scope():
+def test_report_caps_new_issues_per_run():
+    lines = "2 of 2 file(s) failed:\n" + "".join(
+        f"  - us/statutes/{n}.yaml\n" for n in range(drift.MAX_NEW_ISSUES + 5)
+    )
     result = drift.report(
-        plan_result={"scope": "waived", "targets": ["us/a.yaml"], "reasons": []},
-        log="",
-        validate_result="success",
-        open_issue_paths=["us/a.yaml", "us/b.yaml"],
-        all_files=["us/a.yaml", "us/b.yaml"],
+        plan_result={"scope": "full", "targets": [], "reasons": []},
+        log=lines,
+        validate_result="failure",
+        open_issue_paths=[],
         run_url="u",
     )
-    assert result["open"] == [] and result["close"] == ["us/a.yaml"]
+    assert len(result["open"]) == drift.MAX_NEW_ISSUES
+    assert len(result["deferred"]) == 5
 
 
 @pytest.mark.parametrize(("log", "result"), [("", "failure"), (LOG, "cancelled")])
@@ -178,7 +182,6 @@ def test_unreadable_failures_report_an_error_not_an_issue(log, result):
         log=log,
         validate_result=result,
         open_issue_paths=[],
-        all_files=[],
         run_url="u",
     )
     assert "error" in outcome
@@ -190,6 +193,7 @@ def test_cli_plan_reads_the_repository(tmp_path):
     (repo / ".axiom/workflow-toolchain.toml").write_text(
         "[workflow_toolchain]\n"
         f'axiom_rules_engine_ref = "{"e" * 40}"\n'
+        f'axiom_compose_ref = "{"f" * 40}"\n'
         f'axiom_corpus_ref = "{"c" * 40}"\n'
     )
     (repo / ".axiom/toolchain.toml").write_text(
@@ -204,7 +208,7 @@ def test_cli_plan_reads_the_repository(tmp_path):
     previous = tmp_path / "state.json"
     previous.write_text(json.dumps(_state()))
     prs = tmp_path / "prs.json"
-    prs.write_text(json.dumps([_pr(7, "loosen")]))
+    prs.write_text(json.dumps([_pr(7, "none")]))
     output = tmp_path / "plan.json"
     assert (
         drift.main(
@@ -220,5 +224,5 @@ def test_cli_plan_reads_the_repository(tmp_path):
         == 0
     )
     result = json.loads(output.read_text())
-    assert result["scope"] == "waived"
-    assert result["targets"] == ["us/statutes/1.yaml"]
+    assert result["scope"] == "skip"
+    assert result["state"]["encoder_main"] == "b" * 40

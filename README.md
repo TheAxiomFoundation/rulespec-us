@@ -58,13 +58,15 @@ generated formula artifacts.
 
 - `.github/workflows/validation-drift.yml` replaces the daily full
   validation (#1274, axiom-encode#2094). Once a day it plans a run from what
-  changed since the last drift run (`tools/validation_drift.py`): a full run
-  for an encoder merge that declares `Validation effect: tighten` (or no
-  valid effect), a rules-engine or corpus pin, or 7 days since the last full
-  run; the waived files for `loosen` merges; nothing for `none` merges. Each
-  failing file opens or updates one `Validation drift: <path>` issue with the
-  `re-encode-queue` label. A file in scope that passes closes its issue. Run
-  it by hand with `workflow_dispatch` (`scope: full` for every file).
+  changed since the last drift run (`tools/validation_drift.py`). It runs
+  every file for an encoder merge that declares `Validation effect: tighten`
+  or `loosen` (or no valid effect), an encoder commit without a merged PR, a
+  rules-engine, composer or corpus pin or release, or 7 days since the last
+  full run. It skips the run when only `none` merges happened. Each failing
+  file opens or updates one `Validation drift: <path>` issue with the
+  `re-encode-queue` label (at most 50 new issues per run). People close the
+  issues; the run never closes them, because the validator lists only
+  failures. Run it by hand with `workflow_dispatch` (`scope: full`).
 - `.axiom/admissions/` holds reviewed, repository-specific admissions that
   the encoder reads from the protected `main` commit only
   (axiom-encode#2095). Today it holds `coverage-exemptions.jsonl`, in the

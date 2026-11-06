@@ -5,14 +5,14 @@ name: Validation drift
 # the last drift run and validates only what that can affect
 # (tools/validation_drift.py):
 #   - an axiom-encode main merge that declares `Validation effect: tighten`
-#     (or no valid effect), a rules-engine pin, a corpus pin or release, or
-#     7 days since the last full run: every file;
-#   - only `loosen` merges: the waived files;
+#     or `loosen` (or no valid effect), an encoder commit without a merged
+#     PR, a rules-engine, composer or corpus pin or release, or 7 days since
+#     the last full run: every file;
 #   - only `none` merges, or nothing: no run.
 # Each failing file opens or updates one "Validation drift: <path>" issue
-# with the re-encode-queue label; a passing file in scope closes its issue.
-# The verifier is axiom-encode main and the pinned axiom_encode_ref is the
-# producer floor (`encoder-verifier: main`).
+# with the re-encode-queue label (at most 50 new issues per run). Issues are
+# closed by people, never automatically. The verifier mode is the protected
+# [workflow_toolchain].encoder_verifier, the same as for pull requests.
 
 on:
   schedule:
@@ -92,10 +92,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/previous"
-          # The newest state artifact of this workflow, whatever the run's
-          # conclusion: a failing drift run still records what it checked.
-          id="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=validation-drift-state&per_page=1" \
-            --jq '.artifacts[] | select(.expired == false) | .workflow_run.id' | head -n1 || true)"
+          # The newest state artifact that this workflow wrote on main from a
+          # schedule or dispatch run. Any workflow can upload an artifact with
+          # this name, so check the run that produced it.
+          id=""
+          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=validation-drift-state&per_page=20" \
+              --jq '.artifacts[] | select(.expired == false) | .workflow_run.id' || true); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" \
+                --jq '.path == ".github/workflows/validation-drift.yml" and .head_branch == "main" and (.event == "schedule" or .event == "workflow_dispatch")' \
+                | grep -qx true; then
+              id="$run"
+              break
+            fi
+          done
           if [ -n "$id" ]; then
             gh run download "$id" --repo "$GITHUB_REPOSITORY" -n validation-drift-state -D "$RUNNER_TEMP/previous" || true
           fi
@@ -121,12 +130,13 @@ jobs:
               : > "$RUNNER_TEMP/prs.jsonl"
               ok=true
               for sha in $commits; do
+                # A commit without a merged PR declares no effect: full run.
                 gh api "repos/TheAxiomFoundation/axiom-encode/commits/$sha/pulls" \
-                  --jq '.[] | select(.merged_at != null and .base.ref == "main") | {number, body}' \
+                  --jq "[.[] | select(.merged_at != null and .base.ref == \"main\") | {number, body}] | if length == 0 then [{number: null, commit: \"$sha\"}] else . end | .[]" \
                   >> "$RUNNER_TEMP/prs.jsonl" || { ok=false; break; }
               done
               if [ "$ok" = true ]; then
-                python -c 'import json,sys; rows=[json.loads(l) for l in open(sys.argv[1]) if l.strip()]; print(json.dumps(list({r["number"]: r for r in rows}.values())))' \
+                python -c 'import json,sys; rows=[json.loads(l) for l in open(sys.argv[1]) if l.strip()]; print(json.dumps(list({(r.get("number") or r.get("commit")): r for r in rows}.values())))' \
                   "$RUNNER_TEMP/prs.jsonl" > "$prs"
               fi
             fi
@@ -150,8 +160,8 @@ jobs:
 
           plan = json.load(open(sys.argv[1]))
           print(f"scope={plan['scope']}")
-          # Empty for full and skip, so the validator runs every file.
-          print("targets=" + (json.dumps(plan["targets"]) if plan["scope"] == "waived" else ""))
+          # No scoped targets today: every run that runs is a full run.
+          print("targets=" + (json.dumps(plan["targets"]) if plan["targets"] else ""))
           PY
           python -I - "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/state.json" <<'PY'
           import json
@@ -176,9 +186,9 @@ jobs:
   validate:
     needs: plan
     if: ${{ needs.plan.outputs.scope != 'skip' }}
-    # Needs the encoder-verifier and drift-targets inputs of
-    # TheAxiomFoundation/.github#154. Repin to its merge commit before merge.
-    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@6a7d229050a08b6d62e35a29cb8cc3fb1954f1d8
+    # Needs the drift-targets input of TheAxiomFoundation/.github#154.
+    # Repin to its merge commit before merge.
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@e802dcca49d070631254a8afacaddbc9e758ba4f
     secrets: inherit
     with:
       axiom-encode-ref: ${{ needs.plan.outputs.axiom_encode_ref }}
@@ -190,7 +200,6 @@ jobs:
       validation-workers: 4
       guard-programs-root: false
       allow-retired-schema-prefreeze: true
-      encoder-verifier: main
       drift-targets: ${{ needs.plan.outputs.targets }}
 
   report:
@@ -225,44 +234,55 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log > "$RUNNER_TEMP/run.log" || true
+          # This run is still in progress, so read the logs of its finished
+          # validate jobs one by one.
+          : > "$RUNNER_TEMP/run.log"
+          for job in $(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+              --jq '.jobs[] | select(.status == "completed" and (.name | test("(^|/ )validate( \\(|$)"))) | .id'); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" >> "$RUNNER_TEMP/run.log"
+          done
           gh issue list --repo "$GITHUB_REPOSITORY" --state open --label validation-drift \
             --limit 1000 --json number,title > "$RUNNER_TEMP/open-issues.json"
           python -I tools/validation_drift.py report --plan "$RUNNER_TEMP/plan/plan.json" \
             --log "$RUNNER_TEMP/run.log" --validate-result "$VALIDATE_RESULT" \
             --open-issues "$RUNNER_TEMP/open-issues.json" --run-url "$RUN_URL" \
-            --output "$RUNNER_TEMP/actions.json"
+            --workspace "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/actions.json"
           for label in validation-drift re-encode-queue; do
             gh label create "$label" --repo "$GITHUB_REPOSITORY" --force \
               --description "Validation drift run (axiom-encode#2094)" >/dev/null
+          done
+          issue_number() {
+            python -I -c 'import json,sys; t="Validation drift: "+sys.argv[2]; print(next((str(i["number"]) for i in json.load(open(sys.argv[1])) if i["title"] == t), ""))' \
+              "$RUNNER_TEMP/open-issues.json" "$1"
+          }
+          python -I -c 'import json,sys; [print(p) for p in json.load(open(sys.argv[1]))["update"]]' \
+            "$RUNNER_TEMP/actions.json" | while IFS= read -r path; do
+            number="$(issue_number "$path")"
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "Still failing: $RUN_URL"
+            fi
           done
           python -I -c 'import json,sys; [print(json.dumps(i)) for i in json.load(open(sys.argv[1]))["open"]]' \
             "$RUNNER_TEMP/actions.json" | while IFS= read -r item; do
             title="$(printf '%s' "$item" | python -I -c 'import json,sys; print(json.load(sys.stdin)["title"])')"
             body="$(printf '%s' "$item" | python -I -c 'import json,sys; print(json.load(sys.stdin)["body"])')"
-            number="$(python -I -c 'import json,sys; t=sys.argv[2]; print(next((str(i["number"]) for i in json.load(open(sys.argv[1])) if i["title"] == t), ""))' \
-              "$RUNNER_TEMP/open-issues.json" "$title")"
-            if [ -n "$number" ]; then
-              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "Still failing: $RUN_URL"
-            else
-              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" \
-                --label validation-drift --label re-encode-queue
-            fi
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" \
+              --label validation-drift --label re-encode-queue
+            sleep 2  # stay under the secondary rate limit for content creation
           done
-          python -I -c 'import json,sys; [print(p) for p in json.load(open(sys.argv[1]))["close"]]' \
-            "$RUNNER_TEMP/actions.json" | while IFS= read -r path; do
-            number="$(python -I -c 'import json,sys; t="Validation drift: "+sys.argv[2]; print(next((str(i["number"]) for i in json.load(open(sys.argv[1])) if i["title"] == t), ""))' \
-              "$RUNNER_TEMP/open-issues.json" "$path")"
-            if [ -n "$number" ]; then
-              gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "Passes in $RUN_URL"
-            fi
-          done
+          {
+            echo "### Validation drift report"
+            python -I -c 'import json,sys; a=json.load(open(sys.argv[1])); print(f"New issues: {len(a[\"open\"])}; still failing: {len(a[\"update\"])}; deferred (over the per-run cap): {len(a[\"deferred\"])}"); [print(f"- {p}") for p in a["deferred"]]' \
+              "$RUNNER_TEMP/actions.json"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   state:
     # Record what this run checked once validation finished (pass or fail),
     # or when nothing needed a run, so the next plan starts from it.
     needs: [plan, validate, report]
-    if: ${{ always() && needs.plan.result == 'success' && (needs.plan.outputs.scope == 'skip' || needs.validate.result == 'success' || needs.validate.result == 'failure') }}
+    # A failed report does not advance the state, so the next run reports
+    # the same changes again.
+    if: ${{ always() && needs.plan.result == 'success' && (needs.plan.outputs.scope == 'skip' || ((needs.validate.result == 'success' || needs.validate.result == 'failure') && needs.report.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
