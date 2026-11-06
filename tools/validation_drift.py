@@ -234,9 +234,21 @@ def _failure_summary(log: str, workspace: str = "") -> tuple[list[str], int]:
     return failed, declared
 
 
-_CHUNK_RE = re.compile(
-    r"RULESPEC_VALIDATION_CHUNK files=(\d+) status=(\d+) single=(\S+)$"
-)
+_CHUNK_RE = re.compile(r"RULESPEC_VALIDATION_CHUNK files=(\d+) status=(\d+) single=(.+)$")
+_CHUNKS_RE = re.compile(r"RULESPEC_VALIDATION_CHUNKS total=(\d+)$")
+
+
+def _validator_failed_file(segment: list[str], module: str, workspace: str) -> bool:
+    """True when the validator reached ``module`` and reported it as failed."""
+
+    reached = False
+    for raw in segment:
+        line = _LOG_PREFIX_RE.sub("", raw, count=1).rstrip()
+        if line.startswith("File: "):
+            reached = _relative_module(line[len("File: ") :], workspace) == module
+        elif reached and line == "Result: ✗ FAILED":
+            return True
+    return False
 
 
 def leg_failures(log: str, workspace: str = "") -> tuple[set[str], bool]:
@@ -251,10 +263,15 @@ def leg_failures(log: str, workspace: str = "") -> tuple[set[str], bool]:
     failed: set[str] = set()
     segment: list[str] = []
     chunks = 0
+    totals: list[int] = []
     explained = True
     failed_chunks = 0
     for raw in log.splitlines():
         line = _LOG_PREFIX_RE.sub("", raw, count=1).rstrip()
+        total = _CHUNKS_RE.search(line)
+        if total:
+            totals.append(int(total.group(1)))
+            continue
         match = _CHUNK_RE.search(line)
         if not match:
             segment.append(raw)
@@ -265,14 +282,22 @@ def leg_failures(log: str, workspace: str = "") -> tuple[set[str], bool]:
             failed_chunks += 1
             listed, declared = _failure_summary("\n".join(segment), workspace)
             module = _relative_module(single, workspace) if single != "-" else None
-            if files == 1 and module is not None:
+            # A one-file chunk names its file only when the validator reached
+            # it; a setup failure (engine, supervisor) blames no file.
+            if (
+                files == 1
+                and module is not None
+                and _validator_failed_file(segment, module, workspace)
+            ):
                 failed.add(module)
             elif listed and "" not in listed and len(listed) == declared:
                 failed.update(listed)
             else:
                 explained = False
         segment = []
-    if chunks == 0 or failed_chunks == 0:
+    # Every chunk line must be present: a lost line would merge its chunk
+    # into the next one and could drop a failure.
+    if chunks == 0 or failed_chunks == 0 or totals != [chunks]:
         explained = False
     return failed, explained
 

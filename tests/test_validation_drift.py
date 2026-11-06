@@ -141,6 +141,7 @@ validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z 2 of 3 file(s) faile
 validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z   - /home/runner/work/rulespec-us/rulespec-us/us/statutes/7/2015.yaml
 validate (us)\tRun validation\t2026-11-06T06:40:09.0000000Z   - us-ma/regulations/106-cmr/1.yaml
 validate (us)\tRun validation\t2026-11-06T06:40:09.5000000Z RULESPEC_VALIDATION_CHUNK files=3 status=1 single=-
+validate (us)\tRun validation\t2026-11-06T06:40:09.6000000Z RULESPEC_VALIDATION_CHUNKS total=1
 validate (us)\tRun validation\t2026-11-06T06:40:10.0000000Z ##[error]Process completed with exit code 1.
 validate (us)\tOther\t2026-11-06T06:40:11.0000000Z   - us/not/after/header.yaml
 """
@@ -180,6 +181,7 @@ def test_report_caps_new_issues_per_run():
         f"{drift.MAX_NEW_ISSUES + 5} of 99 file(s) failed:\n"
         + "".join(f"  - us/statutes/{n}.yaml\n" for n in range(drift.MAX_NEW_ISSUES + 5))
         + "RULESPEC_VALIDATION_CHUNK files=99 status=1 single=-\n"
+        + "RULESPEC_VALIDATION_CHUNKS total=1\n"
     )
     result = drift.report(
         plan_result={"scope": "full", "targets": [], "reasons": []},
@@ -323,17 +325,42 @@ def test_pending_full_state_forces_a_full_run():
     assert "pending_full" not in _plan(previous, [])["state"]
 
 
-def test_one_file_chunks_and_crashes_are_handled():
-    one_file = (
-        "Traceback (most recent call last): boom\n"
+def _chunks(*segments: str) -> str:
+    return "".join(segments) + f"RULESPEC_VALIDATION_CHUNKS total={len(segments)}\n"
+
+
+SUMMARY_CHUNK = (
+    "2 of 3 file(s) failed:\n  - us/a.yaml\n  - us/b.yaml\n"
+    "RULESPEC_VALIDATION_CHUNK files=3 status=1 single=-\n"
+)
+
+
+def test_one_file_chunk_names_its_file_only_when_the_validator_failed_it():
+    reached = (
+        f"File: {WORKSPACE}/us/statutes/9.yaml\nCI: ✗\nResult: ✗ FAILED\n"
         f"RULESPEC_VALIDATION_CHUNK files=1 status=1 single={WORKSPACE}/us/statutes/9.yaml\n"
     )
-    failed, explained = drift.leg_failures(LOG + one_file, WORKSPACE)
-    assert explained
-    assert "us/statutes/9.yaml" in failed and "us/statutes/7/2015.yaml" in failed
-    crashed = "Traceback (most recent call last): boom\nRULESPEC_VALIDATION_CHUNK files=4 status=1 single=-\n"
-    assert drift.leg_failures(LOG + crashed, WORKSPACE)[1] is False
+    failed, explained = drift.leg_failures(_chunks(SUMMARY_CHUNK, reached), WORKSPACE)
+    assert explained and failed == {"us/a.yaml", "us/b.yaml", "us/statutes/9.yaml"}
+    # A setup failure in a one-file chunk blames no file.
+    setup = (
+        "Traceback (most recent call last): engine missing\n"
+        f"RULESPEC_VALIDATION_CHUNK files=1 status=1 single={WORKSPACE}/us/statutes/9.yaml\n"
+    )
+    assert drift.leg_failures(_chunks(SUMMARY_CHUNK, setup), WORKSPACE)[1] is False
+
+
+def test_crashes_missing_lines_and_old_validators_are_unexplained():
+    crashed = "Traceback: boom\nRULESPEC_VALIDATION_CHUNK files=4 status=1 single=-\n"
+    assert drift.leg_failures(_chunks(SUMMARY_CHUNK, crashed))[1] is False
+    # A chunk line went missing: the total does not match.
+    lost = "RULESPEC_VALIDATION_CHUNKS total=2\n"
+    assert drift.leg_failures(SUMMARY_CHUNK + lost)[1] is False
+    # A path with a space still counts as a chunk line.
+    spaced = "RULESPEC_VALIDATION_CHUNK files=1 status=0 single=us/a b.yaml\n"
+    assert drift.leg_failures(_chunks(SUMMARY_CHUNK, spaced))[1] is True
     # Without chunk lines (an older validator), nothing is explained.
     assert drift.leg_failures("2 of 2 file(s) failed:\n  - us/a.yaml\n  - us/b.yaml\n")[1] is False
     # A failed leg whose chunks all passed failed for another reason.
-    assert drift.leg_failures("RULESPEC_VALIDATION_CHUNK files=2 status=0 single=-\n")[1] is False
+    passed = "RULESPEC_VALIDATION_CHUNK files=2 status=0 single=-\n"
+    assert drift.leg_failures(_chunks(passed))[1] is False
