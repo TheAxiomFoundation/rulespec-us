@@ -234,6 +234,49 @@ def _failure_summary(log: str, workspace: str = "") -> tuple[list[str], int]:
     return failed, declared
 
 
+_CHUNK_RE = re.compile(
+    r"RULESPEC_VALIDATION_CHUNK files=(\d+) status=(\d+) single=(\S+)$"
+)
+
+
+def leg_failures(log: str, workspace: str = "") -> tuple[set[str], bool]:
+    """Return a leg's failing files and whether every failed chunk is explained.
+
+    The shared validator ends each worker's log with a chunk result line.
+    A failed chunk is explained by its file (a one-file chunk) or by a
+    summary that lists exactly the declared number of files. A leg with no
+    chunk lines, or with a failed chunk that is not explained, is not.
+    """
+
+    failed: set[str] = set()
+    segment: list[str] = []
+    chunks = 0
+    explained = True
+    failed_chunks = 0
+    for raw in log.splitlines():
+        line = _LOG_PREFIX_RE.sub("", raw, count=1).rstrip()
+        match = _CHUNK_RE.search(line)
+        if not match:
+            segment.append(raw)
+            continue
+        chunks += 1
+        files, status, single = int(match.group(1)), int(match.group(2)), match.group(3)
+        if status != 0:
+            failed_chunks += 1
+            listed, declared = _failure_summary("\n".join(segment), workspace)
+            module = _relative_module(single, workspace) if single != "-" else None
+            if files == 1 and module is not None:
+                failed.add(module)
+            elif listed and "" not in listed and len(listed) == declared:
+                failed.update(listed)
+            else:
+                explained = False
+        segment = []
+    if chunks == 0 or failed_chunks == 0:
+        explained = False
+    return failed, explained
+
+
 def report(
     *,
     plan_result: dict,
@@ -260,21 +303,20 @@ def report(
         conclusion = job.get("conclusion")
         if name == AGGREGATE_JOB:
             continue
-        listed, declared = _failure_summary(str(job.get("log", "")), workspace)
-        failed.update(path for path in listed if path)
         leg = name.startswith(LEG_PREFIX)
         if conclusion == "success" or (conclusion == "skipped" and not leg):
             continue
-        failed_steps = set(job.get("failed_steps") or [])
-        explained = (
+        # A leg is explained only by its validation step; a later step
+        # (companion tests, proofs, money atoms) failing stops the report
+        # with an error naming the leg, so a person looks at the run.
+        leg_failed, explained = leg_failures(str(job.get("log", "")), workspace)
+        failed.update(leg_failed)
+        if not (
             leg
             and conclusion == "failure"
-            and listed
-            and "" not in listed
-            and len(listed) == declared
-            and failed_steps == {VALIDATION_STEP}
-        )
-        if not explained:
+            and explained
+            and set(job.get("failed_steps") or []) == {VALIDATION_STEP}
+        ):
             unexplained.append(name)
     if unexplained:
         return {

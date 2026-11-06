@@ -66,8 +66,10 @@ generated formula artifacts.
   file opens or updates one `Validation drift: <path>` issue with the
   `re-encode-queue` label (at most 50 new issues per run). People close the
   issues; the run never closes them, because the validator lists only
-  failures. A leg that fails without per-file results, or more than 50 new
-  failures, fails the report, so the next run reports again. In `pinned`
+  failures. The report reads the validator's per-chunk result lines. A leg
+  that fails without explained per-file results (a crash, or a later step
+  such as companion tests), or more than 50 new failures, fails the report,
+  so the state does not advance and the next run reports again. In `pinned`
   verifier mode, encoder main merges do not start a run; a pin change does.
   Run it by hand with `workflow_dispatch` (`scope: full`).
 - A red full validation after a push to main still opens or refreshes one
