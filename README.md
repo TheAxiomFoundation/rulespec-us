@@ -66,7 +66,12 @@ generated formula artifacts.
   file opens or updates one `Validation drift: <path>` issue with the
   `re-encode-queue` label (at most 50 new issues per run). People close the
   issues; the run never closes them, because the validator lists only
-  failures. Run it by hand with `workflow_dispatch` (`scope: full`).
+  failures. A leg that fails without per-file results, or more than 50 new
+  failures, fails the report, so the next run reports again. In `pinned`
+  verifier mode, encoder main merges do not start a run; a pin change does.
+  Run it by hand with `workflow_dispatch` (`scope: full`).
+- A red full validation after a push to main still opens or refreshes one
+  alarm issue (`push-alarm` in `repository-checks.yml`).
 - `.axiom/admissions/` holds reviewed, repository-specific admissions that
   the encoder reads from the protected `main` commit only
   (axiom-encode#2095). Today it holds `coverage-exemptions.jsonl`, in the

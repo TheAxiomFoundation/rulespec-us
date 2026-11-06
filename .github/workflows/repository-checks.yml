@@ -69,3 +69,30 @@ jobs:
       validation-workers: 4
       guard-programs-root: false
       allow-retired-schema-prefreeze: true
+
+  push-alarm:
+    # A red full validation after a push to main opens (or refreshes) one
+    # alarm. The daily drift run moved to validation-drift.yml, which opens
+    # one issue per failing file instead (axiom-encode#2094).
+    needs: validate
+    if: ${{ always() && github.event_name == 'push' && needs.validate.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or refresh the red-main alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Full RuleSpec validation is red on main after a push"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "Still red: ${RUN_URL}"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+              --body "The full validation after a push to main failed: ${RUN_URL}. Close this issue once main is green again."
+          fi

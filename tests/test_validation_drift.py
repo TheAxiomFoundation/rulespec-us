@@ -16,6 +16,8 @@ import validation_drift as drift  # noqa: E402
 NOW = datetime(2026, 11, 6, 6, 23, tzinfo=timezone.utc)
 CURRENT = {
     "encoder_main": "b" * 40,
+    "encoder_verifier": "main",
+    "axiom_encode_ref": "a" * 40,
     "axiom_rules_engine_ref": "e" * 40,
     "axiom_compose_ref": "f" * 40,
     "axiom_corpus_ref": "c" * 40,
@@ -92,6 +94,8 @@ def test_tighten_or_undeclared_runs_everything(effect):
     [
         {"axiom_rules_engine_ref": "f" * 40},
         {"axiom_compose_ref": "0" * 40},
+        {"axiom_encode_ref": "1" * 40},
+        {"encoder_verifier": "pinned"},
         {"axiom_corpus_ref": "f" * 40},
         {"corpus_release": ["2026-10-01", "d" * 64]},
         {"last_full_at": (NOW - timedelta(days=7)).isoformat()},
@@ -102,9 +106,19 @@ def test_engine_corpus_and_weekly_changes_run_everything(changes):
     assert _plan(previous, [])["scope"] == "full"
 
 
-@pytest.mark.parametrize("previous", [None, {}, {"schema": "other"}, _state(encoder_main="x")])
+@pytest.mark.parametrize(
+    "previous",
+    [None, {}, {"schema": "other"}, _state(encoder_main="x"), _state(encoder_verifier="x")],
+)
 def test_missing_or_foreign_state_runs_everything(previous):
     assert _plan(previous, [])["scope"] == "full"
+
+
+def test_pinned_mode_ignores_encoder_main_merges():
+    pinned = {**CURRENT, "encoder_verifier": "pinned"}
+    previous = _state(encoder_verifier="pinned")
+    assert _plan(previous, None, current=pinned)["scope"] == "skip"
+    assert _plan(previous, [_pr(1, "tighten")], current=pinned)["scope"] == "skip"
 
 
 def test_unlisted_encoder_merges_run_everything():
@@ -146,7 +160,7 @@ def test_report_opens_new_issues_updates_known_ones_and_closes_none():
     plan_result = {"scope": "full", "targets": [], "reasons": ["weekly"]}
     result = drift.report(
         plan_result=plan_result,
-        log=LOG,
+        jobs=[{"name": "validate (us)", "conclusion": "failure", "log": LOG}],
         validate_result="failure",
         open_issue_paths=["us/statutes/7/2015.yaml", "us/statutes/1.yaml"],
         run_url="https://example.invalid/run",
@@ -166,7 +180,7 @@ def test_report_caps_new_issues_per_run():
     )
     result = drift.report(
         plan_result={"scope": "full", "targets": [], "reasons": []},
-        log=lines,
+        jobs=[{"name": "validate (us)", "conclusion": "failure", "log": lines}],
         validate_result="failure",
         open_issue_paths=[],
         run_url="u",
@@ -175,11 +189,26 @@ def test_report_caps_new_issues_per_run():
     assert len(result["deferred"]) == 5
 
 
-@pytest.mark.parametrize(("log", "result"), [("", "failure"), (LOG, "cancelled")])
-def test_unreadable_failures_report_an_error_not_an_issue(log, result):
+@pytest.mark.parametrize(
+    ("jobs", "result"),
+    [
+        ([], "failure"),
+        ([{"name": "validate (us)", "conclusion": "failure", "log": ""}], "failure"),
+        ([{"name": "validate (us)", "conclusion": "failure", "log": LOG}], "cancelled"),
+        # One leg lists failures, another failed for another reason.
+        (
+            [
+                {"name": "validate (us)", "conclusion": "failure", "log": LOG},
+                {"name": "validate (us-ca)", "conclusion": "failure", "log": "timeout"},
+            ],
+            "failure",
+        ),
+    ],
+)
+def test_unexplained_failures_report_an_error_not_an_issue(jobs, result):
     outcome = drift.report(
         plan_result={"scope": "full", "targets": [], "reasons": []},
-        log=log,
+        jobs=jobs,
         validate_result=result,
         open_issue_paths=[],
         run_url="u",
@@ -192,6 +221,7 @@ def test_cli_plan_reads_the_repository(tmp_path):
     (repo / ".axiom").mkdir(parents=True)
     (repo / ".axiom/workflow-toolchain.toml").write_text(
         "[workflow_toolchain]\n"
+        f'axiom_encode_ref = "{"a" * 40}"\n'
         f'axiom_rules_engine_ref = "{"e" * 40}"\n'
         f'axiom_compose_ref = "{"f" * 40}"\n'
         f'axiom_corpus_ref = "{"c" * 40}"\n'
@@ -216,6 +246,7 @@ def test_cli_plan_reads_the_repository(tmp_path):
                 "plan",
                 "--previous-state", str(previous),
                 "--encoder-main", "b" * 40,
+                "--encoder-verifier", "main",
                 "--encoder-prs", str(prs),
                 "--repo", str(repo),
                 "--output", str(output),

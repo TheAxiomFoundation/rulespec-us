@@ -18,6 +18,8 @@ Scope:
   shared validator skips waived files, so a waived-only run would check
   nothing; scoping it needs a validator mode that validates waived files.
 - ``none`` only, or nothing changed: no run.
+- In ``pinned`` verifier mode, encoder main merges change nothing; a change of
+  the pin (``axiom_encode_ref``) or of the mode runs every file.
 
 Report: each failing file opens or updates one issue titled
 ``Validation drift: <path>`` with the ``validation-drift`` and
@@ -45,6 +47,7 @@ FULL_INTERVAL = timedelta(days=7)
 MAX_NEW_ISSUES = 50
 STATE_KEYS = (
     "encoder_main",
+    "axiom_encode_ref",
     "axiom_rules_engine_ref",
     "axiom_compose_ref",
     "axiom_corpus_ref",
@@ -89,6 +92,8 @@ def valid_state(state: object) -> dict | None:
             return None
     if not isinstance(state.get("corpus_release"), list):
         return None
+    if state.get("encoder_verifier") not in ("pinned", "main"):
+        return None
     if _parse_time(state.get("last_full_at")) is None:
         return None
     return state
@@ -118,6 +123,12 @@ def plan(
         if now - last_full >= FULL_INTERVAL:
             full = True
             reasons.append(f"weekly full run (last full run {state['last_full_at']})")
+        if state["encoder_verifier"] != current["encoder_verifier"]:
+            full = True
+            reasons.append("encoder verifier mode changed")
+        if state["axiom_encode_ref"] != current["axiom_encode_ref"]:
+            full = True
+            reasons.append("encoder pin (producer floor) changed")
         if state["axiom_rules_engine_ref"] != current["axiom_rules_engine_ref"]:
             full = True
             reasons.append("rules-engine pin changed")
@@ -132,7 +143,13 @@ def plan(
             reasons.append(
                 "corpus pin or release changed (citing files are not derivable yet)"
             )
-    if state is not None and state["encoder_main"] != current["encoder_main"]:
+    # In pinned mode the verifier is the pin, which the check above covers;
+    # encoder main merges cannot change its results.
+    if (
+        state is not None
+        and current["encoder_verifier"] == "main"
+        and state["encoder_main"] != current["encoder_main"]
+    ):
         if encoder_prs is None:
             full = True
             reasons.append("encoder merges could not be listed")
@@ -149,7 +166,10 @@ def plan(
                     reasons.append(f"{label}: {effect or 'undeclared'} validation effect")
     new_state = {
         "schema": STATE_SCHEMA,
-        **{key: current[key] for key in (*STATE_KEYS, "corpus_release")},
+        **{
+            key: current[key]
+            for key in (*STATE_KEYS, "corpus_release", "encoder_verifier")
+        },
         "last_full_at": (
             now.isoformat()
             if full
@@ -197,22 +217,39 @@ def failing_files(log: str, workspace: str = "") -> list[str]:
 def report(
     *,
     plan_result: dict,
-    log: str,
+    jobs: list[dict],
     validate_result: str,
     open_issue_paths: list[str],
     run_url: str,
     workspace: str = "",
 ) -> dict:
-    """Return the issue actions for one finished drift run."""
+    """Return the issue actions for one finished drift run.
 
-    failed = failing_files(log, workspace)
+    ``jobs`` holds each finished validate job's ``conclusion`` and ``log``.
+    A job that failed without a per-file summary (a timeout, a guard or
+    audit failure, a crash) makes the whole report an error, so the state
+    does not advance and the next run reports again.
+    """
+
     if validate_result not in ("success", "failure"):
         return {"error": f"validation did not finish ({validate_result})"}
+    failed: set[str] = set()
+    unexplained = []
+    for job in jobs:
+        job_failed = failing_files(str(job.get("log", "")), workspace)
+        failed.update(job_failed)
+        if job.get("conclusion") != "success" and not job_failed:
+            unexplained.append(str(job.get("name", "validate")))
+    if unexplained:
+        return {
+            "error": "validation failed without per-file results in: "
+            + ", ".join(sorted(unexplained))
+        }
     if validate_result == "failure" and not failed:
         return {"error": "validation failed without per-file results; read the run"}
     reasons = "; ".join(plan_result.get("reasons", [])) or "scheduled"
     known = set(open_issue_paths)
-    new = [path for path in failed if path not in known]
+    new = sorted(path for path in failed if path not in known)
     opened = [
         {
             "path": path,
@@ -251,13 +288,16 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser = sub.add_parser("plan")
     plan_parser.add_argument("--previous-state")
     plan_parser.add_argument("--encoder-main", required=True)
+    plan_parser.add_argument("--encoder-verifier", choices=("pinned", "main"), required=True)
     plan_parser.add_argument("--encoder-prs")
     plan_parser.add_argument("--force-full", action="store_true")
     plan_parser.add_argument("--repo", type=Path, default=Path("."))
     plan_parser.add_argument("--output", type=Path, required=True)
     report_parser = sub.add_parser("report")
     report_parser.add_argument("--plan", required=True)
-    report_parser.add_argument("--log", type=Path, required=True)
+    report_parser.add_argument(
+        "--jobs", required=True, help="JSON list of {name, conclusion, log_file}"
+    )
     report_parser.add_argument("--validate-result", required=True)
     report_parser.add_argument("--open-issues", required=True)
     report_parser.add_argument("--run-url", required=True)
@@ -277,6 +317,8 @@ def main(argv: list[str] | None = None) -> int:
         ]
         current = {
             "encoder_main": args.encoder_main,
+            "encoder_verifier": args.encoder_verifier,
+            "axiom_encode_ref": pins["axiom_encode_ref"],
             "axiom_rules_engine_ref": pins["axiom_rules_engine_ref"],
             "axiom_compose_ref": pins["axiom_compose_ref"],
             "axiom_corpus_ref": pins["axiom_corpus_ref"],
@@ -305,9 +347,21 @@ def main(argv: list[str] | None = None) -> int:
             and isinstance(item.get("title"), str)
             and item["title"].startswith(ISSUE_TITLE_PREFIX)
         ]
+        listed = _load_json(args.jobs)
+        jobs = [
+            {
+                "name": item.get("name"),
+                "conclusion": item.get("conclusion"),
+                "log": Path(item["log_file"]).read_text(
+                    encoding="utf-8", errors="replace"
+                ),
+            }
+            for item in (listed if isinstance(listed, list) else [])
+            if isinstance(item, dict) and isinstance(item.get("log_file"), str)
+        ]
         result = report(
             plan_result=plan_result,
-            log=args.log.read_text(encoding="utf-8", errors="replace"),
+            jobs=jobs,
             validate_result=args.validate_result,
             open_issue_paths=open_paths,
             run_url=args.run_url,
