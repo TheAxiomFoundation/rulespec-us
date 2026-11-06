@@ -1,0 +1,501 @@
+name: Source conflicts
+
+# Network verification of known-source-conflicts.yaml and household-choices.yaml
+# (tools/household_choices.py, the same checks for the household's own
+# choices). The offline checks (tools/source_conflicts.py check: schema,
+# status rules, hygiene, in-repo references, the syntactic screen of test
+# pins and the scan for unregistered module interpretations; and
+# tools/household_choices.py check) run inside the required Repository Checks
+# pytest leg. This workflow checks what needs the network, in two checks:
+#
+# - `verify` (check name source-conflicts): every `texts` excerpt verbatim at
+#   its citation in the PINNED corpus release (.axiom/toolchain.toml) and every
+#   `pending_texts` excerpt verbatim in its pinned snapshot, both judged by
+#   axiom-encode's own proof-atom matcher at axiom_encode_ref; snapshot hashes;
+#   and external implementations and test files at their pinned commits. It
+#   holds the corpus read credentials.
+# - `pinned-tests`: tools/pin_runner.py runs every pinned test at its pinned
+#   commit, in that repository's own install and pytest configuration, and
+#   only `passed` passes. It executes code from other repositories, so it is
+#   isolated: no secrets or tokens, contents: read, no id-token, no persisted
+#   checkout credentials, and its result leaves only as the `pinned-tests`
+#   JSON artifact, which the alarm job reads as data. The provenance it checks
+#   first (that each commit is shipped code of its repository) comes from
+#   `pin-provenance`, a job that runs no pinned code and asks GitHub with the
+#   run's read-only token, since the unauthenticated limit runs out.
+#
+# Neither is a required check, so an outage of a source host never blocks
+# merges, but the merge rule for register pull requests is that every check is
+# green, so a register change lands only on a green run of both. A red
+# scheduled or main run opens an alarm issue. Scheduled, main and dispatched
+# runs also keep a tracking issue listing unregistered open module
+# interpretations, which `check` reports as warnings rather than failures.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - known-source-conflicts.yaml
+      - household-choices.yaml
+      - tools/source_conflicts.py
+      - tools/household_choices.py
+      - tools/pin_runner.py
+      - tools/pin_oracle/**
+      - tests/test_source_conflicts.py
+      - tests/test_source_conflicts_properties.py
+      - tests/test_household_choices.py
+      - tests/test_household_choices_properties.py
+      - tests/test_pin_runner.py
+      - tests/test_pin_runner_properties.py
+      - tests/test_pin_oracle_core.py
+      - .github/workflows/source-conflicts.yml
+      - .axiom/toolchain.toml
+      - .axiom/workflow-toolchain.toml
+  push:
+    branches: [main]
+    paths:
+      - known-source-conflicts.yaml
+      - household-choices.yaml
+      - tools/source_conflicts.py
+      - tools/household_choices.py
+      - tools/pin_runner.py
+      - tools/pin_oracle/**
+      - .github/workflows/source-conflicts.yml
+      - .axiom/toolchain.toml
+      - .axiom/workflow-toolchain.toml
+  schedule:
+    # Daily: snapshots, pinned commits and the corpus pin can drift without a
+    # rulespec change.
+    - cron: "29 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: source-conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: rulespec-us
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Resolve pins
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          root = Path("rulespec-us/.axiom")
+          workflow = tomllib.loads((root / "workflow-toolchain.toml").read_text())["workflow_toolchain"]
+          toolchain = tomllib.loads((root / "toolchain.toml").read_text())["toolchain"]
+          for key in ("axiom_encode_ref", "axiom_corpus_ref"):
+              if re.fullmatch(r"[0-9a-f]{40}", workflow.get(key, "")) is None:
+                  raise SystemExit(f"workflow-toolchain.toml: {key} must be a full lowercase commit SHA")
+              print(f"{key}={workflow[key]}")
+          release = toolchain["axiom_corpus_release"]
+          digest = toolchain["axiom_corpus_release_content_sha256"]
+          if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", release) is None or release == "current":
+              raise SystemExit("toolchain.toml: axiom_corpus_release is not an immutable release name")
+          if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+              raise SystemExit("toolchain.toml: axiom_corpus_release_content_sha256 must be a sha256 digest")
+          print(f"release={release}")
+          print(f"release_sha256={digest}")
+          PY
+
+      - name: Checkout axiom-encode
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-encode
+          ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+          path: axiom-encode
+
+      - name: Checkout axiom-corpus provisions
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: TheAxiomFoundation/axiom-corpus
+          ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
+          path: axiom-corpus
+          sparse-checkout: |
+            data/corpus/provisions
+            .axiom
+
+      - name: Fetch the pinned signed corpus release object
+        shell: bash
+        env:
+          RELEASE_NAME: ${{ steps.pins.outputs.release }}
+          RELEASE_SHA256: ${{ steps.pins.outputs.release_sha256 }}
+          # The shared validate workflow's default public release bucket.
+          RELEASE_BASE_URL: https://pub-a8952f8657fc49fda358146ac001366c.r2.dev
+        run: |
+          set -euo pipefail
+          destination="axiom-corpus/releases/$RELEASE_NAME/$RELEASE_SHA256.json"
+          mkdir -p "$(dirname "$destination")"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$destination" "$RELEASE_BASE_URL/releases/$RELEASE_NAME/$RELEASE_SHA256.json"
+          # The content digest is checked here and the Ed25519 signature by
+          # axiom-encode when the release is opened.
+          python - "$destination" "$RELEASE_NAME" "$RELEASE_SHA256" <<'PY'
+          import hashlib
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1]))
+          content = payload.get("content")
+          actual = hashlib.sha256(
+              json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+          ).hexdigest()
+          if payload.get("release") != sys.argv[2] or actual != sys.argv[3] or payload.get("content_sha256") != actual:
+              raise SystemExit(f"corpus release object mismatch: {payload.get('release')} {actual}")
+          print(f"Fetched {sys.argv[2]} ({actual})")
+          PY
+
+      - name: Install axiom-encode
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e axiom-encode
+          # The tool's tests, property tests included, run against these.
+          # Installed last, so the editable install can't re-resolve them.
+          python -m pip install pytest==9.1.1 pyyaml==6.0.3 hypothesis==6.170.5
+
+      - name: Place provisions that live outside git
+        shell: bash
+        env:
+          RELEASE_NAME: ${{ steps.pins.outputs.release }}
+          RELEASE_SHA256: ${{ steps.pins.outputs.release_sha256 }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_CORPUS_READ_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_CORPUS_READ_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          # A corpus pin from before the lock switch keeps provisions in git,
+          # and the sparse checkout above already placed them.
+          if [ ! -d axiom-corpus/.axiom/corpus-locks ]; then
+            echo "Provisions are tracked in git at this corpus pin."
+            exit 0
+          fi
+          axiom-encode corpus-fetch --corpus-path axiom-corpus \
+            --release "$RELEASE_NAME" --content-sha256 "$RELEASE_SHA256"
+
+      - name: Offline check
+        run: |
+          # Both files are checked even when the first fails, so one run
+          # reports both.
+          rc=0
+          python rulespec-us/tools/source_conflicts.py check --root rulespec-us \
+            --warnings-file "$RUNNER_TEMP/open-interpretations.txt" || rc=1
+          python rulespec-us/tools/household_choices.py check --root rulespec-us || rc=1
+          exit "$rc"
+
+      - name: Keep the unregistered open interpretations
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: open-interpretations
+          path: ${{ runner.temp }}/open-interpretations.txt  # every check warning, not only interpretations
+          if-no-files-found: ignore
+
+      - name: Verify excerpts, snapshots and external references
+        env:
+          AXIOM_CORPUS_RELEASE_PUBLIC_KEY: ${{ vars.AXIOM_CORPUS_RELEASE_PUBLIC_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          # Both files are verified even when the first fails, so the summary
+          # and the alarm have both results.
+          rc=0
+          python rulespec-us/tools/source_conflicts.py verify \
+            --root rulespec-us --corpus-path axiom-corpus 2>&1 | tee "$RUNNER_TEMP/source-conflicts.txt" || rc=1
+          python rulespec-us/tools/household_choices.py verify \
+            --root rulespec-us --corpus-path axiom-corpus 2>&1 | tee "$RUNNER_TEMP/household-choices.txt" || rc=1
+          exit "$rc"
+
+      - name: Test the tool, with property-based and differential tests
+        working-directory: rulespec-us
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            tests/test_source_conflicts.py tests/test_source_conflicts_properties.py \
+            tests/test_household_choices.py tests/test_household_choices_properties.py
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/source-conflicts.txt" ]; then
+            {
+              echo '### Source conflicts'
+              echo '```'
+              head -c 60000 "$RUNNER_TEMP/source-conflicts.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f "$RUNNER_TEMP/household-choices.txt" ]; then
+            {
+              echo '### Household choices'
+              echo '```'
+              head -c 60000 "$RUNNER_TEMP/household-choices.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  pin-provenance:
+    # Asks GitHub's API, with this run's read-only token, that each pinned
+    # commit's repository is canonical and not a fork and that the commit is
+    # on its default branch (tools/pin_runner.py --record-provenance), and
+    # passes the answers to pinned-tests as an artifact. GitHub's
+    # unauthenticated limit (60 requests an hour) runs out on shared runners.
+    # This job runs no pinned code, so pinned-tests, which does, still holds
+    # no token. tests/test_pin_runner.py checks both jobs statically.
+    name: pin-provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: rulespec-us
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the runner's tools
+        run: python -m pip install pyyaml==6.0.3
+
+      - name: Record provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python rulespec-us/tools/pin_runner.py --root rulespec-us \
+            --record-provenance "$RUNNER_TEMP/pin-provenance.json"
+
+      - name: Keep the record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pin-provenance
+          path: ${{ runner.temp }}/pin-provenance.json
+          if-no-files-found: error
+
+  pinned-tests:
+    # Runs every pinned test at its pinned commit (tools/pin_runner.py). This
+    # executes code from other repositories, so the job holds nothing worth
+    # taking: no secrets or tokens in any env, a checkout without persisted
+    # credentials, contents: read and no id-token. Its result leaves only as
+    # the pinned-tests JSON artifact (no job outputs). Before fetching a
+    # commit the runner reads the provenance pin-provenance recorded (the
+    # repository is canonical and not a fork, and the commit is on its
+    # default branch), and asks GitHub's API unauthenticated for any commit
+    # the record lacks. Passing results are cached under (repository,
+    # commit, pinned ids, runner version).
+    # tests/test_pin_runner.py checks this job's isolation statically.
+    name: pinned-tests
+    needs: pin-provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: rulespec-us
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the runner's tools
+        run: python -m pip install pytest==9.1.1 pyyaml==6.0.3 hypothesis==6.170.5 uv==0.12.21
+
+      - name: Restore passing results
+        # Pull requests only: pushes to main and the daily run execute every
+        # pin and save fresh results. Each run saves its own snapshot (the key
+        # ends in the run id) and restores the newest one; records are keyed
+        # inside by repository, commit, ids and runner version, and the runner
+        # re-checks each one and checks its provenance (from this run's
+        # pin-provenance record, or GitHub) before using it.
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pin-runs-cache
+          key: pinned-tests-${{ hashFiles('rulespec-us/known-source-conflicts.yaml', 'rulespec-us/household-choices.yaml', 'rulespec-us/tools/pin_runner.py', 'rulespec-us/tools/pin_oracle/axiom_pin_oracle.py') }}-${{ github.run_id }}
+          restore-keys: |
+            pinned-tests-${{ hashFiles('rulespec-us/known-source-conflicts.yaml', 'rulespec-us/household-choices.yaml', 'rulespec-us/tools/pin_runner.py', 'rulespec-us/tools/pin_oracle/axiom_pin_oracle.py') }}-
+            pinned-tests-
+
+      - name: Test the runner on fixture repositories
+        working-directory: rulespec-us
+        env:
+          AXIOM_PIN_RUNNER_TESTS_REQUIRED: "1"
+        run: python -m pytest -q -p no:cacheprovider tests/test_pin_runner.py tests/test_pin_runner_properties.py
+
+      - name: Test the oracle against policyengine-core
+        # The oracle reads choices through core's own YAML runner; this runs
+        # tests/test_pin_oracle_core.py's cases through it, in an environment
+        # of its own, so the runner's environment stays as it is.
+        working-directory: rulespec-us
+        env:
+          AXIOM_PIN_ORACLE_CORE_REQUIRED: "1"
+        run: >-
+          uv run -q --no-project --python 3.14 --with pytest==9.1.1 --with pyyaml==6.0.3
+          --with policyengine-core==3.33.12
+          python -m pytest -q -p no:cacheprovider tests/test_pin_oracle_core.py
+
+      - name: Fetch the provenance record
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pin-provenance
+          path: ${{ runner.temp }}/pin-provenance
+
+      - name: Run the pinned tests
+        run: |
+          python rulespec-us/tools/pin_runner.py --root rulespec-us \
+            --report "$RUNNER_TEMP/pinned-tests.json" --cache-dir "$RUNNER_TEMP/pin-runs-cache" \
+            --provenance "$RUNNER_TEMP/pin-provenance/pin-provenance.json"
+
+      - name: Save passing results
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pin-runs-cache
+          key: pinned-tests-${{ hashFiles('rulespec-us/known-source-conflicts.yaml', 'rulespec-us/household-choices.yaml', 'rulespec-us/tools/pin_runner.py', 'rulespec-us/tools/pin_oracle/axiom_pin_oracle.py') }}-${{ github.run_id }}
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pinned-tests
+          path: ${{ runner.temp }}/pinned-tests.json
+          if-no-files-found: ignore
+
+  open-interpretations:
+    # Unregistered open module interpretations are warnings, not failures:
+    # signed encoder re-encodes may emit them. A scheduled, main or dispatched
+    # run keeps one tracking issue listing them, and closes it when none remain.
+    needs: verify
+    if: ${{ always() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Fetch the list
+        id: list
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: open-interpretations
+          path: ${{ runner.temp }}/open-interpretations
+
+      - name: Update the tracking issue
+        if: ${{ steps.list.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/open-interpretations/open-interpretations.txt"
+          title="Source-conflict register warnings"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ ! -s "$file" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+                --comment "No source-conflict register warnings remain: ${RUN_URL}"
+            fi
+            exit 0
+          fi
+          {
+            echo "\`tools/source_conflicts.py check\` warns, without failing, on a module interpretation that cites two or more provisions in tension, is \`open\`, and is not in known-source-conflicts.yaml. Give it an entry (adopted_by naming the module and interpretation) when it is ruled or confirmed; an unregistered ruled, confirmed or contradicted interpretation fails Repository Checks."
+            echo
+            echo "Generated by ${RUN_URL}:"
+            echo
+            sed 's/^/- /' "$file"
+          } > "$RUNNER_TEMP/body.md"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+  alarm:
+    # A red scheduled or main run opens (or refreshes) one tracking issue. The
+    # pinned-tests report comes from a job that ran other repositories' code,
+    # so it is parsed as data by main's own tools/pin_runner.py --summarize,
+    # which prints only validated fields; no runner output is interpolated
+    # into a script.
+    needs: [verify, pinned-tests]
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push') && (needs.verify.result != 'success' || needs.pinned-tests.result != 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: rulespec-us
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the summarizer's dependency
+        run: python -m pip install pyyaml==6.0.3
+
+      - name: Fetch the pinned-test report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: pinned-tests
+          path: ${{ runner.temp }}/pinned-tests
+
+      - name: Open or refresh the source-conflicts alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          title="Source-conflict register verification is red on main"
+          python rulespec-us/tools/pin_runner.py \
+            --summarize "$RUNNER_TEMP/pinned-tests/pinned-tests.json" > "$RUNNER_TEMP/pins.md"
+          {
+            echo "The source-conflicts workflow failed on main (${EVENT_NAME}): ${RUN_URL}"
+            echo
+            echo "Open the run to see which job failed. If it is \`source_conflicts.py verify\`,"
+            echo "an excerpt no longer matches the pinned corpus release or its snapshot, a"
+            echo "pinned snapshot or commit is unreadable, or an implementation's cites_entry"
+            echo "claim no longer matches its file. If it is \`pinned-tests\`, a pinned test"
+            echo "did not pass at its pinned commit (below). Fix known-source-conflicts.yaml or"
+            echo "household-choices.yaml (or the pin that moved). Any other step (setup, the offline check, the"
+            echo "tools' tests) needs its own fix. Close this issue once the workflow is green."
+            echo
+            cat "$RUNNER_TEMP/pins.md"
+          } > "$RUNNER_TEMP/body.md"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            {
+              echo "Still red on $(date -u +%Y-%m-%dT%H:%MZ) (${EVENT_NAME}): ${RUN_URL}"
+              echo
+              cat "$RUNNER_TEMP/pins.md"
+            } > "$RUNNER_TEMP/comment.md"
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi

@@ -1,10 +1,14 @@
 import importlib.util
 import json
+import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 import pytest
+import yaml
 
 
 def _load_bulk_module(name: str):
@@ -325,7 +329,8 @@ def test_encode_failure_persists_complete_output(monkeypatch, tmp_path: Path) ->
     monkeypatch.setattr(_local_drain, "WT_ROOT", tmp_path / "wt")
     monkeypatch.setattr(_local_drain, "already_handled", lambda _slug: False)
     monkeypatch.setattr(_local_drain, "make_worktree", lambda _slug, _ref: leaf)
-    monkeypatch.setattr(_local_drain, "signing_key", lambda: "test-key")
+    # Bypass retirement only to retain the encoder failure-log regression.
+    monkeypatch.setattr(_local_drain, "signing_key", lambda: None)
     monkeypatch.setattr(_local_drain, "encode_command", lambda *_args: ["encode"])
     monkeypatch.setattr(
         _local_drain,
@@ -341,6 +346,59 @@ def test_encode_failure_persists_complete_output(monkeypatch, tmp_path: Path) ->
     assert result["status"] == "failed"
     assert result["detail"] == f"encode/apply failed (rc=1); see {failure_log}"
     assert failure_log.read_text() == "resolver failed with full diagnostic\n"
+
+
+def test_retired_signing_key_never_looks_up_credentials(monkeypatch) -> None:
+    environ = MagicMock(name="environ")
+    subprocess_run = Mock(name="subprocess.run")
+    run = Mock(name="run")
+    with monkeypatch.context() as patch:
+        patch.setattr(_local_drain.os, "environ", environ)
+        patch.setattr(_local_drain.subprocess, "run", subprocess_run)
+        patch.setattr(_local_drain, "run", run)
+
+        with pytest.raises(SystemExit, match="Local apply signing is retired") as exc:
+            _local_drain.signing_key()
+
+    assert "TheAxiomFoundation/axiom-encode" in str(exc.value)
+    assert "targeted-signed-reencode" in str(exc.value)
+    assert "main in its protected environment" in str(exc.value)
+    assert environ.mock_calls == []
+    subprocess_run.assert_not_called()
+    run.assert_not_called()
+
+
+def test_encode_entry_rejects_retired_signing_before_worktree(monkeypatch) -> None:
+    make_worktree = Mock(name="make_worktree")
+    run = Mock(name="run")
+    monkeypatch.setattr(_local_drain, "_PAUSE", _local_drain.threading.Event())
+    monkeypatch.setattr(_local_drain, "already_handled", lambda _slug: False)
+    monkeypatch.setattr(_local_drain, "make_worktree", make_worktree)
+    monkeypatch.setattr(_local_drain, "run", run)
+
+    with pytest.raises(SystemExit, match="targeted-signed-reencode"):
+        _local_drain.encode_entry(
+            {"citation": "us-mi/statute/206.30/8", "slug": "retired-signing"}
+        )
+
+    make_worktree.assert_not_called()
+    run.assert_not_called()
+
+
+def test_drain_rejects_retired_signing_before_toolchain_checks(monkeypatch) -> None:
+    toolchain = Mock(name="require_generation_toolchain")
+    coverage = Mock(name="require_coverage_ref")
+    subprocess_run = Mock(name="subprocess.run")
+    monkeypatch.setattr(_local_drain, "require_generation_toolchain", toolchain)
+    monkeypatch.setattr(_local_drain, "require_coverage_ref", coverage)
+    monkeypatch.setattr(_local_drain.subprocess, "run", subprocess_run)
+
+    with pytest.raises(SystemExit, match="targeted-signed-reencode"):
+        _local_drain.cmd_drain(None)
+
+    toolchain.assert_not_called()
+    coverage.assert_not_called()
+    subprocess_run.assert_not_called()
 
 
 def test_wait_for_checks_rejects_stale_validation(monkeypatch) -> None:
@@ -546,6 +604,31 @@ def test_encode_command_rejects_context_outside_checkout(tmp_path: Path) -> None
         )
 
 
+def test_encode_command_passes_drain_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    item = {"citation": "us-sc/manual/dss/snap-policy-manual/page-163"}
+
+    monkeypatch.delenv("DRAIN_BACKEND", raising=False)
+    monkeypatch.delenv("DRAIN_MODEL", raising=False)
+    default = _load_bulk_module("local_drain")
+    command = default.encode_command(tmp_path, tmp_path / "encode-out", item)
+    assert command.count("--model") == 1
+    assert command[command.index("--model") + 1] == "gpt-6.1-sol"
+    assert command.count("--escalation-model") == 1
+    assert command[command.index("--escalation-model") + 1] == "gpt-6.1-sol"
+    assert command[command.index("--backend") + 1] == "codex"
+
+    monkeypatch.setenv("DRAIN_MODEL", "gpt-6-luna")
+    override = _load_bulk_module("local_drain")
+    command = override.encode_command(tmp_path, tmp_path / "encode-out", item)
+    assert command.count("--model") == 1
+    assert command[command.index("--model") + 1] == "gpt-6-luna"
+    assert command.count("--escalation-model") == 1
+    assert command[command.index("--escalation-model") + 1] == "gpt-6-luna"
+    assert command[command.index("--backend") + 1] == "codex"
+
+
 def test_sc_local_queue_schedules_prerequisites_before_dependent() -> None:
     selected = select(_compute_matrix.load(), "pending-local", None, None)
 
@@ -610,28 +693,60 @@ def test_local_runner_requires_review_before_merge() -> None:
 
 
 def test_local_runner_reads_checked_in_workflow_toolchain(monkeypatch) -> None:
+    # Compare with the checked-in table rather than literal pins, so a
+    # configuration-only re-pin of .axiom/workflow-toolchain.toml or the
+    # shared validator needs no test edit. Newer shared validators refuse a
+    # pin change that touches any other file.
     root = Path(__file__).resolve().parents[1]
     monkeypatch.setattr(_local_drain, "CHECKOUT", root)
 
     toolchain = _local_drain.pinned_toolchain()
 
-    assert toolchain["axiom_encode_version"] == "0.2.2006"
-    assert toolchain["axiom_encode_ref"] == "f856cfcb886d9bd050b228aa60aeb4b96939f739"
-    assert toolchain["axiom_rules_engine_ref"] == (
-        "af6e4ea2920b0c0a97bf6a6f45b0c6643e93c0ca"
+    table = tomllib.loads(
+        (root / ".axiom/workflow-toolchain.toml").read_text()
+    )["workflow_toolchain"]
+    assert toolchain == table
+    assert re.fullmatch(r"[0-9]+(?:\.[0-9]+){2,}", toolchain["axiom_encode_version"])
+    for key in (
+        "axiom_encode_ref",
+        "axiom_compose_ref",
+        "axiom_rules_engine_ref",
+        "axiom_artifact_rules_engine_ref",
+        "source_staleness_axiom_encode_ref",
+        "axiom_corpus_ref",
+        "rulespec_us_ref",
+    ):
+        assert re.fullmatch(r"[0-9a-f]{40}", toolchain[key]), key
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("axiom_encode_ref", "2bdc3b42"),
+        ("axiom_rules_engine_ref", "89571CC2A938707FD60A5489B951135345697296"),
+        ("axiom_corpus_ref", ""),
+        ("axiom_encode_version", "0.2"),
+    ],
+)
+def test_local_runner_refuses_an_inexact_workflow_toolchain_pin(
+    tmp_path: Path, monkeypatch, key: str, value: str
+) -> None:
+    table = {
+        "axiom_encode_version": "0.2.1",
+        "axiom_encode_ref": "a" * 40,
+        "axiom_rules_engine_ref": "b" * 40,
+        "axiom_corpus_ref": "c" * 40,
+        key: value,
+    }
+    (tmp_path / ".axiom").mkdir()
+    (tmp_path / ".axiom/workflow-toolchain.toml").write_text(
+        "[workflow_toolchain]\n"
+        + "".join(f'{name} = "{pin}"\n' for name, pin in table.items())
     )
-    assert toolchain["axiom_artifact_rules_engine_ref"] == (
-        "ffd8213271947b0189a9dd61a055c1e0e78908a0"
-    )
-    assert toolchain["source_staleness_axiom_encode_ref"] == (
-        "b041b6b5a0e39f2c05c93669f354f8a54e9a84c3"
-    )
-    assert toolchain["axiom_corpus_ref"] == (
-        "8f7d60aaced28ee4252b9237f9d6e02360dc34bc"
-    )
-    assert toolchain["rulespec_us_ref"] == (
-        "38d5c8c516f9243cedf8e07a22f96dde9ac66fe3"
-    )
+    monkeypatch.setattr(_local_drain, "CHECKOUT", tmp_path)
+
+    with pytest.raises(SystemExit, match=key):
+        _local_drain.pinned_toolchain()
 
 
 def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
@@ -645,6 +760,20 @@ def test_role_specific_workflows_use_compatible_toolchain_pins() -> None:
     assert 'scanner = runpy.run_path(sys.argv[1])' in staleness
     assert "pip install -e _axiom/axiom-encode" not in staleness
     assert "needs.workflow-toolchain.outputs.axiom_rules_engine_ref" in validation
+    assert "axiom-compose-ref: ${{ needs.workflow-toolchain.outputs.axiom_compose_ref }}" in validation
+    assert "axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}" in validation
+    assert '"axiom_compose_ref",' in validation
+    # Collect every call of the shared validator, whatever its ref, so an
+    # extra unpinned call can't sit beside the pinned one.
+    validators = [
+        job["uses"].partition("@")[2]
+        for job in yaml.safe_load(validation)["jobs"].values()
+        if str(job.get("uses", "")).startswith(
+            "TheAxiomFoundation/.github/.github/workflows/validate-rulespec."
+        )
+    ]
+    assert len(validators) == 1, validators
+    assert re.fullmatch(r"[0-9a-f]{40}", validators[0]), validators[0]
 
 
 def test_local_runner_reports_missing_checkout(tmp_path: Path) -> None:
@@ -672,3 +801,18 @@ def test_local_runner_toolchain_status_handles_missing_checkouts(
 
     assert not ok
     assert any("unavailable" in check for check in checks)
+
+
+def test_doctor_reports_retired_signing_before_any_probe(monkeypatch, capsys) -> None:
+    def broken_probe(*_args, **_kwargs):
+        raise FileNotFoundError("encoder cannot launch")
+
+    monkeypatch.setattr(_local_drain, "run", broken_probe)
+    monkeypatch.setattr(_local_drain, "pinned_toolchain", broken_probe)
+
+    with pytest.raises(FileNotFoundError):
+        _local_drain.cmd_doctor(None)
+
+    out = capsys.readouterr().out
+    assert "local apply signing" in out
+    assert "targeted-signed-reencode" in out

@@ -20,6 +20,21 @@ KNOWN_ORPHANED_ENCODING_MANIFESTS = [
     "us-ca/guidance/cdss/acin-2025-i-46-25/standard-utility-allowance.yaml",
 ]
 
+# Replacement manifests record these mutable control files as applied-time
+# evidence. Their historical hashes remain signed in the manifest, but later
+# reviewed waiver/toolchain updates must not be mistaken for edits to rules.
+MUTABLE_ROOT_METADATA_PATHS = frozenset(
+    {".axiom/toolchain.toml", "known-validation-gaps.yaml"}
+)
+
+# ProgramSpecs under programs/ are assembled axiom-compose specs, not encoder
+# output. Since the encoder hard cut (axiom-encode#1108) every signer and
+# manifest surface uses only the atomic roots, so no tool can re-attest an
+# edited spec. Their legacy manual-composition attestations stay as history and
+# are not synced against later reviewed spec edits. The shared validate
+# workflow's pre-check gates programs/ by ProgramSpec shape instead.
+ASSEMBLED_ROOT = "programs"
+
 # Manifest-sync guard: axiom-encode writes an applied-rulespec manifest
 # (schema axiom-encode/applied-rulespec/v1) next to every encoding run,
 # recording the sha256 of each file it applied. A hand-edit to an encoded
@@ -53,12 +68,24 @@ def manifest_roots() -> list[tuple[Path, Path]]:
 
 def resolve_applied_path(base: Path, applied: str) -> Path:
     head = applied.split("/", 1)[0]
-    if base == ROOT and head == "programs":
+    if base == ROOT and (
+        head == "programs"
+        or applied in MUTABLE_ROOT_METADATA_PATHS
+    ):
         return ROOT / applied
     if base == ROOT and not JURISDICTION_DIR_RE.match(head):
         # Pre-consolidation federal manifests predate the us/ prefix.
         return ROOT / "us" / applied
     return base / applied
+
+
+def test_resolve_applied_paths_preserves_root_metadata_and_legacy_layouts() -> None:
+    for path in MUTABLE_ROOT_METADATA_PATHS:
+        assert resolve_applied_path(ROOT, path) == ROOT / path
+        assert resolve_applied_path(ROOT / "us-ct", path) == ROOT / "us-ct" / path
+    assert resolve_applied_path(ROOT, "statutes/26/213.yaml") == ROOT / "us/statutes/26/213.yaml"
+    assert resolve_applied_path(ROOT, "us/policies/example.yaml") == ROOT / "us/policies/example.yaml"
+    assert resolve_applied_path(ROOT, "programs/example.yaml") == ROOT / "programs/example.yaml"
 
 
 @functools.cache
@@ -80,7 +107,12 @@ def latest_manifest_entries() -> dict[Path, tuple[Path, dict]]:
                 if not isinstance(entry, dict):
                     continue
                 applied = entry.get("path")
-                if not applied or applied.endswith(".test.yaml"):
+                if (
+                    not applied
+                    or applied.endswith(".test.yaml")
+                    or (base == ROOT and applied in MUTABLE_ROOT_METADATA_PATHS)
+                    or (base == ROOT and applied.split("/", 1)[0] == ASSEMBLED_ROOT)
+                ):
                     continue
                 module = resolve_applied_path(base, applied)
                 current = latest.get(module)
@@ -90,6 +122,24 @@ def latest_manifest_entries() -> dict[Path, tuple[Path, dict]]:
         module: (manifest_path, entry)
         for module, (_, manifest_path, entry) in latest.items()
     }
+
+
+def test_manifest_sync_excludes_mutable_root_metadata() -> None:
+    latest = latest_manifest_entries()
+    for path in MUTABLE_ROOT_METADATA_PATHS:
+        assert ROOT / path not in latest
+
+
+def test_manifest_sync_excludes_assembled_program_specs() -> None:
+    latest = latest_manifest_entries()
+    assembled = ROOT / ASSEMBLED_ROOT
+    assert not [module for module in latest if module.is_relative_to(assembled)]
+    # Legacy attestations of program specs exist, so the exclusion is live.
+    assert any(
+        entry.get("path", "").startswith(f"{ASSEMBLED_ROOT}/")
+        for manifest in (ROOT / ".axiom" / "encoding-manifests" / ASSEMBLED_ROOT).rglob("*.json")
+        for entry in json.loads(manifest.read_text()).get("applied_files", [])
+    )
 
 
 def test_encoded_modules_match_their_manifests() -> None:
