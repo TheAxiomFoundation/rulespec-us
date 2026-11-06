@@ -986,6 +986,60 @@ def test_text_kinds_override(tmp_path):
         assert any(fragment in issue for issue in check(ctx, bad)), overrides
 
 
+def test_spans_quote_their_sources(tmp_path):
+    ctx = make_repo(tmp_path)
+    second = {"corpus_citation_path": "us/statute/42/403/a/5", "excerpt": "the total of benefits for such month"}
+    good = entry(
+        texts=[entry()["texts"][0], second],
+        spans={
+            # A path cited twice: a span may come from either excerpt.
+            "us/statute/42/403/a/5": ["any such subsequent month", "total of benefits"],
+            "POMS RS 00630.400": ["less after the PIA increase"],
+        },
+    )
+    assert check(ctx, good) == []
+    # The whole excerpt is a span, and a span may hold a dollar amount: spans
+    # quote sources, so they are not prose for the money rule.
+    priced = entry(pending_texts=[{**entry()["pending_texts"][0], "excerpt": "a payment of $21 a month"}])
+    priced["spans"] = {"POMS RS 00630.400": ["a payment of $21 a month", "$21"]}
+    assert check(ctx, priced) == []
+
+
+@pytest.mark.parametrize(
+    ("spans", "fragment"),
+    [
+        ({}, "spans must be a non-empty mapping"),
+        (["for any such subsequent month"], "spans must be a non-empty mapping"),
+        ("for any such subsequent month", "spans must be a non-empty mapping"),
+        ({"us/statute/42/403/a/6": ["subsequent month"]}, "spans[us/statute/42/403/a/6] names a source that is not one"),
+        ({"POMS RS 00630.401": ["PIA increase"]}, "names a source that is not one"),
+        ({7: ["PIA increase"]}, "names a source that is not one"),
+        ({"us/statute/42/403/a/5": []}, "spans[us/statute/42/403/a/5] must be a non-empty list"),
+        ({"us/statute/42/403/a/5": "subsequent month"}, "must be a non-empty list"),
+        ({"us/statute/42/403/a/5": [""]}, "spans[us/statute/42/403/a/5][0] must be a non-blank string"),
+        ({"us/statute/42/403/a/5": ["  "]}, "[0] must be a non-blank string"),
+        ({"us/statute/42/403/a/5": [3]}, "[0] must be a non-blank string"),
+        ({"us/statute/42/403/a/5": ["such subsequent", "such subsequent"]}, "[1] repeats an earlier span of this source"),
+        ({"us/statute/42/403/a/5": ["for any such later month"]}, "[0] is not verbatim in any excerpt of us/statute/42/403/a/5"),
+        # Verbatim means exact: case and spacing count.
+        ({"us/statute/42/403/a/5": ["For any such"]}, "is not verbatim"),
+        ({"us/statute/42/403/a/5": ["any  such"]}, "is not verbatim"),
+        # A span must come from its own source's excerpt, not another's.
+        ({"us/statute/42/403/a/5": ["PIA increase"]}, "is not verbatim in any excerpt of us/statute/42/403/a/5"),
+    ],
+)
+def test_spans_refusals(tmp_path, spans, fragment):
+    bad = entry(spans=spans)
+    issues = check(make_repo(tmp_path), bad)
+    assert any(fragment in issue for issue in issues), issues
+
+
+def test_spans_stay_out_of_the_interpretation_core():
+    assert "spans" in sc.ENTRY_KEYS
+    assert "spans" not in sc.INTERPRETATION_CORE
+    assert "spans" not in sc.MODULE_INTERPRETATION_KEYS
+
+
 @pytest.mark.parametrize("kind", [None, "", "Manual", "speech"])
 def test_pending_text_kind_is_a_closed_enum(tmp_path, kind):
     bad = entry()
@@ -2066,6 +2120,15 @@ def test_citation_label():
     assert sc.citation_label("us/regulation/7/273/24/a") == "7 CFR 273.24(a)"
     assert sc.citation_label("uk-babergh/manual/scheme/page-87") == "uk-babergh/manual/scheme/page-87"
     assert sc.citation_label("us/statute/hts/chapter-99") == "us/statute/hts/chapter-99"
+
+
+def test_aggregate_carries_spans():
+    spans = {"us/statute/42/403/a/5": ["any such subsequent month"], "POMS RS 00630.400": ["PIA increase"]}
+    rows, issues = sc.aggregate({"TheAxiomFoundation/rulespec-us": {"version": 1, "entries": [entry(spans=spans), entry(id="plain")]}})
+    assert issues == []
+    by_id = {row["global_id"]: row for row in rows}
+    assert by_id["us:family-maximum-saving-clause"]["spans"] == spans
+    assert by_id["us:plain"]["spans"] == {}
 
 
 def test_aggregate_sources_are_unique_citations():
