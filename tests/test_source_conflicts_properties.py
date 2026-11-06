@@ -82,6 +82,9 @@ Invariants, for every input:
     - The floor is main's scanner exactly (`_main_words` equals a verbatim
       copy of main's function), so the count is never below main's; and
       widening the single openers never lowers it.
+18. Spans: any non-blank substring of one of a source's excerpts is accepted
+    as a span of that source; any other string, or one keyed by a source the
+    entry does not cite, is always reported.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the source-conflicts workflow installs it and runs them.
@@ -180,6 +183,16 @@ confirmations = st.fixed_dictionaries(
 
 
 @st.composite
+def substrings(draw, text):
+    """A non-blank substring of text."""
+
+    start = draw(st.integers(0, len(text) - 1))
+    end = draw(st.integers(start + 1, len(text)))
+    assume(text[start:end].strip())
+    return text[start:end]
+
+
+@st.composite
 def entries(draw, jurisdiction="us"):
     status = draw(st.sampled_from(sc.STATUSES[:3]))  # contradicted is always a finding
     body_texts = draw(texts)
@@ -216,6 +229,12 @@ def entries(draw, jurisdiction="us"):
     if overridable and draw(st.booleans()):
         path = draw(st.sampled_from(overridable))
         value["text_kinds"] = {path: draw(st.sampled_from(sc.DOCUMENT_CLASS_KINDS[sc.document_class(path)]))}
+    sources = [(text["corpus_citation_path"], text["excerpt"]) for text in body_texts] + [
+        (item["citation"], item["excerpt"]) for item in body_pending
+    ]
+    if draw(st.booleans()):
+        source, excerpt = draw(st.sampled_from(sources))
+        value["spans"] = {source: [draw(substrings(excerpt))]}
     if status != "open":
         value["ruling"] = draw(records)
     if status == "confirmed":
@@ -354,6 +373,9 @@ def test_round_trip_and_drift(tmp_path, value, field):
     value = copy.deepcopy(value)
     value.pop("pending_texts", None)
     assume(value["texts"])
+    # Spans of a pending citation go with it.
+    if not set(value.get("spans", {})) <= set(sc.source_excerpts(value)):
+        del value["spans"]
     module = "us/statutes/42/403.yaml"
     value["adopted_by"] = [{"module": module, "interpretation": value["id"]}]
     # The module is the only adopter here; an implementation following an
@@ -394,6 +416,8 @@ def test_confirmation_drift(tmp_path, value, confirmation, field, other):
     value = copy.deepcopy(value)
     value.pop("pending_texts", None)
     assume(value["texts"])
+    if not set(value.get("spans", {})) <= set(sc.source_excerpts(value)):
+        del value["spans"]
     value["status"] = "confirmed"
     value.setdefault("ruling", {"by": "Org", "date": "2026-10-12", "record": "https://example.org/r"})
     value["confirmation"] = dict(confirmation)
@@ -1339,3 +1363,26 @@ def test_every_recognisable_quotation_counts_in_full(case):
     # included) counts at least its own words.
     text, words = case
     assert sc.quoted_words(text) >= words, text
+
+
+# 18. Spans
+@SETTINGS
+@given(value=entries(), data=st.data())
+def test_spans_are_substrings_of_their_sources(tmp_path, value, data):
+    sources = sc.source_excerpts(value)
+    source = data.draw(st.sampled_from(sorted(sources)))
+    excerpt = data.draw(st.sampled_from(sources[source]))
+    span = data.draw(substrings(excerpt))
+    ctx = repo(tmp_path)
+    good = {**value, "spans": {source: [span]}}
+    assert sc.check_register({"version": 1, "entries": [good]}, ctx) == []
+    other = data.draw(prose)
+    if not any(other in text for text in sources[source]):
+        bad = {**value, "spans": {source: [other]}}
+        issues = sc.check_register({"version": 1, "entries": [bad]}, ctx)
+        assert any("is not verbatim in any excerpt" in issue for issue in issues), issues
+    stranger = data.draw(st.one_of(corpus_paths, prose))
+    if stranger not in sources:
+        bad = {**value, "spans": {stranger: [span]}}
+        issues = sc.check_register({"version": 1, "entries": [bad]}, ctx)
+        assert any("names a source that is not one" in issue for issue in issues), issues
