@@ -1,0 +1,125 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Medical and dental care fees are allowable including any of the following medical fees:
+    Psychotherapy
+    Rehabilitation services
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+    source_sha256: 08294d02db158ca34d5dfca66e9dbb46e0e31e35f1bc4546c1001e8fee1cac7f
+  proof_validation:
+    required: true
+  description: |-
+    Each Payment row represents one separately classified expense component.
+    Callers must classify the actual service and practitioner, splitting mixed
+    invoices into separate components. The category describes medical care,
+    dental care, psychotherapy, rehabilitation, or the actual alternative
+    profession. Unlisted genuine medical or dental fees use medical_care or
+    dental_care. Unknown and nonmedical categories do not establish allowability.
+
+    Callers must set snap_medical_dental_actual_alternative_service true for
+    actual alternative-medicine services even when another label also describes
+    the component. Named alternative professions independently trigger the
+    alternative branch. Licensing, recognition, and prescription facts concern
+    the same practitioner and service component; no registry or professional
+    definition is supplied here.
+
+    This output determines component allowability only. Callers remain responsible
+    for participant elderly/disability classification and exceptions, ownership
+    and billing, out-of-pocket treatment, reimbursements and other exclusions,
+    verification, expense dates, aggregation, disregard, and deduction selection.
+    August 1, 2026 is the first full month of evidence coverage following the
+    July 17 snapshot, not a legal commencement date. Earlier applicability,
+    including July 2026, is unproven and has no formula version.
+  interpretations:
+    - id: alternative-service-precedence
+      status: open
+      question: How should overlapping general and alternative-service classifications be handled?
+      texts:
+        - corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+          excerpt: "Medical and dental care fees are allowable including any of the following medical fees:"
+        - corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+          excerpt: "Acupuncturists, massage therapists, herbalists, and other alternative medicine practitioners licensed and recognized by the State Medical Board and prescribed by a State-licensed practitioner"
+      reading: Actual alternative services require all three qualifications even when also described by a general medical, dental, psychotherapy, or rehabilitation label.
+      alternatives:
+        - id: general-label-independent-allowance
+          reading: A general medical or dental label independently establishes allowance despite an overlapping alternative-service classification.
+          effect: Alternative-service qualifications could be bypassed by relabeling.
+      basis: Preserve the general nonexhaustive allowance while giving effect to the qualifications expressly attached to alternative practitioners.
+      affects:
+        - snap_medical_dental_component_allowable
+inputs:
+  - name: snap_medical_dental_component_category
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: snap_medical_dental_actual_alternative_service
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_dental_practitioner_board_licensed
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_dental_practitioner_board_recognized
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_dental_service_prescribed_by_state_licensed_practitioner
+    entity: Payment
+    dtype: Boolean
+    period: Month
+rules:
+  - name: snap_medical_dental_component_allowable
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block-5
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+              excerpt: "Medical and dental care fees are allowable including any of the following medical fees:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+              excerpt: "Psychotherapy"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+              excerpt: "Rehabilitation services"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-5
+              excerpt: "Acupuncturists, massage therapists, herbalists, and other alternative medicine practitioners licensed and recognized by the State Medical Board and prescribed by a State-licensed practitioner"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          (
+            (
+              snap_medical_dental_actual_alternative_service
+              or snap_medical_dental_component_category == "acupuncturist"
+              or snap_medical_dental_component_category == "massage_therapist"
+              or snap_medical_dental_component_category == "herbalist"
+              or snap_medical_dental_component_category == "other_alternative_practitioner"
+            )
+            and snap_medical_dental_practitioner_board_licensed
+            and snap_medical_dental_practitioner_board_recognized
+            and snap_medical_dental_service_prescribed_by_state_licensed_practitioner
+          )
+          or (
+            not snap_medical_dental_actual_alternative_service
+            and (
+              snap_medical_dental_component_category == "medical_care"
+              or snap_medical_dental_component_category == "dental_care"
+              or snap_medical_dental_component_category == "psychotherapy"
+              or snap_medical_dental_component_category == "rehabilitation"
+            )
+          )
