@@ -1,0 +1,354 @@
+name: Validation drift
+
+# Event-driven drift run (axiom-encode#2094). It replaces the daily full
+# validation of every file (#1274). Once a day it checks what changed since
+# the last drift run and validates only what that can affect
+# (tools/validation_drift.py):
+#   - an axiom-encode main merge that declares `Validation effect: tighten`
+#     or `loosen` (or no valid effect), an encoder commit without a merged
+#     PR, a rules-engine, composer or corpus pin or release, or 7 days since
+#     the last full run: every file;
+#   - only `none` merges, or nothing: no run.
+# Each failing file opens or updates one "Validation drift: <path>" issue
+# with the re-encode-queue label (at most 50 new issues per run). Issues are
+# closed by people, never automatically. The verifier mode is the protected
+# [workflow_toolchain].encoder_verifier (default pinned), the same as for pull
+# requests; in pinned mode encoder main merges do not start a run.
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: auto chooses the scope from what changed; full runs every file
+        type: choice
+        options: [auto, full]
+        default: auto
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-drift
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+      targets: ${{ steps.plan.outputs.targets }}
+      axiom_encode_ref: ${{ steps.pins.outputs.axiom_encode_ref }}
+      axiom_compose_ref: ${{ steps.pins.outputs.axiom_compose_ref }}
+      axiom_rules_engine_ref: ${{ steps.pins.outputs.axiom_rules_engine_ref }}
+      axiom_corpus_ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
+      rulespec_us_ref: ${{ steps.pins.outputs.rulespec_us_ref }}
+      encoder_verifier: ${{ steps.pins.outputs.encoder_verifier }}
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the planner's parser
+        run: python -m pip install --disable-pip-version-check pyyaml==6.0.3
+
+      - name: Read protected workflow toolchain
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          path = Path(".axiom/workflow-toolchain.toml")
+          toolchain = tomllib.loads(path.read_text())["workflow_toolchain"]
+          for key in (
+              "axiom_encode_ref",
+              "axiom_compose_ref",
+              "axiom_rules_engine_ref",
+              "axiom_corpus_ref",
+              "rulespec_us_ref",
+          ):
+              value = toolchain.get(key)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+                  raise SystemExit(f"{path}: {key} must be a full lowercase commit SHA")
+              print(f"{key}={value}")
+          # The protected verifier mode; the shared validator requires the
+          # caller to pass the same value.
+          mode = toolchain.get("encoder_verifier", "pinned")
+          if mode not in ("pinned", "main"):
+              raise SystemExit(f"{path}: encoder_verifier must be pinned or main")
+          print(f"encoder_verifier={mode}")
+          PY
+
+      - name: Load the last drift state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/previous"
+          # The newest state artifact that this workflow wrote on main from a
+          # schedule or dispatch run. Any workflow can upload an artifact with
+          # this name, so check the run that produced it.
+          id=""
+          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=validation-drift-state&per_page=20" \
+              --jq '.artifacts[] | select(.expired == false) | .workflow_run.id' || true); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" \
+                --jq '.path == ".github/workflows/validation-drift.yml" and .head_branch == "main" and (.event == "schedule" or .event == "workflow_dispatch")' \
+                | grep -qx true; then
+              id="$run"
+              break
+            fi
+          done
+          if [ -n "$id" ]; then
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" -n validation-drift-state -D "$RUNNER_TEMP/previous" || true
+          fi
+          ls -l "$RUNNER_TEMP/previous"
+
+      - name: List encoder merges since the last drift run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENCODER_VERIFIER: ${{ steps.pins.outputs.encoder_verifier }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          main="$(git ls-remote https://github.com/TheAxiomFoundation/axiom-encode.git refs/heads/main \
+            | awk -F '\t' '$2 == "refs/heads/main" { print $1 }')"
+          [[ "$main" =~ ^[0-9a-f]{40}$ ]] || { echo "Cannot resolve axiom-encode main" >&2; exit 1; }
+          echo "ENCODER_MAIN=$main" >> "$GITHUB_ENV"
+          previous="$(python -c 'import json,sys; print(json.load(open(sys.argv[1])).get("encoder_main",""))' "$RUNNER_TEMP/previous/state.json" 2>/dev/null || true)"
+          prs="$RUNNER_TEMP/encoder-prs.json"
+          rm -f "$prs"
+          # In pinned mode the encoder pin is the verifier; main merges do
+          # not change results, so they are not listed.
+          if [ "$ENCODER_VERIFIER" = "main" ] && [[ "$previous" =~ ^[0-9a-f]{40}$ ]] && [ "$previous" != "$main" ]; then
+            # More than 250 commits, or any API error, leaves no list; the
+            # planner then runs every file.
+            if commits="$(gh api "repos/TheAxiomFoundation/axiom-encode/compare/$previous...$main" \
+                --jq 'if .total_commits > 250 or .status != "ahead" then error("too far") else .commits[].sha end')"; then
+              : > "$RUNNER_TEMP/prs.jsonl"
+              ok=true
+              for sha in $commits; do
+                # A commit without a merged PR declares no effect: full run.
+                gh api "repos/TheAxiomFoundation/axiom-encode/commits/$sha/pulls" \
+                  --jq "[.[] | select(.merged_at != null and .base.ref == \"main\") | {number, body}] | if length == 0 then [{number: null, commit: \"$sha\"}] else . end | .[]" \
+                  >> "$RUNNER_TEMP/prs.jsonl" || { ok=false; break; }
+              done
+              if [ "$ok" = true ]; then
+                python -c 'import json,sys; rows=[json.loads(l) for l in open(sys.argv[1]) if l.strip()]; print(json.dumps(list({(r.get("number") or r.get("commit")): r for r in rows}.values())))' \
+                  "$RUNNER_TEMP/prs.jsonl" > "$prs"
+              fi
+            fi
+          fi
+
+      - name: Plan the drift run
+        id: plan
+        env:
+          SCOPE_INPUT: ${{ inputs.scope || 'auto' }}
+          ENCODER_VERIFIER: ${{ steps.pins.outputs.encoder_verifier }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(plan --encoder-main "$ENCODER_MAIN" --encoder-verifier "$ENCODER_VERIFIER" --output "$RUNNER_TEMP/plan.json")
+          [ -f "$RUNNER_TEMP/previous/state.json" ] && args+=(--previous-state "$RUNNER_TEMP/previous/state.json")
+          [ -f "$RUNNER_TEMP/encoder-prs.json" ] && args+=(--encoder-prs "$RUNNER_TEMP/encoder-prs.json")
+          [ "$SCOPE_INPUT" = "full" ] && args+=(--force-full)
+          python -I tools/validation_drift.py "${args[@]}"
+          python -I - "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import sys
+
+          plan = json.load(open(sys.argv[1]))
+          print(f"scope={plan['scope']}")
+          # No scoped targets today: every run that runs is a full run.
+          print("targets=" + (json.dumps(plan["targets"]) if plan["targets"] else ""))
+          PY
+          python -I - "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/state.json" <<'PY'
+          import json
+          import sys
+
+          json.dump(json.load(open(sys.argv[1]))["state"], open(sys.argv[2], "w"), indent=2)
+          PY
+          {
+            echo "### Validation drift plan"
+            python -I -c 'import json,sys; p=json.load(open(sys.argv[1])); print(f"Scope: `{p[\"scope\"]}`\n"); [print(f"- {r}") for r in p["reasons"]]; print(f"\nTargets: {len(p[\"targets\"])}")' "$RUNNER_TEMP/plan.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the plan for the report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validation-drift-plan
+          path: |
+            ${{ runner.temp }}/plan.json
+            ${{ runner.temp }}/state.json
+          retention-days: 7
+
+  validate:
+    needs: plan
+    if: ${{ needs.plan.outputs.scope != 'skip' }}
+    # Needs the drift-targets input of TheAxiomFoundation/.github#154.
+    # Repin to its merge commit before merge.
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@89711ae15d73a64c25978a976be1f96a1aab9b0a
+    secrets: inherit
+    with:
+      axiom-encode-ref: ${{ needs.plan.outputs.axiom_encode_ref }}
+      axiom-compose-ref: ${{ needs.plan.outputs.axiom_compose_ref }}
+      axiom-rules-engine-ref: ${{ needs.plan.outputs.axiom_rules_engine_ref }}
+      axiom-corpus-ref: ${{ needs.plan.outputs.axiom_corpus_ref }}
+      rulespec-us-ref: ${{ needs.plan.outputs.rulespec_us_ref }}
+      validate-roots: auto
+      validation-workers: 4
+      guard-programs-root: false
+      allow-retired-schema-prefreeze: true
+      encoder-verifier: ${{ needs.plan.outputs.encoder_verifier }}
+      drift-targets: ${{ needs.plan.outputs.targets }}
+
+  report:
+    needs: [plan, validate]
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.scope != 'skip' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Checkout rules repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: validation-drift-plan
+          path: ${{ runner.temp }}/plan
+
+      - name: Open, update or close per-file drift issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This run is still in progress, so read the logs of its finished
+          # validate jobs one by one.
+          # Every finished job of the called validator, with its conclusion,
+          # so a leg that failed without per-file results is an error.
+          mkdir -p "$RUNNER_TEMP/logs"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+            --jq '.jobs[] | select(.status == "completed" and (.name | startswith("validate /")))
+                  | {id, conclusion, name, failed_steps: [.steps[]? | select(.conclusion == "failure") | .name]}' \
+            > "$RUNNER_TEMP/jobs.jsonl"
+          python -I - "$RUNNER_TEMP/jobs.jsonl" "$RUNNER_TEMP/logs" "$RUNNER_TEMP/jobs.json" <<'PY'
+          import json
+          import sys
+
+          rows = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+          for row in rows:
+              row["log_file"] = f"{sys.argv[2]}/{row['id']}.log"
+          json.dump(rows, open(sys.argv[3], "w"))
+          PY
+          python -I -c 'import json,sys; [print(r["id"]) for r in json.load(open(sys.argv[1]))]' \
+            "$RUNNER_TEMP/jobs.json" | while IFS= read -r job; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/logs/$job.log"
+          done
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open --label validation-drift \
+            --limit 1000 --json number,title > "$RUNNER_TEMP/open-issues.json"
+          if [ "$(python -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$RUNNER_TEMP/open-issues.json")" -ge 1000 ]; then
+            echo "::error::1,000 or more open drift issues; the list may be incomplete, so no issue is created" >&2
+            exit 1
+          fi
+          python -I tools/validation_drift.py report --plan "$RUNNER_TEMP/plan/plan.json" \
+            --jobs "$RUNNER_TEMP/jobs.json" --validate-result "$VALIDATE_RESULT" \
+            --open-issues "$RUNNER_TEMP/open-issues.json" --run-url "$RUN_URL" \
+            --workspace "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/actions.json"
+          for label in validation-drift re-encode-queue; do
+            gh label create "$label" --repo "$GITHUB_REPOSITORY" --force \
+              --description "Validation drift run (axiom-encode#2094)" >/dev/null
+          done
+          issue_number() {
+            python -I -c 'import json,sys; t="Validation drift: "+sys.argv[2]; print(next((str(i["number"]) for i in json.load(open(sys.argv[1])) if i["title"] == t), ""))' \
+              "$RUNNER_TEMP/open-issues.json" "$1"
+          }
+          python -I -c 'import json,sys; [print(p) for p in json.load(open(sys.argv[1]))["update"]]' \
+            "$RUNNER_TEMP/actions.json" | while IFS= read -r path; do
+            number="$(issue_number "$path")"
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "Still failing: $RUN_URL"
+            fi
+          done
+          python -I -c 'import json,sys; [print(json.dumps(i)) for i in json.load(open(sys.argv[1]))["open"]]' \
+            "$RUNNER_TEMP/actions.json" | while IFS= read -r item; do
+            title="$(printf '%s' "$item" | python -I -c 'import json,sys; print(json.load(sys.stdin)["title"])')"
+            body="$(printf '%s' "$item" | python -I -c 'import json,sys; print(json.load(sys.stdin)["body"])')"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" \
+              --label validation-drift --label re-encode-queue
+            sleep 2  # stay under the secondary rate limit for content creation
+          done
+          {
+            echo "### Validation drift report"
+            python -I -c 'import json,sys; a=json.load(open(sys.argv[1])); print(f"New issues: {len(a[\"open\"])}; still failing: {len(a[\"update\"])}; deferred (over the per-run cap): {len(a[\"deferred\"])}"); [print(f"- {p}") for p in a["deferred"]]' \
+              "$RUNNER_TEMP/actions.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Files over the cap have no issue yet: fail, so the state does not
+          # advance and the next run opens them.
+          deferred="$(python -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["deferred"]))' "$RUNNER_TEMP/actions.json")"
+          if [ "$deferred" -gt 0 ]; then
+            # Record that the next run must be full, then fail this report.
+            python -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["pending_full"]=True; json.dump(s, open(p,"w"), indent=2)' \
+              "$RUNNER_TEMP/plan/state.json"
+            echo "DEFERRED=$deferred" >> "$GITHUB_ENV"
+          fi
+
+      - name: Record that the next run must be full
+        if: ${{ env.DEFERRED != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validation-drift-state
+          path: ${{ runner.temp }}/plan/state.json
+          retention-days: 90
+
+      - name: Fail while failing files have no issue
+        if: ${{ env.DEFERRED != '' }}
+        run: |
+          echo "::error::$DEFERRED failing files have no issue yet; the next run is full and opens them"
+          exit 1
+
+  state:
+    # Record what this run checked once validation finished (pass or fail),
+    # or when nothing needed a run, so the next plan starts from it.
+    needs: [plan, validate, report]
+    # A failed report does not advance the state, so the next run reports
+    # the same changes again.
+    if: ${{ always() && needs.plan.result == 'success' && (needs.plan.outputs.scope == 'skip' || ((needs.validate.result == 'success' || needs.validate.result == 'failure') && needs.report.result == 'success')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: validation-drift-plan
+          path: ${{ runner.temp }}/plan
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validation-drift-state
+          path: ${{ runner.temp }}/plan/state.json
+          retention-days: 90

@@ -53,3 +53,28 @@ without being removed, so they only shrink.
 
 Do not add singular rule roots, separate parameter/test fixture files, or
 generated formula artifacts.
+
+## Validation drift and admissions
+
+- `.github/workflows/validation-drift.yml` replaces the daily full
+  validation (#1274, axiom-encode#2094). Once a day it plans a run from what
+  changed since the last drift run (`tools/validation_drift.py`). It runs
+  every file for an encoder merge that declares `Validation effect: tighten`
+  or `loosen` (or no valid effect), an encoder commit without a merged PR, a
+  rules-engine, composer or corpus pin or release, or 7 days since the last
+  full run. It skips the run when only `none` merges happened. Each failing
+  file opens or updates one `Validation drift: <path>` issue with the
+  `re-encode-queue` label (at most 50 new issues per run). People close the
+  issues; the run never closes them, because the validator lists only
+  failures. The report reads the validator's per-chunk result lines. A leg
+  that fails without explained per-file results (a crash, or a later step
+  such as companion tests), or more than 50 new failures, fails the report,
+  so the state does not advance and the next run reports again. In `pinned`
+  verifier mode, encoder main merges do not start a run; a pin change does.
+  Run it by hand with `workflow_dispatch` (`scope: full`).
+- A red full validation after a push to main still opens or refreshes one
+  alarm issue (`push-alarm` in `repository-checks.yml`).
+- `.axiom/admissions/` holds reviewed, repository-specific admissions that
+  the encoder reads from the protected `main` commit only
+  (axiom-encode#2095). Today it holds `coverage-exemptions.jsonl`, in the
+  encoder's coverage-exemption record format. Code owners review it.
