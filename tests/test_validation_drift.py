@@ -160,7 +160,7 @@ def test_report_opens_new_issues_updates_known_ones_and_closes_none():
     plan_result = {"scope": "full", "targets": [], "reasons": ["weekly"]}
     result = drift.report(
         plan_result=plan_result,
-        jobs=[{"name": "validate (us)", "conclusion": "failure", "log": LOG}],
+        jobs=[{"name": "validate / validate (us)", "conclusion": "failure", "failed_steps": ["Validate RuleSpec YAML"], "log": LOG}],
         validate_result="failure",
         open_issue_paths=["us/statutes/7/2015.yaml", "us/statutes/1.yaml"],
         run_url="https://example.invalid/run",
@@ -175,12 +175,12 @@ def test_report_opens_new_issues_updates_known_ones_and_closes_none():
 
 
 def test_report_caps_new_issues_per_run():
-    lines = "2 of 2 file(s) failed:\n" + "".join(
+    lines = f"{drift.MAX_NEW_ISSUES + 5} of 99 file(s) failed:\n" + "".join(
         f"  - us/statutes/{n}.yaml\n" for n in range(drift.MAX_NEW_ISSUES + 5)
     )
     result = drift.report(
         plan_result={"scope": "full", "targets": [], "reasons": []},
-        jobs=[{"name": "validate (us)", "conclusion": "failure", "log": lines}],
+        jobs=[{"name": "validate / validate (us)", "conclusion": "failure", "failed_steps": ["Validate RuleSpec YAML"], "log": lines}],
         validate_result="failure",
         open_issue_paths=[],
         run_url="u",
@@ -193,19 +193,54 @@ def test_report_caps_new_issues_per_run():
     ("jobs", "result"),
     [
         ([], "failure"),
-        ([{"name": "validate (us)", "conclusion": "failure", "log": ""}], "failure"),
-        ([{"name": "validate (us)", "conclusion": "failure", "log": LOG}], "cancelled"),
+        ([{"name": "validate / validate (us)", "conclusion": "failure", "failed_steps": ["Validate RuleSpec YAML"], "log": ""}], "failure"),
+        ([{"name": "validate / validate (us)", "conclusion": "failure", "failed_steps": ["Validate RuleSpec YAML"], "log": LOG}], "cancelled"),
+        # A leg's summary lists fewer files than it declares.
+        (
+            [
+                {
+                    "name": "validate / validate (us)",
+                    "conclusion": "failure",
+                    "failed_steps": ["Validate RuleSpec YAML"],
+                    "log": LOG.replace("2 of 3 file(s)", "3 of 3 file(s)"),
+                }
+            ],
+            "failure",
+        ),
+        # A later step of a listing leg also failed.
+        (
+            [
+                {
+                    "name": "validate / validate (us)",
+                    "conclusion": "failure",
+                    "failed_steps": ["Validate RuleSpec YAML", "Run companion tests"],
+                    "log": LOG,
+                }
+            ],
+            "failure",
+        ),
+        # The shards job failed, or a leg was skipped after it.
+        ([{"name": "validate / shards", "conclusion": "failure", "log": ""}], "failure"),
+        (
+            [
+                {"name": "validate / validate (us)", "conclusion": "failure",
+                 "failed_steps": ["Validate RuleSpec YAML"], "log": LOG},
+                {"name": "validate / validate (us-ca)", "conclusion": "skipped", "log": ""},
+            ],
+            "failure",
+        ),
         # One leg lists failures, another failed for another reason.
         (
             [
-                {"name": "validate (us)", "conclusion": "failure", "log": LOG},
-                {"name": "validate (us-ca)", "conclusion": "failure", "log": "timeout"},
+                {"name": "validate / validate (us)", "conclusion": "failure", "failed_steps": ["Validate RuleSpec YAML"], "log": LOG},
+                {"name": "validate / validate (us-ca)", "conclusion": "failure", "failed_steps": ["Validate RuleSpec YAML"], "log": "timeout"},
             ],
             "failure",
         ),
     ],
 )
 def test_unexplained_failures_report_an_error_not_an_issue(jobs, result):
+    """Each case leaves at least one failing job without a full summary."""
     outcome = drift.report(
         plan_result={"scope": "full", "targets": [], "reasons": []},
         jobs=jobs,
@@ -257,3 +292,29 @@ def test_cli_plan_reads_the_repository(tmp_path):
     result = json.loads(output.read_text())
     assert result["scope"] == "skip"
     assert result["state"]["encoder_main"] == "b" * 40
+
+
+def test_aggregate_and_skipped_helper_jobs_do_not_hide_or_block_results():
+    jobs = [
+        {"name": "validate / validate (us)", "conclusion": "failure",
+         "failed_steps": ["Validate RuleSpec YAML"], "log": LOG},
+        {"name": "validate / validate", "conclusion": "failure", "log": ""},
+        {"name": "validate / rollback proof", "conclusion": "skipped", "log": ""},
+        {"name": "validate / shards", "conclusion": "success", "log": ""},
+    ]
+    result = drift.report(
+        plan_result={"scope": "full", "targets": [], "reasons": []},
+        jobs=jobs,
+        validate_result="failure",
+        open_issue_paths=[],
+        run_url="u",
+        workspace=WORKSPACE,
+    )
+    assert "error" not in result
+    assert len(result["open"]) == 2
+
+
+def test_pending_full_state_forces_a_full_run():
+    previous = _state(encoder_main=CURRENT["encoder_main"], pending_full=True)
+    assert _plan(previous, [])["scope"] == "full"
+    assert "pending_full" not in _plan(previous, [])["state"]

@@ -45,6 +45,11 @@ from pathlib import Path
 STATE_SCHEMA = "rulespec-us/validation-drift-state/v1"
 FULL_INTERVAL = timedelta(days=7)
 MAX_NEW_ISSUES = 50
+# The shared validator's step that prints the per-file failure summary, and
+# its aggregate job, whose failure only mirrors the matrix legs.
+VALIDATION_STEP = "Validate RuleSpec YAML"
+AGGREGATE_JOB = "validate / validate"
+LEG_PREFIX = "validate / validate ("
 STATE_KEYS = (
     "encoder_main",
     "axiom_encode_ref",
@@ -96,6 +101,8 @@ def valid_state(state: object) -> dict | None:
         return None
     if _parse_time(state.get("last_full_at")) is None:
         return None
+    if not isinstance(state.get("pending_full", False), bool):
+        return None
     return state
 
 
@@ -119,6 +126,9 @@ def plan(
     elif state is None:
         full, reasons = True, ["no previous drift state"]
     else:
+        if state.get("pending_full"):
+            full = True
+            reasons.append("the last run left failing files without issues")
         last_full = _parse_time(state["last_full_at"])
         if now - last_full >= FULL_INTERVAL:
             full = True
@@ -197,21 +207,31 @@ def _relative_module(path: str, workspace: str) -> str | None:
 def failing_files(log: str, workspace: str = "") -> list[str]:
     """Return the files that `axiom-encode validate` listed as failed."""
 
-    failed: set[str] = set()
+    return sorted(set(_failure_summary(log, workspace)[0]))
+
+
+def _failure_summary(log: str, workspace: str = "") -> tuple[list[str], int]:
+    """Return the listed failing files and the counts the summaries declare."""
+
+    failed: list[str] = []
+    declared = 0
     collecting = False
     for raw in log.splitlines():
         line = _LOG_PREFIX_RE.sub("", raw, count=1).rstrip()
-        if re.search(r"\d+ of \d+ file\(s\) failed:$", line):
+        header = re.search(r"(\d+) of \d+ file\(s\) failed:$", line)
+        if header:
+            declared += int(header.group(1))
             collecting = True
             continue
         if collecting:
             match = re.fullmatch(r"\s*- (\S+)", line)
-            module = _relative_module(match.group(1), workspace) if match else None
-            if module is not None:
-                failed.add(module)
+            if match:
+                module = _relative_module(match.group(1), workspace)
+                # An unexpected path still counts, so the totals disagree.
+                failed.append(module if module is not None else "")
                 continue
             collecting = False
-    return sorted(failed)
+    return failed, declared
 
 
 def report(
@@ -236,10 +256,26 @@ def report(
     failed: set[str] = set()
     unexplained = []
     for job in jobs:
-        job_failed = failing_files(str(job.get("log", "")), workspace)
-        failed.update(job_failed)
-        if job.get("conclusion") != "success" and not job_failed:
-            unexplained.append(str(job.get("name", "validate")))
+        name = str(job.get("name", "validate"))
+        conclusion = job.get("conclusion")
+        if name == AGGREGATE_JOB:
+            continue
+        listed, declared = _failure_summary(str(job.get("log", "")), workspace)
+        failed.update(path for path in listed if path)
+        leg = name.startswith(LEG_PREFIX)
+        if conclusion == "success" or (conclusion == "skipped" and not leg):
+            continue
+        failed_steps = set(job.get("failed_steps") or [])
+        explained = (
+            leg
+            and conclusion == "failure"
+            and listed
+            and "" not in listed
+            and len(listed) == declared
+            and failed_steps == {VALIDATION_STEP}
+        )
+        if not explained:
+            unexplained.append(name)
     if unexplained:
         return {
             "error": "validation failed without per-file results in: "

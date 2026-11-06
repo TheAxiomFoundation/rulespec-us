@@ -201,7 +201,7 @@ jobs:
     if: ${{ needs.plan.outputs.scope != 'skip' }}
     # Needs the drift-targets input of TheAxiomFoundation/.github#154.
     # Repin to its merge commit before merge.
-    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@ad220a3f181901e565f8a12a8d52aff2459ee4ca
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@255c85058a7a94083845dfb0a15ca20672788202
     secrets: inherit
     with:
       axiom-encode-ref: ${{ needs.plan.outputs.axiom_encode_ref }}
@@ -254,23 +254,28 @@ jobs:
           # so a leg that failed without per-file results is an error.
           mkdir -p "$RUNNER_TEMP/logs"
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
-            --jq '.jobs[] | select(.status == "completed" and (.name | startswith("validate /"))) | [.id, .conclusion, .name] | @tsv' \
-            > "$RUNNER_TEMP/jobs.tsv"
-          python -I - "$RUNNER_TEMP/jobs.tsv" "$RUNNER_TEMP/logs" "$RUNNER_TEMP/jobs.json" <<'PY'
+            --jq '.jobs[] | select(.status == "completed" and (.name | startswith("validate /")))
+                  | {id, conclusion, name, failed_steps: [.steps[]? | select(.conclusion == "failure") | .name]}' \
+            > "$RUNNER_TEMP/jobs.jsonl"
+          python -I - "$RUNNER_TEMP/jobs.jsonl" "$RUNNER_TEMP/logs" "$RUNNER_TEMP/jobs.json" <<'PY'
           import json
           import sys
 
-          rows = [line.rstrip("\n").split("\t", 2) for line in open(sys.argv[1]) if line.strip()]
-          json.dump(
-              [{"id": r[0], "conclusion": r[1], "name": r[2], "log_file": f"{sys.argv[2]}/{r[0]}.log"} for r in rows],
-              open(sys.argv[3], "w"),
-          )
+          rows = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+          for row in rows:
+              row["log_file"] = f"{sys.argv[2]}/{row['id']}.log"
+          json.dump(rows, open(sys.argv[3], "w"))
           PY
-          while IFS=$'\t' read -r job _conclusion _name; do
+          python -I -c 'import json,sys; [print(r["id"]) for r in json.load(open(sys.argv[1]))]' \
+            "$RUNNER_TEMP/jobs.json" | while IFS= read -r job; do
             gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/logs/$job.log"
-          done < "$RUNNER_TEMP/jobs.tsv"
+          done
           gh issue list --repo "$GITHUB_REPOSITORY" --state open --label validation-drift \
             --limit 1000 --json number,title > "$RUNNER_TEMP/open-issues.json"
+          if [ "$(python -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$RUNNER_TEMP/open-issues.json")" -ge 1000 ]; then
+            echo "::error::1,000 or more open drift issues; the list may be incomplete, so no issue is created" >&2
+            exit 1
+          fi
           python -I tools/validation_drift.py report --plan "$RUNNER_TEMP/plan/plan.json" \
             --jobs "$RUNNER_TEMP/jobs.json" --validate-result "$VALIDATE_RESULT" \
             --open-issues "$RUNNER_TEMP/open-issues.json" --run-url "$RUN_URL" \
@@ -307,9 +312,25 @@ jobs:
           # advance and the next run opens them.
           deferred="$(python -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["deferred"]))' "$RUNNER_TEMP/actions.json")"
           if [ "$deferred" -gt 0 ]; then
-            echo "::error::$deferred failing files have no issue yet; the next run opens them"
-            exit 1
+            # Record that the next run must be full, then fail this report.
+            python -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["pending_full"]=True; json.dump(s, open(p,"w"), indent=2)' \
+              "$RUNNER_TEMP/plan/state.json"
+            echo "DEFERRED=$deferred" >> "$GITHUB_ENV"
           fi
+
+      - name: Record that the next run must be full
+        if: ${{ env.DEFERRED != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validation-drift-state
+          path: ${{ runner.temp }}/plan/state.json
+          retention-days: 90
+
+      - name: Fail while failing files have no issue
+        if: ${{ env.DEFERRED != '' }}
+        run: |
+          echo "::error::$DEFERRED failing files have no issue yet; the next run is full and opens them"
+          exit 1
 
   state:
     # Record what this run checked once validation finished (pass or fail),
