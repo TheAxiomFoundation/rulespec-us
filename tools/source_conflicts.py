@@ -709,6 +709,8 @@ ENTRY_KEYS = frozenset(
         "text_kinds",
         "unpublished_sources",
         "proposed",
+        "summary",
+        "sides",
     }
 )
 # A pull request URL on github.com: proposed implementations name the PR that
@@ -942,7 +944,7 @@ def _prose_fields(entry: Mapping[str, Any], label: str) -> Iterator[tuple[str, s
     """The entry's own prose: question, reading, basis and each alternative's
     reading and effect. Source excerpts, citations and records quote others."""
 
-    for key in ("question", "reading", "basis"):
+    for key in ("summary", "question", "reading", "basis"):
         if isinstance(entry.get(key), str):
             yield f"{label}.{key}", entry[key]
     alternatives = entry.get("alternatives")
@@ -1014,6 +1016,55 @@ def cited_corpus_paths(entry: Mapping[str, Any]) -> list[str]:
         and isinstance(text.get("corpus_citation_path"), str)
         and CORPUS_PATH_RE.fullmatch(text["corpus_citation_path"])
     ]
+
+
+SUMMARY_MAX_CHARS = 240
+
+
+def check_summary_and_sides(entry: Mapping[str, Any], *, label: str, issues: list[str]) -> None:
+    """`summary` is one plain sentence on what disagrees; `sides` names, per
+    reading reference, the sources that reading rests on: a corpus citation
+    path from `texts` or a `citation` from `pending_texts`. A source on no
+    side is background. Both are register-only, so the core is unchanged."""
+
+    if "summary" in entry:
+        summary = entry["summary"]
+        if not (isinstance(summary, str) and summary.strip()):
+            issues.append(f"{label}.summary must be a non-blank string.")
+        elif "\n" in summary.strip():
+            issues.append(f"{label}.summary must be one line.")
+        elif len(summary) > SUMMARY_MAX_CHARS:
+            issues.append(f"{label}.summary is {len(summary)} characters; keep it to {SUMMARY_MAX_CHARS}.")
+    if "sides" not in entry:
+        return
+    sides = entry["sides"]
+    if not isinstance(sides, dict) or not sides:
+        issues.append(f"{label}.sides must be a non-empty mapping of reading reference to a list of sources.")
+        return
+    readings = {ADOPTED_READING, *alternative_ids(entry.get("alternatives"))}
+    sources = set(cited_corpus_paths(entry))
+    pending = entry.get("pending_texts")
+    for item in pending if isinstance(pending, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("citation"), str):
+            sources.add(item["citation"])
+    for reading, cited in sides.items():
+        s_label = f"{label}.sides[{reading}]"
+        if reading not in readings:
+            issues.append(f"{s_label} must be `{ADOPTED_READING}` or one of this entry's alternative ids.")
+            continue
+        if not _nonempty_list(cited, label=s_label, issues=issues):
+            continue
+        seen: set[str] = set()
+        for source in cited:
+            if not isinstance(source, str) or source not in sources:
+                issues.append(
+                    f"{s_label} names {source!r}, which is neither a corpus citation path in texts "
+                    "nor a citation in pending_texts."
+                )
+                continue
+            if source in seen:
+                issues.append(f"{s_label} names {source} twice.")
+            seen.add(source)
 
 
 def check_text_kinds(entry: Mapping[str, Any], *, label: str, issues: list[str]) -> None:
@@ -1551,6 +1602,7 @@ def check_entry(entry: Any, *, index: int, ctx: RepoContext, jurisdictions: froz
     if "pending_texts" in entry:
         pending = check_pending_texts(pending, label=f"{label}.pending_texts", issues=issues)
     check_text_kinds(entry, label=label, issues=issues)
+    check_summary_and_sides(entry, label=label, issues=issues)
 
     years = entry.get("years")
     if "years" in entry:
@@ -2325,6 +2377,8 @@ def aggregate(registers: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[
                     "jurisdiction": entry.get("jurisdiction"),
                     "program": entry.get("program"),
                     "question": entry.get("question"),
+                    "summary": entry.get("summary"),
+                    "sides": entry.get("sides") or {},
                     "years": entry.get("years"),
                     "conflict": entry.get("conflict", "live"),
                     "status": entry.get("status"),

@@ -986,6 +986,49 @@ def test_text_kinds_override(tmp_path):
         assert any(fragment in issue for issue in check(ctx, bad)), overrides
 
 
+def test_summary_and_sides(tmp_path):
+    ctx = make_repo(tmp_path)
+    good = entry(
+        summary="The Act protects every later month; POMS protects only months after a PIA increase.",
+        sides={"reading": ["POMS RS 00630.400"], "every-later-month": ["us/statute/42/403/a/5"]},
+    )
+    assert check(ctx, good) == []
+    # A source may back more than one reading, and a reading may rest on none.
+    assert check(ctx, entry(sides={"reading": ["us/statute/42/403/a/5", "POMS RS 00630.400"], "every-later-month": ["us/statute/42/403/a/5"]})) == []
+    assert check(ctx, entry(sides={"reading": ["POMS RS 00630.400"]})) == []
+    for field, value, fragment in (
+        ("summary", "", "summary must be a non-blank string"),
+        ("summary", 3, "summary must be a non-blank string"),
+        ("summary", "one\ntwo", "summary must be one line"),
+        ("summary", "x" * 241, "keep it to 240"),
+        ("sides", {}, "non-empty mapping of reading reference"),
+        ("sides", ["reading"], "non-empty mapping of reading reference"),
+        ("sides", {"other": ["POMS RS 00630.400"]}, "must be `reading` or one of this entry's alternative ids"),
+        ("sides", {"reading": []}, "sides[reading]"),
+        ("sides", {"reading": ["us/statute/42/403/a/6"]}, "neither a corpus citation path in texts nor a citation in pending_texts"),
+        ("sides", {"reading": [7]}, "neither a corpus citation path"),
+        ("sides", {"reading": ["POMS RS 00630.400", "POMS RS 00630.400"]}, "names POMS RS 00630.400 twice"),
+    ):
+        bad = copy.deepcopy(good)
+        bad[field] = value
+        assert any(fragment in issue for issue in check(ctx, bad)), (field, value)
+
+
+def test_summary_is_prose_for_the_money_rule(tmp_path):
+    bad = entry(summary="The two sources differ by $600 a year.")
+    assert any(".summary" in issue and "$600" in issue for issue in check(make_repo(tmp_path), bad))
+
+
+def test_aggregate_carries_summary_and_sides():
+    value = entry(summary="One line.", sides={"reading": ["POMS RS 00630.400"]})
+    rows, issues = sc.aggregate({"rulespec-us": {"entries": [value]}})
+    assert issues == []
+    assert rows[0]["summary"] == "One line."
+    assert rows[0]["sides"] == {"reading": ["POMS RS 00630.400"]}
+    rows, _ = sc.aggregate({"rulespec-us": {"entries": [entry()]}})
+    assert rows[0]["summary"] is None and rows[0]["sides"] == {}
+
+
 @pytest.mark.parametrize("kind", [None, "", "Manual", "speech"])
 def test_pending_text_kind_is_a_closed_enum(tmp_path, kind):
     bad = entry()
