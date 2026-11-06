@@ -53,3 +53,19 @@ without being removed, so they only shrink.
 
 Do not add singular rule roots, separate parameter/test fixture files, or
 generated formula artifacts.
+
+## Validation drift and admissions
+
+- `.github/workflows/validation-drift.yml` replaces the daily full
+  validation (#1274, axiom-encode#2094). Once a day it plans a run from what
+  changed since the last drift run (`tools/validation_drift.py`): a full run
+  for an encoder merge that declares `Validation effect: tighten` (or no
+  valid effect), a rules-engine or corpus pin, or 7 days since the last full
+  run; the waived files for `loosen` merges; nothing for `none` merges. Each
+  failing file opens or updates one `Validation drift: <path>` issue with the
+  `re-encode-queue` label. A file in scope that passes closes its issue. Run
+  it by hand with `workflow_dispatch` (`scope: full` for every file).
+- `.axiom/admissions/` holds reviewed, repository-specific admissions that
+  the encoder reads from the protected `main` commit only
+  (axiom-encode#2095). Today it holds `coverage-exemptions.jsonl`, in the
+  encoder's coverage-exemption record format. Code owners review it.
