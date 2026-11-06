@@ -158,3 +158,18 @@ def test_render_index_omits_counts_but_build_reports_them(tmp_path):
     assert "counts" not in parsed
     assert parsed["schema"] == "axiom.rulespec.provisions_to_rules/v1"
     assert "us/statute/26/a" in parsed["provisions"]
+
+
+def test_separate_source_documents_preserve_all_original_page_dependencies():
+    payload = {"module": {
+        "source_verification": {"corpus_citation_path": "us/guidance/irs/rev-proc-2025-32"},
+        "source_documents": [
+            {"corpus_citation_path": "us/guidance/irs/rev-proc-2025-32/page-14"},
+            {"corpus_citation_path": "us/guidance/irs/rev-proc-2025-32/page-15"},
+        ],
+    }}
+    assert gen.citation_paths_for_module(payload) == {
+        "us/guidance/irs/rev-proc-2025-32": {"module"},
+        "us/guidance/irs/rev-proc-2025-32/page-14": {"module"},
+        "us/guidance/irs/rev-proc-2025-32/page-15": {"module"},
+    }
