@@ -68,38 +68,147 @@ def _edges(modules):
 LATE_TARGET = lsi.Module(rules=(_rule("later_amount", (Y2026, "100")), _rule("other", (Y2018, "7"))))
 
 
+EVERY_NAME_DERIVED = lsi.Scope(
+    derived=frozenset({"a", "b", "c", "a/b", "wages", "imported", "period_start", "period_end"})
+)
+
+
 @pytest.mark.parametrize(
     ("formula", "expected"),
     [
         ("a + b", {"a", "b"}),
         ("max(a, b)", {"a", "b"}),
         ("max (a)", {"a"}),
-        ("table[size]", {"table", "size"}),
+        ("max()", set()),
         ("sum(members.wages)", {"wages"}),
         ('if "a" == b: 1 else: 2', {"b"}),
         ("'a' + b", {"b"}),
         ('"it\\"s a" + b', {"b"}),
+        ("'\\q' + b", {"b"}),
         ("1 # a\n+ b", {"b"}),
-        ('"""a\nb""" + c', {"c"}),
-        ('"""a', set()),
+        ('"""a\nb""" 1 + c', {"c"}),
         ("a/b + c", {"a/b", "c"}),
         ("a / b", {"a", "b"}),
-        ("a/b(c)", {"c"}),
         ("max # note\n(a)", {"a"}),
         ("(max)(a)", {"a"}),
         ("((max))(a, b)", {"a", "b"}),
         ("(a) + (b)", {"a", "b"}),
-        ("2018-01-01", set()),
         ("1_000 + a", {"a"}),
-        ("2018_a", {"a"}),
+        ("1.5 + a", {"a"}),
         ("if a and not b: true else: False", {"a", "b"}),
-        ("period_start + period_end", {"period_start", "period_end"}),
-        ("match a:\n  1 => b\n  _ => c", {"a", "b", "c", "_"}),
-        ("", set()),
+        ("if a: b elif c: 1 else: 2", {"a", "b", "c"}),
+        ("match a:\n  1 => b\n  _ => c", {"a", "b", "c"}),
+        ("match a:\n  b => 1\n  'x' => 2", {"a", "b"}),
+        ("if exactly_one(a, b): 1 else: 0", {"a", "b"}),
+        ("-a", {"a"}),
+        ("\u3000a\u3000", {"a"}),
+        # A scalar reads the period, whatever rules carry those names.
+        ("period_start + period_end", set()),
+        ("days_between(period_start, period_end)", set()),
+        ("if period_start: 1 else: 2", {"period_start"}),
+        # `len` drops the field it carries.
+        ("len(members.wages)", set()),
+        ("len(members, a)", set()),
     ],
 )
-def test_formula_references_follow_the_engine_lexer(formula, expected):
-    assert lsi.formula_references(formula) == expected
+def test_lower_formula_binds_what_formula_rs_binds(formula, expected):
+    lowered = lsi.lower_formula(formula, EVERY_NAME_DERIVED)
+    assert lowered.reads == {(lsi.DERIVED, name) for name in expected}
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "",
+        '"""a\nb""" + c',
+        '"""a',
+        "a/b(c)",
+        "2018-01-01",
+        "2018_a",
+        "a b",
+        "a < b < c",
+        "x = 1",
+        "f(1,)",
+        "max(1)(2)",
+        "a.b",
+        "a.from",
+        "a and b",
+        "not a",
+        "unknown(a)",
+        "ceil(a, b)",
+        "days_between(a)",
+        "mean_over_periods(a)",
+        "count_where(members)",
+        "count_where(members, a + b)",
+        "sum(members)",
+        "len(a + b)",
+        "match a:\n  _ => 1\n  2 => 3",
+        "match a:",
+        "if a: 1",
+        "a[0]",
+        "9223372036854775808",
+        "'open",
+        "'trailing\\",
+        "a ! b",
+    ],
+)
+def test_lower_formula_refuses_what_formula_rs_refuses(formula):
+    with pytest.raises(lsi.FormulaError):
+        lsi.lower_formula(formula, EVERY_NAME_DERIVED)
+
+
+@pytest.mark.parametrize(
+    ("formula", "judgment", "reads", "aggregations", "members"),
+    [
+        # A name binds a parameter in a scalar position and only a derived
+        # rule in a judgment position, where a parameter lowers to an input.
+        ("shared", False, {("parameter", "shared")}, set(), set()),
+        ("shared", True, {("derived", "shared")}, set(), set()),
+        ("rate", True, set(), set(), set()),
+        ("if rate > 1: shared else: 0", False, {("parameter", "rate"), ("parameter", "shared")}, set(), set()),
+        ("rate[size]", False, {("parameter", "rate"), ("derived", "size")}, set(), set()),
+        ("period_start[0]", False, {("parameter", "period_start")}, set(), set()),
+        ("len(members)", False, set(), {lsi.Aggregation("members")}, set()),
+        ("len((members))", False, set(), {lsi.Aggregation("members")}, set()),
+        (
+            "count_where(members, size)",
+            False,
+            {("derived", "size")},
+            {lsi.Aggregation("members", frozenset({"size"}))},
+            set(),
+        ),
+        ("count_where(members, flag)", False, set(), {lsi.Aggregation("members")}, set()),
+        (
+            "sum_where(members, size, flag)",
+            False,
+            {("derived", "size")},
+            {lsi.Aggregation("members", frozenset({"size"}))},
+            set(),
+        ),
+        ("sum(members.rate)", False, set(), {lsi.Aggregation("members")}, set()),
+        ("candidate_row and size", True, {("derived", "size")}, set(), set()),
+    ],
+)
+def test_lower_formula_reads_by_position(formula, judgment, reads, aggregations, members):
+    scope = lsi.Scope(
+        scalars=frozenset({"shared", "rate", "period_start"}),
+        derived=frozenset({"shared", "size"}),
+    )
+    lowered = lsi.lower_formula(formula, scope, judgment)
+    assert lowered == lsi.Lowered(frozenset(reads), frozenset(aggregations), frozenset(members))
+
+
+def test_a_relation_predicate_tests_membership_of_a_relation_it_names():
+    scope = lsi.Scope(
+        derived=frozenset({"candidate_ok"}), relation_predicates=frozenset({"members"})
+    )
+    lowered = lsi.lower_formula("candidate_ok and not members", scope, judgment=True)
+    assert lowered == lsi.Lowered(
+        frozenset({("derived", "candidate_ok")}), frozenset(), frozenset({"members"})
+    )
+    # A predicate has no parameters, so an index has no table to read.
+    with pytest.raises(lsi.FormulaError, match="not a parameter table"):
+        lsi.lower_formula("rate[0] > 1", scope, judgment=True)
 
 
 @pytest.mark.parametrize(
@@ -118,13 +227,12 @@ def test_formula_references_follow_the_engine_lexer(formula, expected):
         ("count_where(members, a + b)", {"a": BOTH, "b": BOTH}, {"members", "a", "b"}),
         ("sum(members.wages)", {"wages": DERIVED_ONLY}, {"members"}),
         ("period_start", {"period_start": DERIVED_ONLY}, set()),
+        ("a/b(c) + 2018_d", {"c": BOTH, "d": BOTH}, {"c", "d"}),
     ],
 )
-def test_formula_reads_tell_apart_the_positions_a_token_shows(formula, reads, relations):
-    # formula.rs lowers the first argument of these calls as a relation, a
-    # later lone name and a field as a derived rule or input, and reads the
-    # period bounds before any parameter.
-    assert lsi.formula_reads(formula) == (reads, frozenset(relations))
+def test_the_token_reader_reads_at_least_what_any_lowering_could(formula, reads, relations):
+    # The fallback for a formula the engine refuses to lower.
+    assert lsi.token_reads(formula) == (reads, frozenset(relations))
 
 
 @pytest.mark.parametrize(
@@ -150,6 +258,9 @@ def test_formula_reads_tell_apart_the_positions_a_token_shows(formula, reads, re
         ("()", False),
         ("", False),
         ("2018-01-01", False),
+        ("9223372036854775807", True),
+        ("9223372036854775808", False),
+        ("1.", False),
     ],
 )
 def test_is_literal_follows_what_the_parser_leaves(formula, literal):
@@ -159,8 +270,14 @@ def test_is_literal_follows_what_the_parser_leaves(formula, literal):
 def test_a_long_run_of_whitespace_does_not_stall_the_lexer():
     started = time.perf_counter()
     assert not lsi.is_literal("1" + " " * 100_000 + "+ imported")
-    assert lsi.formula_references("1" + " " * 100_000 + "+ imported") == {"imported"}
+    lowered = lsi.lower_formula("1" + " " * 100_000 + "+ imported", EVERY_NAME_DERIVED)
+    assert lowered.reads == {(lsi.DERIVED, "imported")}
     assert time.perf_counter() - started < 5
+
+
+def test_a_formula_nested_past_the_port_is_refused_not_crashed():
+    with pytest.raises(lsi.FormulaError, match="nests deeper"):
+        lsi.lower_formula("(" * 5_000 + "a" + ")" * 5_000, EVERY_NAME_DERIVED)
 
 
 @pytest.mark.parametrize(
@@ -311,7 +428,59 @@ rules:
     )
     assert [rule.name for rule in module.rules] == ["e"]
     assert module.names == ("a", "b", "c", "e")
-    assert module.relations == (("c", "d"),)
+    # `c` states no derived_relation, so the engine refuses it.
+    assert module.relations == (lsi.Relation("a"), lsi.Relation("c", True, "", "d", refused=True))
+    assert module.derived_kinds == ("e",)
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (
+            "derived_relation: {arity: 2, source_relation: ' rows ', entity: Person,"
+            " member_relation: member}\n    versions: [{from: 2018-01-01, formula: ' ok '}]",
+            lsi.Relation("r", True, "rows", "ok", "Person", "member"),
+        ),
+        (
+            "derived_relation: {arity: 2, source: rows}\n    formula: ok",
+            lsi.Relation("r", True, "rows", "ok"),
+        ),
+        (
+            "derived_relation: {arity: 2, source: rows}\n    from: 2018-01-01\n    formula: ok",
+            lsi.Relation("r", True, "rows", "ok"),
+        ),
+        (
+            "derived_relation: {arity: 2, source_relation: rows, source: other}\n    formula: ok",
+            lsi.Relation("r", True, "", "ok", refused=True),
+        ),
+        (
+            "derived_relation: {source_relation: rows}\n    formula: ok",
+            lsi.Relation("r", True, "rows", "ok", refused=True),
+        ),
+        (
+            "derived_relation: {arity: 2, source_relation: null}\n    formula: ok",
+            lsi.Relation("r", True, "", "ok", refused=True),
+        ),
+        (
+            "derived_relation: {arity: 2, source_relation: rows}\n"
+            "    versions: [{from: 2018-01-01, formula: a}, {from: 2020-01-01, formula: b}]",
+            lsi.Relation("r", True, "rows", "a b", refused=True),
+        ),
+        (
+            "derived_relation: {arity: 2, source_relation: rows}\n"
+            "    versions: [{from: 2018-01-01, formula: '  '}]",
+            lsi.Relation("r", True, "rows", "", refused=True),
+        ),
+        (
+            "derived_relation: {arity: 2, source_relation: rows, entity: 5, member_relation: TRUE}\n"
+            "    formula: ok",
+            lsi.Relation("r", True, "rows", "ok", "5", "true"),
+        ),
+    ],
+)
+def test_parse_relation_reads_what_to_derived_relation_spec_reads(body, expected):
+    module = lsi.parse_module(f"rules:\n  - name: r\n    kind: derived_relation\n    {body}\n")
+    assert module.relations == (expected,)
 
 
 def test_parse_module_handles_null_imports_and_table_parameters():
@@ -635,15 +804,60 @@ def test_an_imported_parameter_wins_over_an_imported_derived_rule_of_its_name():
     assert _edges(modules) == {_edge(target="us:b#shared")}
 
 
-def test_a_name_defined_both_ways_reads_both_because_position_decides():
-    # A judgment position reads the derived rule and a scalar one the
-    # parameter. Without a parser the tool holds both to account.
+def test_position_decides_which_definition_of_a_name_a_formula_reads():
+    # lower_to_scalar binds the parameter, and lower_to_judgment only the
+    # derived rule.
+    def edges(formula):
+        return _edges(
+            {
+                "us:b": lsi.Module(rules=(_parameter("shared", date(2010, 1, 1)),)),
+                "us:c": lsi.Module(rules=(_rule("shared", (Y2026, "1")),)),
+                "us:a": lsi.Module(
+                    imports=("us:b", "us:c"), rules=(_rule("r", (Y2018, formula)),)
+                ),
+            }
+        )
+
+    assert edges("shared") == set()
+    assert edges("if shared > 0: 1 else: 0") == set()
+    assert edges("if shared: 1 else: 0") == {_edge(target="us:c#shared")}
+    assert lsi.parse_module(
+        "rules: [{name: r, kind: derived, dtype: Judgment, entity: Person,"
+        " versions: [{from: 2018-01-01, formula: shared}]}]\n"
+    ).rules[0].judgment
+
+
+def test_a_judgment_rule_reads_the_derived_definition_of_a_name():
     modules = {
         "us:b": lsi.Module(rules=(_parameter("shared", date(2010, 1, 1)),)),
         "us:c": lsi.Module(rules=(_rule("shared", (Y2026, "1")),)),
-        "us:a": lsi.Module(imports=("us:b", "us:c"), rules=(_rule("r", (Y2018, "shared")),)),
+        "us:a": lsi.Module(
+            imports=("us:b", "us:c"),
+            rules=(lsi.Rule("r", (lsi.Version(Y2018, "shared"),), dtype="Judgment"),),
+        ),
     }
     assert _edges(modules) == {_edge(target="us:c#shared")}
+
+
+def test_a_name_that_moves_to_its_late_derived_definition_widens_the_gap():
+    # Round 4: deleting the parameter sends `shared + 0` to the derived rule,
+    # which starts in 2020, and the engine then stops in 2010. The base bound
+    # sees the new stop dates because the base read only the parameter.
+    base = {
+        "us:b": lsi.Module(rules=(_parameter("shared", date(1990, 1, 1)),)),
+        "us:c": lsi.Module(rules=(_rule("shared", (date(2020, 1, 1), "1")),)),
+        "us:a": lsi.Module(
+            imports=("us:b", "us:c"),
+            rules=(_rule("answer", (date(2000, 1, 1), "shared + 0")),),
+        ),
+    }
+    head = {**base, "us:b": lsi.Module()}
+    before = lsi.stop_dates(lsi.import_references(base))
+    after = lsi.stop_dates(lsi.import_references(head))
+    assert before == {}
+    assert lsi.widened(after, before) == {
+        ("us:a#answer", "shared"): ((date(2000, 1, 1), date(2019, 12, 31)),)
+    }
 
 
 def test_a_local_parameter_feeds_a_merged_name_and_is_no_import_edge():
@@ -791,7 +1005,10 @@ def test_a_version_reads_what_the_predicates_of_its_relations_read():
         "us:a": lsi.Module(
             imports=("us:b",),
             rules=(_rule("answer", (date(2000, 1, 1), "len(member_of_applicant)")),),
-            relations=(("member_of_applicant", "candidate_ok"),),
+            relations=(
+                lsi.Relation("candidate_row"),
+                lsi.Relation("member_of_applicant", True, "candidate_row", "candidate_ok"),
+            ),
         ),
     }
     assert _edges(modules) == {
@@ -799,6 +1016,233 @@ def test_a_version_reads_what_the_predicates_of_its_relations_read():
     }
     reads = lsi.import_references(modules)
     assert {(item.read_name, item.namespace) for item in reads} == {("candidate_ok", lsi.DERIVED)}
+
+
+def _judgment(name, start, formula):
+    return lsi.Rule(name, (lsi.Version(start, formula),), dtype="Judgment")
+
+
+def _ported_edges(modules):
+    """The edges, once the port has lowered every formula: none of them came
+    from the token reader's fallback."""
+    model = lsi.static_model(modules)
+    assert model.fallbacks == set()
+    return lsi.late_start_edges(item for item in model.references if item.crosses)
+
+
+LATE_CANDIDATE = lsi.Module(rules=(_judgment("candidate_ok", date(2020, 1, 1), "x > 1"),))
+CANDIDATE_EDGE = lsi.Edge("us:a#answer", "us:b#candidate_ok", date(2000, 1, 1), date(2020, 1, 1))
+
+
+def _filtered(name="filtered", source="candidate_row", predicate="candidate_ok", **fields):
+    return lsi.Relation(name, True, source, predicate, **fields)
+
+
+def _answer(formula, entity=""):
+    return lsi.Rule("answer", (lsi.Version(date(2000, 1, 1), formula),), entity=entity)
+
+
+def _reader(*rules, relations=(), imports=("us:b",), composition=False):
+    return lsi.Module(
+        imports=imports, rules=rules, relations=relations, composition=composition
+    )
+
+
+def test_a_version_reads_down_a_chain_of_derived_relations():
+    # Round 4 finding 1: related_entity_ids evaluates `outer`'s source,
+    # `filtered`, before its own predicate, so the engine stops on
+    # `candidate_ok` in 2010 although `outer` reads nothing itself.
+    modules = {
+        "us:b": LATE_CANDIDATE,
+        "us:a": _reader(
+            _answer("len(outer)"),
+            relations=(
+                lsi.Relation("candidate_row"),
+                _filtered(),
+                _filtered("outer", "filtered", "true"),
+            ),
+        ),
+    }
+    assert _ported_edges(modules) == {CANDIDATE_EDGE}
+
+
+def test_a_predicate_reads_through_the_relations_it_tests_and_counts():
+    for predicate in ("inner", "len(inner) > 0", "not inner or x > 1"):
+        modules = {
+            "us:b": LATE_CANDIDATE,
+            "us:a": _reader(
+                _answer("len(outer)"),
+                relations=(
+                    lsi.Relation("candidate_row"),
+                    _filtered("inner"),
+                    _filtered("outer", "candidate_row", predicate),
+                ),
+            ),
+        }
+        assert _ported_edges(modules) == {CANDIDATE_EDGE}, predicate
+
+
+def test_a_member_alias_reads_its_filtered_relation_in_rules_of_its_entity():
+    # Round 4 finding 3.
+    relations = (
+        lsi.Relation("candidate_row"),
+        _filtered(entity="Person", member="member"),
+    )
+
+    def edges(entity):
+        return _ported_edges(
+            {"us:b": LATE_CANDIDATE, "us:a": _reader(_answer("len(member)", entity), relations=relations)}
+        )
+
+    assert edges("Person") == {CANDIDATE_EDGE}
+    assert edges("Household") == set()
+    assert edges("") == set()
+
+
+def test_a_module_reads_its_own_relation_of_a_name_another_module_shares():
+    # Round 4 finding 4: the imported `members` filters on a late rule, and the
+    # root's own `members` on nothing.
+    imported = replace(LATE_CANDIDATE, relations=(lsi.Relation("rows"), _filtered("members", "rows")))
+    modules = {
+        "us:b": imported,
+        "us:a": _reader(_answer("len(members)"), relations=(_filtered("members", "rows", "true"),)),
+    }
+    assert _ported_edges(modules) == set()
+
+
+def test_an_aggregation_takes_the_one_relation_of_a_name_only_for_an_imported_rule():
+    # rewrite_relation_references falls back to the short name only when the
+    # aggregation reads a derived rule another module declares.
+    imported = lsi.Module(
+        rules=(
+            _judgment("candidate_ok", date(2020, 1, 1), "x > 1"),
+            _judgment("flag", date(1990, 1, 1), "y > 1"),
+        ),
+        relations=(lsi.Relation("rows"), _filtered("members", "rows")),
+    )
+
+    def edges(formula):
+        local = _judgment("local_flag", date(1990, 1, 1), "z > 1")
+        return _ported_edges({"us:b": imported, "us:a": _reader(_answer(formula), local)})
+
+    assert edges("count_where(members, flag)") == {CANDIDATE_EDGE}
+    assert edges("len(members)") == set()
+    assert edges("count_where(members, local_flag)") == set()
+    assert edges("count_where(members, input_flag)") == set()
+
+
+def test_a_composition_root_reads_its_own_relations_by_their_bare_names():
+    modules = {
+        "us:b": LATE_CANDIDATE,
+        "us:a": _reader(
+            _answer("len(filtered)"),
+            relations=(lsi.Relation("candidate_row"), _filtered()),
+            composition=True,
+        ),
+    }
+    assert _ported_edges(modules) == {CANDIDATE_EDGE}
+
+
+def test_a_dropped_relation_carries_no_member_alias():
+    # A composition root's own `filtered` shares its name with an imported
+    # relation, so rewrite_relation_references drops it unless a rule names it,
+    # and rewrite_filtered_entity_member_aliases never sees its alias.
+    imported = replace(LATE_CANDIDATE, relations=(lsi.Relation("filtered"),))
+    relations = (lsi.Relation("candidate_row"), _filtered(entity="Person", member="member"))
+    alone = {
+        "us:b": imported,
+        "us:a": _reader(_answer("len(member)", "Person"), relations=relations, composition=True),
+    }
+    assert _ported_edges(alone) == set()
+    named = {
+        "us:b": imported,
+        "us:a": _reader(
+            _answer("len(member)", "Person"),
+            lsi.Rule("count", (lsi.Version(date(2000, 1, 1), "len(filtered)"),)),
+            relations=relations,
+            composition=True,
+        ),
+    }
+    assert _ported_edges(named) == {
+        CANDIDATE_EDGE,
+        replace(CANDIDATE_EDGE, rule="us:a#count"),
+    }
+
+
+def test_an_indexed_period_bound_reads_the_table_of_that_name():
+    # Round 4 finding 5: only a bare scalar `period_start` reads the period.
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("period_start", date(2020, 1, 1), table=True),)),
+        "us:a": _reader(_answer("period_start[0]")),
+    }
+    assert _ported_edges(modules) == {replace(CANDIDATE_EDGE, target="us:b#period_start")}
+
+
+@pytest.mark.parametrize(
+    "formula", ["len(member_of_applicant.late)", "days_between(period_start, period_end)"]
+)
+def test_a_dropped_field_and_a_scalar_period_bound_read_no_rule(formula):
+    # Round 4 finding 6: both answer in 2010 on the pinned engine.
+    modules = {
+        "us:b": lsi.Module(
+            rules=(
+                _rule("late", (date(2020, 1, 1), "1 + 1")),
+                _rule("period_start", (date(2020, 1, 1), "1 + 1")),
+            )
+        ),
+        "us:a": _reader(_answer(formula)),
+    }
+    assert _ported_edges(modules) == set()
+
+
+def test_a_formula_the_port_refuses_falls_back_to_reading_every_name_both_ways():
+    modules = {
+        "us:b": lsi.Module(rules=(_parameter("late", Y2026),)),
+        "us:a": _reader(_answer("late late")),
+    }
+    model = lsi.static_model(modules)
+    assert model.fallbacks == {"us:a"}
+    assert lsi.late_start_edges(item for item in model.references if item.crosses) == {
+        lsi.Edge("us:a#answer", "us:b#late", date(2000, 1, 1), Y2026)
+    }
+    lowered = lsi.static_model({**modules, "us:a": _reader(_answer("late + 0"))})
+    assert lowered.fallbacks == set()
+
+
+def test_a_refused_predicate_falls_back_to_the_token_reader():
+    modules = {
+        "us:b": LATE_CANDIDATE,
+        "us:a": _reader(
+            _answer("len(filtered)"),
+            relations=(lsi.Relation("candidate_row"), _filtered(predicate="candidate_ok candidate_ok")),
+        ),
+    }
+    model = lsi.static_model(modules)
+    assert model.fallbacks == {"us:a"}
+    assert lsi.late_start_edges(item for item in model.references if item.crosses) == {
+        CANDIDATE_EDGE
+    }
+
+
+def test_scratch_yaml_keeps_the_text_of_a_null_name(tmp_path):
+    # Round 4 finding 7: `name: NULL` came back as `null`, a different rule.
+    root = tmp_path / "tree"
+    (root / "us").mkdir(parents=True)
+    (root / "us" / "a.yaml").write_text(
+        "rules:\n"
+        "  - name: NULL\n"
+        "    kind: derived\n"
+        "    entity: ~\n"
+        "    versions: [{from: 2018-01-01, formula: TRUE + 1}]\n",
+        encoding="utf-8",
+    )
+    scratch = lsi.write_scratch_root(root, ["us/a.yaml"], tmp_path / "scratch")
+    text = (scratch / "us" / "a.yaml").read_text(encoding="utf-8")
+    assert lsi.parse_module(text) == lsi.parse_module(
+        (root / "us" / "a.yaml").read_text(encoding="utf-8")
+    )
+    rule = yaml.load(text, Loader=lsi.EngineLoader)["rules"][0]
+    assert rule["name"] == "NULL" and lsi.scalar_value(rule["entity"]) is None
 
 
 def test_an_edge_on_a_merged_name_records_the_start_a_formula_meets():
@@ -1014,8 +1458,12 @@ def test_a_sets_relation_replaces_the_parameter_and_not_a_derived_rule_of_its_na
         ),
     }
     assert _edges(modules) == {_edge(target="us:c#value")}
-    derived = {item for item in lsi.import_references(modules) if item.namespace == lsi.DERIVED}
-    assert {(item.target, item.coverage) for item in derived} == {
+    # The derived rule keeps its own versions, which a judgment position reads.
+    judged = {
+        **modules,
+        "us:a": replace(modules["us:a"], rules=(_rule("r", (Y2018, "if rate: 1 else: 0")),)),
+    }
+    assert {(item.target, item.coverage) for item in lsi.import_references(judged)} == {
         ("us:e#rate", ((date(1990, 1, 1), OPEN),))
     }
 
@@ -1585,7 +2033,6 @@ def test_reference_differences_compare_only_modules_the_engine_compiled():
     )
     assert differences.only_engine == {_binding(rule="us:a#s")}
     assert differences.only_static == {_binding(rule="us:a#u")}
-    assert differences.over_reported == set()
 
 
 def test_reference_differences_key_on_name_namespace_and_every_date():
@@ -1619,13 +2066,14 @@ def test_reference_differences_read_the_name_a_sets_relation_replaced():
     assert not differences.only_engine and not differences.only_static
 
 
-def test_the_other_side_of_a_collision_is_over_reported_beside_the_read_the_engine_made():
+def test_the_other_side_of_a_collision_is_a_difference():
+    # Round 4: the model binds each name where the lowering does, so a read of
+    # the other namespace is a misread, not a choice.
     run = _run("us:a", bindings={_binding()}, collisions={"us:a#t"})
     differences = lsi.reference_differences(
         run, {_static(), _static(namespace="parameter")}, MODULES
     )
-    assert differences.only_static == set()
-    assert differences.over_reported == {_binding(namespace="parameter")}
+    assert differences.only_static == {_binding(namespace="parameter")}
 
 
 def test_a_collision_excuses_no_read_the_engine_never_made():
@@ -1634,7 +2082,6 @@ def test_a_collision_excuses_no_read_the_engine_never_made():
     run = _run("us:a", collisions={"us:a#t"})
     differences = lsi.reference_differences(run, {_static()}, MODULES)
     assert differences.only_static == {_binding()}
-    assert differences.over_reported == set()
 
 
 def test_a_collision_excuses_no_input_read():
@@ -1645,11 +2092,10 @@ def test_a_collision_excuses_no_input_read():
     assert differences.only_static == {_binding()}
 
 
-def test_a_parameter_read_the_engine_lowered_to_an_input_is_over_reported():
+def test_a_parameter_read_the_engine_lowered_to_an_input_is_a_difference():
     run = _run("us:a", inputs={_binding(namespace="input", start=None)})
     differences = lsi.reference_differences(run, {_static(namespace="parameter")}, MODULES)
-    assert differences.only_static == set()
-    assert differences.over_reported == {_binding(namespace="parameter")}
+    assert differences.only_static == {_binding(namespace="parameter")}
 
 
 def test_a_derived_read_the_engine_lowered_to_an_input_is_a_difference():
@@ -1752,6 +2198,16 @@ def test_coverage_fails_on_an_edge_in_a_refused_module():
     run = _run(*(TARGETS - {refused}), results=TARGETS)
     failures = lsi.coverage_failures(run, TRACKED, {_edge(f"{refused}#r")})
     assert any("1 edge(s) in modules the engine refused" in failure for failure in failures)
+
+
+def test_coverage_fails_when_the_port_refused_a_formula_the_engine_lowered():
+    first, second = sorted(TARGETS)[:2]
+    compiled = _run(*TARGETS)
+    failures = lsi.coverage_failures(compiled, TRACKED, set(), {first})
+    assert failures == [f"the port refused a formula in 1 module(s) the engine compiled: {[first]}"]
+    # The engine refused `second` too, so the token reader stood in for both.
+    refused = _run(*(TARGETS - {second}), results=TARGETS)
+    assert lsi.coverage_failures(refused, TRACKED, set(), {second}) == []
 
 
 def test_the_differential_refuses_a_run_that_compiled_nothing(tmp_path, monkeypatch, capsys):

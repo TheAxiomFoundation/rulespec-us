@@ -21,38 +21,51 @@ axiom-rules-engine at the pin in `.axiom/workflow-toolchain.toml`:
 * Scope. The engine merges every imported module into one namespace, and
   follows those modules' imports too. The engine validates a `#fragment` and
   then drops it, so it does not narrow what a formula sees, and a stored
-  composition may not write one. A formula name therefore resolves against the whole import closure.
+  composition may not write one. A formula name therefore resolves against the
+  whole import closure.
 * Scalars. Modules load the way the engine's serde_yaml reads them, not the way
   PyYAML does. Where the engine reads a string, an unquoted scalar keeps its
   text, so `name: TRUE` names a rule `TRUE`. Where it reads a value, `yes` stays
   a string, and so does an unquoted date. A date must read YYYY-MM-DD. The check
   refuses a module that writes out a tag, `!!merge` among them, rather than
   guess how serde_yaml would read it.
-* References. Formula identifiers come from a port of the engine's lexer, so a
-  word in a string or comment is not a reference, nor is a called function. The
-  engine lexes every rule's formula as one source, so a formula that leaves a
-  string open would run into the next rule; the check refuses that module. The
-  first argument of `len`, `count_where` or `sum_where` names a relation, and so
-  does the object of a field access; neither reads a rule. Only `parameter` and
-  `derived` rules carry versions the engine enforces at run time. A derived
-  relation carries none, but the engine evaluates its predicate on each date a
-  version asks for the relation, so the version reads what the predicate reads,
-  as derived rules.
+* Formulas. The check ports the engine's formula lexer, parser and lowering.
+  rulespec.rs parses each formula on its own before it lowers any, and refuses
+  the module when one does not parse to its end, so the port parses each
+  formula alone. A word in a string or comment is not a reference, nor is a
+  called function. The engine then lexes every rule's formula again as one
+  source, so a formula that leaves a string open would run into the next rule;
+  the check refuses that module.
 * Namespaces. `kind` does not decide what a name binds to. A rule with `values`
   in any version is a parameter table, of either kind, and its versions without
   `values` do not exist at run time. Otherwise a rule with an `entity`, or with
   a version that is not a lone literal, is derived; the rest are parameters.
   The parser erases parentheses, so `(2)` is a literal, and a leading `-` is an
   operator, so `-2` is not. Parameters of one name merge, and a table of that
-  name removes the others.
-* Binding. A name in a scalar position binds to a parameter before a derived
-  rule, and one in a judgment position binds only to a derived rule. Telling
-  most positions apart takes a parser, so a name defined both ways reads both,
-  and a parameter read in a judgment position, which lowers to an input, still
-  counts. Three positions read derived rules only, which a token can tell: a
-  later argument of a relation call, a field, and `period_start` or
-  `period_end`. So the check can list a (rule, target) pair that no position
-  reaches; `differential` prints each case.
+  name removes the others. Only `parameter` and `derived` rules carry versions
+  the engine enforces at run time.
+* Binding. The lowering decides what each name binds to, as lower_to_scalar
+  and lower_to_judgment do. A name in a scalar position reads a parameter when
+  one of that name exists, and otherwise a derived rule. A name in a judgment
+  position (an `if` condition, `and`, `or`, `not`, `exactly_one`, and the whole
+  formula of a rule whose dtype is Judgment) reads only a derived rule; a
+  parameter there lowers to an input. In a scalar position `period_start` and
+  `period_end` read the period. `x[i]` reads the parameter `x`. `len` reads no
+  name, and drops the field it may carry. `sum(rel.f)`, `count_where` and
+  `sum_where` read their fields and filters as derived rules or inputs. A
+  formula the engine refuses to lower falls back to a token reader that reads
+  each name it mentions both ways; `differential` fails when a module the
+  engine compiles needs that fallback.
+* Relations. A version that aggregates over a derived relation reads what the
+  relation's predicate reads, as derived rules, on each date it runs. The
+  engine evaluates the relation the predicate filters first, and a predicate
+  can ask for membership of another relation, so the version reads through the
+  whole chain. The check resolves each relation name as rulespec.rs does.
+  rewrite_relation_references turns a name a module wrote into that module's
+  own relation, `<module>#relation.<name>`. Where an aggregation reads an
+  imported derived rule, it may instead take the one relation of that short
+  name. rewrite_filtered_entity_member_aliases then sends a member alias to its
+  filtered relation in each rule of that relation's entity.
 * Provenance. A binding crosses an import when any imported definition feeds
   it. Parameters merge, so a local definition beside an imported one does not
   make the merged name local. The merged name holds every version of each, so
@@ -92,17 +105,18 @@ its first date and the date the target next has a version.
 reimplementation drifts from the engine it describes. It compiles each module,
 stored compositions through their own surface, and reads every name the lowered
 program binds in the rules that module declares, following each derived
-relation a version asks for into its predicate. Those bindings must equal the
-static ones by rule, version dates, name, namespace and every version of what
-the name binds to. For each name a module declares, the namespaces and versions
-the lowered program holds must also equal the static model's, both ways. The
-engine reattaches ids by name, so it cannot say which module a colliding name
-came from; the static model alone decides whether a binding crosses an import.
-The run must also cover the tree: every module needs a result, and every edge a
-compiled module. It compiles a scratch copy of the tree with citation metadata
-removed: that metadata decides nothing here, and retired forms of it would
-otherwise stop the engine from loading most of the references this check exists
-to compare.
+relation a version asks for into its predicate and on through the relation it
+filters. Those bindings must equal the static ones exactly, by rule, version
+dates, name, namespace and every version of what the name binds to. For each
+name a module declares, the namespaces and versions the lowered program holds
+must also equal the static model's, both ways. The engine reattaches ids by
+name, so it cannot say which module a colliding name came from; the static
+model alone decides whether a binding crosses an import. The run must also
+cover the tree: every module needs a result, every edge a compiled module, and
+no module the engine compiled may need the token reader. It compiles a scratch
+copy of the tree with citation metadata removed: that metadata decides nothing
+here, and retired forms of it would otherwise stop the engine from loading most
+of the references this check exists to compare.
 
 `tools/known-late-start-imports.txt` lists the edges the repository already
 carries, one per line, as
@@ -115,10 +129,14 @@ to any (rule, name), because regenerating the list would otherwise accept any
 edge. The check computes the base's stop dates from the base commit's own
 modules, not from its list, and compares by the name a formula reads, so a
 repair that moves which module supplies a name can narrow a gap without a
-label. A correct date repair can still widen one: it can expose a gap that was
-already in the law's encoding, and fail closed where the module used to answer
-wrongly. The `late-start-import-accepted` label on the pull request
-(`--allow-added`) records that decision.
+label. The bound compares modeled stop dates: every date a version can read a
+name that has no version there. A version that reads the name only in a branch
+no query takes still holds those dates, so a change that makes the branch
+reachable adds no stop date; its edge was already on the list. A correct date
+repair can still widen a gap: it can expose one that was already in the law's
+encoding, and fail closed where the module used to answer wrongly. The
+`late-start-import-accepted` label on the pull request (`--allow-added`)
+records that decision.
 
 Subcommands:
   check         compare this checkout's edges with the baseline (the CI gate)
@@ -192,6 +210,12 @@ OPEN = date.max
 # pinned engine compiled 4,864 of 4,879 modules when this was set.
 MINIMUM_COMPILED_SHARE = 0.99
 
+# formula.rs parse_dtype: these dtypes lower a rule's formula as a judgment.
+JUDGMENT_DTYPES = frozenset({"Judgment", "judgment"})
+
+# model.rs SCALAR_ENTITY: lower_module gives a derived rule with no entity this one.
+SCALAR_ENTITY = "Scalar"
+
 # Keywords. The lexer turns `true` and friends into keyword tokens, so they never
 # name a rule.
 RESERVED = frozenset(
@@ -220,16 +244,15 @@ PERIOD_BOUNDS = frozenset({"period_start", "period_end"})
 
 # formula.rs lower_to_scalar: the first argument of these calls names a
 # relation, and a later argument that is one name reads a derived rule or an
-# input, never a parameter.
+# input, never a parameter. The token reader uses this.
 RELATION_CALLS = frozenset({"len", "count_where", "sum_where"})
 
-BOOLEANS = frozenset({"true", "True", "false", "False"})
-
-# axiom-rules-engine formula.rs Lexer::tokenise, in its order. `skip` yields no
-# token, so a word inside it is never a name. A name holding a slash is the
-# lexer's Path token: `a/b` is one name, not a division, and a rule may carry it.
-# A docstring is skipped too, and runs to the end when nothing closes it; `open`
-# is a quote the formula never closes.
+# The token groups of formula.rs Lexer::tokenise, in its order, for the token
+# reader and for finding a string a formula leaves open. `skip` yields no token,
+# so a word inside it is never a name. A name holding a slash is the lexer's
+# Path token: `a/b` is one name, not a division, and a rule may carry it. The
+# lexer skips a docstring too, which runs to the end when nothing closes it;
+# `open` is a quote the formula never closes.
 TOKEN = re.compile(
     r'''
       (?P<skip>\s+|\#[^\n]*)
@@ -396,10 +419,11 @@ class EngineDumper(yaml.SafeDumper):
 
 
 def _represent_plain(dumper: yaml.SafeDumper, text: Plain) -> yaml.ScalarNode:
-    value = text.value
-    if isinstance(value, str):
+    if isinstance(text.value, str):
         return dumper.represent_scalar("tag:yaml.org,2002:str", str(text), style='"')
-    return dumper.represent_scalar("!plain", "null" if value is None else str(text))
+    # A null, boolean or number keeps the text the module wrote: where the
+    # engine reads a string it reads that text, so `name: NULL` stays `NULL`.
+    return dumper.represent_scalar("!plain", str(text))
 
 
 EngineDumper.add_representer(Plain, _represent_plain)
@@ -426,10 +450,40 @@ class Rule:
     versions: tuple[Version, ...]
     namespace: str = DERIVED
     table: bool = False
+    # The rule's `dtype` and `entity` as the engine writes them into the formula
+    # source; "" when it states none.
+    dtype: str = ""
+    entity: str = ""
 
     @property
     def start(self) -> date:
         return min(version.start for version in self.versions)
+
+    @property
+    def judgment(self) -> bool:
+        """formula.rs lower_module lowers each version of this rule as a judgment."""
+        return self.dtype in JUDGMENT_DTYPES
+
+
+@dataclass(frozen=True)
+class Relation:
+    """A `data_relation` or `derived_relation` rule, as to_data_relation_spec and
+    to_derived_relation_spec in rulespec.rs read it."""
+
+    name: str
+    derived: bool = False
+    # The relation a derived relation filters, trimmed; "" when it names none.
+    source: str = ""
+    # The derived relation's one formula, trimmed: its predicate.
+    predicate: str = ""
+    # derived_relation.entity and .member_relation, which make `member` an alias
+    # of this relation in each rule of that entity.
+    entity: str | None = None
+    member: str | None = None
+    # The engine refuses the derived relation's shape: it states no arity or
+    # source, or does not hold exactly one formula. `predicate` then joins
+    # every formula it holds, for the token reader.
+    refused: bool = False
 
 
 @dataclass(frozen=True)
@@ -440,17 +494,27 @@ class Module:
     # (target id, value id) for each `sets` source relation, in file order.
     sets: tuple[tuple[str, str], ...] = ()
     # Every rule name the module declares, of any kind, in file order; the
-    # names of `rules` when none are given.
+    # names of `rules` when the caller gives none.
     names: tuple[str, ...] = ()
     # The module states `module.kind`, so the engine compiles it on the composed
     # surface, where its own rules carry no id.
     composition: bool = False
-    # (name, predicate formula) for each derived relation.
-    relations: tuple[tuple[str, str], ...] = ()
+    # Each data and derived relation, in file order.
+    relations: tuple[Relation, ...] = ()
+    # The names of the rules that state `kind: derived`, which a relation
+    # predicate reads as derived rules; the derived-namespace names of `rules`
+    # when the caller gives none.
+    derived_kinds: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.names:
             object.__setattr__(self, "names", tuple(rule.name for rule in self.rules))
+        if self.derived_kinds is None:
+            object.__setattr__(
+                self,
+                "derived_kinds",
+                tuple(rule.name for rule in self.rules if rule.namespace == DERIVED),
+            )
 
 
 @dataclass(frozen=True, order=True)
@@ -592,14 +656,14 @@ def _relation_call_arguments(
     return relations, derived
 
 
-def formula_reads(formula: str) -> tuple[dict[str, frozenset[str]], frozenset[str]]:
-    """The names a formula reads, each with the namespaces it can bind in, and
-    the names it uses as relations.
+def token_reads(formula: str) -> tuple[dict[str, frozenset[str]], frozenset[str]]:
+    """What the token reader says a formula reads, for a formula the engine
+    refuses to lower: each name with the namespaces it can bind in, and the
+    names it can use as relations.
 
-    A called name reads nothing. The object of a field access is a relation,
-    because formula.rs lowers `rel.field` only inside `len` and `sum`, and the
-    field reads a derived rule or an input there. Telling a scalar position from
-    a judgment position takes a parser, so any other name can bind both ways.
+    It reads more than any lowering could. A called name reads nothing. The
+    object of a field access is a relation, and the field reads a derived rule
+    or an input. Any other name can bind both ways, and can name a relation.
     """
     tokens = _tokens(formula)
     relation_arguments, derived_arguments = _relation_call_arguments(tokens)
@@ -625,17 +689,523 @@ def formula_reads(formula: str) -> tuple[dict[str, frozenset[str]], frozenset[st
     return {name: frozenset(spaces) for name, spaces in reads.items()}, frozenset(relations)
 
 
-def formula_references(formula: str) -> frozenset[str]:
-    """The names a formula reads."""
-    return frozenset(formula_reads(formula)[0])
+# ---------------------------------------------------------------------------
+# A port of formula.rs at the pin: its lexer, its parser, and the part of its
+# lowering that decides what a formula reads.
+# ---------------------------------------------------------------------------
+
+
+class FormulaError(ValueError):
+    """A formula the engine's lexer, parser or lowering refuses."""
+
+
+# The byte classes the lexer tests: u8::is_ascii_digit and its siblings.
+_DIGITS = frozenset("0123456789")
+_IDENT_START = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")
+_IDENT_CHARS = _IDENT_START | _DIGITS
+_ASCII_WHITESPACE = frozenset(" \t\n\x0c\r")
+# char::is_whitespace, which str::trim strips.
+_RUST_WHITESPACE = (
+    "\t\n\x0b\x0c\r \x85\xa0        "
+    "        　"
+)
+# A keyword token's kind is its spelling, with `True` and `False` as `true` and `false`.
+_KEYWORDS = {word: word for word in RESERVED} | {"True": "true", "False": "false"}
+_PAIRS = frozenset({"=>", "<=", ">=", "==", "!=", "->"})
+_SINGLES = frozenset(":,.=+-*/<>()[]")
+_ESCAPES = {"\\": "\\", '"': '"', "'": "'", "n": "\n", "r": "\r", "t": "\t"}
+_I64_MAX = 2**63 - 1
+
+
+def rust_trim(text: str) -> str:
+    """str::trim."""
+    return text.strip(_RUST_WHITESPACE)
+
+
+def _run(formula: str, position: int, chars: frozenset[str]) -> int:
+    while position < len(formula) and formula[position] in chars:
+        position += 1
+    return position
+
+
+def _string(formula: str, position: int) -> tuple[str, int]:
+    """A quoted string from its opening quote: its value, and where it ends."""
+    quote = formula[position]
+    position += 1
+    parts: list[str] = []
+    start = position
+    while position < len(formula):
+        current = formula[position]
+        if current == quote:
+            parts.append(formula[start:position])
+            return "".join(parts), position + 1
+        if current == "\\":
+            if position + 1 >= len(formula):
+                raise FormulaError("unterminated string")
+            parts.append(formula[start:position])
+            parts.append(_ESCAPES.get(formula[position + 1], formula[position + 1]))
+            position += 2
+            start = position
+            continue
+        position += 1
+    raise FormulaError("unterminated string")
+
+
+def lex(formula: str) -> list[tuple[str, str]]:
+    """formula.rs Lexer::tokenise, branch for branch: (kind, text) pairs that end
+    with ("eof", ""). An operator's kind is the operator itself."""
+    tokens: list[tuple[str, str]] = []
+    size = len(formula)
+    position = 0
+    while position < size:
+        if formula.startswith('"""', position):
+            close = formula.find('"""', position + 3)
+            position = size if close < 0 else close + 3
+            continue
+        char = formula[position]
+        if char == "#":
+            newline = formula.find("\n", position)
+            position = size if newline < 0 else newline
+            continue
+        if char in _ASCII_WHITESPACE:
+            position += 1
+            continue
+        if char in _DIGITS:
+            chunk = formula[position : position + 10]
+            if (
+                len(chunk) == 10
+                and chunk[4] == chunk[7] == "-"
+                and all(item in _DIGITS for index, item in enumerate(chunk) if index not in (4, 7))
+            ):
+                tokens.append(("date", chunk))
+                position += 10
+                continue
+            end = _run(formula, position, _DIGITS | {"_"})
+            kind = "int"
+            if end + 1 < size and formula[end] == "." and formula[end + 1] in _DIGITS:
+                kind = "float"
+                end = _run(formula, end + 1, _DIGITS | {"_"})
+            tokens.append((kind, formula[position:end]))
+            position = end
+            continue
+        if char in "\"'":
+            value, position = _string(formula, position)
+            tokens.append(("string", value))
+            continue
+        if char in _IDENT_START:
+            end = _run(formula, position, _IDENT_CHARS)
+            path_end = end
+            while (
+                path_end + 1 < size
+                and formula[path_end] == "/"
+                and formula[path_end + 1] in _IDENT_START
+            ):
+                path_end = _run(formula, path_end + 1, _IDENT_CHARS)
+            if path_end > end:
+                tokens.append(("path", formula[position:path_end]))
+                position = path_end
+            else:
+                text = formula[position:end]
+                tokens.append((_KEYWORDS.get(text, "ident"), text))
+                position = end
+            continue
+        pair = formula[position : position + 2]
+        if pair in _PAIRS:
+            tokens.append((pair, pair))
+            position += 2
+            continue
+        if char in _SINGLES:
+            tokens.append((char, char))
+            position += 1
+            continue
+        raise FormulaError(f"unexpected char {char!r}")
+    tokens.append(("eof", ""))
+    return tokens
+
+
+# Nodes are tuples: ("int", digits), ("float", digits), ("str", value),
+# ("bool", value), ("var", name), ("bin", operator, left, right), ("neg", x),
+# ("not", x), ("call", function, arguments), ("field", object, name),
+# ("index", target, index), ("cond", condition, then, else) and
+# ("match", subject, ((pattern, result), ...), default or None).
+_LITERALS = frozenset({"int", "float", "str", "bool"})
+_COMPARISONS = frozenset({"<", ">", "<=", ">=", "==", "!="})
+_PATTERN_STARTS = frozenset({"int", "float", "string", "true", "false", "ident"})
+
+
+class _Parser:
+    """formula.rs Parser, from parse_expr down."""
+
+    def __init__(self, tokens: list[tuple[str, str]]) -> None:
+        self.tokens = tokens
+        self.position = 0
+
+    def kind(self, offset: int = 0) -> str:
+        return self.tokens[min(self.position + offset, len(self.tokens) - 1)][0]
+
+    def take(self, kind: str | None = None) -> tuple[str, str]:
+        token = self.tokens[min(self.position, len(self.tokens) - 1)]
+        if kind is not None and token[0] != kind:
+            raise FormulaError(f"expected {kind}, got {token[0]} ({token[1]})")
+        self.position += 1
+        return token
+
+    def expr(self) -> tuple:
+        if self.kind() == "ident" and self.kind(1) == "=":
+            raise FormulaError("let-bindings are not supported in RuleSpec formulas yet")
+        if self.kind() == "match":
+            return self.match()
+        if self.kind() == "if":
+            return self.cond()
+        return self.disjunction()
+
+    def match(self) -> tuple:
+        self.take("match")
+        subject = self.disjunction()
+        self.take(":")
+        cases: list[tuple[tuple, tuple]] = []
+        default = None
+        while self.kind() in _PATTERN_STARTS and self.kind(1) == "=>":
+            if default is not None:
+                raise FormulaError("a match wildcard arm must be final")
+            pattern = self.primary()
+            self.take("=>")
+            result = self.expr()
+            if pattern == ("var", "_"):
+                default = result
+            else:
+                cases.append((pattern, result))
+        return ("match", subject, tuple(cases), default)
+
+    def cond(self) -> tuple:
+        self.take("if")
+        condition = self.disjunction()
+        self.take(":")
+        then = self.expr()
+        return ("cond", condition, then, self.otherwise())
+
+    def otherwise(self) -> tuple:
+        """parse_cond's else branch and parse_elif_chain."""
+        if self.kind() == "elif":
+            self.take()
+            condition = self.disjunction()
+            self.take(":")
+            then = self.expr()
+            return ("cond", condition, then, self.otherwise())
+        self.take("else")
+        self.take(":")
+        return self.expr()
+
+    def disjunction(self) -> tuple:
+        left = self.conjunction()
+        while self.kind() == "or":
+            self.take()
+            left = ("bin", "or", left, self.conjunction())
+        return left
+
+    def conjunction(self) -> tuple:
+        left = self.comparison()
+        while self.kind() == "and":
+            self.take()
+            left = ("bin", "and", left, self.comparison())
+        return left
+
+    def comparison(self) -> tuple:
+        left = self.sum()
+        if self.kind() in _COMPARISONS:
+            return ("bin", self.take()[0], left, self.sum())
+        return left
+
+    def sum(self) -> tuple:
+        left = self.product()
+        while self.kind() in ("+", "-"):
+            left = ("bin", self.take()[0], left, self.product())
+        return left
+
+    def product(self) -> tuple:
+        left = self.unary()
+        while self.kind() in ("*", "/"):
+            left = ("bin", self.take()[0], left, self.unary())
+        return left
+
+    def unary(self) -> tuple:
+        if self.kind() == "-":
+            self.take()
+            return ("neg", self.unary())
+        if self.kind() == "not":
+            self.take()
+            return ("not", self.unary())
+        return self.postfix()
+
+    def postfix(self) -> tuple:
+        node = self.primary()
+        while True:
+            if self.kind() == "(":
+                if node[0] != "var":
+                    raise FormulaError("can only call named functions")
+                self.take()
+                arguments = []
+                if self.kind() != ")":
+                    arguments.append(self.expr())
+                    while self.kind() == ",":
+                        self.take()
+                        arguments.append(self.expr())
+                self.take(")")
+                node = ("call", node[1], tuple(arguments))
+            elif self.kind() == ".":
+                self.take()
+                node = ("field", node, self.take("ident")[1])
+            elif self.kind() == "[":
+                self.take()
+                index = self.expr()
+                self.take("]")
+                node = ("index", node, index)
+            else:
+                return node
+
+    def primary(self) -> tuple:
+        kind, text = self.take()
+        if kind == "int":
+            digits = text.replace("_", "")
+            if int(digits) > _I64_MAX:
+                raise FormulaError(f"{text} does not fit an i64")
+            return ("int", digits)
+        if kind == "float":
+            return ("float", text.replace("_", ""))
+        if kind == "string":
+            return ("str", text)
+        if kind in ("true", "false"):
+            return ("bool", kind == "true")
+        if kind in ("ident", "path"):
+            return ("var", text)
+        if kind == "(":
+            node = self.expr()
+            self.take(")")
+            return node
+        raise FormulaError(f"unexpected token in expression: {kind} ({text})")
+
+
+_PARSED: dict[str, tuple | str] = {}
+
+
+def parse_formula(formula: str) -> tuple:
+    """The expression rulespec.rs compatibility_diagnostics parses from one
+    formula: trimmed, one expression, then nothing. The engine refuses a module
+    where any formula fails this, before it lowers anything."""
+    parsed = _PARSED.get(formula)
+    if parsed is None:
+        try:
+            parser = _Parser(lex(rust_trim(formula)))
+            parsed = parser.expr()
+            if parser.kind() != "eof":
+                raise FormulaError("unexpected trailing token in formula")
+        except FormulaError as error:
+            parsed = str(error)
+        except RecursionError:
+            parsed = "the formula nests deeper than this port follows"
+        _PARSED[formula] = parsed
+    if isinstance(parsed, str):
+        raise FormulaError(parsed)
+    return parsed
 
 
 def is_literal(formula: str) -> bool:
-    """formula.rs is_literal_expr after parsing: one number, string or boolean."""
-    tokens = _tokens(formula)
-    while len(tokens) > 2 and tokens[0][1] == "(" and tokens[-1][1] == ")":
-        tokens = tokens[1:-1]
-    return len(tokens) == 1 and (tokens[0][0] == "literal" or tokens[0][1] in BOOLEANS)
+    """formula.rs is_literal_expr on the parsed formula: one number, string or
+    boolean. A formula that does not parse is none."""
+    try:
+        return parse_formula(formula)[0] in _LITERALS
+    except FormulaError:
+        return False
+
+
+@dataclass(frozen=True)
+class Scope:
+    """formula.rs LowerCtx: the names each kind of binding can take. lower_module
+    gives a rule's formula the program's parameters and derived rules and no
+    relation predicates; lower_judgment_formula gives a relation predicate no
+    parameters."""
+
+    scalars: frozenset[str] = frozenset()
+    derived: frozenset[str] = frozenset()
+    relation_predicates: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class Aggregation:
+    """A `len`, `sum`, `count_where` or `sum_where`: the relation it names, as
+    written, and the derived rules its value and filter read, which decide
+    whether rewrite_relation_references may take a relation by its short name."""
+
+    relation: str
+    derived: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class Lowered:
+    """What a lowered formula reads: (namespace, name) pairs, the aggregations it
+    makes, and the relations whose membership it tests."""
+
+    reads: frozenset[tuple[str, str]] = frozenset()
+    aggregations: frozenset[Aggregation] = frozenset()
+    members: frozenset[str] = frozenset()
+
+
+@dataclass
+class _Found:
+    reads: set[tuple[str, str]] = field(default_factory=set)
+    aggregations: set[Aggregation] = field(default_factory=set)
+    members: set[str] = field(default_factory=set)
+
+
+_ONE_ARGUMENT = frozenset(
+    {"ceil", "floor", "sum_over_periods", "max_over_periods", "count_over_periods"}
+)
+_TWO_ARGUMENTS = frozenset(
+    {"days_between", "date_add_days", "date_add_months", "date_add_years", "sum_top_n_over_periods"}
+)
+
+
+def _scalar(node: tuple, scope: Scope, found: _Found) -> None:
+    """formula.rs lower_to_scalar."""
+    kind = node[0]
+    if kind in _LITERALS:
+        return
+    if kind == "var":
+        name = node[1]
+        if name in PERIOD_BOUNDS:
+            return
+        if name in scope.scalars:
+            found.reads.add((PARAMETER, name))
+        elif name in scope.derived:
+            found.reads.add((DERIVED, name))
+        return
+    if kind == "index":
+        target = node[1]
+        if target[0] != "var":
+            raise FormulaError("parameter lookup target must be a named parameter")
+        if target[1] not in scope.scalars:
+            raise FormulaError(f"`{target[1]}` is not a parameter table")
+        found.reads.add((PARAMETER, target[1]))
+        _scalar(node[2], scope, found)
+        return
+    if kind == "bin":
+        if node[1] not in ("+", "-", "*", "/"):
+            raise FormulaError(f"binary op {node[1]} in scalar position")
+        _scalar(node[2], scope, found)
+        _scalar(node[3], scope, found)
+        return
+    if kind == "neg":
+        _scalar(node[1], scope, found)
+        return
+    if kind == "call":
+        _call(node[1], node[2], scope, found)
+        return
+    if kind == "cond":
+        _judgment(node[1], scope, found)
+        _scalar(node[2], scope, found)
+        _scalar(node[3], scope, found)
+        return
+    if kind == "match":
+        _, subject, cases, default = node
+        if not cases and default is None:
+            raise FormulaError("empty match")
+        _scalar(subject, scope, found)
+        if default is not None:
+            _scalar(default, scope, found)
+        for pattern, result in cases:
+            _scalar(pattern, scope, found)
+            _scalar(result, scope, found)
+        return
+    if kind == "not":
+        raise FormulaError("`not` in scalar position")
+    raise FormulaError("bare field access in scalar position not supported")
+
+
+def _relation_argument(argument: tuple | None, function: str) -> str:
+    if argument is None or argument[0] != "var":
+        raise FormulaError(f"{function} must name its relation and fields")
+    return argument[1]
+
+
+def _call(function: str, arguments: tuple, scope: Scope, found: _Found) -> None:
+    """The calls lower_to_scalar knows. `len` and `sum` read only their first
+    argument, and `len` drops the field it may carry."""
+    if function in ("max", "min"):
+        for argument in arguments:
+            _scalar(argument, scope, found)
+        return
+    if function in _ONE_ARGUMENT or function in _TWO_ARGUMENTS:
+        expected = 1 if function in _ONE_ARGUMENT else 2
+        if len(arguments) != expected:
+            raise FormulaError(f"{function} takes {expected} arg(s)")
+        for argument in arguments:
+            _scalar(argument, scope, found)
+        return
+    first = arguments[0] if arguments else None
+    if function == "len":
+        relation = first[1] if first is not None and first[0] == "field" else first
+        found.aggregations.add(Aggregation(_relation_argument(relation, function)))
+        return
+    if function == "sum":
+        if first is None or first[0] != "field":
+            raise FormulaError("sum(...) requires a relation field access argument")
+        derived = frozenset({first[2]}) & scope.derived
+        found.reads.update((DERIVED, name) for name in derived)
+        found.aggregations.add(Aggregation(_relation_argument(first[1], function), derived))
+        return
+    if function in ("count_where", "sum_where"):
+        expected = 2 if function == "count_where" else 3
+        if len(arguments) != expected:
+            raise FormulaError(f"{function} takes {expected} args")
+        names = [_relation_argument(argument, function) for argument in arguments]
+        derived = frozenset(names[1:]) & scope.derived
+        found.reads.update((DERIVED, name) for name in derived)
+        found.aggregations.add(Aggregation(names[0], derived))
+        return
+    raise FormulaError(f"unknown function `{function}`")
+
+
+def _judgment(node: tuple, scope: Scope, found: _Found) -> None:
+    """formula.rs lower_to_judgment."""
+    kind = node[0]
+    if kind == "bool":
+        return
+    if kind == "var":
+        name = node[1]
+        if name in scope.derived:
+            found.reads.add((DERIVED, name))
+        elif name in scope.relation_predicates:
+            found.members.add(name)
+        return
+    if kind == "bin" and node[1] in ("and", "or"):
+        _judgment(node[2], scope, found)
+        _judgment(node[3], scope, found)
+        return
+    if kind == "bin" and node[1] in _COMPARISONS:
+        _scalar(node[2], scope, found)
+        _scalar(node[3], scope, found)
+        return
+    if kind == "not":
+        _judgment(node[1], scope, found)
+        return
+    if kind == "call" and node[1] == "exactly_one":
+        if len(node[2]) < 2:
+            raise FormulaError("exactly_one takes at least 2 arguments")
+        for argument in node[2]:
+            _judgment(argument, scope, found)
+        return
+    raise FormulaError(f"{kind} {node[1] if kind in ('bin', 'call') else ''} in judgment position")
+
+
+def lower_formula(formula: str, scope: Scope, judgment: bool = False) -> Lowered:
+    """What the engine reads when it lowers this formula in this scope, as a
+    judgment or a scalar. Raises FormulaError where the engine refuses."""
+    found = _Found()
+    try:
+        (_judgment if judgment else _scalar)(parse_formula(formula), scope, found)
+    except RecursionError:
+        raise FormulaError("the formula nests deeper than this port follows") from None
+    return Lowered(frozenset(found.reads), frozenset(found.aggregations), frozenset(found.members))
 
 
 def _date(raw: Any, where: str) -> date | None:
@@ -684,19 +1254,18 @@ def parse_rule(rule: Mapping[str, Any], where: str) -> Rule | None:
     if rule.get("kind") not in VERSIONED_KINDS:
         return None
     name = _raw_text(rule["name"], where)
+    dtype = string_like(rule.get("dtype")) or ""
+    entity = _raw_text(string_like(rule.get("entity")) or "", where)
     declared = scalar_value(rule.get("versions")) or []
     tabled = [version for version in declared if scalar_value(version.get("values"))]
     if tabled:
-        return Rule(name, _dated(tabled, where), PARAMETER, table=True)
+        return Rule(name, _dated(tabled, where), PARAMETER, True, dtype, entity)
     versions = _dated(declared or [rule], where)
     if not versions:
         return None
-    entity = string_like(rule.get("entity"))
-    if entity is not None:
-        _raw_text(entity, where)
-    if entity not in (None, "") or not all(is_literal(item.formula) for item in versions):
-        return Rule(name, versions, DERIVED)
-    return Rule(name, versions, PARAMETER)
+    if entity or not all(is_literal(item.formula) for item in versions):
+        return Rule(name, versions, DERIVED, False, dtype, entity)
+    return Rule(name, versions, PARAMETER, False, dtype, entity)
 
 
 def parse_set(rule: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -709,15 +1278,54 @@ def parse_set(rule: Mapping[str, Any]) -> tuple[str, str] | None:
     return (target, value) if "#" in target and "#" in value and target != value else None
 
 
-def parse_relation(rule: Mapping[str, Any]) -> tuple[str, str] | None:
-    """(name, predicate) for a derived relation. to_derived_relation_spec lowers
-    its one formula version as a judgment, and the engine evaluates it on each
-    date a rule asks for the relation, whatever that version's date says."""
-    if rule.get("kind") != "derived_relation":
+def _null(item: Any) -> bool:
+    return scalar_value(item) is None
+
+
+def parse_relation(rule: Mapping[str, Any]) -> Relation | None:
+    """A data or derived relation, as to_data_relation_spec and
+    to_derived_relation_spec read it. The engine lowers a derived relation's one
+    formula as a judgment, and evaluates it on each date a rule asks for the
+    relation, whatever that formula's dates say."""
+    kind = rule.get("kind")
+    if kind == "data_relation":
+        return Relation(str(rule["name"]))
+    if kind != "derived_relation":
         return None
-    versions = scalar_value(rule.get("versions")) or [rule]
-    formulas = [string_like(version.get("formula")) or "" for version in versions]
-    return str(rule["name"]), " ".join(formulas)
+    body = scalar_value(rule.get("derived_relation"))
+    body = body if isinstance(body, Mapping) else None
+    source = ""
+    if body is not None:
+        # DerivedRelationRef reads `source` as an alias of `source_relation`.
+        given = [body[key] for key in ("source_relation", "source") if key in body]
+        if len(given) == 1 and isinstance(given[0], str) and not _null(given[0]):
+            source = rust_trim(given[0])
+    versions = scalar_value(rule.get("versions")) or []
+    if not versions and not (
+        _null(rule.get("formula"))
+        and _null(rule.get("effective_from", rule.get("from")))
+    ):
+        # RuleDefinition::effective_versions: one version stated at the top level.
+        versions = [rule]
+    formulas = [rust_trim(string_like(version.get("formula")) or "") for version in versions]
+    arity = scalar_value(body.get("arity")) if body is not None else None
+    refused = (
+        not isinstance(arity, int)
+        or isinstance(arity, bool)
+        or arity < 0
+        or not source
+        or len(formulas) != 1
+        or not formulas[0]
+    )
+    return Relation(
+        str(rule["name"]),
+        True,
+        source,
+        " ".join(formulas) if refused else formulas[0],
+        string_like(body.get("entity")) if body is not None else None,
+        string_like(body.get("member_relation")) if body is not None else None,
+        refused,
+    )
 
 
 def parse_module(text: str, where: str = "<module>") -> Module:
@@ -740,6 +1348,7 @@ def parse_module(text: str, where: str = "<module>") -> Module:
         tuple(str(rule.get("name")) for rule in rules),
         bool(string_like(metadata.get("kind"))),
         tuple(item for item in map(parse_relation, rules) if item is not None),
+        tuple(str(rule.get("name")) for rule in rules if rule.get("kind") == "derived"),
     )
 
 
@@ -854,6 +1463,8 @@ class Program:
 
     parameters: list[Entry]
     derived: list[Entry]
+    # The module whose id apply_rule_ids gives every entry of a name.
+    ids: dict[str, str] = field(default_factory=dict)
 
     def group(self, namespace: str, name: str) -> list[Entry]:
         entries = self.parameters if namespace == PARAMETER else self.derived
@@ -891,7 +1502,9 @@ def program(origin: str, order: list[str], modules: Mapping[str, Module]) -> Pro
             else:
                 (tables if rule.table else scalars).append(entry)
     tabled = {entry.rule.name for entry in tables}
-    built = Program([entry for entry in scalars if entry.rule.name not in tabled] + tables, derived)
+    built = Program(
+        [entry for entry in scalars if entry.rule.name not in tabled] + tables, derived, ids
+    )
 
     def find(reference: str) -> tuple[list[Entry], int] | None:
         owner, name = reference.split("#", 1)
@@ -936,84 +1549,307 @@ def _target(origin: str, group: list[Entry]) -> str:
     return min(entry.source for entry in group)
 
 
-def all_references(modules: Mapping[str, Module]) -> set[Reference]:
+_NAMESPACED = "#relation."
+
+
+def _short(relation: str) -> str:
+    """The name a module wrote for a relation, without `<module>#relation.`."""
+    return relation.split(_NAMESPACED, 1)[-1]
+
+
+def _relation_origin(relation: str) -> str | None:
+    """The module a namespaced relation belongs to, which rewrite_relation_references
+    resolves its derivation's names against; None for a bare name."""
+    return relation.split(_NAMESPACED, 1)[0] if _NAMESPACED in relation else None
+
+
+class _Root:
+    """What one root's lowered program reads through its relations.
+
+    It holds the scope lower_module gives a rule's formula and the scope
+    lower_judgment_formula gives a relation predicate, the relations
+    append_missing_relations merges, and the renames rewrite_relation_references
+    and rewrite_filtered_entity_member_aliases make to the relations a formula
+    names. engine.rs related_entity_ids evaluates a derived relation by
+    evaluating the relation it filters and then its predicate on each member, so
+    a version reads through every relation it reaches that way.
+    """
+
+    def __init__(
+        self, origin: str, order: list[str], modules: Mapping[str, Module], built: Program
+    ) -> None:
+        self.built = built
+        self.fell_back = False
+        closure = [(owner, modules[owner]) for owner in order]
+        self.derived_rules = [
+            rule for _, module in closure for rule in module.rules if rule.namespace == DERIVED
+        ]
+        self.scope = Scope(
+            frozenset(
+                rule.name
+                for _, module in closure
+                for rule in module.rules
+                if rule.namespace == PARAMETER
+            ),
+            frozenset(rule.name for rule in self.derived_rules),
+        )
+        self.predicate_scope = Scope(
+            derived=frozenset(name for _, module in closure for name in module.derived_kinds or ()),
+            relation_predicates=frozenset(
+                relation.name for _, module in closure for relation in module.relations
+            ),
+        )
+        # canonical_relation_id names a relation `<module>#relation.<name>`, or
+        # leaves the name bare for a composition compiled as the root, whose own
+        # rules carry no origin.
+        explicit: list[tuple[str, Relation]] = []
+        self.rewrites: dict[tuple[str, str], str] = {}
+        for owner, module in closure:
+            bare = owner == origin and module.composition
+            for relation in module.relations:
+                canonical = relation.name if bare else f"{owner}{_NAMESPACED}{relation.name}"
+                if not bare:
+                    self.rewrites[(owner, relation.name)] = canonical
+                explicit.append((canonical, relation))
+        canonicals: dict[str, set[str]] = defaultdict(set)
+        for (_, name), canonical in self.rewrites.items():
+            canonicals[name].add(canonical)
+        self.unambiguous = {
+            name: next(iter(found)) for name, found in canonicals.items() if len(found) == 1
+        }
+        self.derived_origins = {
+            entry.rule.name: built.ids[entry.rule.name]
+            for entry in built.derived
+            if entry.rule.name in built.ids
+        }
+        # append_missing_relations: the first derived relation of a name supplies
+        # its derivation.
+        self.derivations: dict[str, Relation] = {}
+        for canonical, relation in explicit:
+            if relation.derived:
+                self.derivations.setdefault(canonical, relation)
+        self._lowered: dict[Relation, Lowered | None] = {}
+        self.aliases: tuple[tuple[str, str, str], ...] = ()
+        self.aliases = self._aliases(explicit)
+
+    def _aliases(self, explicit: list[tuple[str, Relation]]) -> tuple[tuple[str, str, str], ...]:
+        """rewrite_filtered_entity_member_aliases: (entity, alias, relation) for each
+        relation the program still holds after rewrite_relation_references, in the
+        program's order, whose derivation names an entity and a member alias."""
+        names: list[str] = []
+        bare = {canonical for canonical, _ in explicit if _NAMESPACED not in canonical}
+        if bare:
+            # lower_module emits the relations its aggregations name, sorted,
+            # before append_missing_relations adds the explicit ones. Only a bare
+            # explicit relation can merge into one of them.
+            names = sorted(self._inferred())
+        held = set(names)
+        for canonical, _ in explicit:
+            if canonical not in held:
+                held.add(canonical)
+                names.append(canonical)
+        short_names = {name for _, name in self.rewrites}
+        if bare & short_names:
+            # rewrite_relation_references drops a relation of a namespaced short
+            # name that nothing names after the rewrite.
+            used = self._used(names)
+            names = [name for name in names if name not in short_names or name in used]
+        aliases = []
+        for name in names:
+            relation = self.derivations.get(name)
+            if relation is not None and relation.entity is not None and relation.member is not None:
+                aliases.append((relation.entity, relation.member, name))
+        return tuple(aliases)
+
+    def _lowered_rules(self) -> Iterable[tuple[Rule, Lowered]]:
+        for rule in self.derived_rules:
+            for version in rule.versions:
+                try:
+                    yield rule, lower_formula(version.formula, self.scope, rule.judgment)
+                except FormulaError:
+                    continue
+
+    def _inferred(self) -> set[str]:
+        """The relations lower_module infers: each name an aggregation gives."""
+        return {item.relation for _, lowered in self._lowered_rules() for item in lowered.aggregations}
+
+    def _used(self, names: list[str]) -> set[str]:
+        """used_relation_names after rewrite_relation_references."""
+        used = set()
+        for rule, lowered in self._lowered_rules():
+            origin = self.built.ids.get(rule.name)
+            used.update(self._resolve(item, origin) for item in lowered.aggregations)
+        for name in names:
+            relation = self.derivations.get(name)
+            if relation is None:
+                continue
+            origin = _relation_origin(name)
+            used.add(self._exact(relation.source, origin))
+            lowered = self._predicate(relation)
+            if lowered is not None:
+                used.update(self._resolve(item, origin) for item in lowered.aggregations)
+                used.update(self._exact(member, origin) for member in lowered.members)
+        return used
+
+    def _exact(self, name: str, origin: str | None) -> str:
+        """rewrite_relation_name: the relation of that name the same module declares."""
+        if self.rewrites and origin is not None:
+            return self.rewrites.get((origin, name), name)
+        return name
+
+    def _resolve(
+        self, aggregation: Aggregation, origin: str | None, entity: str | None = None
+    ) -> str:
+        """The relation an aggregation evaluates. rewrite_relation_references takes
+        the relation of that name the rule's own module declares, or, when none
+        does and the aggregation reads a derived rule of another module, the one
+        relation of that name. A member alias then applies to a rule of its
+        entity; it never applies inside a relation predicate."""
+        name = aggregation.relation
+        if self.rewrites and origin is not None:
+            exact = self.rewrites.get((origin, name))
+            if exact is not None:
+                name = exact
+            elif _NAMESPACED not in name and any(
+                self.derived_origins.get(item, origin) != origin for item in aggregation.derived
+            ):
+                name = self.unambiguous.get(name, name)
+        if entity is not None:
+            for alias_entity, alias, target in self.aliases:
+                if alias_entity == entity and name == alias:
+                    name = target
+        return name
+
+    def _predicate(self, relation: Relation) -> Lowered | None:
+        """The predicate as to_derived_relation_spec lowers it, or None where the
+        engine refuses the relation."""
+        if relation not in self._lowered:
+            lowered = None
+            if not relation.refused:
+                try:
+                    lowered = lower_formula(relation.predicate, self.predicate_scope, judgment=True)
+                except FormulaError:
+                    pass
+            self._lowered[relation] = lowered
+        return self._lowered[relation]
+
+    def _named(self, relations: Iterable[str]) -> list[str]:
+        """For the token reader: every derived relation a name could reach."""
+        names = set(relations)
+        found = [name for name in self.derivations if _short(name) in names]
+        return found + [target for _, alias, target in self.aliases if alias in names]
+
+    def _follow(self, pending: list[str], reads: set[tuple[str, str]]) -> None:
+        """Add what the engine reads when it evaluates these relations: for each
+        derived one, the relation it filters and its predicate, which reads
+        derived rules and can test membership of, or aggregate over, others."""
+        seen: set[str] = set()
+        while pending:
+            name = pending.pop()
+            relation = self.derivations.get(name)
+            if relation is None or name in seen:
+                continue
+            seen.add(name)
+            origin = _relation_origin(name)
+            pending.append(self._exact(relation.source, origin))
+            lowered = self._predicate(relation)
+            if lowered is None:
+                self.fell_back = True
+                names, relations = token_reads(relation.predicate)
+                reads.update((DERIVED, item) for item in names)
+                pending.extend(self._named(relations))
+                continue
+            reads.update(lowered.reads)
+            pending.extend(self._resolve(item, origin) for item in lowered.aggregations)
+            pending.extend(self._exact(member, origin) for member in lowered.members)
+
+    def version_reads(self, entry: Entry, version: Version) -> set[tuple[str, str]]:
+        """(namespace, name) for each name the engine reads when it evaluates this
+        version: what its formula binds, and what the relations it asks for read.
+        A version `sets` copied keeps the relations its value's module resolved."""
+        origin = self.built.ids.get(entry.source.split("#", 1)[1])
+        try:
+            lowered = lower_formula(version.formula, self.scope, entry.rule.judgment)
+        except FormulaError:
+            self.fell_back = True
+            names, relations = token_reads(version.formula)
+            reads = {(space, name) for name, spaces in names.items() for space in spaces}
+            self._follow(self._named(relations), reads)
+            return reads
+        reads = set(lowered.reads)
+        entity = entry.rule.entity or SCALAR_ENTITY
+        self._follow([self._resolve(item, origin, entity) for item in lowered.aggregations], reads)
+        return reads
+
+
+@dataclass
+class StaticModel:
+    """Every binding the static model finds, and the roots where it read a
+    formula the port refuses with the token reader instead."""
+
+    references: set[Reference]
+    fallbacks: set[str] = field(default_factory=set)
+
+
+def static_model(modules: Mapping[str, Module]) -> StaticModel:
     """Every (rule version, name) binding, local ones included, for each module
     compiled as its own root. Only derived rules read names: a parameter's
-    versions are literals or values. A version also reads what the predicate of
-    each derived relation it asks for reads. The coverage is every version of
+    versions are literals or values. A version reads what its formula binds,
+    and what the relations it asks for read. The coverage is every version of
     what the name binds to, merged parameters together, after the root's `sets`
     relations. The target names the earliest definition an import supplies, and
     this module only when nothing imported does.
     """
     references: set[Reference] = set()
+    fallbacks: set[str] = set()
     for origin, module in modules.items():
+        if not any(rule.namespace == DERIVED for rule in module.rules):
+            continue
         order = flattened(origin, modules)
         built = program(origin, order, modules)
         if built is None:
             continue
-        predicates: dict[str, list[str]] = defaultdict(list)
-        for owner in order:
-            for name, predicate in modules[owner].relations:
-                predicates[name].append(predicate)
+        root = _Root(origin, order, modules, built)
         for rule in module.rules:
             if rule.namespace != DERIVED:
                 continue
             own = [entry for entry in built.group(DERIVED, rule.name) if entry.owner == origin]
             if not own:
                 continue
-            lowered = own[0].rule
-            spans = windows(lowered.versions)
-            for version in lowered.versions:
-                for name, namespaces in _version_reads(version.formula, predicates).items():
-                    for namespace in sorted(namespaces):
-                        group = built.group(namespace, name)
-                        if not group:
-                            continue
-                        coverage = _coverage(group)
-                        target = _target(origin, group)
-                        references.add(
-                            Reference(
-                                f"{origin}#{rule.name}",
-                                version.start,
-                                target,
-                                coverage[0][0],
-                                namespace,
-                                "" if target.split("#", 1)[1] == name else name,
-                                version.end,
-                                coverage,
-                                spans.get(version, ()),
-                                any(
-                                    entry.owner != origin
-                                    or entry.source.split("#", 1)[0] != origin
-                                    for entry in group
-                                ),
-                            )
+            entry = own[0]
+            spans = windows(entry.rule.versions)
+            for version in entry.rule.versions:
+                for namespace, name in sorted(root.version_reads(entry, version)):
+                    group = built.group(namespace, name)
+                    if not group:
+                        continue
+                    coverage = _coverage(group)
+                    target = _target(origin, group)
+                    references.add(
+                        Reference(
+                            f"{origin}#{rule.name}",
+                            version.start,
+                            target,
+                            coverage[0][0],
+                            namespace,
+                            "" if target.split("#", 1)[1] == name else name,
+                            version.end,
+                            coverage,
+                            spans.get(version, ()),
+                            any(
+                                item.owner != origin or item.source.split("#", 1)[0] != origin
+                                for item in group
+                            ),
                         )
-    return references
+                    )
+        if root.fell_back:
+            fallbacks.add(origin)
+    return StaticModel(references, fallbacks)
 
 
-def _version_reads(
-    formula: str, predicates: Mapping[str, list[str]]
-) -> dict[str, frozenset[str]]:
-    """A formula's reads, and through each derived relation it asks for, what that
-    relation's predicate reads. formula.rs lower_judgment_formula lowers a
-    predicate with no scalar names, so its names read only derived rules."""
-    reads, relations = formula_reads(formula)
-    found: dict[str, set[str]] = defaultdict(set)
-    for name, namespaces in reads.items():
-        found[name] |= namespaces
-    pending = [name for name in relations if name in predicates]
-    seen = set(pending)
-    while pending:
-        for predicate in predicates[pending.pop()]:
-            inner, inner_relations = formula_reads(predicate)
-            for name in inner:
-                found[name] |= DERIVED_ONLY
-            for name in inner_relations:
-                if name in predicates and name not in seen:
-                    seen.add(name)
-                    pending.append(name)
-    return {name: frozenset(namespaces) for name, namespaces in found.items()}
+def all_references(modules: Mapping[str, Module]) -> set[Reference]:
+    """Every binding the static model finds; see static_model."""
+    return static_model(modules).references
 
 
 def import_references(modules: Mapping[str, Module]) -> set[Reference]:
@@ -1210,7 +2046,8 @@ def _describe(edge: Edge) -> str:
 
 
 def check(root: Path, baseline_path: Path, base_ref: str | None, allow_added: bool) -> int:
-    references = import_references(load_modules(root))
+    model = static_model(load_modules(root))
+    references = {item for item in model.references if item.crosses}
     edges = late_start_edges(references)
     baseline = parse_baseline(baseline_path.read_text(encoding="utf-8"))
     wider: dict[tuple[str, str], tuple[Interval, ...]] = {}
@@ -1219,6 +2056,12 @@ def check(root: Path, baseline_path: Path, base_ref: str | None, allow_added: bo
         wider = widened(stop_dates(references), base)
     verdict = compare(edges, baseline, {} if allow_added else wider)
     print(summarize(edges))
+    if model.fallbacks:
+        print(
+            f"{len(model.fallbacks)} module(s) hold a formula the engine refuses to lower;"
+            " the check reads those formulas with the token reader, which reads each"
+            f" name both ways: {sorted(model.fallbacks)[:10]}"
+        )
     if verdict.new:
         print(f"\n{len(verdict.new)} edge(s) are not in {baseline_path.name}:")
         for entry in sorted(verdict.new):
@@ -1267,8 +2110,10 @@ HARNESS_SOURCE = r"""//! Written by rulespec-us tools/late_start_imports.py; see
 //! lowered program that hold each rule name the module declares, with the
 //! versions each holds, and each name those derived rules' versions read, with
 //! the namespace the lowered program bound it to and every version of what that
-//! namespace holds. A version that asks for a derived relation also reads what
-//! the relation's predicate reads, on the same dates. A module the engine
+//! namespace holds. A version that asks for a derived relation also reads, on
+//! the same dates, what engine.rs related_entity_ids evaluates for it: the
+//! relation it filters, and so on down the chain, and its predicate, with each
+//! relation that predicate asks for. A module the engine
 //! refuses on the atomic surface because it itself declares `module.kind` is
 //! compiled from a copy under the scratch directory instead (composed programs
 //! must sit outside every root).
@@ -1291,11 +2136,14 @@ use serde_json::{Value, json};
 
 type Span = (NaiveDate, Option<NaiveDate>);
 
+/// A derived relation's predicate and the relation it filters, by name.
+type Derivations = BTreeMap<String, (Value, String)>;
+
 /// Every name a lowered expression reads, by namespace, from its tagged spec,
-/// following each derived relation it asks for into that relation's predicate.
+/// following each relation it asks for.
 fn collect(
     value: &Value,
-    predicates: &BTreeMap<String, Value>,
+    derivations: &Derivations,
     followed: &mut BTreeSet<String>,
     read: &mut BTreeSet<(&'static str, String)>,
 ) {
@@ -1312,19 +2160,32 @@ fn collect(
             {
                 read.insert((namespace, name.to_string()));
             }
-            if let Some(relation) = map.get("relation").and_then(Value::as_str)
-                && let Some(predicate) = predicates.get(relation)
-                && followed.insert(relation.to_string())
-            {
-                collect(predicate, predicates, followed, read);
+            if let Some(relation) = map.get("relation").and_then(Value::as_str) {
+                follow(relation, derivations, followed, read);
             }
             map.values()
-                .for_each(|child| collect(child, predicates, followed, read));
+                .for_each(|child| collect(child, derivations, followed, read));
         }
         Value::Array(items) => items
             .iter()
-            .for_each(|child| collect(child, predicates, followed, read)),
+            .for_each(|child| collect(child, derivations, followed, read)),
         _ => {}
+    }
+}
+
+/// engine.rs related_entity_ids: a derived relation evaluates the relation it
+/// filters, then its predicate on each member.
+fn follow(
+    relation: &str,
+    derivations: &Derivations,
+    followed: &mut BTreeSet<String>,
+    read: &mut BTreeSet<(&'static str, String)>,
+) {
+    if let Some((predicate, source)) = derivations.get(relation)
+        && followed.insert(relation.to_string())
+    {
+        collect(predicate, derivations, followed, read);
+        follow(source, derivations, followed, read);
     }
 }
 
@@ -1423,14 +2284,14 @@ fn main() {
                 .iter()
                 .map(|v| (rule.name.as_str(), (v.effective_from, v.effective_to)))
         }));
-        let predicates: BTreeMap<String, Value> = program
+        let derivations: Derivations = program
             .relations
             .iter()
             .filter_map(|relation| {
                 let derivation = relation.derivation.as_ref()?;
                 let predicate =
                     serde_json::to_value(&derivation.predicate).expect("predicate as json");
-                Some((relation.name.clone(), predicate))
+                Some((relation.name.clone(), (predicate, derivation.source_relation.clone())))
             })
             .collect();
         let collisions: Vec<&str> = parameters
@@ -1456,7 +2317,7 @@ fn main() {
             for version in &rule.versions {
                 let semantics = serde_json::to_value(&version.semantics).expect("semantics as json");
                 let mut read = BTreeSet::new();
-                collect(&semantics, &predicates, &mut BTreeSet::new(), &mut read);
+                collect(&semantics, &derivations, &mut BTreeSet::new(), &mut read);
                 for (namespace, name) in read {
                     let coverage = match namespace {
                         "parameter" => parameters.get(name.as_str()).map(spans_json),
@@ -1569,11 +2430,21 @@ def parse_engine_references(lines: Iterable[str]) -> EngineRun:
 
 
 def coverage_failures(
-    run: EngineRun, tracked: Iterable[str], edges: Iterable[Edge]
+    run: EngineRun,
+    tracked: Iterable[str],
+    edges: Iterable[Edge],
+    fallbacks: Iterable[str] = (),
 ) -> list[str]:
-    """Why this run cannot vouch for the static model, however well it agreed."""
+    """Why this run cannot vouch for the static model, however well it agreed. A
+    module the engine compiled lowers every formula it holds, so the static
+    model should have needed the token reader for none of them."""
     expected = {canonical_target(path) for path in tracked}
     failures = []
+    if guessed := sorted(set(fallbacks) & run.compiled):
+        failures.append(
+            f"the port refused a formula in {len(guessed)} module(s) the engine compiled:"
+            f" {guessed[:10]}"
+        )
     if missing := expected - run.results:
         failures.append(f"no result for {len(missing)} module(s): {sorted(missing)[:10]}")
     if unexpected := run.results - expected:
@@ -1624,14 +2495,9 @@ def declared_rules(
 class Differences:
     only_engine: set[Binding]
     only_static: set[Binding]
-    # Static bindings the model reads by design and the lowered program does
-    # not, each where the engine read the same name another way: the other side
-    # of a collision, and a parameter read in a judgment position, which lowers
-    # to an input.
-    over_reported: set[Binding]
     # Declared names the lowered program does not hold as the model does: in
     # that namespace, with those versions.
-    missing_rules: set[tuple[str, str, tuple[Interval, ...]]]
+    missing_rules: set[tuple[str, str, tuple[Interval, ...]]] = field(default_factory=set)
     # Declared names the lowered program holds where the model has none.
     extra_rules: set[tuple[str, str, tuple[Interval, ...]]] = field(default_factory=set)
 
@@ -1658,24 +2524,10 @@ def reference_differences(
         _binding(item) for item in static if item.rule.split("#", 1)[0] in run.compiled
     }
     engine = {item for item in run.bindings if declared(item.rule)}
-    reads: dict[tuple[str, date, str], set[str]] = defaultdict(set)
-    for item in engine | run.inputs:
-        reads[(item.rule, item.version_start, item.name)].add(item.namespace)
-
-    def by_design(item: Binding) -> bool:
-        other = reads[(item.rule, item.version_start, item.name)] - {item.namespace}
-        collides = f"{item.rule.split('#', 1)[0]}#{item.name}" in run.collisions
-        return bool(other - {"input"}) and collides or (
-            item.namespace == PARAMETER and "input" in other
-        )
-
-    only_static = in_scope - engine
-    over_reported = {item for item in only_static if by_design(item)}
     expected = declared_rules(modules, sorted(run.compiled))
     return Differences(
         engine - in_scope,
-        only_static - over_reported,
-        over_reported,
+        in_scope - engine,
         expected - run.rules,
         run.rules - expected,
     )
@@ -1762,9 +2614,10 @@ def differential(engine_src: Path, root: Path, output: Path) -> int:
     output.write_text(report, encoding="utf-8")
     run = parse_engine_references(report.splitlines())
     static_modules = load_modules(root)
-    static = all_references(static_modules)
-    failures = coverage_failures(run, modules, late_start_edges(import_references(static_modules)))
-    differences = reference_differences(run, static, static_modules)
+    model = static_model(static_modules)
+    edges = late_start_edges(item for item in model.references if item.crosses)
+    failures = coverage_failures(run, modules, edges, model.fallbacks)
+    differences = reference_differences(run, model.references, static_modules)
     print(
         f"The engine compiled {len(run.compiled)} of {len(modules)} modules without citation "
         f"metadata and bound {len(run.bindings)} names in their own rules."
@@ -1774,10 +2627,6 @@ def differential(engine_src: Path, root: Path, output: Path) -> int:
         print(f"  refused {module}: {reason}")
     if run.collisions:
         print(f"{len(run.collisions)} name(s) bound in both namespaces: {sorted(run.collisions)}")
-    if differences.over_reported:
-        print(f"{len(differences.over_reported)} static binding(s) over-reported by design:")
-        for item in sorted(differences.over_reported)[:20]:
-            print(f"  {item.rule} {item.version_start} -> {item.namespace} {item.name}")
     for label, items in (
         ("engine", differences.only_engine),
         ("static model", differences.only_static),

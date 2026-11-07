@@ -4,15 +4,15 @@ Invariants:
 
 1. Run-time meaning. For every generated program without a `sets` relation, the
    dates on which each rule stops on each name it reads equal the tool's stop
-   dates, except that a name defined in both namespaces may stop on more dates
-   in the tool, which reads it both ways. A reference simulation below finds
-   those dates without the tool's interval code: it binds names the way
-   lower_to_scalar does, by position (every generated formula reads in a scalar
-   position, so a parameter wins), flattens imports, sorts each rule into a
-   namespace, and on each stretch of dates where nothing changes picks the
-   version the engine picks and looks for a name it reads with no version
-   then. Generated formulas take every branch, so "stops" and "can read the
-   gap" agree here; the tool makes no claim about a branch a date never takes.
+   dates, names defined in both namespaces included. A reference simulation
+   below finds those dates without the tool's formula port or interval code:
+   it binds names the way lower_to_scalar does, by position (every generated
+   formula reads in a scalar position, so a parameter wins), flattens imports,
+   sorts each rule into a namespace, and on each stretch of dates where nothing
+   changes picks the version the engine picks and looks for a name it reads
+   with no version then. Generated formulas take every branch, so "stops" and
+   "can read the gap" agree here; the tool makes no claim about a branch a date
+   never takes.
 2. Edges render stop dates: each edge starts on a stop date of its rule for a
    name its target supplies, and each (rule, name) with stop dates has an edge
    whose target supplies that name.
@@ -26,8 +26,9 @@ Invariants:
    versions, nor on the order of imports where no `sets` relation acts (there,
    merge order decides, as it does in the engine). Reduction to edges does not
    depend on the order of references.
-6. Lexing: words in strings and comments are never references, and the names
-   of called functions are never references, however they are parenthesized.
+6. Lexing and parsing: words in strings, comments and docstrings are never
+   references, and the name of a called function is never one, however it is
+   parenthesized, even where a derived rule carries that name.
 7. Interval algebra: `merged`, `subtract`, `windows` and `widened` agree with a
    day-by-day count on every input.
 8. Baseline round trip: parse(render(S)) == S and render is canonical.
@@ -452,17 +453,10 @@ def test_the_generators_reach_each_hard_shape_and_stay_loadable(reached):
 
 @settings(semantic_properties, max_examples=500)
 @given(plain_specs)
-def test_each_stop_date_is_the_tools_and_each_other_one_reads_a_name_both_ways(spec):
+def test_each_stop_date_is_the_tools(spec):
     found = stops_of(build(spec))
-    stops = simulated_stops(spec)
     target(float(len(found)))
-    for key in found.keys() | stops.keys():
-        rule, name = key
-        origin = rule.split("#")[0]
-        if in_both_namespaces(name, closure(origin, spec) | {origin}, spec):
-            assert lsi.subtract(stops.get(key, ()), found.get(key, ())) == ()
-        else:
-            assert found.get(key) == stops.get(key)
+    assert found == simulated_stops(spec)
 
 
 @semantic_properties
@@ -659,28 +653,34 @@ def test_the_result_does_not_depend_on_declaration_order(spec, rng: random.Rando
 
 
 words = st.sampled_from(NAMES)
+CALLEES = ("max", "min", "floor", "ceil")
+callees = st.sampled_from(CALLEES)
 noise = st.one_of(
     words.map(lambda word: f'"{word}"'),
     words.map(lambda word: f"'{word}'"),
-    words.map(lambda word: f"# {word}\n"),
-    words.map(lambda word: f'"""{word} {word}"""'),
-    words.map(lambda word: f"{word}(0)"),
-    words.map(lambda word: f"{word} # note\n(0)"),
-    words.map(lambda word: f"({word})(0)"),
-    words.map(lambda word: f"(({word}))\n(0)"),
+    words.map(lambda word: f"0 # {word}\n"),
+    words.map(lambda word: f'"""{word} {word}""" 0'),
+    callees.map(lambda callee: f"{callee}(0)"),
+    callees.map(lambda callee: f"{callee} # note\n(0)"),
+    callees.map(lambda callee: f"({callee})(0)"),
+    callees.map(lambda callee: f"(({callee}))\n(0)"),
 )
+# Every word and every callee names a derived rule, so a read that a string, a
+# comment or a call produced would show.
+NOISY_SCOPE = lsi.Scope(derived=frozenset({*NAMES, *CALLEES}))
 
 
 @semantic_properties
 @given(st.sets(words), st.lists(noise, max_size=4), st.randoms(use_true_random=False))
 def test_strings_comments_and_calls_are_never_references(names, extras, rng):
     parts = [*sorted(names), *extras]
+    assume(parts)
     rng.shuffle(parts)
-    # An operator on each line, so that a name is never a callee by accident and
-    # a comment cannot swallow the next part.
+    # An operator on each line, so that a comment cannot swallow the next part.
     formula_text = "\n+ ".join(parts)
     assert lsi.closes_its_strings(formula_text)
-    assert lsi.formula_references(formula_text) == names
+    lowered = lsi.lower_formula(formula_text, NOISY_SCOPE)
+    assert lowered.reads == {(lsi.DERIVED, name) for name in names}
 
 
 @semantic_properties

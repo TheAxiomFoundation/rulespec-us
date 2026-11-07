@@ -78,6 +78,33 @@ def sets(name: str, target: str, value: str) -> str:
     )
 
 
+def data_relation(name: str) -> str:
+    return (
+        f"  - name: {name}\n"
+        "    kind: data_relation\n"
+        "    data_relation:\n"
+        f"      predicate: {name}\n"
+        "      arity: 2\n"
+    )
+
+
+def derived_relation(name: str, source: str, predicate: str, *fields: str) -> str:
+    """`fields` adds lines to the derived_relation mapping, such as an entity."""
+    return (
+        f"  - name: {name}\n"
+        "    kind: derived_relation\n"
+        "    derived_relation:\n"
+        "      arity: 2\n"
+        f"      source_relation: {source}\n"
+        "      current_slot: 1\n"
+        "      related_slot: 0\n"
+        + "".join(f"      {line}\n" for line in fields)
+        + "    versions:\n"
+        "      - effective_from: '2000-01-01'\n"
+        f"        formula: {predicate}\n"
+    )
+
+
 def module(*rules: str, imports: tuple[str, ...] = (), kind: str | None = None) -> str:
     head = f"format: rulespec/v1\nmodule: {{kind: {kind}}}\n" if kind else "format: rulespec/v1\nmodule: {}\n"
     lines = "".join(f"  - us:statutes/1/{name}\n" for name in imports)
@@ -416,16 +443,18 @@ def test_a_derived_relation_reads_what_its_predicate_reads(tmp_path):
     assert {item.name for item in run.bindings} == {"candidate_ok"}
 
 
-def test_a_string_field_keeps_an_unquoted_name_as_written(tmp_path):
+@pytest.mark.parametrize("name", ["TRUE", "NULL"])
+def test_a_string_field_keeps_an_unquoted_name_as_written(tmp_path, name):
+    # Round 4 finding 7: the scratch copy once wrote `NULL` back as `null`.
     edges, _ = compared(
         tmp_path,
         {
-            "target": module(derived("TRUE", Y2020, "'true'", "Boolean")),
+            "target": module(derived(name, Y2020, "'true'", "Boolean")),
             # Quoted: a formula reads a value, where an unquoted TRUE is `true`.
-            "caller": module(derived("answer", Y2000, "'TRUE'", "Boolean"), imports=("target",)),
+            "caller": module(derived("answer", Y2000, f"'{name}'", "Boolean"), imports=("target",)),
         },
     )
-    assert edges == {edge("caller#answer", "target#TRUE", Y2000, Y2020)}
+    assert edges == {edge("caller#answer", f"target#{name}", Y2000, Y2020)}
 
 
 def test_a_sets_relation_copies_the_first_entry_of_its_value(tmp_path):
@@ -478,3 +507,179 @@ def test_a_relation_rule_gives_a_name_its_id(tmp_path):
     )
     assert edges == {edge("caller#answer", "value#new_rate", Y2000, Y2020)}
 
+
+
+# Round 4 shapes. Each binding below is one the pinned engine lowers; the
+# review ran each tree at a date inside its edge, where it stops.
+
+LATE_CANDIDATE = module(derived("candidate_ok", Y2020, "true", "Judgment"))
+CANDIDATE_EDGE = edge("caller#answer", "late#candidate_ok", Y2000, Y2020)
+
+
+@pytest.mark.parametrize(("source", "predicate"), [("filtered", "true"), ("candidate_row", "filtered")])
+def test_a_relation_reads_what_the_relations_it_builds_on_read(tmp_path, source, predicate):
+    # Finding 1: related_entity_ids evaluates a relation's source, and a
+    # relation its predicate tests, before the predicate itself.
+    edges, run = compared(
+        tmp_path,
+        {
+            "late": LATE_CANDIDATE,
+            "caller": module(
+                data_relation("candidate_row"),
+                derived_relation("filtered", "us:statutes/1/caller#relation.candidate_row", "candidate_ok"),
+                derived_relation("outer", source, predicate),
+                derived("answer", Y2000, "len(outer)"),
+                imports=("late",),
+            ),
+        },
+    )
+    assert edges == {CANDIDATE_EDGE}
+    assert {item.name for item in run.bindings} == {"candidate_ok"}
+
+
+def test_a_member_alias_reads_its_relation_in_rules_of_its_entity(tmp_path):
+    # Finding 3.
+    edges, run = compared(
+        tmp_path,
+        {
+            "late": LATE_CANDIDATE,
+            "caller": module(
+                data_relation("candidate_row"),
+                derived_relation(
+                    "filtered", "candidate_row", "candidate_ok", "entity: Person", "member_relation: member"
+                ),
+                derived("answer", Y2000, "len(member)"),
+                imports=("late",),
+            ),
+        },
+    )
+    assert edges == {CANDIDATE_EDGE}
+    assert {item.name for item in run.bindings} == {"candidate_ok"}
+
+
+def test_a_module_reads_its_own_relation_of_a_name_another_module_shares(tmp_path):
+    # Finding 4.
+    edges, run = compared(
+        tmp_path,
+        {
+            "late": module(
+                derived("candidate_ok", Y2020, "true", "Judgment"),
+                data_relation("rows"),
+                derived_relation("members", "rows", "candidate_ok"),
+            ),
+            "caller": module(
+                data_relation("rows"),
+                derived_relation("members", "rows", "true"),
+                derived("answer", Y2000, "len(members)"),
+                imports=("late",),
+            ),
+        },
+    )
+    assert edges == set()
+    assert run.bindings == set()
+
+
+@pytest.mark.parametrize(
+    ("formula", "late"),
+    [
+        ("'count_where(members, flag)'", True),
+        ("'len(members)'", False),
+        ("'count_where(members, local_flag)'", False),
+    ],
+)
+def test_an_aggregation_takes_the_one_relation_of_a_name_only_for_an_imported_rule(tmp_path, formula, late):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "late": module(
+                derived("candidate_ok", Y2020, "true", "Judgment"),
+                derived("flag", Y1990, "true", "Judgment"),
+                data_relation("rows"),
+                derived_relation("members", "rows", "candidate_ok"),
+            ),
+            "caller": module(
+                derived("local_flag", Y1990, "true", "Judgment"),
+                derived("answer", Y2000, formula),
+                imports=("late",),
+            ),
+        },
+    )
+    assert edges == ({CANDIDATE_EDGE} if late else set())
+
+
+@pytest.mark.parametrize("named", [False, True])
+def test_a_compositions_own_relation_carries_its_alias_only_while_a_rule_names_it(tmp_path, named):
+    # rewrite_relation_references drops the composition's own `filtered`, which
+    # shares its name with an imported relation, unless a rule names it.
+    rules = [
+        data_relation("candidate_row"),
+        derived_relation(
+            "filtered", "candidate_row", "candidate_ok", "entity: Person", "member_relation: member"
+        ),
+        derived("answer", Y2000, "len(member)"),
+    ]
+    if named:
+        rules.append(derived("count", Y2000, "len(filtered)"))
+    edges, _ = compared(
+        tmp_path,
+        {
+            "late": module(derived("candidate_ok", Y2020, "true", "Judgment"), data_relation("filtered")),
+            "caller": module(*rules, imports=("late",), kind="composition"),
+        },
+    )
+    both = {CANDIDATE_EDGE, edge("caller#count", "late#candidate_ok", Y2000, Y2020)}
+    assert edges == (both if named else set())
+
+
+def test_an_indexed_period_bound_reads_the_table_of_that_name(tmp_path):
+    # Finding 5.
+    table = (
+        "  - name: period_start\n"
+        "    kind: parameter\n"
+        "    indexed_by: bracket\n"
+        "    versions:\n"
+        "      - from: '2020-01-01'\n"
+        "        values: {0: 3}\n"
+    )
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(table),
+            "caller": module(derived("answer", Y2000, "'period_start[0]'"), imports=("target",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#period_start", Y2000, Y2020)}
+
+
+@pytest.mark.parametrize(
+    ("name", "formula"),
+    [
+        ("late", "'len(member_of_applicant.late)'"),
+        ("period_start", "'days_between(period_start, period_end)'"),
+    ],
+)
+def test_a_dropped_field_and_a_scalar_period_bound_read_no_rule(tmp_path, name, formula):
+    # Finding 6.
+    edges, run = compared(
+        tmp_path,
+        {
+            "target": module(derived(name, Y2020, "'1'")),
+            "caller": module(derived("answer", Y2000, formula), imports=("target",)),
+        },
+    )
+    assert edges == set()
+    assert run.bindings == set()
+
+
+def test_a_scalar_read_meets_the_parameter_until_it_goes(tmp_path):
+    # Finding 2: the base reads the 1990 parameter, not the 2020 derived rule
+    # of its name, so its edge appears only when the head deletes the parameter.
+    caller = module(derived("answer", Y2000, "'shared + 0'"), imports=("target",))
+    base, run = compared(
+        tmp_path / "base",
+        {"target": module(parameter("shared", Y1990, "'7'"), derived("shared", Y2020, "'1'")), "caller": caller},
+    )
+    assert base == set()
+    assert {item.namespace for item in run.bindings} == {"parameter"}
+    head, _ = compared(tmp_path / "head", {"target": module(derived("shared", Y2020, "'1'")), "caller": caller})
+    assert head == {edge("caller#answer", "target#shared", Y2000, Y2020)}

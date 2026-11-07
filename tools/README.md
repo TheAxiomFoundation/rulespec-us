@@ -106,19 +106,29 @@ the pinned engine:
   `values`. Otherwise a rule with an `entity` or a computed version is derived,
   and the rest are parameters. Parameters of one name merge, so a name counts as
   imported when any imported definition feeds it.
+- **Formulas.** It ports the engine's formula lexer, parser and lowering, so a
+  name binds by its position, as the engine binds it. In a scalar position a
+  name reads a parameter of that name when one exists, and otherwise a derived
+  rule. In a judgment position (an `if` condition, `and`, `or`, `not`, and the
+  whole formula of a Judgment rule) it reads only a derived rule. A bare
+  `period_start` or `period_end` reads the period, and `len` drops the field it
+  carries. A formula the engine refuses to lower falls back to a token reader
+  that reads every name it mentions both ways.
 - **Dates.** A version applies from `effective_from` through `effective_to`, and
   on each date the engine picks the applicable version that starts last. The
   tool compares the dates each rule version applies with every version of what
   it reads, so a later rule version that starts with a later target reads no
   gap. That is the correct way to encode a change.
 - **Relations.** A version that asks for a derived relation reads what the
-  relation's predicate reads, on the same dates. A `sets` source relation gives
-  its target the value's versions in the module's own root, the way the engine
-  finds and copies them.
+  relation's predicate reads, on the same dates, and on through the relation it
+  filters and any relation its predicate tests. A relation name a module writes
+  means that module's own relation of that name, and a member alias means its
+  filtered relation in rules of that relation's entity. A `sets` source relation
+  gives its target the value's versions in the module's own root, the way the
+  engine finds and copies them.
 
-An edge means a version can read the gap, not that every query does. The tool
-has no parser, so a branch no date takes still counts, and a name defined in
-both namespaces reads both.
+An edge means a version can read the gap, not that every query does: a branch
+no query takes still counts.
 
 The check reads each module's rules under that module's own root, which is how
 the engine compiles it. It does not cover a rule's bindings under a root that
@@ -146,7 +156,9 @@ with `never` when it has none.
   list would otherwise accept any edge. The workflow computes the base's stop
   dates from the base commit's modules, not from its list. It compares by the
   name a formula reads, so moving which module supplies a name can narrow a gap
-  without a label.
+  without a label. The bound protects the stop dates the tool models. A version
+  that reads a name only in a branch no query takes already holds that name's
+  stop dates, so a change that makes the branch reachable adds none.
 
 Fix a new edge by starting the rule version no earlier than its target, giving
 the target a version for those dates, or reading the target only from a rule
@@ -163,18 +175,16 @@ python tools/late_start_imports.py baseline > tools/known-late-start-imports.txt
 The workflow's `engine-differential` job holds the static model to the pinned
 engine. It compiles each module, stored compositions through their own surface,
 and reads every name the lowered program binds in that module's own rules,
-following derived relations into their predicates. Those bindings must equal the
-static ones by rule, version dates, name, namespace and every version of what
-the name binds to. For each name a module declares, the namespaces and versions
-the program holds must also equal the static model's, both ways. The run fails
-unless every module has a result, the engine compiled at least 99% of them, and
-every edge sits in a compiled module. It compiles a scratch copy of the tree
-with citation metadata removed, because retired forms of that metadata would
-otherwise stop the engine from loading most of what it compares. The static
-model may report more than the engine in two cases, both on purpose and both
-printed: a name defined in both namespaces reads both, because only a parser
-could tell which position reads which, and a parameter read in a judgment
-position counts, though the engine lowers it to an input.
+following derived relations into their predicates and the relations they
+filter. Those bindings must equal the static ones exactly, by rule, version
+dates, name, namespace and every version of what the name binds to. For each
+name a module declares, the namespaces and versions the program holds must also
+equal the static model's, both ways. The run fails unless every module has a
+result, the engine compiled at least 99% of them, every edge sits in a compiled
+module, and no module the engine compiled needed the token reader. It compiles
+a scratch copy of the tree with citation metadata removed, because retired
+forms of that metadata would otherwise stop the engine from loading most of
+what it compares.
 
 The same job lowers generated programs and known hard shapes through the
 engine. Point `LATE_START_HARNESS` at the built harness to run those tests
