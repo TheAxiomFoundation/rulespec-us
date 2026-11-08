@@ -115,19 +115,50 @@ def edge(rule: str, target: str, version_start: date, target_start: date) -> "ls
     return lsi.Edge(f"us:statutes/1/{rule}", f"us:statutes/1/{target}", version_start, target_start)
 
 
-def compared(tmp_path: Path, texts: dict[str, str]) -> tuple[set, "lsi.EngineRun"]:
-    """The static edges of a tree whose bindings the engine has just confirmed."""
+def table(name: str, start: date, formula: str | None = None) -> str:
+    """A parameter table; `formula`, written as given, sits beside its values."""
+    return (
+        f"  - name: {name}\n"
+        "    kind: parameter\n"
+        "    indexed_by: band\n"
+        "    versions:\n"
+        f"      - from: '{start}'\n"
+        "        values: {0: 3}\n"
+        + (f"        formula: {formula}\n" if formula else "")
+    )
+
+
+def engine_run(tmp_path: Path, texts: dict[str, str]) -> tuple["lsi.EngineRun", dict]:
+    """What the engine reports for the tree, and the port's parse of each module."""
     root = tmp_path / "tree"
     paths = [f"us/statutes/1/{name}.yaml" for name in texts]
     for path, text in zip(paths, texts.values()):
         (root / path).parent.mkdir(parents=True, exist_ok=True)
         (root / path).write_text(text, encoding="utf-8")
     run = lsi.parse_engine_references(lsi.run_harness(Path(HARNESS), root, paths).splitlines())
-    assert run.refused == {}
     modules = {
         lsi.canonical_target(path): lsi.parse_module((root / path).read_text(encoding="utf-8"), path)
         for path in paths
     }
+    return run, modules
+
+
+def refused_by_both(tmp_path: Path, texts: dict[str, str], name: str) -> str:
+    """The engine refuses module `name` alone and the port reads it with the token
+    reader; the engine's reason."""
+    run, modules = engine_run(tmp_path, texts)
+    target = f"us:statutes/1/{name}"
+    assert set(run.refused) == {target}
+    assert lsi.static_model(modules).fallbacks == {target}
+    return run.refused[target]
+
+
+def compared(tmp_path: Path, texts: dict[str, str]) -> tuple[set, "lsi.EngineRun"]:
+    """The static edges of a tree whose bindings the engine has just confirmed."""
+    run, modules = engine_run(tmp_path, texts)
+    assert run.refused == {}
+    # The engine compiled every module, so none may need the token reader.
+    assert lsi.static_model(modules).fallbacks == set()
     differences = lsi.reference_differences(run, lsi.all_references(modules), modules)
     assert differences.only_engine == set()
     assert differences.only_static == set()
@@ -683,3 +714,271 @@ def test_a_scalar_read_meets_the_parameter_until_it_goes(tmp_path):
     assert {item.namespace for item in run.bindings} == {"parameter"}
     head, _ = compared(tmp_path / "head", {"target": module(derived("shared", Y2020, "'1'")), "caller": caller})
     assert head == {edge("caller#answer", "target#shared", Y2000, Y2020)}
+
+
+OPEN_LAST = "'later + 1 \"\"\" a docstring nothing closes'"
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        (derived("answer", Y2000, OPEN_LAST),),
+        (derived("other", Y2000, "'later'"), derived("answer", Y2000, OPEN_LAST)),
+        (derived("answer", Y2000, OPEN_LAST), table("band_rate", Y2000)),
+        (table("band_rate", Y2000, "'1 \"\"\"'"), derived("answer", Y2000, "'later + 1'")),
+    ],
+    ids=["only", "last-rule", "before-a-table", "in-a-table"],
+)
+def test_the_last_formula_a_module_writes_may_leave_a_docstring_open(tmp_path, rules):
+    # Seed 2 witness. The lexer skips the open docstring to the end of the
+    # merged source, past a table's stub, which the indexed parameter replaces;
+    # the engine parses a table's own formulas alone and never writes them.
+    edges, run = compared(
+        tmp_path,
+        {
+            "target": module(derived("later", Y2020, "'1'")),
+            "caller": module(*rules, imports=("target",)),
+        },
+    )
+    assert edge("caller#answer", "target#later", Y2000, Y2020) in edges
+    assert ("us:statutes/1/caller#answer", "derived") in {(rule, space) for rule, space, _ in run.rules}
+
+
+def test_a_docstring_left_open_drops_the_formulas_an_importing_root_writes(tmp_path):
+    # Why the port refuses this root: the engine merges the import's rules
+    # first, the docstring skips the root's own formulas, and the engine
+    # compiles the root without them.
+    run, modules = engine_run(
+        tmp_path,
+        {
+            "target": module(derived("later", Y2020, "'2 \"\"\" a docstring nothing closes'")),
+            "caller": module(derived("answer", Y2000, "'later + 1'"), imports=("target",)),
+        },
+    )
+    assert run.refused == {}
+    assert "us:statutes/1/caller" in run.compiled
+    assert not any(rule.startswith("us:statutes/1/caller#") for rule, _, _ in run.rules)
+    with pytest.raises(ValueError, match="leaves a docstring open, and under us:statutes/1/caller"):
+        lsi.static_model(modules)
+
+
+@pytest.mark.parametrize(
+    ("formula", "reads"),
+    [
+        ("'match later: _ => 3'", False),
+        ("'match later: 1 => 2 _ => 3'", True),
+        ("'match later: 1 => 2'", True),
+    ],
+)
+def test_a_match_reads_its_subject_only_where_a_pattern_or_its_failure_keeps_it(tmp_path, formula, reads):
+    # Fuzz witness: a lone `_` arm lowers to its result alone.
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(derived("later", Y2020, "'1'")),
+            "caller": module(derived("answer", Y2000, formula), imports=("target",)),
+        },
+    )
+    assert edges == ({edge("caller#answer", "target#later", Y2000, Y2020)} if reads else set())
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "(" * 3_500 + "later" + ")" * 3_500,
+        "-" * 2_000 + "later",
+        "max(" * 2_000 + "later" + ")" * 2_000,
+        "later" + " + later" * 1_999,
+    ],
+    ids=["parentheses", "negation", "calls", "sum"],
+)
+def test_nesting_the_engine_lowers_reads_the_same_names(tmp_path, formula):
+    # Fuzz witness: the port refused these at CPython's recursion limit.
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(derived("later", Y2020, "'1'")),
+            "caller": module(derived("answer", Y2000, f"'{formula}'"), imports=("target",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#later", Y2000, Y2020)}
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "9223372036854775807",
+        "0" * 5_000 + "7",
+        "79228162514264337593543950335.4",
+        "79228162514264337593543950335.49999",
+        "0" * 40 + "79228162514264337593543950335.4",
+        "1." + "9" * 5_000,
+    ],
+    ids=[
+        "i64-max",
+        "zero-padded-int",
+        "decimal-max",
+        "decimal-rounds-down",
+        "zero-padded-decimal",
+        "long-fraction",
+    ],
+)
+def test_a_literal_the_parser_keeps_reads_like_any_other(tmp_path, literal):
+    edges, _ = compared(
+        tmp_path,
+        {
+            "target": module(derived("later", Y2020, "'1'")),
+            "caller": module(derived("answer", Y2000, f"'later + {literal}'"), imports=("target",)),
+        },
+    )
+    assert edges == {edge("caller#answer", "target#later", Y2000, Y2020)}
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "9223372036854775808",
+        "1" * 5_000,
+        "79228162514264337593543950335.5",
+        "79228162514264337593543950336.0",
+        "7922816251426433759354395033_5.5",
+    ],
+    ids=[
+        "i64-max-plus-one",
+        "past-int-str-limit",
+        "decimal-rounds-up",
+        "decimal-overflow",
+        "underscored",
+    ],
+)
+def test_a_literal_the_parser_refuses_refuses_the_module(tmp_path, literal):
+    # Fuzz witness: the port took a decimal the engine refuses, and crashed on
+    # an integer longer than CPython's int() takes.
+    reason = refused_by_both(
+        tmp_path,
+        {
+            "target": module(derived("later", Y2020, "'1'")),
+            "caller": module(derived("answer", Y2000, f"'later + {literal}'"), imports=("target",)),
+        },
+        "caller",
+    )
+    assert "formula parse error" in reason
+
+
+def rule_text(name: str, kind: str, start: date, formula: str | None = None, **meta: str) -> str:
+    """One version from `start`: `formula`, or else table values."""
+    return (
+        f"  - name: {name}\n"
+        f"    kind: {kind}\n"
+        + "".join(f"    {key}: {value}\n" for key, value in meta.items())
+        + "    versions:\n"
+        f"      - from: '{start}'\n"
+        + ("        values: {0: 3}\n" if formula is None else f"        formula: {formula}\n")
+    )
+
+
+PERSON = {"entity": "Person", "dtype": "Integer", "period": "Month"}
+SETS_PAIRS = {
+    "table-and-scalar": (
+        rule_text("t", "parameter", Y1990, indexed_by="size"),
+        rule_text("v", "parameter", Y2020, "'2'"),
+        True,
+    ),
+    "two-indexes": (
+        rule_text("t", "parameter", Y1990, indexed_by="size"),
+        rule_text("v", "parameter", Y2020, indexed_by="band"),
+        True,
+    ),
+    "parameter-units": (
+        rule_text("t", "parameter", Y1990, "'2'", unit="USD"),
+        rule_text("v", "parameter", Y2020, "'2'", unit="EUR"),
+        True,
+    ),
+    "one-unit": (
+        rule_text("t", "parameter", Y1990, "'2'", unit="USD"),
+        rule_text("v", "parameter", Y2020, "'2'"),
+        False,
+    ),
+    "one-index": (
+        rule_text("t", "parameter", Y1990, indexed_by="size"),
+        rule_text("v", "parameter", Y2020, indexed_by="size"),
+        False,
+    ),
+    "entities": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON),
+        rule_text("v", "derived", Y2020, "'1'", **{**PERSON, "entity": "Household"}),
+        True,
+    ),
+    "scalar-entity": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON),
+        rule_text("v", "parameter", Y2020, "'x + 1'"),
+        True,
+    ),
+    "dtypes": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON),
+        rule_text("v", "derived", Y2020, "'true'", **{**PERSON, "dtype": "Boolean"}),
+        True,
+    ),
+    "dtype-spellings": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON),
+        rule_text("v", "derived", Y2020, "'1'", **{**PERSON, "dtype": "int"}),
+        False,
+    ),
+    "periods": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON),
+        rule_text("v", "derived", Y2020, "'1'", **{**PERSON, "period": "Year"}),
+        True,
+    ),
+    "one-period": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON),
+        rule_text("v", "derived", Y2020, "'1'", entity="Person", dtype="Integer"),
+        False,
+    ),
+    "derived-units": (
+        rule_text("t", "derived", Y1990, "'1'", **PERSON, unit="USD"),
+        rule_text("v", "derived", Y2020, "'1'", **PERSON, unit="EUR"),
+        True,
+    ),
+    "table-units": (
+        rule_text("t", "parameter", Y1990, indexed_by="size", unit="USD"),
+        rule_text("v", "parameter", Y2020, indexed_by="size", unit="EUR"),
+        True,
+    ),
+    # to_indexed_parameter_spec copies a table's unit as written, so an empty
+    # one still counts as stated; the formula source drops a scalar's.
+    "table-empty-unit": (
+        rule_text("t", "parameter", Y1990, indexed_by="size", unit="''"),
+        rule_text("v", "parameter", Y2020, indexed_by="size", unit="USD"),
+        True,
+    ),
+    "scalar-empty-unit": (
+        rule_text("t", "parameter", Y1990, "'2'", unit="''"),
+        rule_text("v", "parameter", Y2020, "'2'", unit="USD"),
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize("pair", SETS_PAIRS)
+def test_a_sets_relation_copies_only_between_entries_whose_metadata_agree(tmp_path, pair):
+    # Property-test witness (a table set to a scalar): apply_source_relation_sets
+    # compares the two entries before it copies, and refuses the root otherwise.
+    target, value, refused = SETS_PAIRS[pair]
+    texts = {
+        "target": module(target),
+        "value": module(value),
+        "caller": module(
+            sets("assignment", "us:statutes/1/target#t", "us:statutes/1/value#v"),
+            derived("answer", Y2000, "'t + 1'"),
+            imports=("target", "value"),
+        ),
+    }
+    if not refused:
+        edges, _ = compared(tmp_path, texts)
+        assert edge("caller#answer", "value#v", Y2000, Y2020) in edges
+        return
+    run, modules = engine_run(tmp_path, texts)
+    assert set(run.refused) == {"us:statutes/1/caller"}
+    assert "source relation" in run.refused["us:statutes/1/caller"]
+    assert lsi.program("us:statutes/1/caller", lsi.flattened("us:statutes/1/caller", modules), modules) is None
+    assert not any(item.rule.startswith("us:statutes/1/caller#") for item in lsi.static_model(modules).references)

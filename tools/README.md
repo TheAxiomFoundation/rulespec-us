@@ -99,7 +99,7 @@ the pinned engine:
 
 - **YAML.** It reads YAML the way the engine's parser does: an unquoted `yes`
   stays a string, and `name: TRUE` names a rule `TRUE`. It refuses a module that
-  writes out a YAML tag or leaves a formula string open, rather than guess.
+  writes out a YAML tag, rather than guess.
 - **Names.** It resolves a formula's names against the whole import closure,
   because a `#fragment` does not narrow what a formula sees, and by namespace,
   not by `kind`. A rule with `values` is a table, and it starts at its first
@@ -111,9 +111,20 @@ the pinned engine:
   name reads a parameter of that name when one exists, and otherwise a derived
   rule. In a judgment position (an `if` condition, `and`, `or`, `not`, and the
   whole formula of a Judgment rule) it reads only a derived rule. A bare
-  `period_start` or `period_end` reads the period, and `len` drops the field it
-  carries. A formula the engine refuses to lower falls back to a token reader
-  that reads every name it mentions both ways.
+  `period_start` or `period_end` reads the period, `len` drops the field it
+  carries, and a `match` whose only arm is `_` reads nothing through its
+  subject. Like the engine, it refuses an integer literal that overflows an
+  i64, a decimal literal that overflows rust_decimal, and a string that
+  escapes a non-ASCII character, on which the engine's lexer panics. A formula
+  the engine refuses to lower falls back to a token reader that reads every
+  name it mentions both ways.
+- **One formula source.** The engine writes the formulas of every module a root
+  merges into one source and lexes it again. A docstring left open there skips
+  to the next `"""` or the end of the source. Under a root that imports such a
+  module, the engine can compile the root without the root's own rules. So the
+  tool refuses a quote left open in any formula, and a docstring left open
+  anywhere but the last formula a module writes, and it refuses a root that
+  writes a formula after one.
 - **Dates.** A version applies from `effective_from` through `effective_to`, and
   on each date the engine picks the applicable version that starts last. The
   tool compares the dates each rule version applies with every version of what
@@ -125,7 +136,13 @@ the pinned engine:
   means that module's own relation of that name, and a member alias means its
   filtered relation in rules of that relation's entity. A `sets` source relation
   gives its target the value's versions in the module's own root, the way the
-  engine finds and copies them.
+  engine finds and copies them, and the tool reads nothing from a root the
+  engine refuses over one: a side missing, two kinds, or metadata that differ
+  (`indexed_by`, entity, dtype, or a unit or period both sides state). The
+  engine also refuses a root whose relations
+  name a relation it lacks or depend on each other in a cycle; the tool does
+  not model that refusal, so it can only add edges there, and the
+  `engine-differential` job fails on any edge in a module the engine refuses.
 
 An edge means a version can read the gap, not that every query does: a branch
 no query takes still counts.
@@ -186,8 +203,10 @@ a scratch copy of the tree with citation metadata removed, because retired
 forms of that metadata would otherwise stop the engine from loading most of
 what it compares.
 
-The same job lowers generated programs and known hard shapes through the
-engine. Point `LATE_START_HARNESS` at the built harness to run those tests
+The same job lowers generated programs, known hard shapes, and about 1,600
+seeded formulas through the engine. The formulas mix edges of the grammar with
+generated and mutated ones, and the port must refuse and bind each one as the
+engine does. Point `LATE_START_HARNESS` at the built harness to run those tests
 locally.
 
 ```bash

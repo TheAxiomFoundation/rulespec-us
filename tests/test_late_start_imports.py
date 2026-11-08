@@ -99,6 +99,19 @@ EVERY_NAME_DERIVED = lsi.Scope(
         ("if a: b elif c: 1 else: 2", {"a", "b", "c"}),
         ("match a:\n  1 => b\n  _ => c", {"a", "b", "c"}),
         ("match a:\n  b => 1\n  'x' => 2", {"a", "b"}),
+        # A match keeps its subject only in each pattern's comparison and in the
+        # failure a match with no `_` ends in; a lone `_` arm is its result alone.
+        ("match a:\n  _ => b", {"b"}),
+        ("match a:\n  1 => b", {"a", "b"}),
+        # The largest literals the parser keeps: an i64, and a rust_decimal
+        # whose 96-bit mantissa rounds away extra fractional digits.
+        ("9223372036854775807 + a", {"a"}),
+        ("9_223_372_036_854_775_807 + a", {"a"}),
+        ("0" * 5_000 + "7 + a", {"a"}),
+        ("79228162514264337593543950335.4 + a", {"a"}),
+        ("79228162514264337593543950335.49999 + a", {"a"}),
+        ("0" * 40 + "79228162514264337593543950335.4 + a", {"a"}),
+        ("1." + "9" * 5_000 + " + a", {"a"}),
         ("if exactly_one(a, b): 1 else: 0", {"a", "b"}),
         ("-a", {"a"}),
         ("\u3000a\u3000", {"a"}),
@@ -144,9 +157,26 @@ def test_lower_formula_binds_what_formula_rs_binds(formula, expected):
         "len(a + b)",
         "match a:\n  _ => 1\n  2 => 3",
         "match a:",
+        # The subject must lower even where nothing keeps it.
+        "match (a and b):\n  _ => 1",
         "if a: 1",
         "a[0]",
         "9223372036854775808",
+        "9_223_372_036_854_775_808",
+        # Past CPython's 4,300-digit int() limit, which the port must not hit.
+        "1" * 5_000,
+        "79228162514264337593543950335.5",
+        "79228162514264337593543950336.0",
+        "7922816251426433759354395033_5.5",
+        "0" * 40 + "79228162514264337593543950335.5",
+        "1" * 5_000 + ".5",
+        # formula.rs escapes one byte of a non-ASCII character and then slices
+        # from inside it: its lexer panics (fuzz seeds 6 and 8), or finds no
+        # closing quote.
+        "'\\é' + a",
+        "'\\ n' + a",
+        "'\\é\\n' + a",
+        "a + '\\é",
         "'open",
         "'trailing\\",
         "a ! b",
@@ -275,9 +305,43 @@ def test_a_long_run_of_whitespace_does_not_stall_the_lexer():
     assert time.perf_counter() - started < 5
 
 
-def test_a_formula_nested_past_the_port_is_refused_not_crashed():
+@pytest.fixture
+def default_frame_limit():
+    """CPython's default recursion limit, set for this test alone. A port that
+    never put the limit back would leave it raised for every later test, so
+    reading the limit before and after inside one test would miss that."""
+    saved = sys.getrecursionlimit()
+    sys.setrecursionlimit(1_000)
+    yield 1_000
+    sys.setrecursionlimit(saved)
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "(" * 3_500 + "a" + ")" * 3_500,
+        "-" * 2_000 + "a",
+        "max(" * 2_000 + "a" + ")" * 2_000,
+        "a" + " + a" * 1_999,
+        "not " * 2_000 + "a",
+    ],
+    ids=["parentheses", "negation", "calls", "sum", "not"],
+)
+def test_the_port_follows_nesting_the_engine_lowers(formula, default_frame_limit):
+    # The pinned engine lowers each of these shapes (the engine fixtures run
+    # them); the port lifts CPython's recursion limit while it parses and
+    # lowers, and puts it back.
+    lowered = lsi.lower_formula(formula, EVERY_NAME_DERIVED, judgment=formula.startswith("not"))
+    assert lowered.reads == {(lsi.DERIVED, "a")}
+    assert sys.getrecursionlimit() == default_frame_limit
+
+
+def test_a_formula_nested_past_the_port_is_refused_not_crashed(default_frame_limit):
+    # The engine's own stack overflows before 4,000 parentheses. Past its frame
+    # budget the port refuses the formula, so the token reader takes it.
     with pytest.raises(lsi.FormulaError, match="nests deeper"):
-        lsi.lower_formula("(" * 5_000 + "a" + ")" * 5_000, EVERY_NAME_DERIVED)
+        lsi.lower_formula("(" * 30_000 + "a" + ")" * 30_000, EVERY_NAME_DERIVED)
+    assert sys.getrecursionlimit() == default_frame_limit
 
 
 @pytest.mark.parametrize(
@@ -497,7 +561,8 @@ rules:
 """
     )
     assert module.imports == ()
-    assert module.rules == (_parameter("table", Y2018, table=True),)
+    # The table keeps its indexed_by, which a sets relation compares.
+    assert module.rules == (replace(_parameter("table", Y2018, table=True), indexed_by="size"),)
 
 
 @pytest.mark.parametrize(
@@ -602,15 +667,116 @@ def test_parse_module_rejects_a_date_it_cannot_read(raw):
         )
 
 
-@pytest.mark.parametrize("formula", ['"abc', "'abc", '1 """', '"""a""', 'a + """b'])
-def test_a_formula_that_leaves_a_string_open_is_refused(formula):
+def _derived_text(name: str, *formulas: str) -> dict:
+    return {
+        "name": name,
+        "kind": "derived",
+        "versions": [
+            {"from": f"{2018 + index}-01-01", "formula": formula}
+            for index, formula in enumerate(formulas)
+        ],
+    }
+
+
+TABLE_TEXT = {
+    "name": "t",
+    "kind": "parameter",
+    "indexed_by": "band",
+    # The engine parses this formula alone, where the docstring runs to its end,
+    # and never writes it into the merged source.
+    "versions": [{"from": "2018-01-01", "values": {0: 1}, "formula": '1 """'}],
+}
+
+OPEN_DOCSTRINGS = ['1 """', '"""a""', 'a + """b', '"""doc"""\nd"""']
+
+
+@pytest.mark.parametrize("formula", ['"abc', "'abc", "'a \"\"\"", *OPEN_DOCSTRINGS])
+def test_a_formula_that_leaves_a_string_open_before_another_is_refused(formula):
     # The engine lexes every rule's formula as one source, so an open string
     # runs into the next rule (round 3 witness).
-    text = yaml.safe_dump(
-        {"rules": [{"name": "r", "kind": "derived", "from": "2018-01-01", "formula": formula}]}
-    )
+    text = yaml.safe_dump({"rules": [_derived_text("r", formula), _derived_text("s", "1")]})
+    with pytest.raises(ValueError, match="leaves a (doc)?string open"):
+        lsi.parse_module(text, "us/a.yaml")
+
+
+@pytest.mark.parametrize("formula", ['"abc', "'abc", "'a \"\"\""])
+def test_a_quote_left_open_is_refused_even_in_the_last_formula(formula):
+    # The lexer refuses a quote nothing closes, alone or in the merged source.
+    text = yaml.safe_dump({"rules": [_derived_text("r", formula)]})
     with pytest.raises(ValueError, match="leaves a string open"):
         lsi.parse_module(text, "us/a.yaml")
+
+
+@pytest.mark.parametrize("formula", OPEN_DOCSTRINGS)
+@pytest.mark.parametrize(
+    "rules",
+    [
+        lambda formula: [_derived_text("r", formula)],
+        lambda formula: [_derived_text("r", "1", formula)],
+        lambda formula: [_derived_text("r", formula), TABLE_TEXT],
+        lambda formula: [_derived_text("s", "2"), _derived_text("r", formula)],
+    ],
+    ids=["only", "last-version", "before-a-table", "last-rule"],
+)
+def test_the_last_formula_a_module_writes_may_leave_a_docstring_open(formula, rules):
+    # The lexer skips a docstring nothing closes to the end of the source,
+    # and a table writes a stub its indexed parameter replaces (seed 2 witness).
+    module = lsi.parse_module(yaml.safe_dump({"rules": rules(formula)}), "us/a.yaml")
+    assert module.open_docstring
+    assert module.rules[[rule.name for rule in module.rules].index("r")].versions[-1].formula == formula
+
+
+def test_a_docstring_left_open_in_an_earlier_version_is_refused():
+    text = yaml.safe_dump({"rules": [_derived_text("r", '1 """', "2")]})
+    with pytest.raises(ValueError, match="from 2018-01-01 leaves a docstring open"):
+        lsi.parse_module(text, "us/a.yaml")
+
+
+def test_a_table_versions_formula_is_never_written():
+    # rulespec.rs writes a stub for a table, so its versions' formulas never
+    # reach the merged source.
+    module = lsi.parse_module(
+        yaml.safe_dump({"rules": [TABLE_TEXT, _derived_text("r", "1")]}), "us/a.yaml"
+    )
+    assert not module.open_docstring
+    assert [rule.name for rule in module.rules] == ["t", "r"]
+
+
+def _open_tail(name: str) -> "lsi.Module":
+    return lsi.parse_module(
+        yaml.safe_dump({"rules": [_derived_text(name, 'imported + 1 """')]}), f"us/{name}.yaml"
+    )
+
+
+def test_a_root_may_not_write_a_formula_after_a_docstring_left_open():
+    # The engine merges an import's rules before the root's own, so the
+    # docstring skips the root's formulas, and the engine compiles the root
+    # without them (engine fixture witness).
+    reader = lsi.parse_module(
+        yaml.safe_dump({"imports": ["us:b"], "rules": [_derived_text("r", "b + 1")]}), "us/a.yaml"
+    )
+    with pytest.raises(ValueError, match="us:b: its last formula leaves a docstring open, and under us:a"):
+        lsi.static_model({"us:a": reader, "us:b": _open_tail("b")})
+
+
+def test_a_root_may_write_tables_after_a_docstring_left_open():
+    tables = lsi.parse_module(
+        yaml.safe_dump({"imports": ["us:b"], "rules": [TABLE_TEXT]}), "us/a.yaml"
+    )
+    modules = {"us:a": tables, "us:b": _open_tail("b")}
+    built = lsi.program("us:a", lsi.flattened("us:a", modules), modules)
+    assert [entry.source for entry in built.group(lsi.PARAMETER, "t")] == ["us:a#t"]
+    assert [entry.source for entry in built.group(lsi.DERIVED, "b")] == ["us:b#b"]
+    lsi.static_model(modules)
+
+
+def test_two_docstrings_left_open_in_one_root_are_refused():
+    tables = lsi.parse_module(
+        yaml.safe_dump({"imports": ["us:b", "us:c"], "rules": [TABLE_TEXT]}), "us/a.yaml"
+    )
+    modules = {"us:a": tables, "us:b": _open_tail("b"), "us:c": _open_tail("c")}
+    with pytest.raises(ValueError, match="us:b: its last formula leaves a docstring open"):
+        lsi.program("us:a", lsi.flattened("us:a", modules), modules)
 
 
 @pytest.mark.parametrize("formula", ['"""a"""', '"a" + b', "'it\\'s' + b", '"""\n"""\n1'])
@@ -1512,6 +1678,122 @@ def test_a_sets_relation_between_kinds_is_refused():
         ),
     }
     assert lsi.program("us:a", lsi.flattened("us:a", modules), modules) is None
+
+
+def _scalar_text(name: str, **meta) -> dict:
+    return {"name": name, "kind": "parameter", "from": "2018-01-01", "formula": "1", **meta}
+
+
+def _table_text(name: str, **meta) -> dict:
+    versions = [{"from": "2018-01-01", "values": {0: 1}}]
+    return {"name": name, "kind": "parameter", "indexed_by": "size", "versions": versions, **meta}
+
+
+def _computed_text(name: str, **meta) -> dict:
+    rule = {"name": name, "kind": "derived", "entity": "Person", "dtype": "Integer"}
+    return {**rule, "period": "Month", "from": "2018-01-01", "formula": "x + 1", **meta}
+
+
+def _sets_modules(target: dict, value: dict, *more: tuple[str, dict]) -> dict:
+    """us:a sets us:b's `t` to us:c's `v`, then to each further (module, rule)."""
+    modules = {
+        "us:b": lsi.parse_module(yaml.safe_dump({"rules": [target]}), "us/b.yaml"),
+        "us:c": lsi.parse_module(yaml.safe_dump({"rules": [value]}), "us/c.yaml"),
+    }
+    relations = [("us:c#v",)]
+    for owner, rule in more:
+        modules[owner] = lsi.parse_module(yaml.safe_dump({"rules": [rule]}), f"{owner}.yaml")
+        relations.append((f"{owner}#{rule['name']}",))
+    assignments = [
+        {
+            "name": f"assignment{number}",
+            "kind": "source_relation",
+            "source_relation": {"type": "sets", "target": "us:b#t", "value": value_id},
+        }
+        for number, (value_id,) in enumerate(relations)
+    ]
+    reader = {"name": "r", "kind": "derived", "entity": "Person", "from": "2018-01-01", "formula": "t + 1"}
+    modules["us:a"] = lsi.parse_module(
+        yaml.safe_dump({"imports": sorted(modules), "rules": [*assignments, reader]}), "us/a.yaml"
+    )
+    return modules
+
+
+@pytest.mark.parametrize(
+    ("target", "value"),
+    [
+        (_table_text("t"), _scalar_text("v")),
+        (_table_text("t"), _table_text("v", indexed_by="band")),
+        (_scalar_text("t", unit="USD"), _scalar_text("v", unit="EUR")),
+        (_computed_text("t"), _computed_text("v", entity="Household")),
+        (_computed_text("t"), {**_computed_text("v"), "entity": None}),
+        (_computed_text("t"), _computed_text("v", dtype="Boolean")),
+        (_computed_text("t", dtype="Rate"), _computed_text("v", dtype="Integer")),
+        (_computed_text("t"), _computed_text("v", period="Year")),
+        (_computed_text("t", unit="USD"), _computed_text("v", unit="EUR")),
+        (_table_text("t", unit="USD"), _table_text("v", unit="EUR")),
+        (_table_text("t", unit=""), _table_text("v", unit="USD")),
+    ],
+    ids=[
+        "table-and-scalar",
+        "two-indexes",
+        "parameter-units",
+        "entities",
+        "scalar-entity",
+        "dtypes",
+        "decimal-and-integer",
+        "periods",
+        "derived-units",
+        "table-units",
+        "table-keeps-an-empty-unit",
+    ],
+)
+def test_a_sets_relation_between_entries_whose_metadata_differ_is_refused(target, value):
+    # apply_source_relation_sets compares the two lowered entries before it
+    # copies; the property test's generator found the first of these.
+    modules = _sets_modules(target, value)
+    assert lsi.program("us:a", lsi.flattened("us:a", modules), modules) is None
+
+
+@pytest.mark.parametrize(
+    ("target", "value"),
+    [
+        (_scalar_text("t", unit="USD"), _scalar_text("v")),
+        (_table_text("t"), _table_text("v")),
+        (_computed_text("t"), _computed_text("v", dtype="int")),
+        (_computed_text("t", dtype="Money"), _computed_text("v", dtype="Rate")),
+        (_computed_text("t", dtype="Foo"), {**_computed_text("v"), "dtype": None}),
+        (_computed_text("t"), {**_computed_text("v"), "period": None}),
+        ({**_computed_text("t"), "entity": "Scalar"}, {**_computed_text("v"), "entity": None}),
+        (_computed_text("t", unit="USD"), _computed_text("v", unit="")),
+    ],
+    ids=[
+        "one-unit",
+        "one-index",
+        "dtype-spellings",
+        "two-decimals",
+        "unknown-dtype-is-decimal",
+        "one-period",
+        "scalar-entity-spelled-out",
+        "empty-unit-is-none",
+    ],
+)
+def test_a_sets_relation_between_entries_whose_metadata_agree_copies(target, value):
+    modules = _sets_modules(target, value)
+    built = lsi.program("us:a", lsi.flattened("us:a", modules), modules)
+    namespace = lsi.PARAMETER if target["kind"] == "parameter" else lsi.DERIVED
+    assert [entry.source for entry in built.group(namespace, "t")] == ["us:c#v"]
+
+
+def test_a_target_keeps_its_own_metadata_after_a_copy():
+    # The engine copies versions and semantics, not the unit, so a second copy
+    # compares the target's own unit, which it does not carry.
+    modules = _sets_modules(
+        _scalar_text("t"), _scalar_text("v", unit="USD"), ("us:d", _scalar_text("w", unit="EUR"))
+    )
+    built = lsi.program("us:a", lsi.flattened("us:a", modules), modules)
+    [entry] = built.group(lsi.PARAMETER, "t")
+    assert (entry.source, entry.rule.unit) == ("us:d#w", None)
 
 
 def test_a_sets_relation_finds_only_the_definition_that_kept_the_id():

@@ -33,9 +33,22 @@ axiom-rules-engine at the pin in `.axiom/workflow-toolchain.toml`:
   rulespec.rs parses each formula on its own before it lowers any, and refuses
   the module when one does not parse to its end, so the port parses each
   formula alone. A word in a string or comment is not a reference, nor is a
-  called function. The engine then lexes every rule's formula again as one
-  source, so a formula that leaves a string open would run into the next rule;
-  the check refuses that module.
+  called function. Like the engine's parser, the port refuses an integer
+  literal that does not fit an i64 and a decimal one that does not fit
+  rust_decimal's 96-bit mantissa. It refuses a string that escapes a non-ASCII
+  character too: the engine's lexer escapes one byte of it and then slices
+  from inside it, so it panics, or finds no closing quote. The port follows
+  nesting as deep as the engine lowers it on CPython 3.11 and later; on older
+  versions a formula nested past the recursion limit falls back to the token
+  reader. The engine then writes the formula of each version of each parameter
+  and derived rule, from every module the root merges, into one source in
+  merge order, and lexes it again. A quote left open stops that lexer. A
+  docstring left open makes it skip to the next `\"\"\"`, or to the end of the
+  source, so it can swallow every formula written after it. So the check
+  refuses a module that leaves a quote open in any formula, or a docstring open
+  in any formula but the last it writes, and refuses a root that merges
+  another formula after a docstring left open. A table's versions are not
+  written, so their formulas do not count.
 * Namespaces. `kind` does not decide what a name binds to. A rule with `values`
   in any version is a parameter table, of either kind, and its versions without
   `values` do not exist at run time. Otherwise a rule with an `entity`, or with
@@ -53,9 +66,12 @@ axiom-rules-engine at the pin in `.axiom/workflow-toolchain.toml`:
   `period_end` read the period. `x[i]` reads the parameter `x`. `len` reads no
   name, and drops the field it may carry. `sum(rel.f)`, `count_where` and
   `sum_where` read their fields and filters as derived rules or inputs. A
-  formula the engine refuses to lower falls back to a token reader that reads
-  each name it mentions both ways; `differential` fails when a module the
-  engine compiles needs that fallback.
+  `match` must lower its subject, but only the comparison with each pattern,
+  and the failure a match with no `_` arm ends in, read it, so a match whose
+  only arm is `_` reads nothing through its subject. A formula the engine
+  refuses to lower falls back to a token reader that reads each name it
+  mentions both ways; `differential` fails when a module the engine compiles
+  needs that fallback.
 * Relations. A version that aggregates over a derived relation reads what the
   relation's predicate reads, as derived rules, on each date it runs. The
   engine evaluates the relation the predicate filters first, and a predicate
@@ -65,7 +81,13 @@ axiom-rules-engine at the pin in `.axiom/workflow-toolchain.toml`:
   own relation, `<module>#relation.<name>`. Where an aggregation reads an
   imported derived rule, it may instead take the one relation of that short
   name. rewrite_filtered_entity_member_aliases then sends a member alias to its
-  filtered relation in each rule of that relation's entity.
+  filtered relation in each rule of that relation's entity. compile.rs
+  validate_relation_derivation_graph refuses a root whose relation filters, or
+  whose predicate asks for membership of, a relation the program lacks, or
+  whose relations depend on each other in a cycle. The check does not model
+  that refusal: it reads such a root as if the engine compiled it, so it can
+  only add edges there, and `differential` fails on an edge in a module the
+  engine refuses.
 * Provenance. A binding crosses an import when any imported definition feeds
   it. Parameters merge, so a local definition beside an imported one does not
   make the merged name local. The merged name holds every version of each, so
@@ -83,8 +105,10 @@ any kind, that carries one, and the rules of a composition compiled as the root
 carry none. Then each relation, in rule order, resolves its target and its
 value to the first parameter that carries the id, or else the first derived
 rule, and copies the value's versions onto that one target entry. The engine
-refuses a root where only one side resolves or the two sides differ in kind,
-and the check reads nothing from that root. A formula that reads
+refuses a root where only one side resolves, where the two sides differ in
+kind, or where their metadata differ: `indexed_by` for parameters, the entity
+or dtype for derived rules, and the unit, or a derived rule's period, when both
+sides carry one. The check reads nothing from such a root. A formula that reads
 the target then meets the value's versions, and the edge names the value.
 
 The check reads each module's own rules under that module's own root. Under a
@@ -161,11 +185,12 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
@@ -212,6 +237,16 @@ MINIMUM_COMPILED_SHARE = 0.99
 
 # formula.rs parse_dtype: these dtypes lower a rule's formula as a judgment.
 JUDGMENT_DTYPES = frozenset({"Judgment", "judgment"})
+
+# formula.rs parse_dtype, whole: the DTypeSpec each spelling lowers to. Any other
+# spelling, or none, lowers to Decimal.
+DTYPE_SPECS = {
+    **dict.fromkeys(JUDGMENT_DTYPES, "Judgment"),
+    **dict.fromkeys(("Boolean", "Bool", "boolean", "bool"), "Bool"),
+    **dict.fromkeys(("Integer", "integer", "int"), "Integer"),
+    **dict.fromkeys(("Text", "text", "String", "string"), "Text"),
+    **dict.fromkeys(("Date", "date"), "Date"),
+}
 
 # model.rs SCALAR_ENTITY: lower_module gives a derived rule with no entity this one.
 SCALAR_ENTITY = "Scalar"
@@ -454,6 +489,12 @@ class Rule:
     # source; "" when it states none.
     dtype: str = ""
     entity: str = ""
+    # The `unit`, `period` and `indexed_by` the lowered entry carries, which
+    # apply_source_relation_sets compares; None when it carries none. The formula
+    # source drops an empty one, and a table keeps its own as written.
+    unit: str | None = None
+    period: str | None = None
+    indexed_by: str | None = None
 
     @property
     def start(self) -> date:
@@ -505,6 +546,9 @@ class Module:
     # predicate reads as derived rules; the derived-namespace names of `rules`
     # when the caller gives none.
     derived_kinds: tuple[str, ...] | None = None
+    # The last formula the module writes leaves a docstring open, which the
+    # engine's lexer skips to the end of the root's formula source.
+    open_docstring: bool = False
 
     def __post_init__(self) -> None:
         if not self.names:
@@ -586,19 +630,27 @@ def _tokens(formula: str) -> list[tuple[str | None, str]]:
     ]
 
 
+def open_string(formula: str) -> str | None:
+    """What the formula leaves open: "string" for a quote nothing closes, which the
+    lexer refuses, "docstring" for a docstring nothing closes, which the lexer
+    skips to the end of its source, or None when it closes everything it opens.
+    """
+    for match in TOKEN.finditer(formula):
+        if match.lastgroup == "open":
+            return "string"
+        text = match[0]
+        if match.lastgroup == "docstring" and not (len(text) >= 6 and text.endswith('"""')):
+            return "docstring"
+    return None
+
+
 def closes_its_strings(formula: str) -> bool:
     """Whether every string and docstring the formula opens also ends in it.
 
     rulespec.rs writes every rule's formula into one source and lexes it once,
     so an open quote would run into the next rule, which this check reads apart.
     """
-    for match in TOKEN.finditer(formula):
-        text = match[0]
-        if match.lastgroup == "open" or (
-            match.lastgroup == "docstring" and not (len(text) >= 6 and text.endswith('"""'))
-        ):
-            return False
-    return True
+    return open_string(formula) is None
 
 
 def _unwrapped(tokens: list[tuple[str | None, str]], index: int) -> tuple[int, int]:
@@ -714,12 +766,60 @@ _KEYWORDS = {word: word for word in RESERVED} | {"True": "true", "False": "false
 _PAIRS = frozenset({"=>", "<=", ">=", "==", "!=", "->"})
 _SINGLES = frozenset(":,.=+-*/<>()[]")
 _ESCAPES = {"\\": "\\", '"': '"', "'": "'", "n": "\n", "r": "\r", "t": "\t"}
-_I64_MAX = 2**63 - 1
+# The largest literals the parser keeps: str::parse::<i64> takes an integer
+# token, and rust_decimal 1.41's Decimal::from_str, with its 96-bit mantissa, a
+# float token.
+_I64_MAX_TEXT = str(2**63 - 1)
+_U96_MAX_TEXT = str(2**96 - 1)
+# formula.rs recurses once for each level of nesting, on the engine's
+# main-thread stack. At the pin it lowers formulas nested 2,000 deep in every
+# shape, and it overflows that stack somewhere between 2,000 and 16,000 levels,
+# by shape. The port's parser spends nine Python frames on each parenthesis, so
+# while it parses and lowers it lifts CPython's limit of 1,000 frames to this.
+# CPython 3.11 and later run a call from Python to Python without recursing in
+# C, so those frames cost heap, not stack; older versions keep their limit and
+# fall back to the token reader past it.
+_FORMULA_FRAMES = 200_000
 
 
 def rust_trim(text: str) -> str:
     """str::trim."""
     return text.strip(_RUST_WHITESPACE)
+
+
+def _exceeds(digits: str, limit: str) -> bool:
+    """Whether a run of digits, leading zeros and all, writes a larger number
+    than `limit` does. It never calls int(), which CPython refuses on more than
+    4,300 digits."""
+    significant = digits.lstrip("0")
+    if len(significant) != len(limit):
+        return len(significant) > len(limit)
+    return significant > limit
+
+
+def _decimal_overflows(digits: str) -> bool:
+    """rust_decimal 1.41 Decimal::from_str on a float token once formula.rs drops
+    its underscores, `<whole>.<fraction>` with digits on both sides. It rounds
+    away fractional digits past a scale of 28 or past a 96-bit mantissa, and
+    refuses only a whole part above 2**96 - 1, or a whole part of 2**96 - 1 that
+    the first fractional digit rounds up."""
+    whole, fraction = digits.split(".", 1)
+    if _exceeds(whole, _U96_MAX_TEXT):
+        return True
+    return whole.lstrip("0") == _U96_MAX_TEXT and fraction[0] >= "5"
+
+
+@contextmanager
+def _room_to_nest() -> Iterator[None]:
+    """Lift the recursion limit to _FORMULA_FRAMES while the port parses or
+    lowers, and put it back afterwards."""
+    limit = sys.getrecursionlimit()
+    if sys.version_info >= (3, 11) and limit < _FORMULA_FRAMES:
+        sys.setrecursionlimit(_FORMULA_FRAMES)
+    try:
+        yield
+    finally:
+        sys.setrecursionlimit(limit)
 
 
 def _run(formula: str, position: int, chars: frozenset[str]) -> int:
@@ -742,6 +842,12 @@ def _string(formula: str, position: int) -> tuple[str, int]:
         if current == "\\":
             if position + 1 >= len(formula):
                 raise FormulaError("unterminated string")
+            if not formula[position + 1].isascii():
+                # formula.rs escapes one byte of the character and then slices
+                # from inside it, so its lexer panics, or finds no closing quote.
+                raise FormulaError(
+                    "an escaped non-ASCII character stops the engine's lexer"
+                )
             parts.append(formula[start:position])
             parts.append(_ESCAPES.get(formula[position + 1], formula[position + 1]))
             position += 2
@@ -967,11 +1073,14 @@ class _Parser:
         kind, text = self.take()
         if kind == "int":
             digits = text.replace("_", "")
-            if int(digits) > _I64_MAX:
+            if _exceeds(digits, _I64_MAX_TEXT):
                 raise FormulaError(f"{text} does not fit an i64")
             return ("int", digits)
         if kind == "float":
-            return ("float", text.replace("_", ""))
+            digits = text.replace("_", "")
+            if _decimal_overflows(digits):
+                raise FormulaError(f"{text} does not fit a rust_decimal Decimal")
+            return ("float", digits)
         if kind == "string":
             return ("str", text)
         if kind in ("true", "false"):
@@ -995,10 +1104,11 @@ def parse_formula(formula: str) -> tuple:
     parsed = _PARSED.get(formula)
     if parsed is None:
         try:
-            parser = _Parser(lex(rust_trim(formula)))
-            parsed = parser.expr()
-            if parser.kind() != "eof":
-                raise FormulaError("unexpected trailing token in formula")
+            with _room_to_nest():
+                parser = _Parser(lex(rust_trim(formula)))
+                parsed = parser.expr()
+                if parser.kind() != "eof":
+                    raise FormulaError("unexpected trailing token in formula")
         except FormulaError as error:
             parsed = str(error)
         except RecursionError:
@@ -1109,7 +1219,11 @@ def _scalar(node: tuple, scope: Scope, found: _Found) -> None:
         _, subject, cases, default = node
         if not cases and default is None:
             raise FormulaError("empty match")
-        _scalar(subject, scope, found)
+        # The engine lowers the subject, so a subject that does not lower refuses
+        # the formula, but only the comparison with each pattern, and the NoMatch
+        # a match without `_` ends in, keep it. A lone `_` arm lowers to its
+        # result alone.
+        _scalar(subject, scope, found if cases else _Found())
         if default is not None:
             _scalar(default, scope, found)
         for pattern, result in cases:
@@ -1202,7 +1316,8 @@ def lower_formula(formula: str, scope: Scope, judgment: bool = False) -> Lowered
     judgment or a scalar. Raises FormulaError where the engine refuses."""
     found = _Found()
     try:
-        (_judgment if judgment else _scalar)(parse_formula(formula), scope, found)
+        with _room_to_nest():
+            (_judgment if judgment else _scalar)(parse_formula(formula), scope, found)
     except RecursionError:
         raise FormulaError("the formula nests deeper than this port follows") from None
     return Lowered(frozenset(found.reads), frozenset(found.aggregations), frozenset(found.members))
@@ -1235,11 +1350,6 @@ def _dated(raw: Iterable[Mapping[str, Any]], where: str) -> tuple[Version, ...]:
             continue
         end = _date(version.get("effective_to", version.get("to")), where)
         formula = string_like(version.get("formula")) or ""
-        if not closes_its_strings(formula):
-            raise ValueError(
-                f"{where}: the formula from {start} leaves a string open, and the engine"
-                " lexes every rule's formula as one source"
-            )
         versions.append(Version(start, formula, OPEN if end is None else end))
     return tuple(versions)
 
@@ -1258,14 +1368,20 @@ def parse_rule(rule: Mapping[str, Any], where: str) -> Rule | None:
     entity = _raw_text(string_like(rule.get("entity")) or "", where)
     declared = scalar_value(rule.get("versions")) or []
     tabled = [version for version in declared if scalar_value(version.get("values"))]
+    unit, indexed_by = (string_like(rule.get(key)) for key in ("unit", "indexed_by"))
     if tabled:
-        return Rule(name, _dated(tabled, where), PARAMETER, True, dtype, entity)
+        # to_indexed_parameter_spec copies the rule's own unit and indexed_by.
+        return Rule(
+            name, _dated(tabled, where), PARAMETER, True, dtype, entity, unit, None, indexed_by
+        )
     versions = _dated(declared or [rule], where)
     if not versions:
         return None
+    # write_formula_definition writes metadata only when it is not empty.
+    written = (unit or None, string_like(rule.get("period")) or None, indexed_by or None)
     if entity or not all(is_literal(item.formula) for item in versions):
-        return Rule(name, versions, DERIVED, False, dtype, entity)
-    return Rule(name, versions, PARAMETER, False, dtype, entity)
+        return Rule(name, versions, DERIVED, False, dtype, entity, *written)
+    return Rule(name, versions, PARAMETER, False, dtype, entity, *written)
 
 
 def parse_set(rule: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -1340,16 +1456,44 @@ def parse_module(text: str, where: str = "<module>") -> Module:
         if "\n" in str(string_like(metadata.get(key)) or ""):
             raise ValueError(f"{where}: module {key} holds a line break")
     rules = scalar_value(document.get("rules")) or []
-    parsed = (parse_rule(rule, f"{where} rule {rule.get('name')}") for rule in rules)
+    parsed = tuple(
+        rule
+        for rule in (parse_rule(rule, f"{where} rule {rule.get('name')}") for rule in rules)
+        if rule is not None
+    )
     return Module(
         tuple(str(item) for item in scalar_value(document.get("imports")) or ()),
-        tuple(rule for rule in parsed if rule is not None),
+        parsed,
         tuple(item for item in map(parse_set, rules) if item is not None),
         tuple(str(rule.get("name")) for rule in rules),
         bool(string_like(metadata.get("kind"))),
         tuple(item for item in map(parse_relation, rules) if item is not None),
         tuple(str(rule.get("name")) for rule in rules if rule.get("kind") == "derived"),
+        _leaves_a_docstring_open(parsed, where),
     )
+
+
+def _leaves_a_docstring_open(rules: Iterable[Rule], where: str) -> bool:
+    """Whether the last formula the module writes leaves a docstring open.
+
+    rulespec.rs writes each version of each parameter and derived rule into one
+    formula source, in rule order, and lexes it once. It writes a table as a
+    stub instead, and the indexed parameter replaces whatever the stub lowers
+    to. A quote nothing closes stops the lexer. A docstring nothing closes
+    skips to the end of the source, so it skips every formula written after
+    it. Only the last formula may leave one open, and program() refuses a root
+    that merges another formula after it.
+    """
+    written = [(rule, version) for rule in rules if not rule.table for version in rule.versions]
+    for index, (rule, version) in enumerate(written):
+        left = open_string(version.formula)
+        if left is None or (left == "docstring" and index == len(written) - 1):
+            continue
+        raise ValueError(
+            f"{where} rule {rule.name}: the formula from {version.start} leaves a {left}"
+            " open, and the engine lexes every rule's formula as one source"
+        )
+    return bool(written) and open_string(written[-1][1].formula) == "docstring"
 
 
 def load_modules(root: Path) -> dict[str, Module]:
@@ -1481,9 +1625,25 @@ def program(origin: str, order: list[str], modules: Mapping[str, Module]) -> Pro
     that name, of any kind, that carries one; a composition's own rules carry
     none. apply_source_relation_sets then finds each id, a parameter before a
     derived rule and the first entry of either, and copies the value entry's
-    versions onto the target entry, in rule order. Parameters of one name merge
-    later, in compile.rs normalize_parameter_duplicates.
+    versions onto the target entry, in rule order, unless the two entries'
+    metadata differ (see _sets_refuses). Parameters of one name merge later, in
+    compile.rs normalize_parameter_duplicates.
+
+    The engine writes the formulas of every module in `order` into one source, in
+    that order. When one module's last formula leaves a docstring open and a
+    later module writes a formula, the lexer skips that formula; the check
+    refuses the root rather than guess what remains.
     """
+    left_open = None
+    for owner in order:
+        if left_open is not None and any(not rule.table for rule in modules[owner].rules):
+            raise ValueError(
+                f"{left_open}: its last formula leaves a docstring open, and under"
+                f" {origin} the engine writes {owner}'s formulas after it, which the"
+                " docstring skips"
+            )
+        if modules[owner].open_docstring:
+            left_open = owner
     ids: dict[str, str] = {}
     for owner in order:
         module = modules[owner]
@@ -1524,13 +1684,43 @@ def program(origin: str, order: list[str], modules: Mapping[str, Module]) -> Pro
             if found_target is None or found_value is None or found_target[0] is not found_value[0]:
                 return None
             entries, index = found_target
-            source = found_value[0][found_value[1]]
+            kept, source = entries[index].rule, found_value[0][found_value[1]]
+            if _sets_refuses(kept, source.rule):
+                return None
+            # The target keeps its own metadata; only what the value computes moves.
             entries[index] = Entry(
                 entries[index].owner,
                 source.source,
-                replace(source.rule, name=entries[index].rule.name),
+                replace(
+                    source.rule,
+                    name=kept.name,
+                    unit=kept.unit,
+                    period=kept.period,
+                    indexed_by=kept.indexed_by,
+                ),
             )
     return built
+
+
+def _sets_refuses(target: Rule, value: Rule) -> bool:
+    """apply_source_relation_sets refuses a copy between two parameters whose
+    indexed_by differs, and between two derived rules whose entity or dtype
+    differs, as lower_module fills them in. It refuses differing units on
+    either kind, and differing periods on derived rules, only when both sides
+    carry one."""
+
+    def both_differ(left: str | None, right: str | None) -> bool:
+        return left is not None and right is not None and left != right
+
+    if both_differ(target.unit, value.unit):
+        return True
+    if target.namespace == PARAMETER:
+        return target.indexed_by != value.indexed_by
+    return (
+        (target.entity or SCALAR_ENTITY) != (value.entity or SCALAR_ENTITY)
+        or DTYPE_SPECS.get(target.dtype, "Decimal") != DTYPE_SPECS.get(value.dtype, "Decimal")
+        or both_differ(target.period, value.period)
+    )
 
 
 def _coverage(group: list[Entry]) -> tuple[Interval, ...]:

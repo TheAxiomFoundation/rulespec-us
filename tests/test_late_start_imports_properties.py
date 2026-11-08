@@ -28,7 +28,8 @@ Invariants:
    depend on the order of references.
 6. Lexing and parsing: words in strings, comments and docstrings are never
    references, and the name of a called function is never one, however it is
-   parenthesized, even where a derived rule carries that name.
+   parenthesized, even where a derived rule carries that name. The token
+   pattern and the ported lexer agree on whether a formula leaves a quote open.
 7. Interval algebra: `merged`, `subtract`, `windows` and `widened` agree with a
    day-by-day count on every input.
 8. Baseline round trip: parse(render(S)) == S and render is canonical.
@@ -38,8 +39,9 @@ Invariants:
 
 The generated programs hold only what the engine loads: no import cycle, one
 derived rule per name per program, no derived cycle, and `sets` relations only
-where every root that flattens them resolves both sides to one kind. They
-carry end dates, tables, collisions between namespaces and `sets` relations.
+where every root that flattens them resolves both sides to entries of one kind
+whose metadata agree. They carry end dates, tables, collisions between
+namespaces and `sets` relations.
 
 Hypothesis is not installed in the shared validate workflow's pytest leg, so
 these skip there; the late-start-imports workflow installs it and runs them.
@@ -138,9 +140,11 @@ def relations_for(index: int):
 def loadable(spec):
     """What the engine refuses goes: a second derived rule of a name in one
     flattened program becomes a scalar, and so does a reading rule left in a
-    derived cycle, which `derived_cycle` finds. A `sets` relation stays only
-    when its value reads nothing, both sides sit in the module or its closure,
-    and every root that flattens it resolves both sides to one kind."""
+    derived cycle, which `derived_cycle` finds. Each `sets` relation first aims
+    at names its modules define (see `aimed`). It stays only when its value
+    reads nothing, both sides sit in the module or its closure, and every root
+    that flattens it resolves both sides to entries of one kind whose metadata
+    agree."""
     spec = {
         owner: (imported, dict(defined), stopped, relations)
         for owner, (imported, defined, stopped, relations) in spec.items()
@@ -162,7 +166,7 @@ def loadable(spec):
             stopped,
             tuple(
                 relation
-                for relation in relations
+                for relation in (aimed(item, spec) for item in relations)
                 if relation[0] in scope
                 and relation[2] in scope
                 and relation[1] in spec[relation[0]][1]
@@ -185,6 +189,40 @@ def loadable(spec):
         )
         imported, defined, stopped, relations = spec[owner]
         spec[owner] = (imported, defined, stopped, relations[:-1])
+
+
+# What apply_source_relation_sets compares between a target and its value, by
+# the shape that decides it in rule_yaml: the namespace, then an entity, dtype
+# and period for a derived rule, or `indexed_by` for a parameter.
+METADATA = {
+    **dict.fromkeys(("derived", "constant"), ("derived", "Person", "Integer", "Month")),
+    "computed": ("derived", "", "", ""),
+    **dict.fromkeys(LITERAL, ("parameter", "")),
+    **dict.fromkeys(TABLE, ("parameter", "size")),
+}
+
+
+def aimed(relation, spec):
+    """A drawn relation aimed at names its modules define: the target at one of
+    its module's rules, and the value at a rule that reads nothing, preferring
+    one whose metadata match the target's. Names drawn blind would leave almost
+    every relation pointing at nothing, or at entries the engine refuses to
+    copy between. lsi.program stays the arbiter: `loadable` drops whatever it
+    refuses."""
+    target_module, target_name, value_module, value_name = relation
+    defined = sorted(spec[target_module][1])
+    if target_name not in defined:
+        target_name = defined[NAMES.index(target_name) % len(defined)]
+    values = sorted(
+        name for name, (shape, _) in spec[value_module][1].items() if shape in VALUE_SHAPES
+    )
+    wanted = METADATA[spec[target_module][1][target_name][0]]
+    values = [
+        name for name in values if METADATA[spec[value_module][1][name][0]] == wanted
+    ] or values
+    if values and value_name not in values:
+        value_name = values[NAMES.index(value_name) % len(values)]
+    return (target_module, target_name, value_module, value_name)
 
 
 def derived_cycle(root, spec) -> tuple[str, str] | None:
@@ -681,6 +719,27 @@ def test_strings_comments_and_calls_are_never_references(names, extras, rng):
     assert lsi.closes_its_strings(formula_text)
     lowered = lsi.lower_formula(formula_text, NOISY_SCOPE)
     assert lowered.reads == {(lsi.DERIVED, name) for name in names}
+
+
+@semantic_properties
+@given(st.text(alphabet=st.sampled_from(['"', "'", "\\", "#", "\n", " ", "a", "1", "+", "é"]), max_size=14))
+def test_the_token_pattern_and_the_lexer_agree_on_a_string_left_open(formula_text):
+    # Two readers of one lexer: TOKEN, behind open_string and the token reader,
+    # and lex, the port of Lexer::tokenise. lex stops at its first error, so
+    # each direction holds where it can see the string.
+    try:
+        lsi.lex(formula_text)
+    except lsi.FormulaError as caught:
+        error = str(caught)
+    else:
+        error = None
+    left = lsi.open_string(formula_text)
+    if error is None:
+        assert left != "string"
+    if error == "unterminated string":
+        assert left == "string"
+    if left == "string":
+        assert error is not None
 
 
 @semantic_properties
