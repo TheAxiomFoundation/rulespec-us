@@ -52,6 +52,7 @@ AGGREGATE_JOB = "validate / validate"
 LEG_PREFIX = "validate / validate ("
 STATE_KEYS = (
     "encoder_main",
+    "validator_ref",
     "axiom_encode_ref",
     "axiom_rules_engine_ref",
     "axiom_compose_ref",
@@ -63,6 +64,18 @@ EFFECTS = ("none", "loosen", "tighten")
 _EFFECT_RE = re.compile(r"^\s*validation effect\s*:\s*(\S+)\s*$", re.I | re.M)
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 _MODULE_RE = re.compile(r"[a-z]{2}(?:-[a-z0-9]+)*/[^\s]+\.ya?ml")
+# The shared validator that the validate job calls, pinned by commit.
+DRIFT_WORKFLOW = ".github/workflows/validation-drift.yml"
+_VALIDATOR_USES_RE = re.compile(
+    r"^\s*uses:\s*TheAxiomFoundation/\.github/\.github/workflows/"
+    r"validate-rulespec\.yml@([0-9a-f]{40})\s*$",
+    re.M,
+)
+# A fenced code block (``` or ~~~), as in the encoder's validation-effect check.
+_FENCE_RE = re.compile(
+    r"^[ \t]{0,3}(?P<fence>`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]{0,3}(?P=fence)[ \t]*$|\Z)",
+    re.M | re.S,
+)
 _LOG_PREFIX_RE = re.compile(r"^.*?\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z ?")
 
 
@@ -70,6 +83,7 @@ def declared_effect(body: str | None) -> str | None:
     """Return the one declared effect of an encoder PR body, or None."""
 
     text = re.sub(r"<!--.*?-->", "", body or "", flags=re.S)
+    text = _FENCE_RE.sub("", text)
     effects = _EFFECT_RE.findall(text)
     if len(effects) != 1:
         return None
@@ -136,6 +150,9 @@ def plan(
         if state["encoder_verifier"] != current["encoder_verifier"]:
             full = True
             reasons.append("encoder verifier mode changed")
+        if state["validator_ref"] != current["validator_ref"]:
+            full = True
+            reasons.append("shared validator workflow changed")
         if state["axiom_encode_ref"] != current["axiom_encode_ref"]:
             full = True
             reasons.append("encoder pin (producer floor) changed")
@@ -418,8 +435,14 @@ def main(argv: list[str] | None = None) -> int:
         toolchain = tomllib.loads((repo / ".axiom/toolchain.toml").read_text())[
             "toolchain"
         ]
+        validators = _VALIDATOR_USES_RE.findall(
+            (repo / DRIFT_WORKFLOW).read_text(encoding="utf-8")
+        )
+        if len(validators) != 1:
+            parser.error(f"{DRIFT_WORKFLOW} must call one pinned shared validator")
         current = {
             "encoder_main": args.encoder_main,
+            "validator_ref": validators[0],
             "encoder_verifier": args.encoder_verifier,
             "axiom_encode_ref": pins["axiom_encode_ref"],
             "axiom_rules_engine_ref": pins["axiom_rules_engine_ref"],

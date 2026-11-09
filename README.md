@@ -61,8 +61,8 @@ generated formula artifacts.
   changed since the last drift run (`tools/validation_drift.py`). It runs
   every file for an encoder merge that declares `Validation effect: tighten`
   or `loosen` (or no valid effect), an encoder commit without a merged PR, a
-  rules-engine, composer or corpus pin or release, or 7 days since the last
-  full run. It skips the run when only `none` merges happened. Each failing
+  rules-engine, composer or corpus pin or release, a new shared-validator
+  commit in the workflow's `uses:` line, or 7 days since the last full run. It skips the run when only `none` merges happened. Each failing
   file opens or updates one `Validation drift: <path>` issue with the
   `re-encode-queue` label (at most 50 new issues per run). People close the
   issues; the run never closes them, because the validator lists only
@@ -71,10 +71,19 @@ generated formula artifacts.
   such as companion tests), or more than 50 new failures, fails the report,
   so the state does not advance and the next run reports again. In `pinned`
   verifier mode, encoder main merges do not start a run; a pin change does.
-  Run it by hand with `workflow_dispatch` (`scope: full`).
+  Run it by hand with `workflow_dispatch` (`scope: full`). A run that cannot
+  finish its report opens or refreshes one `Validation drift run failed`
+  issue (label `validation-drift-run`). Only the `issues` job can write
+  issues; it checks out nothing and runs only `gh` and `jq`.
+- The drift run and pull-request gating can call different shared-validator
+  commits until `repository-checks.yml` moves to the same commit. Keep them
+  equal.
 - A red full validation after a push to main still opens or refreshes one
   alarm issue (`push-alarm` in `repository-checks.yml`).
-- `.axiom/admissions/` holds reviewed, repository-specific admissions that
-  the encoder reads from the protected `main` commit only
-  (axiom-encode#2095). Today it holds `coverage-exemptions.jsonl`, in the
-  encoder's coverage-exemption record format. Code owners review it.
+- `.axiom/admissions/` is the reviewed, repository-specific admissions
+  registry (axiom-encode#2095). Today it is dormant: it holds an empty
+  `coverage-exemptions.jsonl`, and no workflow exports it to the encoder yet
+  (`axiom-encode admission-registry export` from the protected `main`
+  commit). A follow-up wires it into the shared validator; until then a
+  record here admits nothing. `tests/test_admissions_registry.py` checks the
+  file layout, and CODEOWNERS requests review.

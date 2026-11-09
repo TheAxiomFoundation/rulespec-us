@@ -16,6 +16,7 @@ import validation_drift as drift  # noqa: E402
 NOW = datetime(2026, 11, 6, 6, 23, tzinfo=timezone.utc)
 CURRENT = {
     "encoder_main": "b" * 40,
+    "validator_ref": "9" * 40,
     "encoder_verifier": "main",
     "axiom_encode_ref": "a" * 40,
     "axiom_rules_engine_ref": "e" * 40,
@@ -93,6 +94,7 @@ def test_tighten_or_undeclared_runs_everything(effect):
     "changes",
     [
         {"axiom_rules_engine_ref": "f" * 40},
+        {"validator_ref": "8" * 40},
         {"axiom_compose_ref": "0" * 40},
         {"axiom_encode_ref": "1" * 40},
         {"encoder_verifier": "pinned"},
@@ -108,7 +110,14 @@ def test_engine_corpus_and_weekly_changes_run_everything(changes):
 
 @pytest.mark.parametrize(
     "previous",
-    [None, {}, {"schema": "other"}, _state(encoder_main="x"), _state(encoder_verifier="x")],
+    [
+        None,
+        {},
+        {"schema": "other"},
+        _state(encoder_main="x"),
+        _state(encoder_verifier="x"),
+        {k: v for k, v in _state().items() if k != "validator_ref"},
+    ],
 )
 def test_missing_or_foreign_state_runs_everything(previous):
     assert _plan(previous, [])["scope"] == "full"
@@ -275,6 +284,11 @@ def test_cli_plan_reads_the_repository(tmp_path):
     )
     (repo / "us/statutes").mkdir(parents=True)
     (repo / "us/statutes/1.yaml").write_text("format: rulespec/v1\n")
+    (repo / ".github/workflows").mkdir(parents=True)
+    (repo / drift.DRIFT_WORKFLOW).write_text(
+        "jobs:\n  validate:\n    uses: TheAxiomFoundation/.github/.github/workflows/"
+        f"validate-rulespec.yml@{'9' * 40}\n"
+    )
     previous = tmp_path / "state.json"
     previous.write_text(json.dumps(_state()))
     prs = tmp_path / "prs.json"
@@ -364,3 +378,37 @@ def test_crashes_missing_lines_and_old_validators_are_unexplained():
     # A failed leg whose chunks all passed failed for another reason.
     passed = "RULESPEC_VALIDATION_CHUNK files=2 status=0 single=-\n"
     assert drift.leg_failures(_chunks(passed))[1] is False
+
+
+def test_a_fenced_declaration_is_not_the_declared_effect():
+    body = "```\nValidation effect: none\n```\nValidation effect: tighten\n"
+    assert drift.declared_effect(body) == "tighten"
+    assert drift.declared_effect("~~~\nValidation effect: none\n~~~\n") is None
+
+
+def test_linkage_lines_do_not_change_the_declared_effect():
+    body = (
+        "Encoding-Target: none\nFixes-Run: none\n\nValidation effect: none\n"
+    )
+    assert drift.declared_effect(body) == "none"
+
+
+def test_plan_reads_the_pinned_shared_validator(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    output = tmp_path / "plan.json"
+    assert drift.main(
+        [
+            "plan",
+            "--encoder-main",
+            "b" * 40,
+            "--encoder-verifier",
+            "pinned",
+            "--repo",
+            str(repo),
+            "--output",
+            str(output),
+        ]
+    ) == 0
+    workflow = (repo / drift.DRIFT_WORKFLOW).read_text()
+    (validator,) = drift._VALIDATOR_USES_RE.findall(workflow)
+    assert json.loads(output.read_text())["state"]["validator_ref"] == validator
