@@ -96,13 +96,17 @@ This repository verifies pull requests with the pinned encoder
 (`encoder_verifier` absent, which means `pinned`). The switch to
 `encoder_verifier = "main"` (axiom-encode#2091) is one configuration-only
 pull request, after axiom-encode#2097 and #2101 and
-TheAxiomFoundation/.github#154 have merged. Follow these steps.
+TheAxiomFoundation/.github#154 have merged. Both callers
+(`repository-checks.yml` and `validation-drift.yml`) must use a shared
+validator commit that contains .github#154 with the verifier hold (the
+.github#154 merge commit); an older validator ignores the hold. Follow
+these steps.
 
 1. Choose the verifier commit. Use an axiom-encode first-parent `main`
-   commit that passed the offline replay benchmark of axiom-encode#1891
-   (a required check on encoder `main` once #1891 merges; until then, run
-   the benchmark locally on that commit). Do not use a commit that is only
-   the current tip.
+   commit that passed the offline replay benchmark of axiom-encode#1891.
+   #1891 is an open pull request; until it merges and branch protection
+   makes it a required check, run the benchmark locally on that commit. Do
+   not use a commit only because it is the current tip.
 2. Measure before you open the pull request. Run the full validation and
    the waiver audit of this repository with the chosen commit (locally, or
    in an encoder-side run). List every new failure and every waiver whose
@@ -113,14 +117,19 @@ TheAxiomFoundation/.github#154 have merged. Follow these steps.
    (TheAxiomFoundation/.github#152). So a waiver restate cannot ride in the
    switch pull request today. Re-encode the failing files, or land the
    waiver changes in their own pull requests under the pinned verifier
-   where the pinned verifier accepts them. If a restate under the new
+   where the pinned verifier accepts them. Each ledger change also changes
+   `validation_waiver_set_sha256` and makes every open manifest that binds
+   the whole ledger (all manifests signed before the switch) stale, so
+   batch ledger changes into one pull request and plan the re-signing. If
+   a restate under the new
    verifier is unavoidable, decide first whether the shared validator may
    accept the ledger in a mode-switch pull request (open question on
    TheAxiomFoundation/.github#152).
 4. Open the switch pull request. It changes only:
    - `.axiom/workflow-toolchain.toml`: add `encoder_verifier = "main"` and
      `encoder_verifier_hold = "<commit from step 1>"`. Keep
-     `axiom_encode_ref`; it becomes the producer floor.
+     `axiom_encode_ref`; it becomes the producer floor and must be on
+     first-parent axiom-encode `main` (2bdc3b421 is).
    - `.github/workflows/repository-checks.yml`: move the `uses:` line of
      `validate-rulespec.yml` to the commit that `validation-drift.yml`
      uses, and pass `encoder-verifier: main` (read it from the table, as
@@ -138,8 +147,15 @@ TheAxiomFoundation/.github#154 have merged. Follow these steps.
    available.
 6. After the switch is green on `main`, remove `encoder_verifier_hold` in
    a separate pull request. A hold-only change runs the first shard and the
-   guard ratchet, not a full validation. From then on, the drift run checks
-   encoder merges that declare `loosen` or `tighten`.
+   guard, not a full validation, so first measure the current tip as in
+   step 2, and after the merge dispatch `validation-drift` with
+   `scope: full`. From then on, the drift run checks encoder merges that
+   declare `loosen` or `tighten`.
+
+Timing: all 1,939 waiver records expire on 2026-12-21 (#1980). Do the
+measurement of step 2 and the switch on the same side of that date, and
+renew the waivers in one ledger pull request, because a renewal changes
+every waived file's record.
 
 Producers below `axiom_encode_ref` stay rejected after the switch. Signed
 pull requests from such producers need a new signed run.
