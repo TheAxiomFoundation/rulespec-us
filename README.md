@@ -111,25 +111,49 @@ these steps.
    the waiver audit of this repository with the chosen commit (locally, or
    in an encoder-side run). List every new failure and every waiver whose
    fingerprint changed.
-3. Fix what step 2 found before the switch. The switch pull request must be
-   configuration-only: the shared validator refuses a dependency or mode
-   change beside any other path, including `known-validation-gaps.yaml`
-   (TheAxiomFoundation/.github#152). So a waiver restate cannot ride in the
-   switch pull request today. Re-encode the failing files, or land the
-   waiver changes in their own pull requests under the pinned verifier
-   where the pinned verifier accepts them. Each ledger change also changes
-   `validation_waiver_set_sha256` and makes every open manifest that binds
-   the whole ledger (all manifests signed before the switch) stale, so
-   batch ledger changes into one pull request and plan the re-signing. If
-   a restate under the new
-   verifier is unavoidable, decide first whether the shared validator may
-   accept the ledger in a mode-switch pull request (open question on
-   TheAxiomFoundation/.github#152).
+3. Sort what step 2 found into two groups.
+   - Waivers whose failure fingerprint changed under the chosen commit, and
+     waivers whose file now passes. The switch pull request restates these
+     (step 4). The shared validator accepts the ledger in a mode-switch
+     pull request only as a mechanical restate: it rebuilds the ledger from
+     the protected base and requires the same bytes. Only the `fingerprint`
+     of an `active` record may change, and an entry that has an `active`
+     record and no `pending` record may be removed. Owner, issue, expiry,
+     `pending` records, order and comments stay as they are. No entry is
+     added.
+   - Everything else: a file that fails with no waiver, and a waiver that
+     needs a new entry, another owner or issue, or a later expiry. A restate
+     cannot cover these, and the switch fails and names them. Fix them
+     before the switch, under the pinned verifier: re-encode the file, or
+     land an ordinary waiver pull request that the pinned verifier accepts.
+     Each of those ledger changes also changes
+     `validation_waiver_set_sha256` and makes every open manifest that
+     binds the whole ledger stale, so batch them into one pull request and
+     plan the re-signing. While you fix them, the chosen commit stays the
+     target: it becomes the hold in step 4, so later encoder merges do not
+     move the measurement.
+
+   A restate re-approves the new failure of a file that is already waived:
+   the validator proves that the fingerprint is the one that the new
+   verifier observes, not that the new failure is acceptable. Read the
+   restated failures before you approve the switch pull request.
+
+   Do not run the switch across a waiver renewal. A restate requires every
+   `pending` record to be the same as on `main`. Either finish the
+   renewal of the 2026-12-21 expiry (stage and consume) before you open the
+   switch pull request, or start it after the switch has merged. If `main`
+   gets a ledger change while the switch pull request is open, merge `main`
+   into the branch and restate again.
 4. Open the switch pull request. It changes only:
    - `.axiom/workflow-toolchain.toml`: add `encoder_verifier = "main"` and
      `encoder_verifier_hold = "<commit from step 1>"`. Keep
      `axiom_encode_ref`; it becomes the producer floor and must be on
      first-parent axiom-encode `main` (2bdc3b421 is).
+   - `known-validation-gaps.yaml` and `validation_waiver_set_sha256` in
+     `.axiom/toolchain.toml`, only if step 3 found waivers to restate: the
+     new fingerprints, the removed entries, and the new ledger digest.
+     Nothing else in `.axiom/toolchain.toml` may change. The held verifier
+     must contain the restate audit (axiom-encode#2101 or later).
    - `.github/workflows/repository-checks.yml`: move the `uses:` line of
      `validate-rulespec.yml` to the .github#154 merge commit (the commit
      that `validation-drift.yml` uses once it is repinned before this
@@ -139,6 +163,20 @@ these steps.
    Its CI is a full dependency change: every file and every waiver is
    checked under the held verifier (about 3.6 hours and 46 runner-hours),
    and the generated guard compares the pinned base with the new verifier.
+   With a restate, the waiver audit also requires each restated
+   fingerprint to equal the failure that the held verifier observes, and
+   each removed file to pass.
+
+   A revert to `pinned` follows the same rule in the other direction: it
+   may restate the ledger only if `axiom_encode_ref` stays the same commit.
+   That commit is then the pinned verifier, so it must contain the restate
+   audit (axiom-encode#2101 or later). 2bdc3b421 does not. Move
+   `axiom_encode_ref` to such a commit, in the switch pull request or in a
+   later floor change, before you depend on a revert. A higher floor
+   rejects older producers, so signed pull requests from them need a new
+   signed run.
+   A second switch after a revert is a new switch pull request, measured
+   again from step 1.
 5. Use the hold rather than a freeze of encoder merges. Each run resolves
    the verifier once, but a re-run, a later push run on `main` and the
    drift run would each pick a newer encoder `main`. The hold fixes the
