@@ -262,6 +262,21 @@ def test_cli_writes_and_checks_an_explicit_output(tmp_path, capsys):
     assert gen.main(["--repo-root", str(root), "--output", str(tmp_path / "absent.json"), "--check"]) == 1
 
 
+def test_cli_refuses_an_output_inside_the_scanned_repository(tmp_path, capsys):
+    """A copy inside the checkout is git-ignored but still trips clean-checkout gates."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    for inside in (
+        root / gen.INDEX_RELATIVE_PATH,
+        root / "index.json",
+    ):
+        for extra in ([], ["--check"]):
+            assert gen.main(["--repo-root", str(root), "--output", str(inside), *extra]) == 2
+        assert not inside.exists()
+    assert "inside the repository" in capsys.readouterr().err
+    assert not (root / ".axiom").exists()
+
+
 def test_cli_requires_an_explicit_output(tmp_path):
     """There is no default location, so a run can never dirty the checkout."""
     with pytest.raises(SystemExit) as excinfo:

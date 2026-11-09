@@ -395,8 +395,9 @@ def unstick_pr(branch: str, wait: bool) -> str:
     Overlay (not merge): a fresh main-based branch with the module's RuleSpec
     artifacts re-applied and the derived pending lane regenerated. (The
     reverse index is not tracked, so nothing is regenerated for it.) This is
-    always up-to-date with main (strict branch protection) and never conflicts on the shared oracle-coverage-pending.yaml as siblings
-    merge one after another.
+    always up-to-date with main (strict branch protection) and never conflicts
+    on the shared oracle-coverage-pending.yaml as siblings merge one after
+    another.
     """
     slug = branch.split("/", 1)[1]
     leaf = make_worktree(f"unstick-{slug}", "origin/main")

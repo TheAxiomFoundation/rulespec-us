@@ -27,10 +27,15 @@ into runnable programs.
   is a pure function of the RuleSpec YAML, and a tracked copy made every
   encoding pull request edit the same file. Generate it outside the
   checkout with `python tests/generate_reverse_index.py --output <path>`
-  (a copy inside the checkout blocks the encoder's clean-checkout gates), or
-  download the `provisions-to-rules-index` artifact of the latest
-  `Source staleness and reverse index` run on `main`. Never commit it; a test
-  fails if anything under `.axiom/index/` is tracked.
+  (the script refuses a path inside the checkout, because a copy there
+  blocks the encoder's clean-checkout gates). This is the trusted way.
+  As a convenience, commits on `main` also upload it as the
+  `provisions-to-rules-index` artifact of the `Source staleness and reverse
+  index` workflow. Take the artifact only from a successful `push` run
+  (`gh run list --workflow source-staleness.yml --branch main --event push
+  --status success`) whose `headSha` is a commit on `origin/main`: a pull
+  request run can upload an artifact with the same name. Never commit the
+  index; a test fails if anything under `.axiom/index/` is tracked.
 
 Durable ids are `<jurisdiction>:<path>#<rule>` — `us:statutes/7/2015/e`
 lives at `us/statutes/7/2015/e.yaml`, `us-ca:regulations/mpp/63-300/1` at

@@ -9,7 +9,7 @@ two places:
   proof grounding).
 
 This script scans every non-test RuleSpec YAML under the jurisdiction roots and
-emits ``.axiom/index/provisions_to_rules.json``: for each corpus citation path
+emits the provision -> rules index: for each corpus citation path
 referenced anywhere, the sorted list of module paths that depend on it, plus the
 kinds of reference (``module`` and/or ``proof_atom``). The output is fully
 deterministic (sorted keys, sorted module lists), so any two runs over the same
@@ -17,9 +17,10 @@ tree produce the same bytes.
 
 The index is NOT tracked in Git. It is a pure function of the tracked RuleSpec
 YAML, so it is generated where it is needed: locally with this script (write it
-outside the checkout with ``--output``), or from the
+outside the checkout with ``--output``; this is the trusted way), or from the
 ``provisions-to-rules-index`` artifact that the ``reverse-index`` CI job
-uploads for each commit on ``main``. A tracked copy was the one file that every
+uploads for each commit on ``main`` (take it only from a successful ``push``
+run whose head commit is on ``main``; see the README). A tracked copy was the one file that every
 encoding pull request had to edit, so each merge made every other open pull
 request stale or conflicting, and the signed encoder workflow (which may only
 write signed RuleSpec paths) could not produce it at all.
@@ -245,6 +246,14 @@ def main(argv: list[str] | None = None) -> int:
     rendered = render_index(index)
     output_path = args.output
     output_label = output_path.as_posix()
+    if output_path.resolve().is_relative_to(repo_root):
+        print(
+            f"--output {output_label} is inside the repository being scanned. "
+            "The index is not tracked and the encoder's clean-checkout gates "
+            "reject stray files there; choose a path outside the checkout.",
+            file=sys.stderr,
+        )
+        return 2
     counts = index["counts"]
 
     if args.check:

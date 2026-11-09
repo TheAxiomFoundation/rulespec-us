@@ -13,9 +13,12 @@ name: Source staleness and reverse index
 #    from the tree under test (generator runs, output is canonical) and that
 #    no copy is tracked. For commits on `main` it also uploads the generated
 #    index as the `provisions-to-rules-index` artifact, which is what readers
-#    should use instead of a committed file. The job holds no secret and no
-#    write permission; the artifact is never uploaded for pull requests, so a
-#    pull request cannot publish an index.
+#    can use instead of a committed file. The job holds no secret and no
+#    write permission, and this definition never uploads for pull requests.
+#    A pull request can still edit its own copy of this workflow, so readers
+#    must take the artifact only from a successful `push` run whose head
+#    commit is on `main` (or generate the index locally, which is the trusted
+#    way).
 #
 # 2. source-staleness (REPORT-ONLY) - recompute every
 #    `module.source_verification.source_sha256` pin against axiom-corpus@main
@@ -92,9 +95,12 @@ jobs:
           assert list(provisions) == sorted(provisions), "provisions are not sorted"
           print(f"Generated reverse index: {len(provisions)} provisions.")
           PY
-          if [ -n "$(git status --porcelain)" ]; then
+          # --ignored on .axiom: the index directory is git-ignored, so a
+          # copy written there would be invisible to a plain status.
+          dirty="$(git status --porcelain; git status --porcelain --ignored -- .axiom)"
+          if [ -n "$dirty" ]; then
             echo "::error::Generating the reverse index changed the checkout." >&2
-            git status --porcelain >&2
+            printf '%s\n' "$dirty" >&2
             exit 1
           fi
 
