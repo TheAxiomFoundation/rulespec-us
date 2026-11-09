@@ -126,6 +126,11 @@ def question_issues(path: Path) -> list[str]:
         module = answer.get("module")
         if not (isinstance(module, str) and CTX.module_path_ok(module) and (ROOT / module).is_file()):
             issues.append(f"{a_label}.module names {module!r}, which is not a RuleSpec module in this repository.")
+        if not answer.get("outputs"):
+            issues.append(f"{a_label}.outputs must name at least one rule.")
+        # A number is one rule's value (`combine: value`).
+        if answer.get("combine") == "value" and len(answer.get("outputs") or []) != 1:
+            issues.append(f"{a_label}: combine `value` needs exactly one output rule.")
         for key in ("outputs", "guards"):
             for r_index, ref in enumerate(answer.get(key) or []):
                 issues.extend(rule_issues(ref, label=f"{a_label}.{key}[{r_index}]"))
@@ -164,3 +169,18 @@ def test_a_renamed_rule_or_input_is_reported() -> None:
 def test_only_question_files_live_under_questions() -> None:
     stray = [path for path in question_files() if not path.name.endswith(QUESTION_SUFFIX)]
     assert stray == []
+
+
+def test_a_value_answer_names_one_rule() -> None:
+    files = [path for path in question_files() if "combine: value" in path.read_text(encoding="utf-8")]
+    if not files:
+        pytest.skip("no question file with a value answer")
+    payload = yaml.safe_load(files[0].read_text(encoding="utf-8"))
+    payload["answers"][0]["outputs"] = payload["answers"][0]["outputs"] * 2
+    target = files[0].parent / "two-outputs.question.yaml"
+    try:
+        target.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        issues = question_issues(target)
+    finally:
+        target.unlink(missing_ok=True)
+    assert any("needs exactly one output rule" in issue for issue in issues), issues
