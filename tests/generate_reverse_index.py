@@ -20,10 +20,10 @@ YAML, so it is generated where it is needed: locally with this script (write it
 outside the checkout with ``--output``; this is the trusted way), or from the
 ``provisions-to-rules-index`` artifact that the ``reverse-index`` CI job
 uploads for each commit on ``main`` (take it only from a successful ``push``
-run whose head commit is on ``main``; see the README). A tracked copy was the one file that every
-encoding pull request had to edit, so each merge made every other open pull
-request stale or conflicting, and the signed encoder workflow (which may only
-write signed RuleSpec paths) could not produce it at all.
+run whose head commit is on ``main``; see the README). A tracked copy was the
+one file that every encoding pull request had to edit, so each merge made every
+other open pull request stale or conflicting, and the signed encoder workflow
+(which may only write signed RuleSpec paths) could not produce it at all.
 ``tests/test_reverse_index.py`` fails if anything under ``.axiom/index/`` is
 tracked again. ``--output`` is required and there is no default location inside
 the checkout: the encoder's clean-checkout gates reject untracked and ignored
@@ -216,6 +216,24 @@ def render_index(index: dict[str, Any]) -> str:
     return json.dumps(serializable, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
 
 
+def _is_inside(path: Path, directory: Path) -> bool:
+    """True when ``path`` is ``directory`` or lies under it.
+
+    Compares by file identity as well as by name, so a symlink or a
+    case-variant spelling on a case-insensitive filesystem is still caught.
+    """
+    resolved = path.resolve()
+    if resolved.is_relative_to(directory):
+        return True
+    for candidate in (resolved, *resolved.parents):
+        try:
+            if candidate.exists() and candidate.samefile(directory):
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -242,11 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
-    index = build_index(repo_root)
-    rendered = render_index(index)
     output_path = args.output
     output_label = output_path.as_posix()
-    if output_path.resolve().is_relative_to(repo_root):
+    if _is_inside(output_path, repo_root):
         print(
             f"--output {output_label} is inside the repository being scanned. "
             "The index is not tracked and the encoder's clean-checkout gates "
@@ -254,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    index = build_index(repo_root)
+    rendered = render_index(index)
     counts = index["counts"]
 
     if args.check:

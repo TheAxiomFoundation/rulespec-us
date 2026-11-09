@@ -262,19 +262,25 @@ def test_cli_writes_and_checks_an_explicit_output(tmp_path, capsys):
     assert gen.main(["--repo-root", str(root), "--output", str(tmp_path / "absent.json"), "--check"]) == 1
 
 
-def test_cli_refuses_an_output_inside_the_scanned_repository(tmp_path, capsys):
+def test_cli_refuses_an_output_inside_the_scanned_repository(tmp_path, capsys, monkeypatch):
     """A copy inside the checkout is git-ignored but still trips clean-checkout gates."""
     root = tmp_path / "repo"
     root.mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    link = tmp_path / "link-into-repo"
+    link.symlink_to(root, target_is_directory=True)
+    monkeypatch.chdir(root)
     for inside in (
         root / gen.INDEX_RELATIVE_PATH,
         root / "index.json",
+        link / "index.json",
+        tmp_path / "elsewhere" / ".." / "repo" / "index.json",
+        Path("relative-index.json"),
     ):
         for extra in ([], ["--check"]):
             assert gen.main(["--repo-root", str(root), "--output", str(inside), *extra]) == 2
-        assert not inside.exists()
-    assert "inside the repository" in capsys.readouterr().err
-    assert not (root / ".axiom").exists()
+            assert "inside the repository" in capsys.readouterr().err
+    assert list(root.iterdir()) == []
 
 
 def test_cli_requires_an_explicit_output(tmp_path):
