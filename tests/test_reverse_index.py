@@ -14,6 +14,7 @@ pull request stale or conflicting. It is now generated on demand (see
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -160,7 +161,13 @@ def test_repository_index_is_derivable_and_canonical():
 
 
 def _tracked_paths(*pathspecs: str) -> list[str] | None:
-    """Return tracked paths matching ``pathspecs``, or None outside a Git checkout."""
+    """Return tracked paths matching ``pathspecs``.
+
+    Returns None only for a plain source export (no ``.git`` entry, not CI).
+    In a checkout or in GitHub Actions an unusable Git is an error, so the
+    not-tracked checks can never pass by silently skipping.
+    """
+    must_answer = (REPO_ROOT / ".git").exists() or os.environ.get("GITHUB_ACTIONS") == "true"
     try:
         inside = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "rev-parse", "--show-toplevel"],
@@ -169,8 +176,17 @@ def _tracked_paths(*pathspecs: str) -> list[str] | None:
             check=False,
         )
     except OSError:
+        assert not must_answer, "git is not runnable, so the tracked-index check cannot run"
         return None
-    if inside.returncode != 0 or Path(inside.stdout.strip()).resolve() != REPO_ROOT.resolve():
+    usable = (
+        inside.returncode == 0
+        and Path(inside.stdout.strip()).resolve() == REPO_ROOT.resolve()
+    )
+    if not usable:
+        assert not must_answer, (
+            "git cannot inspect this checkout, so the tracked-index check cannot run: "
+            f"{inside.stderr.strip() or inside.stdout.strip()}"
+        )
         return None
     listed = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--", *pathspecs],
@@ -185,11 +201,14 @@ def test_reverse_index_is_not_tracked():
     """Nothing under ``.axiom/index/`` may be tracked.
 
     A tracked index is a shared file that every encoding pull request must
-    rewrite, which makes open pull requests invalidate each other. The shared
-    validation workflow also treats ``.axiom/index/`` as derived metadata that
-    cannot change what a shard validates, so that directory must stay empty in
-    Git. If this fails on your branch, run
-    ``git rm -r --cached .axiom/index`` and commit; do not regenerate and commit.
+    rewrite, which makes open pull requests invalidate each other. If this
+    fails on your branch (for example after a merge with ``main`` kept your
+    side of a modify/delete conflict), run ``git rm -r --cached .axiom/index``
+    and commit; do not regenerate and commit.
+
+    This is a contention guard, not a security boundary: a pull request can
+    edit this test. RuleSpec content is protected by the shared validation
+    workflow (layout check, ``guard-generated``), which does not depend on it.
     """
     tracked = _tracked_paths(".axiom/index")
     if tracked is None:
@@ -218,7 +237,7 @@ def test_reverse_index_directory_is_git_ignored():
     )
     assert ignored.returncode == 0, (
         f"{gen.INDEX_RELATIVE_PATH.as_posix()} must be git-ignored so a locally "
-        "generated copy never dirties a checkout or lands in a commit."
+        "stray copy cannot be committed by accident."
     )
 
 
@@ -231,7 +250,8 @@ def test_cli_writes_and_checks_an_explicit_output(tmp_path, capsys):
     output = tmp_path / "out" / "index.json"
     assert gen.main(["--repo-root", str(root), "--output", str(output)]) == 0
     assert output.read_text(encoding="utf-8") == gen.render_index(gen.build_index(root))
-    assert not (root / gen.INDEX_RELATIVE_PATH).exists()
+    # Nothing is ever written inside the scanned tree.
+    assert not (root / ".axiom").exists()
     assert gen.main(["--repo-root", str(root), "--output", str(output), "--check"]) == 0
     _write(
         root / "us" / "statutes" / "b.yaml",
@@ -239,10 +259,15 @@ def test_cli_writes_and_checks_an_explicit_output(tmp_path, capsys):
     )
     assert gen.main(["--repo-root", str(root), "--output", str(output), "--check"]) == 1
     assert "stale or absent" in capsys.readouterr().err
-    # The default location is the git-ignored path under the repository root.
-    assert gen.main(["--repo-root", str(root), "--check"]) == 1
-    assert gen.main(["--repo-root", str(root)]) == 0
-    assert gen.main(["--repo-root", str(root), "--check"]) == 0
+    assert gen.main(["--repo-root", str(root), "--output", str(tmp_path / "absent.json"), "--check"]) == 1
+
+
+def test_cli_requires_an_explicit_output(tmp_path):
+    """There is no default location, so a run can never dirty the checkout."""
+    with pytest.raises(SystemExit) as excinfo:
+        gen.main(["--repo-root", str(tmp_path)])
+    assert excinfo.value.code == 2
+    assert not (tmp_path / ".axiom").exists()
 
 
 def test_render_index_omits_counts_but_build_reports_them(tmp_path):

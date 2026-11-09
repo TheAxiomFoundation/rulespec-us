@@ -16,14 +16,19 @@ deterministic (sorted keys, sorted module lists), so any two runs over the same
 tree produce the same bytes.
 
 The index is NOT tracked in Git. It is a pure function of the tracked RuleSpec
-YAML, so it is generated where it is needed: locally with this script, or from
-the ``provisions-to-rules-index`` artifact that the ``reverse-index`` CI job
+YAML, so it is generated where it is needed: locally with this script (write it
+outside the checkout with ``--output``), or from the
+``provisions-to-rules-index`` artifact that the ``reverse-index`` CI job
 uploads for each commit on ``main``. A tracked copy was the one file that every
 encoding pull request had to edit, so each merge made every other open pull
 request stale or conflicting, and the signed encoder workflow (which may only
-write signed RuleSpec paths) could not produce it at all. ``.axiom/index/`` is
-git-ignored and ``tests/test_reverse_index.py`` fails if anything under it is
-tracked again.
+write signed RuleSpec paths) could not produce it at all.
+``tests/test_reverse_index.py`` fails if anything under ``.axiom/index/`` is
+tracked again. ``--output`` is required and there is no default location inside
+the checkout: the encoder's clean-checkout gates reject untracked and ignored
+files, so a copy left in the checkout would block signed applies there.
+``.axiom/index/`` is git-ignored only so that a stray copy cannot be committed
+by accident.
 
 The index is read-only tooling metadata. It does not participate in RuleSpec
 validation and nothing in the engine binds to it; it exists so that a change to
@@ -32,9 +37,8 @@ a corpus provision can be traced to every module that must be re-checked
 check.
 
 Usage:
-    python tests/generate_reverse_index.py                 # write the local index
-    python tests/generate_reverse_index.py --output PATH   # write it elsewhere
-    python tests/generate_reverse_index.py --check         # exit 1 if the local copy is stale
+    python tests/generate_reverse_index.py --output /tmp/provisions_to_rules.json
+    python tests/generate_reverse_index.py --output PATH --check   # exit 1 if PATH is stale
 """
 
 from __future__ import annotations
@@ -216,15 +220,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Verify the local (untracked) index copy is up to date; exit 1 if it is stale or absent.",
+        help="Verify the copy at --output is up to date; exit 1 if it is stale or absent.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=None,
+        required=True,
         help=(
-            "Where to write (or check) the index. Defaults to "
-            f"{INDEX_RELATIVE_PATH.as_posix()} under the repository root, which is git-ignored."
+            "Where to write (or check) the index. Use a path outside the "
+            "checkout: the index is not tracked, and the encoder's "
+            "clean-checkout gates reject stray files inside it."
         ),
     )
     parser.add_argument(
@@ -238,8 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = args.repo_root.resolve()
     index = build_index(repo_root)
     rendered = render_index(index)
-    output_path = args.output if args.output is not None else repo_root / INDEX_RELATIVE_PATH
-    output_label = output_path.as_posix() if args.output is not None else INDEX_RELATIVE_PATH.as_posix()
+    output_path = args.output
+    output_label = output_path.as_posix()
     counts = index["counts"]
 
     if args.check:
@@ -247,8 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         if existing != rendered:
             print(
                 f"{output_label} is stale or absent. "
-                "Run `python tests/generate_reverse_index.py` to regenerate it "
-                "(the index is not tracked; do not commit it).",
+                "Run `python tests/generate_reverse_index.py --output <path>` to "
+                "regenerate it (the index is not tracked; do not commit it).",
                 file=sys.stderr,
             )
             return 1

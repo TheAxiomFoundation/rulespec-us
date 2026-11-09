@@ -25,8 +25,9 @@ into runnable programs.
   each corpus citation path to the modules that depend on it (via module
   `source_verification` and proof-atom sources). It is **not tracked**: it
   is a pure function of the RuleSpec YAML, and a tracked copy made every
-  encoding pull request edit the same file. Generate it with
-  `python tests/generate_reverse_index.py` (the path is git-ignored), or
+  encoding pull request edit the same file. Generate it outside the
+  checkout with `python tests/generate_reverse_index.py --output <path>`
+  (a copy inside the checkout blocks the encoder's clean-checkout gates), or
   download the `provisions-to-rules-index` artifact of the latest
   `Source staleness and reverse index` run on `main`. Never commit it; a test
   fails if anything under `.axiom/index/` is tracked.
