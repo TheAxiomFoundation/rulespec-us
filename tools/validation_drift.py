@@ -73,7 +73,8 @@ _VALIDATOR_USES_RE = re.compile(
 )
 # A fenced code block (``` or ~~~), as in the encoder's validation-effect check.
 _FENCE_RE = re.compile(
-    r"^[ \t]{0,3}(?P<fence>`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]{0,3}(?P=fence)[ \t]*$|\Z)",
+    r"^[ \t]{0,3}(?P<fence>(?P<char>[`~])(?P=char){2,})[^\n]*\n.*?"
+    r"(?:^[ \t]{0,3}(?P=fence)(?P=char)*[ \t]*$|\Z)",
     re.M | re.S,
 )
 _LOG_PREFIX_RE = re.compile(r"^.*?\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z ?")
@@ -113,6 +114,9 @@ def valid_state(state: object) -> dict | None:
         return None
     if state.get("encoder_verifier") not in ("pinned", "main"):
         return None
+    hold = state.get("encoder_verifier_hold", "")
+    if hold != "" and (not isinstance(hold, str) or not _COMMIT_RE.fullmatch(hold)):
+        return None
     if _parse_time(state.get("last_full_at")) is None:
         return None
     if not isinstance(state.get("pending_full", False), bool):
@@ -150,6 +154,9 @@ def plan(
         if state["encoder_verifier"] != current["encoder_verifier"]:
             full = True
             reasons.append("encoder verifier mode changed")
+        if state.get("encoder_verifier_hold", "") != current["encoder_verifier_hold"]:
+            full = True
+            reasons.append("encoder verifier hold changed")
         if state["validator_ref"] != current["validator_ref"]:
             full = True
             reasons.append("shared validator workflow changed")
@@ -172,9 +179,11 @@ def plan(
             )
     # In pinned mode the verifier is the pin, which the check above covers;
     # encoder main merges cannot change its results.
+    # A protected hold fixes the verifier commit, like the pinned mode.
     if (
         state is not None
         and current["encoder_verifier"] == "main"
+        and not current["encoder_verifier_hold"]
         and state["encoder_main"] != current["encoder_main"]
     ):
         if encoder_prs is None:
@@ -195,7 +204,12 @@ def plan(
         "schema": STATE_SCHEMA,
         **{
             key: current[key]
-            for key in (*STATE_KEYS, "corpus_release", "encoder_verifier")
+            for key in (
+                *STATE_KEYS,
+                "corpus_release",
+                "encoder_verifier",
+                "encoder_verifier_hold",
+            )
         },
         "last_full_at": (
             now.isoformat()
@@ -440,10 +454,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if len(validators) != 1:
             parser.error(f"{DRIFT_WORKFLOW} must call one pinned shared validator")
+        hold = pins.get("encoder_verifier_hold", "")
+        if hold and (not isinstance(hold, str) or not _COMMIT_RE.fullmatch(hold)):
+            parser.error("encoder_verifier_hold must be a full commit")
         current = {
             "encoder_main": args.encoder_main,
             "validator_ref": validators[0],
             "encoder_verifier": args.encoder_verifier,
+            "encoder_verifier_hold": hold,
             "axiom_encode_ref": pins["axiom_encode_ref"],
             "axiom_rules_engine_ref": pins["axiom_rules_engine_ref"],
             "axiom_compose_ref": pins["axiom_compose_ref"],
@@ -478,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "name": item.get("name"),
                 "conclusion": item.get("conclusion"),
+                "failed_steps": item.get("failed_steps"),
                 "log": Path(item["log_file"]).read_text(
                     encoding="utf-8", errors="replace"
                 ),

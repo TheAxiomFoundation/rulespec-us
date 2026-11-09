@@ -18,6 +18,7 @@ CURRENT = {
     "encoder_main": "b" * 40,
     "validator_ref": "9" * 40,
     "encoder_verifier": "main",
+    "encoder_verifier_hold": "",
     "axiom_encode_ref": "a" * 40,
     "axiom_rules_engine_ref": "e" * 40,
     "axiom_compose_ref": "f" * 40,
@@ -95,6 +96,7 @@ def test_tighten_or_undeclared_runs_everything(effect):
     [
         {"axiom_rules_engine_ref": "f" * 40},
         {"validator_ref": "8" * 40},
+        {"encoder_verifier_hold": "7" * 40},
         {"axiom_compose_ref": "0" * 40},
         {"axiom_encode_ref": "1" * 40},
         {"encoder_verifier": "pinned"},
@@ -412,3 +414,57 @@ def test_plan_reads_the_pinned_shared_validator(tmp_path):
     workflow = (repo / drift.DRIFT_WORKFLOW).read_text()
     (validator,) = drift._VALIDATOR_USES_RE.findall(workflow)
     assert json.loads(output.read_text())["state"]["validator_ref"] == validator
+
+
+def test_a_verifier_hold_ignores_encoder_main_merges():
+    held = {**CURRENT, "encoder_verifier_hold": "7" * 40}
+    previous = _state(encoder_verifier_hold="7" * 40)
+    assert _plan(previous, None, current=held)["scope"] == "skip"
+    assert _plan(previous, [_pr(1, "tighten")], current=held)["scope"] == "skip"
+    assert _plan(previous, [], current=held)["state"]["encoder_verifier_hold"] == "7" * 40
+
+
+def test_a_malformed_hold_in_state_is_not_trusted():
+    assert _plan(_state(encoder_verifier_hold="main"), [])["scope"] == "full"
+
+
+def test_cli_report_keeps_the_failed_steps_of_each_job(tmp_path):
+    """The workflow writes failed_steps into jobs.json; the CLI must keep them."""
+
+    log = tmp_path / "1.log"
+    log.write_text(LOG)
+    jobs = tmp_path / "jobs.json"
+    jobs.write_text(
+        json.dumps(
+            [
+                {
+                    "id": 1,
+                    "name": "validate / validate (us)",
+                    "conclusion": "failure",
+                    "failed_steps": ["Validate RuleSpec YAML"],
+                    "log_file": str(log),
+                }
+            ]
+        )
+    )
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps({"scope": "full", "targets": [], "reasons": []}))
+    issues = tmp_path / "issues.json"
+    issues.write_text("[]")
+    output = tmp_path / "actions.json"
+    code = drift.main(
+        [
+            "report",
+            "--plan", str(plan_file),
+            "--jobs", str(jobs),
+            "--validate-result", "failure",
+            "--open-issues", str(issues),
+            "--run-url", "https://example.invalid/run",
+            "--workspace", WORKSPACE,
+            "--output", str(output),
+        ]
+    )
+    actions = json.loads(output.read_text())
+    assert code == 0, actions
+    assert "error" not in actions
+    assert actions["open"]

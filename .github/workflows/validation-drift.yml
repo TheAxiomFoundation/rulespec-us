@@ -293,8 +293,8 @@ jobs:
           echo "deferred=$deferred" >> "$GITHUB_OUTPUT"
           if [ "$deferred" -gt 0 ]; then
             # Files over the cap have no issue yet: record that the next run
-            # must be full. The issues job fails after it opens the others,
-            # so the state does not advance.
+            # must be full (pending_full). The issues job fails after it
+            # opens the others, so the next run is full and opens the rest.
             python -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["pending_full"]=True; json.dump(s, open(p,"w"), indent=2)' \
               "$RUNNER_TEMP/plan/state.json"
           fi
@@ -377,8 +377,9 @@ jobs:
     # and every issue was written, or when nothing needed a run, so the next
     # plan starts from it.
     needs: [plan, validate, report, issues]
-    # A failed report or issues job does not advance the state, so the next
-    # run reports the same changes again.
+    # A failed report or issues job does not record this run's state, so
+    # the next run reports the same changes again (or, after deferred files,
+    # runs full from the pending_full state that the report recorded).
     if: ${{ always() && needs.plan.result == 'success' && (needs.plan.outputs.scope == 'skip' || ((needs.validate.result == 'success' || needs.validate.result == 'failure') && needs.report.result == 'success' && needs.issues.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -425,5 +426,5 @@ jobs:
             gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "Failed again: $RUN_URL"
           else
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label "$label" \
-              --body "The validation drift run did not finish its per-file report: $RUN_URL. Read the failed job; the drift state did not advance, so the next run repeats the check."
+              --body "The validation drift run did not finish its per-file report: $RUN_URL. Read the failed job; this run's state was not recorded, so the next run repeats the check (a full run after deferred files)."
           fi
