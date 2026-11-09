@@ -131,8 +131,9 @@ these steps.
      `axiom_encode_ref`; it becomes the producer floor and must be on
      first-parent axiom-encode `main` (2bdc3b421 is).
    - `.github/workflows/repository-checks.yml`: move the `uses:` line of
-     `validate-rulespec.yml` to the commit that `validation-drift.yml`
-     uses, and pass `encoder-verifier: main` (read it from the table, as
+     `validate-rulespec.yml` to the .github#154 merge commit (the commit
+     that `validation-drift.yml` uses once it is repinned before this
+     pull request merges), and pass `encoder-verifier: main` (read it from the table, as
      `validation-drift.yml` does).
 
    Its CI is a full dependency change: every file and every waiver is
