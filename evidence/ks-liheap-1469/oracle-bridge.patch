@@ -1,0 +1,3706 @@
+diff --git a/axiom_oracles/bridges/ks_liheap.py b/axiom_oracles/bridges/ks_liheap.py
+new file mode 100644
+--- /dev/null
++++ b/axiom_oracles/bridges/ks_liheap.py
+@@ -0,0 +1,1192 @@
++"""Explicit Kansas LIHEAP comparison inputs from rulespec-us issue 1469.
++
++These are replay assumptions, not legal rules.  In particular an annual PE
++amount is a proxy for twelve identical application months, and one SPM unit
++is used only for a single residential economic unit.  Do not use this bridge
++for variable income, self-employment cost elections, or residence exceptions.
++
++No ``ks_liheap_*`` calculated value can be supplied as an input.  This keeps
++the comparison independent: both engines must calculate the tested outputs.
++PolicyEngine is imported lazily, so fixture/schema checks need no PE runtime.
++"""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import importlib.metadata
++import inspect
++import json
++import math
++from pathlib import Path
++from typing import Any, Mapping
++
++
++ISSUE_URL = "https://github.com/TheAxiomFoundation/rulespec-us/issues/1469"
++SUPPORTED_YEARS = frozenset({2025, 2026})
++PINNED_RUNTIME = {
++    "policyengine": "6.11.1",
++    "policyengine-us": "2.68.0",
++    "policyengine-core": "3.34.10",
++    "policyengine-taxsim": "2.30.0",
++}
++
++# The keys describe observed facts; the values are PolicyEngine input names.
++# Net business/rental income is a boundary input, not an implementation of
++# Kansas's 25% deduction or actual-cost election.
++PERSON_ANNUAL_INPUTS = {
++    "employment": "employment_income",
++    "self_employment_net": "self_employment_income",
++    "sstb_self_employment_net": "sstb_self_employment_income",
++    "farm_operations_net": "farm_operations_income",
++    "partnership_s_corp_net": "partnership_s_corp_income",
++    "unemployment": "unemployment_compensation",
++    "strike": "strike_benefits",
++    "social_security_gross": "social_security",
++    "ssi": "ssi",
++    "pension": "pension_income",
++    "military_retired_pay": "military_retirement_pay",
++    "military_survivor_annuity": "military_retirement_pay_survivors",
++    "general_assistance": "general_assistance",
++    "rental_net": "rental_income",
++    "farm_rent_net": "farm_rent_income",
++    "alimony": "alimony_income",
++    "child_support": "child_support_received",
++    "workers_compensation": "workers_compensation",
++    "disability": "disability_benefits",
++    "veterans_benefits": "veterans_benefits",
++    "interest": "interest_income",
++    "qualified_dividends": "qualified_dividend_income",
++    "ordinary_dividends": "non_qualified_dividend_income",
++}
++SPM_ANNUAL_INPUTS = {
++    "kansas_tanf": "ks_tanf",
++    "gas_bill": "gas_expense",
++    "electricity_bill_before_subsidy": "pre_subsidy_electricity_expense",
++    "propane_bill": "bottled_gas_expense",
++    "fuel_oil_bill": "fuel_oil_expense",
++    "wood_bill": "wood_expense",
++    "coal_bill": "coal_expense",
++    "other_fuel_bill": "other_heating_fuel_expense",
++}
++SPM_FACT_INPUTS = {
++    "heating_fuel": "heating_type",
++    "heat_in_rent": "heat_expense_included_in_rent",
++    "housing_assistance": "receives_housing_assistance",
++    "dwelling_type": "ks_liheap_dwelling_type",
++    "utility_rate_tier": "ks_liheap_utility_rate_tier",
++}
++OUTPUTS = (
++    "ks_liheap_household_size",
++    "ks_liheap_countable_earned_income",
++    "ks_liheap_countable_interest_dividend_income",
++    "ks_liheap_countable_unearned_income",
++    "ks_liheap_countable_income",
++    "ks_liheap_income_limit",
++    "ks_liheap_income_eligible",
++    "ks_liheap_energy_vulnerable",
++    "ks_liheap_eligible",
++    "ks_liheap_fuel_category",
++    "ks_liheap_income_band",
++    "ks_liheap_household_size_group",
++    "ks_liheap_matrix_amount",
++    "ks_liheap",
++)
++ANNUAL_INCOME_OUTPUTS = frozenset(
++    {
++        "ks_liheap_countable_earned_income",
++        "ks_liheap_countable_interest_dividend_income",
++        "ks_liheap_countable_unearned_income",
++        "ks_liheap_countable_income",
++        "ks_liheap_income_limit",
++    }
++)
++DECISION_OUTPUTS = frozenset(
++    {
++        "ks_liheap_income_eligible",
++        "ks_liheap_energy_vulnerable",
++        "ks_liheap_eligible",
++    }
++)
++OUTPUT_METADATA = {
++    name: {
++        "entity": "person"
++        if name == "ks_liheap_countable_earned_income"
++        else "spm_unit",
++        "period": "year",
++        "unit": (
++            "annual_USD"
++            if name in ANNUAL_INCOME_OUTPUTS
++            else "season_USD"
++            if name in {"ks_liheap", "ks_liheap_matrix_amount"}
++            else "boolean"
++            if name in DECISION_OUTPUTS
++            else "enum"
++            if name == "ks_liheap_fuel_category"
++            else "integer"
++        ),
++        "axiom_legal_id": None,
++        "binding_status": "awaiting_candidate_output_binding",
++    }
++    for name in OUTPUTS
++}
++
++
++class UnsupportedKSLIHEAPCase(ValueError):
++    """A fixture cannot be projected faithfully under this bridge's scope."""
++
++
++def _known_keys(value: Mapping[str, Any], allowed: set[str], label: str) -> None:
++    if not isinstance(value, Mapping):
++        raise UnsupportedKSLIHEAPCase(f"{label}: expected an object")
++    unknown = set(value) - allowed
++    if unknown:
++        raise UnsupportedKSLIHEAPCase(f"{label}: unsupported fields {sorted(unknown)}")
++
++
++def _amount(value: Any, label: str) -> float:
++    if isinstance(value, bool) or not isinstance(value, (float, int)):
++        raise UnsupportedKSLIHEAPCase(f"{label}: expected a finite USD amount")
++    result = float(value)
++    if not math.isfinite(result):
++        raise UnsupportedKSLIHEAPCase(f"{label}: expected a finite USD amount")
++    return result
++
++
++def _period_values(
++    name: str, year: int, annual_amount: float
++) -> dict[int | str, float]:
++    # Both variables are MONTH in the pinned runtime. Explicit twelve-month
++    # inputs avoid depending on PE's implicit annual input division behavior.
++    if name in {"ssi", "ks_tanf"}:
++        return {f"{year}-{month:02}": annual_amount / 12 for month in range(1, 13)}
++    return {year: annual_amount}
++
++
++def policyengine_situation(case: Mapping[str, Any]) -> dict[str, Any]:
++    """Project one explicit issue-1469 fixture, with annual USD input units.
++
++    ``annual_income``/``annual_amounts`` omissions mean *explicit zero* and
++    are all written into the situation. This prevents endogenous SSI, TANF,
++    Social Security or other modeled benefits from creating unspecified
++    countable income. Expected outputs are deliberately not read here.
++    """
++    _known_keys(
++        case,
++        {
++            "id",
++            "year",
++            "state",
++            "stable_monthly_income",
++            "one_residential_economic_unit",
++            "people",
++            "spm_unit",
++            "expected",
++            "source_claim",
++            "group",
++        },
++        "case",
++    )
++    year = case.get("year")
++    if type(year) is not int or year not in SUPPORTED_YEARS:
++        raise UnsupportedKSLIHEAPCase("Only model years 2025 and 2026 are supported")
++    if case.get("state") != "KS":
++        raise UnsupportedKSLIHEAPCase("This comparison is limited to Kansas")
++    for fact in ("stable_monthly_income", "one_residential_economic_unit"):
++        if case.get(fact) is not True:
++            raise UnsupportedKSLIHEAPCase(f"{fact} must be explicitly true")
++    people = case.get("people")
++    if not isinstance(people, list) or not people:
++        raise UnsupportedKSLIHEAPCase(
++            "At least one explicitly described person is required"
++        )
++    projected_people: dict[str, Any] = {}
++    for person in people:
++        _known_keys(
++            person,
++            {"id", "age_in_application_month", "immigration_status", "annual_income"},
++            "person",
++        )
++        person_id = person.get("id")
++        if (
++            not isinstance(person_id, str)
++            or not person_id
++            or person_id in projected_people
++        ):
++            raise UnsupportedKSLIHEAPCase("Person ids must be nonempty and unique")
++        age = person.get("age_in_application_month")
++        if type(age) is not int or not 0 <= age <= 120:
++            raise UnsupportedKSLIHEAPCase(
++                f"{person_id}: application-month age is required"
++            )
++        immigration_status = person.get("immigration_status")
++        if not isinstance(immigration_status, str) or not immigration_status:
++            raise UnsupportedKSLIHEAPCase(
++                f"{person_id}: immigration status is required"
++            )
++        income = person.get("annual_income", {})
++        _known_keys(income, set(PERSON_ANNUAL_INPUTS), f"{person_id} income")
++        projected_people[person_id] = {
++            "age": {year: age},
++            "immigration_status": {year: immigration_status},
++            **{
++                pe_name: _period_values(
++                    pe_name, year, _amount(income.get(fact, 0), fact)
++                )
++                for fact, pe_name in PERSON_ANNUAL_INPUTS.items()
++            },
++        }
++    members = list(projected_people)
++    spm = case.get("spm_unit", {})
++    _known_keys(spm, {*SPM_FACT_INPUTS, "annual_amounts"}, "spm_unit")
++    missing = set(SPM_FACT_INPUTS) - set(spm)
++    if missing:
++        raise UnsupportedKSLIHEAPCase(f"Explicit SPM facts required: {sorted(missing)}")
++    for flag in ("heat_in_rent", "housing_assistance"):
++        if type(spm[flag]) is not bool:
++            raise UnsupportedKSLIHEAPCase(f"{flag} must be a boolean")
++    for enum in ("heating_fuel", "dwelling_type", "utility_rate_tier"):
++        if not isinstance(spm[enum], str) or not spm[enum]:
++            raise UnsupportedKSLIHEAPCase(f"{enum} must be an explicit enum name")
++    amounts = spm.get("annual_amounts", {})
++    _known_keys(amounts, set(SPM_ANNUAL_INPUTS), "SPM annual amounts")
++    projected_spm = {
++        "members": members,
++        **{pe_name: {year: spm[fact]} for fact, pe_name in SPM_FACT_INPUTS.items()},
++        **{
++            pe_name: _period_values(pe_name, year, _amount(amounts.get(fact, 0), fact))
++            for fact, pe_name in SPM_ANNUAL_INPUTS.items()
++        },
++    }
++    return {
++        "people": projected_people,
++        "spm_units": {"spm": projected_spm},
++        "families": {"family": {"members": members}},
++        "tax_units": {"tax_unit": {"members": members}},
++        "marital_units": {"marital_unit": {"members": members}},
++        "households": {"household": {"members": members, "state_code": {year: "KS"}}},
++    }
++
++
++def load_fixtures(path: Path | None = None) -> list[dict[str, Any]]:
++    path = path or Path(__file__).with_name("fixtures") / "ks_liheap_1469.json"
++    payload = json.loads(path.read_text())
++    cases = payload["cases"]
++    if not isinstance(cases, list) or not cases:
++        raise UnsupportedKSLIHEAPCase("Fixture file must contain nonempty cases")
++    ids: set[str] = set()
++    for case in cases:
++        case_id = case.get("id")
++        if not isinstance(case_id, str) or not case_id or case_id in ids:
++            raise UnsupportedKSLIHEAPCase("Case ids must be nonempty and unique")
++        ids.add(case_id)
++        policyengine_situation(case)
++    return cases
++
++
++def monthly_income_output(pe_variable: str, annual_value: float) -> float:
++    """Normalize only annual income/limits; seasonal benefits are never /12."""
++    if pe_variable not in ANNUAL_INCOME_OUTPUTS:
++        raise ValueError(f"{pe_variable} is not an annual-income output")
++    return _amount(annual_value, pe_variable) / 12
++
++
++def check_expectations(
++    actual: Mapping[str, Any], expected: Mapping[str, Any]
++) -> list[dict[str, Any]]:
++    """Compare issue review assertions without treating absent checks as passes.
++
++    Monetary tolerance is one cent in the declared output unit. Person arrays
++    preserve member order; booleans, categories and household sizes are exact.
++    NaN, missing values, type mismatches and vector-length mismatches all fail.
++    """
++    _known_keys(expected, set(OUTPUTS), "expected outputs")
++    if not expected:
++        raise UnsupportedKSLIHEAPCase(
++            "At least one explicit expected output is required"
++        )
++    differences = []
++    for variable, want in expected.items():
++        have = actual.get(variable)
++        want_values = want if isinstance(want, list) else [want]
++        have_values = have if isinstance(have, list) else [have]
++        matches = isinstance(want, list) == isinstance(have, list)
++        matches = matches and len(want_values) == len(have_values) and bool(want_values)
++        for left, right in zip(have_values, want_values):
++            if variable in DECISION_OUTPUTS:
++                matches = (
++                    matches
++                    and type(left) is bool
++                    and type(right) is bool
++                    and left == right
++                )
++            elif variable == "ks_liheap_fuel_category":
++                matches = (
++                    matches
++                    and isinstance(left, str)
++                    and isinstance(right, str)
++                    and left == right
++                )
++            else:
++                money = OUTPUT_METADATA[variable]["unit"] in {
++                    "annual_USD",
++                    "season_USD",
++                }
++                try:
++                    left_number = _amount(left, variable)
++                    right_number = _amount(right, variable)
++                    matches = matches and abs(left_number - right_number) <= (
++                        0.01 if money else 0
++                    )
++                except UnsupportedKSLIHEAPCase:
++                    matches = False
++        if not matches:
++            differences.append({"output": variable, "expected": want, "observed": have})
++    return differences
++
++
++def _runtime_provenance() -> dict[str, Any]:
++    versions = {
++        package: importlib.metadata.version(package) for package in PINNED_RUNTIME
++    }
++    if versions != PINNED_RUNTIME:
++        raise RuntimeError(
++            f"KS LIHEAP replay requires {PINNED_RUNTIME}; found {versions}"
++        )
++    from policyengine_us import CountryTaxBenefitSystem
++
++    system = CountryTaxBenefitSystem()
++    source_hashes = {}
++    for variable, contract in OUTPUT_METADATA.items():
++        runtime_variable = system.variables.get(variable)
++        if runtime_variable is None:
++            raise RuntimeError(f"Pinned runtime is missing {variable}")
++        if (runtime_variable.entity.key, str(runtime_variable.definition_period)) != (
++            contract["entity"],
++            contract["period"],
++        ):
++            raise RuntimeError(f"Runtime entity/period changed for {variable}")
++        source_hashes[variable] = hashlib.sha256(
++            Path(inspect.getfile(type(runtime_variable))).read_bytes()
++        ).hexdigest()
++    return {"versions": versions, "policyengine_output_source_sha256": source_hashes}
++
++
++def _json_output(value: Any, variable: str) -> Any:
++    if hasattr(value, "decode_to_str"):
++        values = value.decode_to_str().tolist()
++    else:
++        values = value.tolist()
++    if not values:
++        raise RuntimeError(f"Missing runtime values for {variable}")
++    for scalar in values:
++        if variable in DECISION_OUTPUTS:
++            if type(scalar) is not bool:
++                raise RuntimeError(f"Expected boolean runtime output for {variable}")
++        elif variable == "ks_liheap_fuel_category":
++            if scalar not in {"NATURAL_GAS", "ELECTRICITY", "PROPANE", "OTHER"}:
++                raise RuntimeError(f"Unknown runtime fuel category: {scalar!r}")
++        else:
++            _amount(scalar, variable)
++    if OUTPUT_METADATA[variable]["entity"] == "person":
++        return values
++    if len(values) != 1:
++        raise RuntimeError(
++            f"Expected one SPM result for {variable}, received {len(values)}"
++        )
++    return values[0]
++
++
++def run_policyengine_suite(fixtures_path: Path | None = None) -> dict[str, Any]:
++    """Run real PE calculations; this does not claim an Axiom comparison."""
++    from policyengine_us import Simulation
++
++    path = fixtures_path or Path(__file__).with_name("fixtures") / "ks_liheap_1469.json"
++    fixture_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
++    bridge_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
++    cases = load_fixtures(path)
++    runtime = _runtime_provenance()
++    rows = []
++    for case in cases:
++        simulation = Simulation(situation=policyengine_situation(case))
++        actual = {
++            variable: _json_output(
++                simulation.calculate(variable, case["year"]), variable
++            )
++            for variable in OUTPUTS
++        }
++        differences = check_expectations(actual, case["expected"])
++        rows.append(
++            {
++                "case_id": case["id"],
++                "group": case["group"],
++                "year": case["year"],
++                "actual": actual,
++                "expected": case["expected"],
++                "differences": differences,
++                "status": "mismatch" if differences else "pass",
++            }
++        )
++    asserted_outputs = sorted({output for case in cases for output in case["expected"]})
++    differences = sum(len(row["differences"]) for row in rows)
++    if fixture_sha256 != hashlib.sha256(path.read_bytes()).hexdigest() or (
++        bridge_sha256 != hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
++    ):
++        raise RuntimeError(
++            "Fixtures or bridge changed while the comparison was running"
++        )
++    return {
++        "schema_version": 1,
++        "mode": "policyengine_issue_expectations_only",
++        "status": "mismatch" if differences else "pass",
++        "issue_url": ISSUE_URL,
++        "expectation_authority": "Issue review claims, not independent legal source verification",
++        "runtime": runtime,
++        "fixtures_sha256": fixture_sha256,
++        "bridge_sha256": bridge_sha256,
++        "axiom_comparison": {
++            "status": "blocked_no_source_admitted_candidate",
++            "compared_cases": 0,
++            "compared_outputs": 0,
++            "candidate_sha256": None,
++        },
++        "coverage": {
++            "cases": len(rows),
++            "outputs_queried_per_case": len(OUTPUTS),
++            "distinct_asserted_outputs": asserted_outputs,
++            "assertions": sum(len(case["expected"]) for case in cases),
++            "failed_assertions": differences,
++            "passed_cases": sum(row["status"] == "pass" for row in rows),
++            "failed_cases": sum(row["status"] == "mismatch" for row in rows),
++        },
++        "output_contract": OUTPUT_METADATA,
++        "cases": rows,
++    }
++
++
++def _file_receipt(path: Path, expected: str | None = None) -> dict[str, str]:
++    path = path.resolve(strict=True)
++    digest = hashlib.sha256(path.read_bytes()).hexdigest()
++    if expected is not None and digest != expected:
++        raise ValueError(f"Candidate file hash mismatch: {path}")
++    return {"path": str(path), "sha256": digest}
++
++
++def _fixture_payments(case: Mapping[str, Any], projection: Mapping[str, Any] | None):
++    """Materialize raw recurring sources once each, without eligibility logic."""
++    if projection is None:
++        return []
++    sources = projection.get("sources", {})
++    allowed = {
++        "employment",
++        "pension",
++        "military_retired_pay",
++        "military_survivor_annuity",
++    }
++    if not sources or not set(sources) <= allowed or not projection.get("assumptions"):
++        raise ValueError(
++            "Payment projection requires documented supported ordinary sources"
++        )
++    if case["spm_unit"].get("annual_amounts", {}).get("kansas_tanf", 0):
++        raise ValueError("Payment projection cannot omit nonzero household TANF")
++    payments = []
++    for person in case["people"]:
++        for source, amount in person.get("annual_income", {}).items():
++            if amount == 0:
++                continue
++            if source not in sources:
++                raise ValueError(
++                    f"Payment projection cannot omit nonzero source: {source}"
++                )
++            labels = sources[source]
++            if set(labels) != {"payment_type", "income_kind"} or not all(
++                isinstance(v, str) and v for v in labels.values()
++            ):
++                raise ValueError(
++                    "Payment source requires explicit string type and kind labels"
++                )
++            payments.append(
++                {
++                    "id": f"payment::{person['id']}::{source}",
++                    "person": person,
++                    "annual_amount": _amount(amount, source),
++                    **labels,
++                }
++            )
++    return payments
++
++
++def _observed_input(
++    case: Mapping[str, Any], binding: Mapping[str, Any], person=None, payment=None
++):
++    """Read raw observations only; expected/calculated outputs are inaccessible."""
++    if "constant" in binding:
++        if "source" in binding or not binding.get("assumption"):
++            raise ValueError(
++                "Constant inputs require a documented assumption and no source"
++            )
++        value = binding["constant"]
++    else:
++        source = binding.get("source", "")
++        if source == "case.state":
++            value = case["state"]
++        elif source == "case.year":
++            value = case["year"]
++        elif source == "household.member_count":
++            value = len(case["people"])
++        elif source.startswith("payment."):
++            field = source.removeprefix("payment.")
++            if payment is None or field not in {
++                "annual_amount",
++                "payment_type",
++                "income_kind",
++            }:
++                raise ValueError(
++                    "Payment observations require supported payment input scope"
++                )
++            value = payment[field]
++        elif source.startswith("person."):
++            if person is None:
++                raise ValueError("Person observations require person input scope")
++            field = source.removeprefix("person.")
++            if field in {"age_in_application_month", "immigration_status"}:
++                value = person[field]
++            elif (
++                field.startswith("annual_income.")
++                and field.split(".")[1] in PERSON_ANNUAL_INPUTS
++            ):
++                value = person.get("annual_income", {}).get(field.split(".")[1], 0)
++            else:
++                raise ValueError(f"Unsupported observation source: {source}")
++        elif source.startswith("household."):
++            field = source.removeprefix("household.")
++            if field in SPM_FACT_INPUTS:
++                value = case["spm_unit"][field]
++            elif (
++                field.startswith("annual_amounts.")
++                and field.split(".")[1] in SPM_ANNUAL_INPUTS
++            ):
++                value = (
++                    case["spm_unit"]
++                    .get("annual_amounts", {})
++                    .get(field.split(".")[1], 0)
++                )
++            else:
++                raise ValueError(f"Unsupported observation source: {source}")
++        else:
++            raise ValueError(f"Unsupported observation source: {source}")
++    if "enum_map" in binding:
++        mapping = binding["enum_map"]
++        if (
++            not isinstance(value, str)
++            or value not in mapping
++            or not isinstance(mapping[value], str)
++        ):
++            raise ValueError(
++                "Enum maps must translate explicit string labels to string labels"
++            )
++        value = mapping[value]
++    if "scale" in binding:
++        scale = binding["scale"]
++        if isinstance(scale, bool) or scale not in {1, 12, 1 / 12}:
++            raise ValueError(
++                "Input scale must be an explicit monthly/annual conversion"
++            )
++        value = _amount(value, str(binding.get("source"))) * scale
++    return value
++
++
++def candidate_input_records(
++    case: Mapping[str, Any], bindings: list[dict[str, Any]], payment_projection=None
++):
++    """Project fixture facts into explicitly named generated input slots."""
++    policyengine_situation(case)  # Apply the same fixture validity contract.
++    payments = _fixture_payments(case, payment_projection)
++    records = []
++    for binding in bindings:
++        scope = binding.get("scope")
++        if scope not in {"person", "household", "payment"}:
++            raise ValueError("Input scope must be person, household or payment")
++        if scope == "payment" and payment_projection is None:
++            raise ValueError("Payment input requires an explicit payment projection")
++        subjects = (
++            [(p["person"], p) for p in payments]
++            if scope == "payment"
++            else [(p, None) for p in (case["people"] if scope == "person" else [None])]
++        )
++        for person, payment in subjects:
++            records.append(
++                {
++                    "name": binding["name"],
++                    "entity": binding["entity"],
++                    "entity_id": payment["id"]
++                    if payment is not None
++                    else person["id"]
++                    if person is not None
++                    else "household",
++                    "value": _observed_input(case, binding, person, payment),
++                }
++            )
++    identities = [(r["name"], r["entity"], r["entity_id"]) for r in records]
++    if len(identities) != len(set(identities)):
++        raise ValueError("Duplicate candidate input binding")
++    return records
++
++
++def _candidate_output(value: Any, output: str, binding: Mapping[str, Any]) -> Any:
++    wanted_unit = OUTPUT_METADATA[output]["unit"]
++    given_unit = binding["unit"]
++    if given_unit == "monthly_USD" and wanted_unit == "annual_USD":
++        value = _amount(value, output) * 12
++    elif given_unit != wanted_unit:
++        raise ValueError(
++            f"Unsupported output unit conversion: {given_unit} -> {wanted_unit}"
++        )
++    if "enum_map" in binding:
++        mapping = binding["enum_map"]
++        if not isinstance(value, str) or value not in mapping:
++            raise ValueError(f"Unmapped candidate enum for {output}: {value!r}")
++        value = mapping[value]
++    if wanted_unit == "boolean" and type(value) is not bool:
++        raise ValueError(f"Candidate returned a nonboolean {output}")
++    if wanted_unit == "enum" and (not isinstance(value, str) or not value):
++        raise ValueError(f"Candidate returned an invalid enum {output}")
++    if wanted_unit in {"annual_USD", "season_USD", "integer"}:
++        number = _amount(value, output)
++        if wanted_unit == "integer" and not number.is_integer():
++            raise ValueError(f"Candidate returned a noninteger {output}")
++    return value
++
++
++def _candidate_relations(
++    case: Mapping[str, Any],
++    bindings: list[dict],
++    program: dict,
++    payment_projection=None,
++) -> list[dict]:
++    """Require declared typed slots; never infer an untyped relation's order."""
++    schemas = program.get("relations", [])
++    schemas = schemas if isinstance(schemas, dict) else {s["name"]: s for s in schemas}
++    records = []
++    for binding in bindings:
++        schema = schemas.get(binding["name"])
++        slots = binding.get("slots")
++        if schema is None or schema.get("arity") != 2 or schema.get("derivation"):
++            raise ValueError(
++                "Candidate relation must name a declared binary base relation"
++            )
++        if (
++            not isinstance(slots, list)
++            or len(slots) != 2
++            or {slot.get("scope") for slot in slots}
++            not in ({"person", "household"}, {"payment", "person"})
++            or any(
++                slot.get("entity")
++                != {
++                    "person": "Person",
++                    "household": "Household",
++                    "payment": "Payment",
++                }.get(slot.get("scope"))
++                for slot in slots
++            )
++            or [slot.get("entity") for slot in slots] != schema.get("slot_entities")
++        ):
++            raise ValueError(
++                "Candidate relation requires explicit slots matching declared entity types"
++            )
++        payment_relation = any(slot["scope"] == "payment" for slot in slots)
++        if payment_relation and payment_projection is None:
++            raise ValueError("Payment relation requires an explicit payment projection")
++        subjects = (
++            [
++                {"payment": p["id"], "person": p["person"]["id"]}
++                for p in _fixture_payments(case, payment_projection)
++            ]
++            if payment_relation
++            else [{"person": p["id"], "household": "household"} for p in case["people"]]
++        )
++        for subject in subjects:
++            owner_scope = "person" if payment_relation else "household"
++            related_scope = "payment" if payment_relation else "person"
++            kinds = {slot["scope"]: slot["entity"] for slot in slots}
++            records.append(
++                {
++                    "name": binding["name"],
++                    "tuple": [subject[slot["scope"]] for slot in slots],
++                    "roles": {
++                        "owner_id": subject[owner_scope],
++                        "owner_kind": kinds[owner_scope],
++                        "related_id": subject[related_scope],
++                        "related_kind": kinds[related_scope],
++                    },
++                }
++            )
++    return records
++
++
++def run_candidate_suite(
++    binding_path: Path, fixtures_path: Path | None = None
++) -> dict[str, Any]:
++    """Execute actual compiled candidates and retain incomplete coverage explicitly.
++
++    Binding files record source identity; they do not replace encoder source
++    admission or the corpus release signature verifier. No remote RuleSpec
++    fallback, generated expected answers, or default input filling is used.
++    """
++    from axiom_oracles.adapters.axiom.generic_inputs import enumerate_inputs
++    from axiom_oracles.adapters.axiom.runner import AxiomRulesRunner
++    from axiom_oracles.core.case import Case
++
++    binding_receipt = _file_receipt(binding_path)
++    configuration = json.loads(binding_path.read_text())
++    if configuration.get("schema_version") != 1 or not configuration.get("candidates"):
++        raise ValueError(
++            "Candidate binding requires schema_version 1 and nonempty candidates"
++        )
++    fixture_path = (
++        fixtures_path or Path(__file__).with_name("fixtures") / "ks_liheap_1469.json"
++    )
++    fixture_receipt = _file_receipt(fixture_path)
++    bridge_receipt = _file_receipt(Path(__file__))
++    cases = load_fixtures(fixtures_path)
++    oracle = run_policyengine_suite(fixtures_path)
++    pe_rows = {row["case_id"]: row for row in oracle["cases"]}
++    comparisons: dict[str, dict[str, Any]] = {case["id"]: {} for case in cases}
++    errors = []
++    receipts = []
++    all_files = [binding_receipt, fixture_receipt, bridge_receipt]
++    bound_slots: set[tuple[str, str]] = set()
++    base = binding_path.resolve().parent
++    for candidate in configuration["candidates"]:
++        years = candidate.get("years")
++        if (
++            not isinstance(years, list)
++            or not years
++            or not set(years) <= SUPPORTED_YEARS
++        ):
++            raise ValueError("Candidate years must explicitly select 2025 and/or 2026")
++        selected_ids = candidate.get("case_ids")
++        if selected_ids is not None and (
++            not isinstance(selected_ids, list)
++            or not selected_ids
++            or not set(selected_ids) <= {case["id"] for case in cases}
++        ):
++            raise ValueError(
++                "Candidate case_ids must explicitly name existing fixtures"
++            )
++        selected_cases = [
++            case
++            for case in cases
++            if case["year"] in years
++            and (selected_ids is None or case["id"] in selected_ids)
++        ]
++        if not selected_cases:
++            raise ValueError("Candidate selects no supported fixture cases")
++        artifact = candidate["compiled_artifact"]
++        artifact_receipt = _file_receipt(base / artifact["path"], artifact["sha256"])
++        source_receipts = [
++            _file_receipt(base / item["path"], item["sha256"])
++            for item in candidate["source_files"]
++        ]
++        if not source_receipts:
++            raise ValueError("Candidate source files must be explicitly hashed")
++        receipt_binding = candidate["compilation_receipt"]
++        compilation_file = _file_receipt(
++            base / receipt_binding["path"], receipt_binding["sha256"]
++        )
++        compilation = json.loads(Path(compilation_file["path"]).read_text())
++        rulespec_root = (base / candidate["rulespec_root"]).resolve()
++        if (
++            compilation.get("compile_exit_code") != 0
++            or compilation.get("compiled_artifact_sha256") != artifact_receipt["sha256"]
++            or Path(compilation.get("compiled_artifact", "")).resolve()
++            != Path(artifact_receipt["path"])
++            or Path(compilation.get("candidate_root", "")).resolve() != rulespec_root
++            or len(source_receipts) != 1
++            or compilation.get("copied_source_sha256") != source_receipts[0]["sha256"]
++            or compilation.get("source_sha256") != source_receipts[0]["sha256"]
++            or not isinstance(compilation.get("encoder_acceptance_status"), str)
++            or not compilation["encoder_acceptance_status"]
++        ):
++            raise ValueError(
++                "Compilation receipt does not link the exact source, artifact, root and acceptance status"
++            )
++        binary_receipt = _file_receipt(
++            base / candidate["engine_binary"], compilation["engine_binary_sha256"]
++        )
++        all_files.extend(
++            [artifact_receipt, *source_receipts, compilation_file, binary_receipt]
++        )
++        acceptance = None
++        if candidate.get("final_acceptance_receipt"):
++            declaration = candidate["final_acceptance_receipt"]
++            acceptance_file = _file_receipt(
++                base / declaration["path"], declaration["sha256"]
++            )
++            final_acceptance = json.loads(Path(acceptance_file["path"]).read_text())
++            if final_acceptance.get("final_source_sha256") != source_receipts[0][
++                "sha256"
++            ] or not final_acceptance.get("status"):
++                raise ValueError(
++                    "Final acceptance receipt does not describe the candidate source"
++                )
++            issues_file = _file_receipt(
++                base / final_acceptance["issues_path"],
++                final_acceptance["issues_sha256"],
++            )
++            all_files.extend([acceptance_file, issues_file])
++            acceptance = {
++                "receipt": acceptance_file,
++                "issues": issues_file,
++                "status": final_acceptance["status"],
++                "encoder_exit_code": final_acceptance["encoder_exit_code"],
++                "ci_passed": final_acceptance["ci_passed"],
++            }
++        compiled = json.loads(Path(artifact_receipt["path"]).read_text())
++        program = compiled.get("program", compiled)
++        derived = {item["id"]: item for item in program["derived"]}
++        input_slots = {slot.name: slot for slot in enumerate_inputs(program)}
++        inputs = {
++            request_name: input_slots[entry["slot"]]
++            for entry in compiled.get("metadata", {}).get("input_catalog", [])
++            if entry["slot"] in input_slots
++            for request_name in entry["request_names"]
++        }
++        # Validate every relation even before invoking the engine or processing a case.
++        _candidate_relations(
++            selected_cases[0],
++            candidate.get("relations", []),
++            program,
++            candidate.get("payment_projection"),
++        )
++        for item in candidate["inputs"]:
++            if (
++                item["name"] not in inputs
++                or inputs[item["name"]].entity != item["entity"]
++            ):
++                raise ValueError(
++                    f"Input binding is absent from candidate or has wrong entity: {item['name']}"
++                )
++        outputs = candidate["outputs"]
++        if not outputs or not set(outputs) <= set(OUTPUTS):
++            raise ValueError(
++                "Candidate outputs must be a nonempty subset of KS comparison outputs"
++            )
++        for output, mapping in outputs.items():
++            rule = derived.get(mapping["legal_id"])
++            if (
++                rule is None
++                or ":" not in mapping["legal_id"]
++                or "#" not in mapping["legal_id"]
++            ):
++                raise ValueError(
++                    f"Output requires a real canonical compiled legal ID: {output}"
++                )
++            if rule["entity"] != mapping["entity"]:
++                raise ValueError(f"Candidate entity mismatch: {output}")
++            actual_period = str(rule.get("period", "")).lower()
++            expected_period = "month" if mapping["period"] == "month" else "year"
++            if actual_period not in (
++                {"month"}
++                if expected_period == "month"
++                else {"year", "taxyear", "tax_year"}
++            ):
++                raise ValueError(f"Candidate period mismatch: {output}")
++            scope = mapping.get("scope")
++            expected_scope = (
++                "person"
++                if OUTPUT_METADATA[output]["entity"] == "person"
++                else "household"
++            )
++            if scope != expected_scope:
++                raise ValueError(f"Output entity scope mismatch: {output}")
++            for case in selected_cases:
++                slot = (case["id"], output)
++                if slot in bound_slots:
++                    raise ValueError(
++                        f"Overlapping candidate binding: {case['id']}/{output}"
++                    )
++                bound_slots.add(slot)
++        corpus = candidate["corpus_release"]
++        release_path = base / corpus["object_path"]
++        release_receipt = _file_receipt(release_path)
++        release = json.loads(release_path.read_text())
++        encoded_content = json.dumps(
++            release["content"], sort_keys=True, separators=(",", ":"), ensure_ascii=True
++        ).encode()
++        if (release["release"], release["content_sha256"]) != (
++            corpus["release"],
++            corpus["content_sha256"],
++        ) or hashlib.sha256(encoded_content).hexdigest() != corpus["content_sha256"]:
++            raise ValueError("Candidate corpus release identity mismatch")
++        all_files.append(release_receipt)
++        runner = AxiomRulesRunner(
++            compiled_artifact_path=artifact_receipt["path"],
++            binary_path=binary_receipt["path"],
++            rulespec_repo_roots=(rulespec_root,),
++            mode="explain",
++        )
++        grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
++        for output, mapping in outputs.items():
++            key = (mapping["scope"], mapping["entity"], mapping["period"])
++            grouped.setdefault(key, {})[output] = mapping
++        for (scope, entity, period), group_outputs in grouped.items():
++            if period not in {"month", "year"}:
++                raise ValueError("Candidate period must be month or year")
++            executions = []
++            result_keys = []
++            for case in selected_cases:
++                month = candidate.get("application_month")
++                if period == "month" and (
++                    type(month) is not int or not 1 <= month <= 12
++                ):
++                    raise ValueError(
++                        "Monthly candidates require an explicit application_month"
++                    )
++                case_period = (
++                    f"{case['year']}-{month:02}"
++                    if period == "month"
++                    else str(case["year"])
++                )
++                records = candidate_input_records(
++                    case, candidate["inputs"], candidate.get("payment_projection")
++                )
++                relations = _candidate_relations(
++                    case,
++                    candidate.get("relations", []),
++                    program,
++                    candidate.get("payment_projection"),
++                )
++                query_people = case["people"] if scope == "person" else [None]
++                for person in query_people:
++                    executions.append(
++                        Case(
++                            case_id=f"{case['id']}::{person['id'] if person else 'household'}",
++                            period=case_period,
++                            outputs=tuple(
++                                mapping["legal_id"]
++                                for mapping in group_outputs.values()
++                            ),
++                            metadata={
++                                "axiom_input_records": records,
++                                "axiom_relations": relations,
++                                "axiom_entity_id": person["id"]
++                                if person
++                                else "household",
++                                "axiom_entity": entity,
++                            },
++                        )
++                    )
++                    result_keys.append((case["id"], person is not None))
++            results = runner.run_cases(
++                executions, variables=list(executions[0].outputs)
++            )
++            if len(results) != len(executions):
++                raise RuntimeError(
++                    "Candidate result count differs from submitted cases"
++                )
++            for result, (case_id, person_scope) in zip(results, result_keys):
++                diagnostics = (
++                    (result.raw or {}).get("relation_binding_diagnostics", {})
++                    if isinstance(result.raw, dict)
++                    else {}
++                )
++                if diagnostics:
++                    errors.append(
++                        {
++                            "candidate": candidate["id"],
++                            "case_id": case_id,
++                            "errors": [
++                                "Relation binding reported ambiguous tuple evidence"
++                            ],
++                            "relation_binding_diagnostics": diagnostics,
++                        }
++                    )
++                    continue
++                if result.errors:
++                    errors.append(
++                        {
++                            "candidate": candidate["id"],
++                            "case_id": case_id,
++                            "errors": list(result.errors),
++                        }
++                    )
++                    continue
++                for output, mapping in group_outputs.items():
++                    try:
++                        value = _candidate_output(
++                            result.values.get(mapping["legal_id"]), output, mapping
++                        )
++                    except ValueError as exc:
++                        errors.append(
++                            {
++                                "candidate": candidate["id"],
++                                "case_id": case_id,
++                                "output": output,
++                                "errors": [str(exc)],
++                            }
++                        )
++                        continue
++                    if person_scope:
++                        comparisons[case_id].setdefault(output, []).append(value)
++                    elif output in comparisons[case_id]:
++                        raise ValueError(
++                            f"Overlapping candidate binding: {case_id}/{output}"
++                        )
++                    else:
++                        comparisons[case_id][output] = value
++        if not runner.engine_receipt or not runner.engine_receipt.get("commit"):
++            raise RuntimeError(
++                "Executed candidate engine lacks a verified source-build receipt"
++            )
++        if (
++            runner.engine_receipt["commit"] != compilation["engine_git_commit"]
++            or runner.engine_receipt["binary_sha256"]
++            != compilation["engine_binary_sha256"]
++        ):
++            raise ValueError("Executed engine differs from compilation receipt")
++        receipts.append(
++            {
++                "id": candidate["id"],
++                "years": years,
++                "case_ids": [case["id"] for case in selected_cases],
++                "scope_assumptions": candidate.get("scope_assumptions", []),
++                "payment_projection": candidate.get("payment_projection"),
++                "compiled_artifact": artifact_receipt,
++                "source_files": source_receipts,
++                "compilation_receipt": compilation_file,
++                "encoder_acceptance_status": compilation["encoder_acceptance_status"],
++                "final_acceptance": acceptance,
++                "engine": runner.engine_receipt,
++                "corpus_release": corpus,
++                "outputs": outputs,
++            }
++        )
++    rows = []
++    for case in cases:
++        actual = comparisons[case["id"]]
++        expected = {name: pe_rows[case["id"]]["actual"][name] for name in actual}
++        differences = check_expectations(actual, expected) if expected else []
++        rows.append(
++            {
++                "case_id": case["id"],
++                "year": case["year"],
++                "axiom": actual,
++                "policyengine": expected,
++                "differences": differences,
++                "unsupported_outputs": sorted(set(OUTPUTS) - set(actual)),
++            }
++        )
++    for receipt in all_files:
++        _file_receipt(Path(receipt["path"]), receipt["sha256"])
++    compared = sum(len(row["axiom"]) for row in rows)
++    differences = sum(len(row["differences"]) for row in rows)
++    unsupported = sum(len(row["unsupported_outputs"]) for row in rows)
++    status = (
++        "error"
++        if errors
++        else "mismatch"
++        if differences
++        else "incomplete"
++        if unsupported
++        else "pass"
++    )
++    return {
++        "schema_version": 1,
++        "mode": "axiom_policyengine_candidate_comparison",
++        "status": status,
++        "binding": binding_receipt,
++        "candidates": receipts,
++        "runtime": oracle["runtime"],
++        "fixtures_sha256": oracle["fixtures_sha256"],
++        "bridge_sha256": oracle["bridge_sha256"],
++        "coverage": {
++            "fixture_cases": len(cases),
++            "compared_cases": sum(bool(row["axiom"]) for row in rows),
++            "compared_outputs": compared,
++            "unsupported_outputs": unsupported,
++            "differences": differences,
++            "execution_errors": len(errors),
++        },
++        "issue_expectation_comparison": {
++            "coverage": oracle["coverage"],
++            "cases": oracle["cases"],
++        },
++        "cases": rows,
++        "errors": errors,
++    }
++
++
++def main(argv: list[str] | None = None) -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    mode = parser.add_mutually_exclusive_group()
++    mode.add_argument(
++        "--oracle-only",
++        action="store_true",
++        help="Explicitly run PE issue assertions without claiming Axiom parity",
++    )
++    mode.add_argument(
++        "--candidate-binding",
++        type=Path,
++        help="Execute hashed compiled candidates with explicit observation bindings",
++    )
++    parser.add_argument("--fixtures", type=Path)
++    parser.add_argument("--report", type=Path, required=True)
++    args = parser.parse_args(argv)
++    if args.candidate_binding:
++        try:
++            report = run_candidate_suite(args.candidate_binding, args.fixtures)
++            exit_code = (
++                2
++                if report["coverage"]["execution_errors"]
++                or report["coverage"]["unsupported_outputs"]
++                else 1
++                if report["coverage"]["differences"]
++                else 0
++            )
++        except Exception as exc:
++            report = {
++                "schema_version": 1,
++                "status": "error",
++                "error": f"{type(exc).__name__}: {exc}",
++                "axiom_comparison": {"compared_cases": 0, "compared_outputs": 0},
++            }
++            exit_code = 2
++    elif not args.oracle_only:
++        report = {
++            "schema_version": 1,
++            "status": "awaiting_candidate_output_binding",
++            "compared_cases": 0,
++            "compared_outputs": 0,
++            "output_contract": OUTPUT_METADATA,
++            "reason": "Supply an explicit binding for a source-derived RuleSpec candidate's exact legal IDs and input facts before comparing. --oracle-only checks only PE against issue review expectations.",
++        }
++        exit_code = 2
++    else:
++        try:
++            report = run_policyengine_suite(args.fixtures)
++            exit_code = 1 if report["coverage"]["failed_assertions"] else 0
++        except Exception as exc:
++            report = {
++                "schema_version": 1,
++                "status": "error",
++                "error": f"{type(exc).__name__}: {exc}",
++                "axiom_comparison": {"compared_cases": 0, "compared_outputs": 0},
++            }
++            exit_code = 2
++    args.report.parent.mkdir(parents=True, exist_ok=True)
++    args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
++    print(
++        json.dumps(
++            {
++                "status": report["status"],
++                "report": str(args.report),
++                "coverage": report.get("coverage"),
++            }
++        )
++    )
++    return exit_code
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/axiom_oracles/bridges/fixtures/ks_liheap_1469.json b/axiom_oracles/bridges/fixtures/ks_liheap_1469.json
+new file mode 100644
+--- /dev/null
++++ b/axiom_oracles/bridges/fixtures/ks_liheap_1469.json
+@@ -0,0 +1,1810 @@
++{
++  "schema_version": 1,
++  "issue_url": "https://github.com/TheAxiomFoundation/rulespec-us/issues/1469",
++  "expectation_authority": "Issue review claims only; official admitted sources are generation authority. Matrix/minimum and other unresolved legal questions must not be inferred resolved by an oracle pass.",
++  "cases": [
++    {
++      "id": "single-apartment",
++      "group": 1,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 22000
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "APARTMENT",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 1,
++        "ks_liheap_countable_income": 22000,
++        "ks_liheap_eligible": true,
++        "ks_liheap_income_band": 4,
++        "ks_liheap": 248
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "family-season-2025",
++      "group": 2,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 10000
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 5,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_limit": 46800,
++        "ks_liheap_eligible": true,
++        "ks_liheap": 941
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "family-season-2026",
++      "group": 2,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 10000
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 5,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_limit": 48228,
++        "ks_liheap_eligible": true,
++        "ks_liheap": 709
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "band-10788",
++      "group": 3,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 10788
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_band": 1,
++        "ks_liheap": 709
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "band-10800",
++      "group": 3,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 10800
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_band": 2,
++        "ks_liheap": 638
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "band-14388",
++      "group": 3,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 14388
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_band": 2,
++        "ks_liheap": 638
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "band-14400",
++      "group": 3,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 14400
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_band": 3,
++        "ks_liheap": 567
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "band-20388",
++      "group": 3,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 20388
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_band": 3,
++        "ks_liheap": 567
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "band-20400",
++      "group": 3,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 20400
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_band": 4,
++        "ks_liheap": 496
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "limit-2026-0",
++      "group": 4,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 23472
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_limit": 23472,
++        "ks_liheap_income_eligible": true,
++        "ks_liheap": 496
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "limit-2026-1",
++      "group": 4,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 23473
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_limit": 23472,
++        "ks_liheap_income_eligible": false,
++        "ks_liheap": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "limit-2025-0",
++      "group": 5,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 22590
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_limit": 22590,
++        "ks_liheap_income_eligible": true,
++        "ks_liheap": 659
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "limit-2025-1",
++      "group": 5,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 22591
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_limit": 22590,
++        "ks_liheap_income_eligible": false,
++        "ks_liheap": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "ninth-member-2026-0",
++      "group": 6,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 89484
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 6,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 7,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p5",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p6",
++          "age_in_application_month": 9,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p7",
++          "age_in_application_month": 10,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p8",
++          "age_in_application_month": 11,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p9",
++          "age_in_application_month": 12,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 9,
++        "ks_liheap_income_limit": 89484,
++        "ks_liheap_income_eligible": true,
++        "ks_liheap": 567
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "ninth-member-2026-1",
++      "group": 6,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 89485
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 6,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 7,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p5",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p6",
++          "age_in_application_month": 9,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p7",
++          "age_in_application_month": 10,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p8",
++          "age_in_application_month": 11,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p9",
++          "age_in_application_month": 12,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 9,
++        "ks_liheap_income_limit": 89484,
++        "ks_liheap_income_eligible": false,
++        "ks_liheap": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "ninth-member-2025-0",
++      "group": 6,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 87150
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 6,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 7,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p5",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p6",
++          "age_in_application_month": 9,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p7",
++          "age_in_application_month": 10,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p8",
++          "age_in_application_month": 11,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p9",
++          "age_in_application_month": 12,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 9,
++        "ks_liheap_income_limit": 87150,
++        "ks_liheap_income_eligible": true,
++        "ks_liheap": 753
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "ninth-member-2025-1",
++      "group": 6,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 87151
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 6,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 7,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p5",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p6",
++          "age_in_application_month": 9,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p7",
++          "age_in_application_month": 10,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p8",
++          "age_in_application_month": 11,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p9",
++          "age_in_application_month": 12,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 9,
++        "ks_liheap_income_limit": 87150,
++        "ks_liheap_income_eligible": false,
++        "ks_liheap": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "fuel-natural_gas",
++      "group": 7,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 709,
++        "ks_liheap_fuel_category": "NATURAL_GAS",
++        "ks_liheap_matrix_amount": 709
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "fuel-electricity",
++      "group": 7,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "ELECTRICITY",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "electricity_bill_before_subsidy": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 1043,
++        "ks_liheap_fuel_category": "ELECTRICITY",
++        "ks_liheap_matrix_amount": 1043
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "fuel-propane",
++      "group": 7,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "PROPANE",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "propane_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 553,
++        "ks_liheap_fuel_category": "PROPANE",
++        "ks_liheap_matrix_amount": 553
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "fuel-wood",
++      "group": 7,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "WOOD",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "wood_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 639,
++        "ks_liheap_fuel_category": "OTHER",
++        "ks_liheap_matrix_amount": 639
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "dwelling-duplex-E",
++      "group": 8,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "DUPLEX",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 532
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "dwelling-apartment-E",
++      "group": 8,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "APARTMENT",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 354
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "dwelling-trailer_other-E",
++      "group": 8,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "TRAILER_OTHER",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 177
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "dwelling-house_modular_mobile-A",
++      "group": 8,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "A",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 482
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "dwelling-house_modular_mobile-J",
++      "group": 8,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "J",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap": 1136
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "five-propane-duplex",
++      "group": 9,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 36,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 13200
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 35,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 11,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 8,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p5",
++          "age_in_application_month": 3,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "PROPANE",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "DUPLEX",
++        "utility_rate_tier": "C",
++        "annual_amounts": {
++          "propane_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 5,
++        "ks_liheap_household_size_group": 2,
++        "ks_liheap_income_band": 2,
++        "ks_liheap": 393
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "excluded-members-income-counts",
++      "group": 10,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 6000
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 38,
++          "immigration_status": "UNDOCUMENTED",
++          "annual_income": {
++            "employment": 12000
++          }
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 9,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p4",
++          "age_in_application_month": 6,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p5",
++          "age_in_application_month": 2,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 4,
++        "ks_liheap_countable_income": 18000,
++        "ks_liheap_income_band": 3,
++        "ks_liheap": 567
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "subsidized-heat-in-rent",
++      "group": 11,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 12000
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "ELECTRICITY",
++        "heat_in_rent": true,
++        "housing_assistance": true,
++        "dwelling_type": "APARTMENT",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "electricity_bill_before_subsidy": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_income_eligible": true,
++        "ks_liheap_energy_vulnerable": false,
++        "ks_liheap_eligible": false,
++        "ks_liheap": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "subsidized-direct-bill",
++      "group": 11,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 15000
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": true,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_eligible": true,
++        "ks_liheap": 567
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "purchased-wood-tanf",
++      "group": 12,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 26,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 2,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "WOOD",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "wood_bill": 1200,
++          "kansas_tanf": 3600
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_income": 3600,
++        "ks_liheap": 639
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "free-wood",
++      "group": 12,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 12000
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "WOOD",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {}
++      },
++      "expected": {
++        "ks_liheap_energy_vulnerable": false,
++        "ks_liheap_eligible": false,
++        "ks_liheap": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "child-earnings-excluded",
++      "group": 13,
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 44,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 20000
++          }
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 42,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 8000,
++            "interest": 1500
++          }
++        },
++        {
++          "id": "p3",
++          "age_in_application_month": 17,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 6000
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "DUPLEX",
++        "utility_rate_tier": "B",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_household_size": 3,
++        "ks_liheap_countable_earned_income": [
++          20000,
++          8000,
++          0
++        ],
++        "ks_liheap_countable_income": 29500,
++        "ks_liheap": 307
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "interest-2025-360",
++      "group": 14,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "interest": 360,
++            "qualified_dividends": 240
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_interest_dividend_income": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "interest-2025-361",
++      "group": 14,
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "interest": 361,
++            "qualified_dividends": 240
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_interest_dividend_income": 601
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "pavel-military_retired_pay",
++      "group": "pavel-military-addendum",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 70,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "military_retired_pay": 24000
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_unearned_income": 24000,
++        "ks_liheap_countable_income": 24000
++      },
++      "source_claim": "Pavel issuecomment-6373240252: count military retired pay and SBP once; KEESM13360/13361 and FY2026 plan1.9"
++    },
++    {
++      "id": "pavel-military_survivor_annuity",
++      "group": "pavel-military-addendum",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 70,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "military_survivor_annuity": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_unearned_income": 9600,
++        "ks_liheap_countable_income": 9600
++      },
++      "source_claim": "Pavel issuecomment-6373240252: count military retired pay and SBP once; KEESM13360/13361 and FY2026 plan1.9"
++    },
++    {
++      "id": "earned-age-17",
++      "group": "age-boundary",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 17,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 1200
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_earned_income": [
++          0,
++          0
++        ],
++        "ks_liheap_countable_income": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "earned-age-18",
++      "group": "age-boundary",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 18,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 1200
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_earned_income": [
++          0,
++          1200
++        ],
++        "ks_liheap_countable_income": 1200
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "regular-interest-season-2025",
++      "group": "interest-season",
++      "year": 2025,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "interest": 600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_interest_dividend_income": 0
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "regular-interest-season-2026",
++      "group": "interest-season",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "interest": 600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_interest_dividend_income": 600
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "military-combined-count-once",
++      "group": "military-combination",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 70,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "military_retired_pay": 24000,
++            "military_survivor_annuity": 9600,
++            "pension": 1200
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "HOUSE_MODULAR_MOBILE",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_unearned_income": 34800,
++        "ks_liheap_countable_income": 34800
++      },
++      "source_claim": "Issue #1469 review expectation; not independent legal source verification"
++    },
++    {
++      "id": "fy2026-floor-matrix-75-benefit-130",
++      "group": "minimum-floor-review-assumption",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "employment": 21600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "PROPANE",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "TRAILER_OTHER",
++        "utility_rate_tier": "A",
++        "annual_amounts": {
++          "propane_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_matrix_amount": 75,
++        "ks_liheap": 130
++      },
++      "source_claim": "Issue #1469 unresolved FY2026 minimum interpretation: matrix75, floor130. A pass does not resolve the source question."
++    },
++    {
++      "id": "child-military-survivor-annuity",
++      "group": "military-all-members",
++      "year": 2026,
++      "state": "KS",
++      "stable_monthly_income": true,
++      "one_residential_economic_unit": true,
++      "people": [
++        {
++          "id": "p1",
++          "age_in_application_month": 40,
++          "immigration_status": "CITIZEN",
++          "annual_income": {}
++        },
++        {
++          "id": "p2",
++          "age_in_application_month": 14,
++          "immigration_status": "CITIZEN",
++          "annual_income": {
++            "military_survivor_annuity": 9600
++          }
++        }
++      ],
++      "spm_unit": {
++        "heating_fuel": "NATURAL_GAS",
++        "heat_in_rent": false,
++        "housing_assistance": false,
++        "dwelling_type": "APARTMENT",
++        "utility_rate_tier": "E",
++        "annual_amounts": {
++          "gas_bill": 1200
++        }
++      },
++      "expected": {
++        "ks_liheap_countable_unearned_income": 9600,
++        "ks_liheap_countable_income": 9600
++      },
++      "source_claim": "Pavel issuecomment-6373240252 and KEESM13360 all-member unearned-income review inference; regular SBP annuity, not death/burial lump sum."
++    }
++  ]
++}
+diff --git a/tests/bridges/test_ks_liheap.py b/tests/bridges/test_ks_liheap.py
+new file mode 100644
+--- /dev/null
++++ b/tests/bridges/test_ks_liheap.py
+@@ -0,0 +1,689 @@
++"""Fail-closed Kansas issue replay and input mapping tests (no PE needed)."""
++
++from copy import deepcopy
++import hashlib
++import json
++
++import pytest
++
++from axiom_oracles.bridges.ks_liheap import (
++    OUTPUT_METADATA,
++    OUTPUTS,
++    UnsupportedKSLIHEAPCase,
++    check_expectations,
++    candidate_input_records,
++    load_fixtures,
++    main,
++    monthly_income_output,
++    policyengine_situation,
++    run_candidate_suite,
++)
++
++
++@pytest.fixture
++def case():
++    return deepcopy(load_fixtures()[0])
++
++
++def test_every_original_issue_group_has_executable_fixtures():
++    cases = load_fixtures()
++    assert set(range(1, 15)) <= {case["group"] for case in cases}
++    assert {2025, 2026} == {case["year"] for case in cases}
++    for case in cases:
++        assert case["expected"]
++        assert not (set(case["expected"]) - set(OUTPUTS))
++        assert len(policyengine_situation(case)["people"]) == len(case["people"])
++
++
++def test_missing_legal_candidate_is_not_counted_as_coverage(tmp_path):
++    report_path = tmp_path / "report.json"
++    assert main(["--report", str(report_path)]) == 2
++    report = json.loads(report_path.read_text())
++    assert report["status"] == "awaiting_candidate_output_binding"
++    assert report["compared_cases"] == report["compared_outputs"] == 0
++    assert len(report["output_contract"]) == 14
++    assert all(row["axiom_legal_id"] is None for row in OUTPUT_METADATA.values())
++
++
++def test_expected_values_cannot_enter_the_oracle(case):
++    first = policyengine_situation(case)
++    case["expected"] = {output: 999999 for output in OUTPUTS}
++    assert policyengine_situation(case) == first
++    for location in (case, case["spm_unit"], case["people"][0]["annual_income"]):
++        location["ks_liheap"] = 999999
++        with pytest.raises(UnsupportedKSLIHEAPCase, match="unsupported fields"):
++            policyengine_situation(case)
++        del location["ks_liheap"]
++
++
++def test_monthly_assistance_preserves_annual_total_and_explicit_zero(case):
++    case["people"][0]["annual_income"]["ssi"] = 1200
++    case["spm_unit"]["annual_amounts"]["kansas_tanf"] = 3600
++    situation = policyengine_situation(case)
++    ssi = situation["people"]["p1"]["ssi"]
++    tanf = situation["spm_units"]["spm"]["ks_tanf"]
++    assert ssi == {f"2026-{month:02}": 100 for month in range(1, 13)}
++    assert tanf == {f"2026-{month:02}": 300 for month in range(1, 13)}
++    assert situation["people"]["p1"]["social_security"] == {2026: 0}
++    assert situation["people"]["p1"]["general_assistance"] == {2026: 0}
++    assert situation["people"]["p1"]["pension_income"] == {2026: 0}
++
++
++def test_retired_pay_and_survivor_annuity_are_distinct_observed_inputs(case):
++    case["people"][0]["annual_income"] = {
++        "military_retired_pay": 24000,
++        "military_survivor_annuity": 9600,
++    }
++    person = policyengine_situation(case)["people"]["p1"]
++    assert person["military_retirement_pay"] == {2026: 24000}
++    assert person["military_retirement_pay_survivors"] == {2026: 9600}
++    assert person["pension_income"] == {2026: 0}
++    assert "military_retirement_income" not in person
++    assert "ks_liheap_countable_unearned_income" not in person
++
++
++def test_excluded_person_is_retained_for_income_not_filtered_out():
++    case = next(
++        case
++        for case in load_fixtures()
++        if case["id"] == "excluded-members-income-counts"
++    )
++    situation = policyengine_situation(case)
++    assert situation["people"]["p2"]["immigration_status"] == {2026: "UNDOCUMENTED"}
++    assert situation["people"]["p2"]["employment_income"] == {2026: 12000}
++    assert situation["spm_units"]["spm"]["members"] == ["p1", "p2", "p3", "p4", "p5"]
++    assert "ks_liheap_household_size" not in situation["spm_units"]["spm"]
++
++
++@pytest.mark.parametrize(
++    ("key", "value"),
++    [
++        ("state", "MO"),
++        ("year", 2027),
++        ("year", "2026"),
++        ("stable_monthly_income", False),
++        ("one_residential_economic_unit", False),
++        ("people", []),
++    ],
++)
++def test_unsupported_scope_is_rejected(case, key, value):
++    case[key] = value
++    with pytest.raises(UnsupportedKSLIHEAPCase):
++        policyengine_situation(case)
++
++
++@pytest.mark.parametrize("value", [True, "24000", float("inf"), float("nan")])
++def test_invalid_income_cannot_be_silently_coerced(case, value):
++    case["people"][0]["annual_income"]["employment"] = value
++    with pytest.raises(UnsupportedKSLIHEAPCase, match="finite USD"):
++        policyengine_situation(case)
++
++
++def test_income_conversion_does_not_divide_a_seasonal_payment():
++    assert monthly_income_output("ks_liheap_income_limit", 23472) == 1956
++    with pytest.raises(ValueError, match="not an annual-income output"):
++        monthly_income_output("ks_liheap", 496)
++
++
++@pytest.mark.parametrize(
++    ("actual", "expected"),
++    [
++        ({"ks_liheap": float("nan")}, {"ks_liheap": 496}),
++        ({"ks_liheap": float("inf")}, {"ks_liheap": 496}),
++        ({}, {"ks_liheap": 496}),
++        ({"ks_liheap_eligible": 1}, {"ks_liheap_eligible": True}),
++        (
++            {"ks_liheap_countable_earned_income": [1]},
++            {"ks_liheap_countable_earned_income": [1, 0]},
++        ),
++        (
++            {"ks_liheap_countable_earned_income": 1},
++            {"ks_liheap_countable_earned_income": [1]},
++        ),
++    ],
++)
++def test_missing_nonfinite_or_wrong_entity_output_is_a_failure(actual, expected):
++    assert check_expectations(actual, expected)
++
++
++def test_negative_control_is_an_unexplained_difference():
++    expected = {"ks_liheap_countable_income": 24000}
++    assert check_expectations(expected, expected) == []
++    wrong = {"ks_liheap_countable_income": 24001}
++    assert check_expectations(wrong, expected) == [
++        {"output": "ks_liheap_countable_income", "expected": 24000, "observed": 24001},
++    ]
++
++
++def test_candidate_inputs_only_read_observations(case):
++    bindings = [
++        {
++            "name": "actual_input",
++            "entity": "Person",
++            "scope": "person",
++            "source": "person.annual_income.employment",
++            "scale": 1 / 12,
++        }
++    ]
++    case["people"][0]["annual_income"]["employment"] = 24000
++    before = candidate_input_records(case, bindings)
++    case["expected"] = {name: 123456789 for name in OUTPUTS}
++    assert candidate_input_records(case, bindings) == before
++    assert before[0]["value"] == 2000
++    bindings[0]["source"] = "expected.ks_liheap_countable_income"
++    with pytest.raises(ValueError, match="Unsupported observation"):
++        candidate_input_records(case, bindings)
++
++
++def test_candidate_constants_are_explicit_assumptions(case):
++    binding = {
++        "name": "constant",
++        "entity": "Household",
++        "scope": "household",
++        "constant": True,
++    }
++    with pytest.raises(ValueError, match="documented assumption"):
++        candidate_input_records(case, [binding])
++    binding["assumption"] = "All fixtures explicitly select Kansas residence"
++    assert candidate_input_records(case, [binding])[0]["value"] is True
++
++
++@pytest.fixture
++def candidate_binding(tmp_path, monkeypatch, case):
++    """Plumbing-only candidate; tests never claim an actual engine invocation."""
++    import axiom_oracles.bridges.ks_liheap as bridge
++    import axiom_oracles.adapters.axiom.runner as runner
++    from axiom_oracles.core.results import EngineResult
++
++    output = "ks_liheap_countable_earned_income"
++    legal_id = "us-ks:manual/test/13360#earned_income"
++    input_id = "us-ks:manual/test/13360#input.employment"
++    case["people"] = [case["people"][0]]
++    case["people"][0]["annual_income"] = {"employment": 12000}
++    case["year"] = 2026
++    monkeypatch.setattr(bridge, "load_fixtures", lambda _: [deepcopy(case)])
++    monkeypatch.setattr(
++        bridge,
++        "run_policyengine_suite",
++        lambda _: {
++            "cases": [{"case_id": case["id"], "actual": {output: [12000]}}],
++            "runtime": {"test_double": True},
++            "fixtures_sha256": "fixture",
++            "bridge_sha256": "bridge",
++            "coverage": {"test_double": True},
++        },
++    )
++    calls = []
++
++    class FakeRunner:
++        value = 1000
++        engine_receipt = {
++            "commit": "a" * 40,
++            "binary_sha256": "b" * 64,
++            "test_double": True,
++        }
++
++        def __init__(self, **kwargs):
++            pass
++
++        def run_cases(self, cases, variables):
++            calls.extend(cases)
++            return [
++                EngineResult("axiom", c.case_id, {legal_id: self.value}) for c in cases
++            ]
++
++    monkeypatch.setattr(runner, "AxiomRulesRunner", FakeRunner)
++    artifact = {
++        "metadata": {
++            "input_catalog": [
++                {
++                    "slot": "employment",
++                    "canonical_request_name": input_id,
++                    "request_names": [input_id],
++                }
++            ]
++        },
++        "program": {
++            "derived": [
++                {
++                    "id": legal_id,
++                    "entity": "Person",
++                    "period": "Month",
++                    "expr": {"kind": "input", "name": "employment"},
++                }
++            ]
++        },
++    }
++    artifact_path = tmp_path / "compiled.json"
++    artifact_path.write_text(json.dumps(artifact))
++    source_path = tmp_path / "candidate.yaml"
++    source_path.write_text("plumbing-only test source\n")
++    binary_path = tmp_path / "test-double-binary"
++    binary_path.write_text("test double, not an executable\n")
++    FakeRunner.engine_receipt["binary_sha256"] = hashlib.sha256(
++        binary_path.read_bytes()
++    ).hexdigest()
++    compilation_path = tmp_path / "compilation-receipt.json"
++    compilation_path.write_text(
++        json.dumps(
++            {
++                "compile_exit_code": 0,
++                "compiled_artifact": str(artifact_path),
++                "compiled_artifact_sha256": hashlib.sha256(
++                    artifact_path.read_bytes()
++                ).hexdigest(),
++                "candidate_root": str(tmp_path),
++                "source_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
++                "copied_source_sha256": hashlib.sha256(
++                    source_path.read_bytes()
++                ).hexdigest(),
++                "encoder_acceptance_status": "test_double_not_encoder_accepted",
++                "engine_git_commit": FakeRunner.engine_receipt["commit"],
++                "engine_binary_sha256": FakeRunner.engine_receipt["binary_sha256"],
++            }
++        )
++    )
++    content = {"release": "test-release"}
++    content_hash = hashlib.sha256(
++        json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
++    ).hexdigest()
++    release_path = tmp_path / "release.json"
++    release_path.write_text(
++        json.dumps(
++            {
++                "release": "test-release",
++                "content_sha256": content_hash,
++                "content": content,
++            }
++        )
++    )
++    binding = {
++        "schema_version": 1,
++        "candidates": [
++            {
++                "id": "test",
++                "years": [2026],
++                "application_month": 1,
++                "compiled_artifact": {
++                    "path": str(artifact_path),
++                    "sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
++                },
++                "source_files": [
++                    {
++                        "path": str(source_path),
++                        "sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
++                    }
++                ],
++                "compilation_receipt": {
++                    "path": str(compilation_path),
++                    "sha256": hashlib.sha256(compilation_path.read_bytes()).hexdigest(),
++                },
++                "engine_binary": str(binary_path),
++                "rulespec_root": str(tmp_path),
++                "corpus_release": {
++                    "release": "test-release",
++                    "content_sha256": content_hash,
++                    "object_path": str(release_path),
++                },
++                "inputs": [
++                    {
++                        "name": input_id,
++                        "entity": "Person",
++                        "scope": "person",
++                        "source": "person.annual_income.employment",
++                        "scale": 1 / 12,
++                    }
++                ],
++                "outputs": {
++                    output: {
++                        "legal_id": legal_id,
++                        "entity": "Person",
++                        "scope": "person",
++                        "period": "month",
++                        "unit": "monthly_USD",
++                    }
++                },
++            }
++        ],
++    }
++    path = tmp_path / "binding.json"
++    path.write_text(json.dumps(binding))
++    return path, binding, calls, FakeRunner
++
++
++def test_real_candidate_path_is_requested_and_partial_coverage_is_not_pass(
++    candidate_binding,
++):
++    path, _, calls, _ = candidate_binding
++    report = run_candidate_suite(path)
++    assert len(calls) == 1
++    assert calls[0].period == "2026-01"
++    assert calls[0].metadata["axiom_input_records"][0]["value"] == 1000
++    assert report["coverage"]["compared_outputs"] == 1
++    assert report["coverage"]["unsupported_outputs"] == 13
++    assert report["coverage"]["differences"] == 0
++    assert report["status"] == "incomplete"
++    assert (
++        report["candidates"][0]["encoder_acceptance_status"]
++        == "test_double_not_encoder_accepted"
++    )
++    assert (
++        main(
++            [
++                "--candidate-binding",
++                str(path),
++                "--report",
++                str(path.parent / "report.json"),
++            ]
++        )
++        == 2
++    )
++
++
++def test_candidate_wrong_result_is_retained(candidate_binding):
++    path, _, _, runner = candidate_binding
++    runner.value = 1001
++    report = run_candidate_suite(path)
++    assert report["status"] == "mismatch"
++    assert report["cases"][0]["differences"] == [
++        {
++            "output": "ks_liheap_countable_earned_income",
++            "expected": [12000],
++            "observed": [12012],
++        }
++    ]
++
++
++def test_missing_candidate_value_is_error_not_comparison(candidate_binding):
++    path, _, _, runner = candidate_binding
++    runner.value = None
++    report = run_candidate_suite(path)
++    assert report["status"] == "error"
++    assert report["coverage"]["execution_errors"] == 1
++    assert report["coverage"]["compared_outputs"] == 0
++    assert report["coverage"]["unsupported_outputs"] == 14
++
++
++def test_unsupported_fixture_year_remains_uncovered(candidate_binding, monkeypatch):
++    import axiom_oracles.bridges.ks_liheap as bridge
++
++    path, _, calls, _ = candidate_binding
++    cases = bridge.load_fixtures(None)
++    older = deepcopy(cases[0])
++    older.update(id="older-year", year=2025)
++    monkeypatch.setattr(
++        bridge, "load_fixtures", lambda _: [*deepcopy(cases), deepcopy(older)]
++    )
++    report = run_candidate_suite(path)
++    assert len(calls) == 1
++    assert report["coverage"]["fixture_cases"] == 2
++    assert report["coverage"]["compared_cases"] == 1
++    assert report["coverage"]["unsupported_outputs"] == 27
++    assert report["cases"][1]["axiom"] == {}
++
++
++def test_candidate_source_hash_drift_fails_before_execution(candidate_binding):
++    path, binding, calls, _ = candidate_binding
++    source = binding["candidates"][0]["source_files"][0]
++    from pathlib import Path
++
++    Path(source["path"]).write_text("changed source\n")
++    with pytest.raises(ValueError, match="hash mismatch"):
++        run_candidate_suite(path)
++    assert calls == []
++
++
++@pytest.mark.parametrize(
++    "field",
++    [
++        "compiled_artifact_sha256",
++        "copied_source_sha256",
++        "source_sha256",
++        "candidate_root",
++        "compile_exit_code",
++        "encoder_acceptance_status",
++    ],
++)
++def test_compilation_receipt_must_link_exact_candidate(candidate_binding, field):
++    from pathlib import Path
++
++    path, binding, calls, _ = candidate_binding
++    receipt_binding = binding["candidates"][0]["compilation_receipt"]
++    receipt_path = Path(receipt_binding["path"])
++    receipt = json.loads(receipt_path.read_text())
++    receipt[field] = None if field == "encoder_acceptance_status" else "wrong"
++    receipt_path.write_text(json.dumps(receipt))
++    receipt_binding["sha256"] = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
++    path.write_text(json.dumps(binding))
++    with pytest.raises((TypeError, ValueError)):
++        run_candidate_suite(path)
++    assert calls == []
++
++
++def test_execution_engine_must_match_compilation(candidate_binding):
++    path, _, _, runner = candidate_binding
++    runner.engine_receipt["commit"] = "c" * 40
++    with pytest.raises(ValueError, match="Executed engine differs"):
++        run_candidate_suite(path)
++
++
++@pytest.mark.parametrize(
++    "declaration",
++    [
++        None,
++        {"name": "members", "arity": 2},
++        {
++            "name": "members",
++            "arity": 3,
++            "slot_entities": ["Household", "Person", "Person"],
++        },
++    ],
++)
++def test_unknown_or_untyped_relations_fail_closed(case, declaration):
++    from axiom_oracles.bridges.ks_liheap import _candidate_relations
++
++    binding = {
++        "name": "members",
++        "slots": [
++            {"scope": "household", "entity": "Household"},
++            {"scope": "person", "entity": "Person"},
++        ],
++    }
++    with pytest.raises(ValueError):
++        _candidate_relations(
++            case, [binding], {"relations": [declaration] if declaration else []}
++        )
++
++
++def test_typed_relation_preserves_explicit_declared_slot_order(case):
++    from axiom_oracles.bridges.ks_liheap import _candidate_relations
++
++    binding = {
++        "name": "members",
++        "slots": [
++            {"scope": "household", "entity": "Household"},
++            {"scope": "person", "entity": "Person"},
++        ],
++    }
++    program = {
++        "relations": [
++            {"name": "members", "arity": 2, "slot_entities": ["Household", "Person"]}
++        ]
++    }
++    result = _candidate_relations(case, [binding], program)
++    assert result[0]["tuple"] == ["household", case["people"][0]["id"]]
++    binding["slots"].reverse()
++    with pytest.raises(ValueError, match="explicit slots"):
++        _candidate_relations(case, [binding], program)
++
++
++def test_payment_mapping_uses_raw_sources_once_and_excludes_expected(case):
++    from axiom_oracles.bridges.ks_liheap import _candidate_relations
++
++    case["people"] = [case["people"][0]]
++    person = case["people"][0]
++    person["annual_income"] = {"pension": 1200, "military_retired_pay": 24000}
++    projection = {
++        "assumptions": ["Ordinary recurring payments"],
++        "sources": {
++            "pension": {"payment_type": "pension", "income_kind": "unearned"},
++            "military_retired_pay": {
++                "payment_type": "military_retired_pay",
++                "income_kind": "unearned",
++            },
++        },
++    }
++    inputs = [
++        {
++            "name": "amount",
++            "entity": "Payment",
++            "scope": "payment",
++            "source": "payment.annual_amount",
++            "scale": 1 / 12,
++        },
++        {
++            "name": "age",
++            "entity": "Payment",
++            "scope": "payment",
++            "source": "person.age_in_application_month",
++        },
++    ]
++    records = candidate_input_records(case, inputs, projection)
++    assert [r["value"] for r in records if r["name"] == "amount"] == [100, 2000]
++    assert [r["value"] for r in records if r["name"] == "age"] == [
++        person["age_in_application_month"]
++    ] * 2
++    case["expected"] = {"ks_liheap_countable_income": -123456}
++    assert candidate_input_records(case, inputs, projection) == records
++    binding = {
++        "name": "payment_of_person",
++        "slots": [
++            {"scope": "payment", "entity": "Payment"},
++            {"scope": "person", "entity": "Person"},
++        ],
++    }
++    program = {
++        "relations": [
++            {
++                "name": "payment_of_person",
++                "arity": 2,
++                "slot_entities": ["Payment", "Person"],
++            }
++        ]
++    }
++    relations = _candidate_relations(case, [binding], program, projection)
++    assert len(relations) == 2
++    assert {r["tuple"][1] for r in relations} == {person["id"]}
++    assert {r["tuple"][0] for r in relations} == {r["entity_id"] for r in records}
++    from axiom_oracles.bridges.relation_binding import bind_request_relations
++
++    # No input/query identity evidence is needed: roles come from declared slots.
++    bound = bind_request_relations({"dataset": {"relations": relations}}, program)
++    assert not bound.get("relation_binding_diagnostics")
++    assert [r["tuple"] for r in bound["dataset"]["relations"]] == [
++        r["tuple"] for r in relations
++    ]
++
++
++@pytest.mark.parametrize("unmapped", ["person_income", "household_tanf"])
++def test_payment_mapping_rejects_omitted_nonzero_income(case, unmapped):
++    projection = {
++        "assumptions": ["Ordinary recurring wages"],
++        "sources": {"employment": {"payment_type": "wages", "income_kind": "earnings"}},
++    }
++    if unmapped == "person_income":
++        case["people"][0]["annual_income"]["interest"] = 100
++    else:
++        case["spm_unit"].setdefault("annual_amounts", {})["kansas_tanf"] = 3600
++    with pytest.raises(ValueError, match="cannot omit"):
++        candidate_input_records(case, [], projection)
++
++
++@pytest.mark.parametrize("matches_source", [True, False])
++def test_final_acceptance_receipt_is_linked_and_retained(
++    candidate_binding, matches_source
++):
++    from pathlib import Path
++
++    path, binding, _, _ = candidate_binding
++    candidate = binding["candidates"][0]
++    issues = path.parent / "issues.json"
++    issues.write_text('{"issues": ["rejected test candidate"]}')
++    acceptance = path.parent / "acceptance.json"
++    acceptance.write_text(
++        json.dumps(
++            {
++                "final_source_sha256": candidate["source_files"][0]["sha256"]
++                if matches_source
++                else "wrong",
++                "status": "not_accepted_ci_rejected",
++                "encoder_exit_code": 1,
++                "ci_passed": False,
++                "issues_path": str(issues),
++                "issues_sha256": hashlib.sha256(issues.read_bytes()).hexdigest(),
++            }
++        )
++    )
++    candidate["final_acceptance_receipt"] = {
++        "path": str(acceptance),
++        "sha256": hashlib.sha256(acceptance.read_bytes()).hexdigest(),
++    }
++    path.write_text(json.dumps(binding))
++    if not matches_source:
++        with pytest.raises(ValueError, match="Final acceptance receipt"):
++            run_candidate_suite(path)
++        return
++    report = run_candidate_suite(path)
++    assert (
++        report["candidates"][0]["final_acceptance"]["status"]
++        == "not_accepted_ci_rejected"
++    )
++    assert Path(report["candidates"][0]["final_acceptance"]["issues"]["path"]) == issues
++
++
++@pytest.mark.parametrize(
++    "change",
++    [
++        "unknown_output",
++        "wrong_entity",
++        "wrong_period",
++        "unknown_input",
++        "bare_input",
++        "overlap",
++    ],
++)
++def test_invalid_candidate_bindings_are_rejected(candidate_binding, change):
++    path, binding, calls, _ = candidate_binding
++    candidate = binding["candidates"][0]
++    output = candidate["outputs"]["ks_liheap_countable_earned_income"]
++    if change == "unknown_output":
++        output["legal_id"] = "us-ks:invented#unknown"
++    elif change == "wrong_entity":
++        output["entity"] = "Household"
++    elif change == "wrong_period":
++        output["period"] = "year"
++    elif change == "unknown_input":
++        candidate["inputs"][0]["name"] = "nonexistent"
++    elif change == "bare_input":
++        candidate["inputs"][0]["name"] = "employment"
++    else:
++        binding["candidates"].append(deepcopy(candidate))
++    path.write_text(json.dumps(binding))
++    with pytest.raises(ValueError):
++        run_candidate_suite(path)
++    if change != "overlap":
++        assert calls == []
++
++
++@pytest.mark.parametrize("expected", [{}, {"invented_output": 0}])
++def test_empty_or_unknown_expected_checks_never_report_success(expected):
++    with pytest.raises(UnsupportedKSLIHEAPCase):
++        check_expectations({}, expected)
++
++
++def test_cli_has_nonzero_status_for_live_mismatch(monkeypatch, tmp_path):
++    monkeypatch.setattr(
++        "axiom_oracles.bridges.ks_liheap.run_policyengine_suite",
++        lambda _: {"status": "mismatch", "coverage": {"failed_assertions": 1}},
++    )
++    assert main(["--oracle-only", "--report", str(tmp_path / "report.json")]) == 1
