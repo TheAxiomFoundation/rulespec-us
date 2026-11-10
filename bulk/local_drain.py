@@ -304,12 +304,6 @@ def drop_worktree(leaf: Path) -> None:
         run(["git", "-C", str(CHECKOUT), "worktree", "remove", "--force", str(leaf)])
 
 
-def regen_index(leaf: Path) -> None:
-    script = leaf / "tests/generate_reverse_index.py"
-    if script.exists():
-        run([str(COV_PY), str(script)], cwd=leaf)
-
-
 def sync_pending(leaf: Path) -> str:
     """Write oracle-coverage-pending.yaml using the pinned classifier.
     Returns the sync summary line."""
@@ -396,13 +390,14 @@ def open_bulk_prs():
 
 def unstick_pr(branch: str, wait: bool) -> str:
     """Rebuild the stuck PR branch as origin/main + the module artifacts + a
-    fresh oracle-coverage-pending sync + reverse index.
+    fresh oracle-coverage-pending sync.
 
     Overlay (not merge): a fresh main-based branch with the module's RuleSpec
-    artifacts re-applied and the derived files (pending lane, reverse index)
-    regenerated. This is always up-to-date with main (strict branch protection)
-    and never conflicts on the shared oracle-coverage-pending.yaml as siblings
-    merge one after another.
+    artifacts re-applied and the derived pending lane regenerated. (The
+    reverse index is not tracked, so nothing is regenerated for it.) This is
+    always up-to-date with main (strict branch protection) and never conflicts
+    on the shared oracle-coverage-pending.yaml as siblings merge one after
+    another.
     """
     slug = branch.split("/", 1)[1]
     leaf = make_worktree(f"unstick-{slug}", "origin/main")
@@ -432,10 +427,7 @@ def unstick_pr(branch: str, wait: bool) -> str:
             composition_files = apply_program_scope_sync(leaf, item, {})
         summary = sync_pending(leaf)
         keep_pending = finalize_pending(leaf)
-        regen_index(leaf)
-        add_files = [
-            *artifacts, *composition_files, ".axiom/index/provisions_to_rules.json"
-        ]
+        add_files = [*artifacts, *composition_files]
         if keep_pending:
             add_files.append("oracle-coverage-pending.yaml")
         run(["git", "-C", str(leaf), "add", "--", *add_files])
@@ -692,11 +684,10 @@ def encode_entry(item: dict) -> dict:
         except (RuntimeError, ValueError) as exc:
             res["detail"] = str(exc)
             return res
-        regen_index(leaf)
 
         # gate battery (fail-closed pre-check, PR-CI order)
         run(["git", "-C", str(leaf), "add", "--", module, test_file, manifest,
-             *composition_files, ".axiom/index/provisions_to_rules.json"])
+             *composition_files])
         run(["git", "-C", str(leaf), "-c", "user.email=bulk-encode@axiom",
              "-c", "user.name=bulk-encode", "commit", "-q", "-m", f"wip: {citation}"])
         roots = subprocess.run([str(COV_PY), str(leaf / "bulk/roots_for.py"), module],
@@ -719,16 +710,16 @@ def encode_entry(item: dict) -> dict:
         # declare oracle-coverage pending lane (the step the cloud dispatcher lacks)
         sync_summary = sync_pending(leaf)
         keep_pending = finalize_pending(leaf)
-        regen_index(leaf)
 
         branch = f"bulk/{slug}"
         title = f"Encode {citation} (bulk)"
         if gate_status == "needs-fixtures":
             title = f"Encode {citation} (bulk, needs-fixtures)"
-        add_files = [*composition_files, ".axiom/index/provisions_to_rules.json"]
+        add_files = [*composition_files]
         if keep_pending:
             add_files.append("oracle-coverage-pending.yaml")
-        run(["git", "-C", str(leaf), "add", "--", *add_files])
+        if add_files:
+            run(["git", "-C", str(leaf), "add", "--", *add_files])
         commit_msg = (f"Encode {citation} via local drain\n\n"
                       f"Produced by axiom-encode encode {citation} --apply "
                       f"(backend {BACKEND}, model {MODEL}, pinned encoder). "

@@ -5,10 +5,20 @@ name: Source staleness and reverse index
 #
 # Two independent concerns:
 #
-# 1. reverse-index (BLOCKING) - `.axiom/index/provisions_to_rules.json` is a
-#    generated artifact. This job regenerates it from the tracked RuleSpec YAML
-#    and fails if the committed copy is stale. It needs only PyYAML, so it is
-#    cheap and deterministic.
+# 1. reverse-index - the provision -> rules index is a pure function of the
+#    tracked RuleSpec YAML and is NOT tracked in Git. A tracked copy was the
+#    one file every encoding pull request had to edit, so each merge made every
+#    other open pull request stale or conflicting, and the signed encoder
+#    workflow could not write it at all. This job proves the index is derivable
+#    from the tree under test (generator runs, output is canonical) and that
+#    no copy is tracked. For commits on `main` it also uploads the generated
+#    index as the `provisions-to-rules-index` artifact, which is what readers
+#    can use instead of a committed file. The job holds no secret and no
+#    write permission, and this definition never uploads for pull requests.
+#    A pull request can still edit its own copy of this workflow, so readers
+#    must take the artifact only from a successful `push` run whose head
+#    commit is on `main` (or generate the index locally, which is the trusted
+#    way).
 #
 # 2. source-staleness (REPORT-ONLY) - recompute every
 #    `module.source_verification.source_sha256` pin against axiom-corpus@main
@@ -39,6 +49,8 @@ jobs:
     steps:
       - name: Checkout rules repository
         uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6.2.0
@@ -48,18 +60,62 @@ jobs:
       - name: Install PyYAML
         run: python -m pip install --upgrade pip pyyaml
 
-      - name: Regenerate provision -> rules reverse index
-        run: python tests/generate_reverse_index.py
-
-      - name: Fail if the committed reverse index is stale
+      - name: Fail if a reverse index is tracked
         run: |
           set -euo pipefail
-          if ! git diff --exit-code -- .axiom/index/provisions_to_rules.json; then
-            echo "::error::.axiom/index/provisions_to_rules.json is stale." >&2
-            echo "Run 'python tests/generate_reverse_index.py' and commit the result." >&2
+          tracked="$(git ls-files -- .axiom/index)"
+          if [ -n "$tracked" ]; then
+            echo "::error::The reverse index is generated on demand and must not be tracked:" >&2
+            printf '%s\n' "$tracked" >&2
+            echo "Run 'git rm -r --cached .axiom/index' and commit." >&2
             exit 1
           fi
-          echo "Reverse index is up to date."
+          echo "No reverse index is tracked."
+
+      - name: Generate provision -> rules reverse index
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/reverse-index"
+          python tests/generate_reverse_index.py \
+            --output "$RUNNER_TEMP/reverse-index/provisions_to_rules.json"
+
+      - name: Check the generated index is well formed and stable across runs
+        run: |
+          set -euo pipefail
+          python tests/generate_reverse_index.py --check \
+            --output "$RUNNER_TEMP/reverse-index/provisions_to_rules.json"
+          python - "$RUNNER_TEMP/reverse-index/provisions_to_rules.json" <<'PY'
+          import json
+          import sys
+
+          index = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert index["schema"] == "axiom.rulespec.provisions_to_rules/v1", index["schema"]
+          provisions = index["provisions"]
+          assert provisions, "generated reverse index has no provisions"
+          assert list(provisions) == sorted(provisions), "provisions are not sorted"
+          print(f"Generated reverse index: {len(provisions)} provisions.")
+          PY
+          # --ignored on .axiom: the index directory is git-ignored, so a
+          # copy written there would be invisible to a plain status.
+          dirty="$(git status --porcelain)"
+          ignored="$(git status --porcelain --ignored -- .axiom)"
+          if [ -n "$dirty$ignored" ]; then
+            echo "::error::Generating the reverse index changed the checkout." >&2
+            printf '%s\n' "$dirty" "$ignored" >&2
+            exit 1
+          fi
+
+      # Only commits on main publish the index. A pull request (or a manual run
+      # on another branch) runs the generator from its own tree, so its output
+      # is not an index of main and must not be offered as one.
+      - name: Upload the reverse index for this main commit
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: provisions-to-rules-index
+          path: ${{ runner.temp }}/reverse-index/provisions_to_rules.json
+          if-no-files-found: error
+          retention-days: 90
 
   source-staleness:
     name: source-staleness (report-only)
