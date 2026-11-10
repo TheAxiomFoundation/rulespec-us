@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 import generate_reverse_index as gen
 
@@ -306,3 +307,248 @@ def test_render_index_omits_counts_but_build_reports_them(tmp_path):
     assert "counts" not in parsed
     assert parsed["schema"] == "axiom.rulespec.provisions_to_rules/v1"
     assert "us/statute/26/a" in parsed["provisions"]
+
+
+def _write_rule_module(path: Path, module: dict, rules: list) -> None:
+    _write(
+        path,
+        yaml.safe_dump({"format": "rulespec/v1", "module": module, "rules": rules}),
+    )
+
+
+def _dated_rule(formula: object, *, name: str = "credit", kind: str = "derived") -> dict:
+    return {
+        "name": name,
+        "kind": kind,
+        "versions": [{"effective_from": "2026-01-01", "formula": formula}],
+    }
+
+
+def test_deferred_provisions_follow_provider_lifecycle(tmp_path):
+    federal = "us/regulation/7/273/4/c/3/A"
+    german = "de/statute/estg/32a"
+    consumer = "us-ca/regulations/example/10.yaml"
+    output = "us-ca:regulations/example/10#dependent_credit"
+    consumer_module = {
+        "source_verification": {"corpus_citation_path": "us-ca/regulation/example/10"},
+        "deferred_outputs": [
+            {"output": output, "blocked_by_provisions": [federal, german]},
+            {"output": "legacy", "reason": f"Depends on {german}."},
+            {"output": "malformed", "blocked_by_provisions": [federal, 0]},
+        ],
+    }
+    _write_rule_module(tmp_path / consumer, consumer_module, [])
+    # A provision with only a placeholder version is still missing an export.
+    _write_rule_module(
+        tmp_path / "de/statutes/estg/32a.yaml",
+        {"source_verification": {"corpus_citation_path": german}},
+        [_dated_rule(None)],
+    )
+    for status in ("deferred", "entity_not_supported", "stub"):
+        _write_rule_module(
+            tmp_path / f"de/statutes/estg/32a/{status}.yaml",
+            {"status": status, "source_verification": {"corpus_citation_path": german}},
+            [_dated_rule(False)],
+        )
+    # Executable rules grounded elsewhere can cite the blocker in proof.
+    _write_rule_module(
+        tmp_path / "us-ca/statutes/rtc/17063.yaml",
+        {"source_verification": {"corpus_citation_path": "us-ca/statute/rtc/17063"}},
+        [
+            {
+                **_dated_rule(1, name="amount", kind="parameter"),
+                "metadata": {
+                    "proof": {"atoms": [{"source": {"corpus_citation_path": federal}}]}
+                },
+            }
+        ],
+    )
+    _write_rule_module(
+        tmp_path / "us/regulations/7/273/4/c/3/other.yaml",
+        {"source_verification": {"corpus_citation_path": federal.lower()}},
+        [_dated_rule(1, name="coverage", kind="parameter")],
+    )
+
+    index, report = gen.build_reports(tmp_path, include_deferrals=True)
+    assert gen.render_index(index) == gen.render_index(gen.build_index(tmp_path))
+    assert report == {
+        "schema": "axiom.rulespec.deferred_provisions/v1",
+        "deferrals": [
+            {
+                "module": consumer,
+                "output": output,
+                "status": "waiting",
+                "blockers": [
+                    {"provision": german, "provider_modules": []},
+                    {"provision": federal, "provider_modules": []},
+                ],
+            }
+        ],
+    }
+
+    federal_provider = "us/regulations/7/273/4/c/3/A.yaml"
+    _write_rule_module(
+        tmp_path / federal_provider,
+        {"source_verification": {"corpus_citation_path": federal}},
+        [
+            {
+                "name": "coverage",
+                "kind": "parameter",
+                "indexed_by": "status_code",
+                "versions": [{"effective_from": "2026-01-01", "values": {"0": 0}}],
+            }
+        ],
+    )
+    _, report = gen.build_reports(tmp_path, include_deferrals=True)
+    assert report["deferrals"][0]["status"] == "waiting"
+    assert report["deferrals"][0]["blockers"][1]["provider_modules"] == [
+        federal_provider
+    ]
+
+    german_provider = "de/statutes/estg/32a.yaml"
+    _write_rule_module(
+        tmp_path / german_provider,
+        {"source_verification": {"corpus_citation_path": german}},
+        [_dated_rule(False)],
+    )
+    _, report = gen.build_reports(tmp_path, include_deferrals=True)
+    assert report["deferrals"][0]["status"] == "review_linkage"
+    assert report["deferrals"][0]["blockers"] == [
+        {"provision": german, "provider_modules": [german_provider]},
+        {"provision": federal, "provider_modules": [federal_provider]},
+    ]
+    assert "Review linkage" in gen._render_deferral_summary(report)
+    # Re-running the report leaves the deferral open until the consumer is changed.
+    assert gen.build_reports(tmp_path, include_deferrals=True)[1] == report
+    consumer_module["deferred_outputs"].pop(0)
+    _write_rule_module(tmp_path / consumer, consumer_module, [])
+    _, report = gen.build_reports(tmp_path, include_deferrals=True)
+    assert report["deferrals"] == []
+
+
+def test_deferred_provision_cannot_match_its_consumer(tmp_path):
+    provision = "de/statute/estg/32a"
+    _write_rule_module(
+        tmp_path / "de/statutes/estg/32a.yaml",
+        {
+            "source_verification": {"corpus_citation_path": provision},
+            "deferred_outputs": [
+                {
+                    "output": "de:statutes/estg/32a#other",
+                    "blocked_by_provisions": [provision],
+                }
+            ],
+        },
+        [_dated_rule(0, name="rate", kind="parameter")],
+    )
+    _, report = gen.build_reports(tmp_path, include_deferrals=True)
+    assert report["deferrals"][0]["status"] == "waiting"
+    assert report["deferrals"][0]["blockers"] == [
+        {"provision": provision, "provider_modules": []}
+    ]
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        {
+            "name": "eligible_members",
+            "kind": "derived_relation",
+            "derived_relation": {
+                "arity": 2,
+                "source_relation": "us:policies/example#relation.member_of_household",
+                "current_slot": 1,
+                "related_slot": 0,
+            },
+            "versions": [{"effective_from": "2026-01-01", "formula": True}],
+        },
+        {
+            "name": "rate",
+            "kind": "parameter",
+            "effective_from": "2026-01-01",
+            "formula": 0,
+        },
+        {
+            "name": "eligible",
+            "kind": "derived",
+            "from": "2026-01-01",
+            "formula": False,
+            "versions": [],
+        },
+    ],
+)
+def test_deferred_provision_matches_supported_executable_shapes(tmp_path, rule):
+    provision = "us/statute/26/100"
+    provider = "us/statutes/26/100.yaml"
+    _write_rule_module(
+        tmp_path / "us/statutes/26/101.yaml",
+        {
+            "source_verification": {"corpus_citation_path": "us/statute/26/101"},
+            "deferred_outputs": [
+                {
+                    "output": "us:statutes/26/101#other",
+                    "blocked_by_provisions": [provision],
+                }
+            ],
+        },
+        [],
+    )
+    _write_rule_module(
+        tmp_path / provider,
+        {"source_verification": {"corpus_citation_path": provision}},
+        [rule],
+    )
+    _, report = gen.build_reports(tmp_path, include_deferrals=True)
+    assert report["deferrals"][0]["status"] == "review_linkage"
+    assert report["deferrals"][0]["blockers"] == [
+        {"provision": provision, "provider_modules": [provider]}
+    ]
+
+
+def test_cli_checks_deferred_report_independently(tmp_path, capsys):
+    root = tmp_path / "repo"
+    _write_rule_module(
+        root / "us/statutes/example.yaml",
+        {
+            "source_verification": {"corpus_citation_path": "us/statute/26/100"},
+            "deferred_outputs": [
+                {
+                    "output": "us:statutes/example#credit",
+                    "blocked_by_provisions": ["us/statute/26/101"],
+                }
+            ],
+        },
+        [],
+    )
+    output = tmp_path / "index.json"
+    report = tmp_path / "deferred.json"
+    args = [
+        "--repo-root",
+        str(root),
+        "--output",
+        str(output),
+        "--deferred-provisions-output",
+        str(report),
+    ]
+    assert gen.main(args) == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["deferrals"][0]["status"] == "waiting"
+    assert "1 waiting. 0 to review for linkage." in capsys.readouterr().out
+    assert gen.main([*args, "--check"]) == 0
+    report.write_text("{}", encoding="utf-8")
+    assert gen.main([*args, "--check"]) == 1
+    assert str(report) in capsys.readouterr().err
+    assert (
+        gen.main(
+            [
+                "--repo-root",
+                str(root),
+                "--output",
+                str(output),
+                "--deferred-provisions-output",
+                str(root / "deferred.json"),
+            ]
+        )
+        == 2
+    )
+    assert not (root / "deferred.json").exists()
