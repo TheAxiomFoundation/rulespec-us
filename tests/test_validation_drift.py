@@ -267,7 +267,13 @@ def test_unexplained_failures_report_an_error_not_an_issue(jobs, result):
     assert "error" in outcome
 
 
-def test_cli_plan_reads_the_repository(tmp_path):
+def test_cli_plan_reads_the_repository(tmp_path, monkeypatch):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz)
+
+    monkeypatch.setattr(drift, "datetime", FrozenDateTime)
     repo = tmp_path / "rulespec-us"
     (repo / ".axiom").mkdir(parents=True)
     (repo / ".axiom/workflow-toolchain.toml").write_text(
