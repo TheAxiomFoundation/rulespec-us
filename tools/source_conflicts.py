@@ -910,31 +910,108 @@ def _check_record(record: Any, *, label: str, confirmation: bool, issues: list[s
 # The one way the register writes money: $, digits (commas between groups of
 # three allowed), and optionally two-digit cents. A sentence may end after it.
 DOLLAR_RE = re.compile(r"\$((?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]{2})?)(?![0-9A-Za-z_]|[.,][0-9])")
-# Anything else that reads as money is refused, so no figure escapes the
-# money-case rule by its spelling: "USD 200", "200 dollars", "$ 200", "$.50",
-# "$-200", "$1.5k", "US$200".
-MONEY_LIKE_RE = re.compile(
-    r"(?i)\bUS\$|\$|\bUSD\b|\b[0-9][0-9,.]*\s*(?:dollars?|cents?|bucks)\b|\bUSD\s*[0-9]"
+# These words spell out an amount.
+_NUMBER_WORD = (
+    r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen"
+    r"|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
 )
+_SCALE_WORD = r"(?:hundred|thousand|million|billion|trillion)"
+_MORE_WORDS = rf"(?:[\s-]+(?:and[\s-]+)?(?:{_NUMBER_WORD}|{_SCALE_WORD})\b)*"
+_UNIT_WORD = r"(?:dollars?|cents?|bucks|usd)\b"
+# Scale abbreviations: "3k", "3 M", "3MM", "3 bn", "$2T". One reads as a scale
+# where its word ends or where a unit runs on from it ("3kUSD"). A hyphen to a
+# word other than a unit makes it part of a name ("K-1", "T-bill"), which
+# passes.
+_ABBREVIATION = r"(?:mln|mil|mm|mn|m|bln|bil|bn|b|tn|t|k)"
+_ABBREVIATED_SCALE = rf"{_ABBREVIATION}(?:\b(?!-(?!{_UNIT_WORD})\w)|(?={_UNIT_WORD}))"
+_SCALE = rf"(?:{_SCALE_WORD}\b|{_ABBREVIATED_SCALE})"
+# A $ figure's digits, with commas or points between them. A point after the
+# last digit ends a sentence, so "$3,000. M." is $3,000 and a list label.
+_FIGURE = r"[0-9](?:[0-9,.]*[0-9])?"
+# What joins a $ figure to the second number of a range: "$3-5 million",
+# "$3 to 5 million", "$3 or five million", "between $3 and 5 million". A count
+# with a scale after a $ figure reads as that second number too ("pays $300 to
+# 2 million households"), so the screen refuses it.
+_RANGE = r"(?:\s*-+\s*|\s+(?:to|or|and)\s+)"
+# The screen refuses anything else that reads as money, so no figure escapes
+# the money-case rule by its spelling: "USD 200", "200 dollars", "$ 200",
+# "$.50", "$-200", "$1.5k", "US$200", "3,000USD", "3,000 US dollars",
+# "a 3,000-dollar credit", "50¢", "three thousand dollars", "3 thousand
+# dollars", "a thousand dollars", "fifty cents", "3 M dollars", "3kUSD",
+# "three M dollars". It also refuses a $ figure with a scale, which DOLLAR_RE
+# would read as its digits alone, and a $ range with a scale after its second
+# number: "$3 million", "$3 M", "$3-5 million", "$3 or five million". A
+# magnitude names no figure and passes: "thousands of dollars",
+# "dollar-for-dollar", "whole dollars".
+MONEY_LIKE_RE = re.compile(
+    rf"""(?ix)
+    \${_FIGURE}(?:[\s-]*(?:{_SCALE_WORD}|{_ABBREVIATION})\b)?
+      (?:{_RANGE}\$?{_FIGURE})?[\s-]*{_SCALE}
+    | \${_FIGURE}(?:[\s-]*(?:{_SCALE_WORD}|{_ABBREVIATION})\b)?
+      {_RANGE}(?:a|{_NUMBER_WORD})\b{_MORE_WORDS}[\s-]+{_SCALE_WORD}\b
+    | (?P<sign>\bU\.?S\.?\$ | [$\u00a2\U0001F4B2] | \bUSD\b | \bUSD\s*\d)
+    | (?P<number>
+        \b\d[\d,.]*(?:[\s-]*{_SCALE})*
+        | \ba[\s-]+{_SCALE_WORD}\b{_MORE_WORDS}
+        | \b(?:{_NUMBER_WORD}|{_SCALE_WORD})\b{_MORE_WORDS}(?:[\s-]*{_ABBREVIATED_SCALE})?
+      )
+      (?P<unit>(?:[\s-]+(?:U\.?\s?S\.?|American))?[\s-]*(?:{_UNIT_WORD}|\u00a2))?
+    """
+)
+# Unicode's Default_Ignorable_Code_Point characters (DerivedCoreProperties.txt):
+# soft hyphens, zero-width spaces and joiners, bidirectional controls,
+# variation selectors and tags. None is visible, so none may split a spelling
+# a reader sees whole ("3000 dol<soft hyphen>lars").
+_INVISIBLE_RE = re.compile(
+    "[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f"
+    "\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]"
+)
+# Unicode's dash punctuation (general category Pd) as NFKC leaves it, and the
+# minus sign. Each reads as a hyphen, so a figure joined to its unit by a
+# non-breaking hyphen or an en dash reads whole: "a 3,000\u2011dollar credit".
+_DASH_RE = re.compile(
+    "[\u058a\u05be\u1400\u1806\u2010-\u2015\u2212"
+    "\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d\u301c\u3030\u30a0\U00010d6e\U00010ead]"
+)
+
+
+def _money_text(text: str) -> str:
+    """Text as both money screens read it: without invisible characters,
+    NFKC-normalised, with every dash a hyphen. A compatibility form reads as
+    what it stands for: ＄ (U+FF04) and ﹩ (U+FE69) as $, fullwidth digits and
+    commas as ASCII ones."""
+
+    return _DASH_RE.sub("-", unicodedata.normalize("NFKC", _INVISIBLE_RE.sub("", text)))
 
 
 def _dollar_values(text: str) -> set[str]:
     """Dollar amounts in text, normalised: "$4,200.00" and "$4,200" -> "4200"."""
 
     return {
-        format(Decimal(match.group(1).replace(",", "")).normalize(), "f") for match in DOLLAR_RE.finditer(text)
+        format(Decimal(match.group(1).replace(",", "")).normalize(), "f")
+        for match in DOLLAR_RE.finditer(_money_text(text))
     }
 
 
 def _unsupported_money(text: str) -> list[str]:
     """Spellings of money other than the one DOLLAR_RE accepts."""
 
+    text = _money_text(text)
     canonical = {match.start() for match in DOLLAR_RE.finditer(text)}
     found = []
     for match in MONEY_LIKE_RE.finditer(text):
+        # A number without a unit is no money. The screen reads each run of
+        # number words or digits once, whole, so a long run costs one pass.
+        if match.group("number") is not None and match.group("unit") is None:
+            continue
         if match.group(0) == "$" and match.start() in canonical:
             continue
-        found.append(text[match.start() : match.start() + 12].split("\n")[0])
+        # The whole spelling, on one line. A sign or code shows what follows
+        # it, up to 12 characters in all, so "$ 200" shows its figure.
+        spelled = " ".join(match.group(0).split())
+        if match.group("sign"):
+            spelled += text[match.end() : match.start() + 12].split("\n")[0]
+        found.append(spelled)
     return found
 
 
@@ -1718,6 +1795,10 @@ def check_entry(entry: Any, *, index: int, ctx: RepoContext, jurisdictions: froz
     # threshold"). No lexical test can tell a quoted threshold from a computed
     # amount, so prose amounts are never backed by an excerpt.
     covered = _dollar_values(str(money.get("description", ""))) | _dollar_values(f"${money.get('amount', '')}")
+    # The amount is a decimal string, so it states its value whatever its
+    # decimals: "0.3" backs "$0.30".
+    if isinstance(money.get("amount"), str) and DECIMAL_RE.fullmatch(money["amount"]):
+        covered.add(format(Decimal(money["amount"]).normalize(), "f"))
     spelled = list(_prose_fields(entry, label))
     if isinstance(money.get("description"), str):
         spelled.append((f"{label}.money_case.description", money["description"]))

@@ -895,11 +895,383 @@ def test_money_has_one_spelling(tmp_path, spelling):
     assert any("writes money as" in issue for issue in check(make_repo(tmp_path), value)), spelling
 
 
+@pytest.mark.parametrize(("amount", "figure"), [("0.3", "$0.30"), ("1500.5", "$1,500.50"), ("1500.500", "$1,500.50")])
+def test_a_money_case_amount_backs_its_value_whatever_its_decimals(tmp_path, amount, figure):
+    # The amount is a decimal string: on main only an amount with no decimals
+    # or two backed a figure, so "0.3" left "$0.30" in prose unbacked.
+    value = entry()
+    value["money_case"]["description"] = "A family against another."
+    value["money_case"]["amount"] = amount
+    value["alternatives"][0]["effect"] = f"The family is paid {figure} less."
+    assert check(make_repo(tmp_path), value) == []
+
+
 def test_canonical_money_at_a_sentence_end(tmp_path):
     value = entry()
     value["money_case"]["description"] = "A family: $1,234.56 against $1,213.56."
     value["alternatives"][0]["effect"] = "The family is paid $21.00, then $1,234.56."
     assert check(make_repo(tmp_path), value) == []
+
+
+@pytest.mark.parametrize(
+    ("spelling", "fragment"),
+    [
+        # Review of 2026-10-21: on main these four returned nothing from either
+        # screen, so an entry with no money case could state them.
+        ("\uff043,000", "states $3000, which no money case backs"),  # fullwidth dollar sign
+        ("\ufe693,000", "states $3000, which no money case backs"),  # small dollar sign
+        ("three thousand dollars", "writes money as `three thousand dollars`"),
+        ("3 thousand dollars", "writes money as `3 thousand dollars`"),
+        # Review of 2026-11-03: a scale abbreviation escaped both screens here,
+        # and main refused the third only by its code.
+        ("3kUSD", "writes money as `3kUSD`"),
+        ("$3 M", "writes money as `$3 M`"),
+        ("3k\u200bUSD", "writes money as `3kUSD`"),  # zero-width space
+    ],
+)
+def test_spellings_that_escaped_both_screens(tmp_path, spelling, fragment):
+    assert sc._dollar_values(spelling) or sc._unsupported_money(spelling), spelling
+    value = entry()
+    del value["money_case"]
+    value["alternatives"][0]["effect"] = f"The family is paid {spelling} less."
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"alternatives[0].effect {fragment}" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        # Number words, scale words or both, before any unit.
+        "two hundred dollars",
+        "2 hundred dollars",
+        "a hundred dollars",
+        "twenty-five dollars",
+        "one hundred and twenty-five dollars",
+        "Two Hundred Dollars",
+        "fifty cents",
+        "1.5 thousand dollars",
+        "1.5k dollars",
+        "3million dollars",
+        # Digits with a unit glued on, qualified or hyphenated.
+        "200USD",
+        "200 US dollars",
+        "200 U.S. dollars",
+        "a 200-dollar",
+        "200bucks",
+        "50\u00a2",
+        # Other signs, and digits from another script.
+        "U.S.$200",
+        "\U0001f4b2200",
+        "50\uffe0",
+        "\u0662\u0660\u0660 dollars",
+        # Compatibility forms in another spelling.
+        "\uff04 200",
+        "USD\uff12\uff10\uff10",
+        # Invisible characters inside a spelling.
+        "200 dol\u00adlars",
+        "200 dol\u200blars",
+        "two\u2060 hundred dollars",
+        # A $ figure with a scale word, which DOLLAR_RE reads as its digits.
+        "$2 hundred",
+        "$2 million",
+        "$2-million",
+        # A dash or a minus sign for a hyphen.
+        "a 200\u2011dollar",
+        "a 200\u2013dollar",
+        "twenty\u2010five dollars",
+        "200\u2212dollar",
+        # A scale abbreviation, glued or spaced, before a unit or a code.
+        "3MUSD",
+        "3 kUSD",
+        "3bn\u00adUSD",
+        "3kdollars",
+        "3 M dollars",
+        "1.5 MM dollars",
+        "3 bn dollars",
+        "a 3 k-dollar",
+        # A $ figure with a scale abbreviation, which DOLLAR_RE reads as its
+        # digits, and a $ range with a scale after its second figure.
+        "$3 MM",
+        "$3 bn",
+        "$1 T",
+        "$3\u2060 M",
+        "$3-5 million",
+        "$3 to 5 million",
+        "$3\u20135 M",
+        "$3 M-5 M",
+        # A $ range joined by "or" or "and", or with its second number in
+        # words.
+        "$3 or 5 million",
+        "between $3 and 5 M",
+        "$3 to five million",
+        "$3-twenty-five million",
+        "$1 to a million",
+        # Number words before a scale abbreviation, and the longer
+        # abbreviations.
+        "three M dollars",
+        "twenty-five bn USD",
+        "a five k-dollar",
+        "3 mln dollars",
+        "$3 mil",
+        "3 bln USD",
+        "$3 bil",
+        "2 tn dollars",
+    ],
+)
+def test_money_has_one_spelling_however_it_is_written(tmp_path, spelling):
+    # Same escape as the 2026-10-21 review found, in other spellings. The entry
+    # has a money case, so only the spelling is wrong.
+    value = entry()
+    value["alternatives"][0]["effect"] = f"The family is paid {spelling} less."
+    assert any("writes money as" in issue for issue in check(make_repo(tmp_path), value)), spelling
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "\uff041,500.00",
+        "\ufe691,500",
+        "$\uff11,\uff15\uff10\uff10",
+        "\uff04\uff11\uff0c\uff15\uff10\uff10",
+        "$1,\u200b500",
+        "$1,500\u00ad",
+    ],
+)
+def test_compatibility_forms_of_the_one_spelling(tmp_path, spelling):
+    # Both screens read prose NFKC-normalised and without invisible
+    # characters: \uff04 and \ufe69 are $, fullwidth digits and commas are
+    # ASCII ones. Intended: these are the one spelling, so like $1,500 each
+    # needs a money case that states it, and passes with one.
+    ctx = make_repo(tmp_path)
+    backed = entry()
+    backed["money_case"]["description"] = "A survivor family: $1,500.00 against $1,479."
+    backed["reading"] = f"Protect {spelling} from the earlier month."
+    assert check(ctx, backed) == []
+    unbacked = entry()
+    unbacked["reading"] = f"Protect {spelling} from the earlier month."
+    assert any("reading states $1500, which no money case backs" in issue for issue in check(ctx, unbacked))
+
+
+def test_a_scale_word_makes_a_figure_a_spelling_of_its_own(tmp_path):
+    # DOLLAR_RE reads "$3 million" as $3, so on main a money case of $3 backed
+    # it. The scale word makes it a spelling of its own.
+    value = entry()
+    value["money_case"]["description"] = "A family: $3 against nothing."
+    value["money_case"]["amount"] = "3.00"
+    value["alternatives"][0]["effect"] = "The state pays $3 million more."
+    issues = check(make_repo(tmp_path), value)
+    assert any("alternatives[0].effect writes money as `$3 million`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    ("amount", "description"),
+    [("3.00", "A family: $3 against nothing."), ("3000000.00", "A family: $3,000,000 against nothing.")],
+)
+def test_a_scale_abbreviation_makes_a_figure_a_spelling_of_its_own(tmp_path, amount, description):
+    # Review of 2026-11-03: DOLLAR_RE reads "$3 M" as $3, so a money case of $3
+    # backed it. Like a scale word, the abbreviation makes it a spelling of its
+    # own, whatever the money case states.
+    value = entry()
+    value["money_case"]["description"] = description
+    value["money_case"]["amount"] = amount
+    value["alternatives"][0]["effect"] = "The state pays $3 M more."
+    issues = check(make_repo(tmp_path), value)
+    assert any("alternatives[0].effect writes money as `$3 M`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    ("text", "figure", "amount"),
+    [
+        # A hyphen to a word makes a letter part of a name: Schedule K-1, a
+        # Treasury bill.
+        ("A partner's $5,000 K-1 loss counts.", "$5,000", "5000"),
+        ("A $100 T-bill counts as a resource.", "$100", "100"),
+        # A letter after a sentence's last figure labels the next item, as in
+        # state program manuals.
+        ("The manual lists $346.50. b. A grant follows.", "$346.50", "346.5"),
+        ("Shares above $3,000. M. Per capita payments follow.", "$3,000", "3000"),
+    ],
+)
+def test_a_letter_in_a_name_or_after_a_sentence_is_no_scale(tmp_path, text, figure, amount):
+    # Each figure is the one spelling: a money case that states it backs it,
+    # and without one the entry fails for the figure, not for its spelling.
+    ctx = make_repo(tmp_path)
+    backed = entry()
+    backed["money_case"]["description"] = f"A family: {figure} against nothing."
+    backed["basis"] = text
+    assert check(ctx, backed) == []
+    unbacked = entry()
+    del unbacked["money_case"]
+    unbacked["basis"] = text
+    issues = check(ctx, unbacked)
+    assert any(f"basis states ${amount}, which no money case backs" in issue for issue in issues), issues
+    assert not [issue for issue in issues if "writes money as" in issue], issues
+
+
+def test_a_letter_right_after_a_figure_reads_as_a_scale(tmp_path):
+    # Intended: a letter that may abbreviate a scale, right after a figure,
+    # reads as one, even where it labels a list item. The screen can't tell
+    # "$13,000 b. A couple" from "$3 M. The state", and an unread scale lets a
+    # figure escape. Write "(b)", or end the sentence after the figure.
+    value = entry()
+    value["basis"] = "The limits are $13,000 b. A couple may keep more."
+    issues = check(make_repo(tmp_path), value)
+    assert any("basis writes money as `$13,000 b`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    ("text", "spelled"),
+    [
+        ("The state pays $300 to 2 million households.", "$300 to 2 million"),
+        ("The state pays $300 and 2 million households claim it.", "$300 and 2 million"),
+        ("The state pays $300 to two million households.", "$300 to two million"),
+    ],
+)
+def test_a_scaled_count_after_a_figure_reads_as_a_range(tmp_path, text, spelled):
+    # Intended: a number with a scale, joined to a $ figure by a dash, "to",
+    # "or" or "and", reads as the second number of a range, even when it
+    # counts something. The screen can't tell "pays $300 to 2 million
+    # households" from "costs $3 to 5 million", and an unread range lets a
+    # figure escape. Write "pays 2 million households $300 each".
+    ctx = make_repo(tmp_path)
+    value = entry()
+    value["basis"] = text
+    issues = check(ctx, value)
+    assert any(f"basis writes money as `{spelled}`;" in issue for issue in issues), issues
+    value["basis"] = "The state pays 2 million households $300 each."
+    assert not [issue for issue in check(ctx, value) if "writes money as" in issue]
+
+
+@pytest.mark.parametrize(
+    ("spelling", "shown"),
+    [
+        ("50¢", "50¢"),
+        ("50￠", "50¢"),  # fullwidth cent sign
+        ("3 mln dollars", "3 mln dollars"),
+        ("$3 or five million", "$3 or five million"),
+        ("three M dollars", "three M dollars"),
+    ],
+)
+def test_a_refusal_shows_the_spelling_whole(tmp_path, spelling, shown):
+    # A refusal shows the whole spelling, the figure with its unit or scale,
+    # not the sign or unit alone.
+    value = entry()
+    value["alternatives"][0]["effect"] = f"The family is paid {spelling} less."
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"alternatives[0].effect writes money as `{shown}`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("question",),
+        ("reading",),
+        ("basis",),
+        ("alternatives", 0, "reading"),
+        ("alternatives", 0, "effect"),
+        ("implementations", 0, "basis"),
+        ("years", "note"),
+        ("unpublished_sources", 0, "description"),
+        ("money_case", "description"),
+    ],
+)
+def test_every_prose_field_screens_spelled_money(tmp_path, path):
+    value = entry(years={"from": 2024, "type": "program", "note": "July to June."}, unpublished_sources=[dict(UNPUBLISHED)])
+    target = value
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = "It pays three thousand dollars more."
+    label = "".join(f"[{part}]" if isinstance(part, int) else f".{part}" for part in path)
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"{label} writes money as `three thousand dollars`" in issue for issue in issues), (label, issues)
+
+
+def test_a_spelling_across_a_line_break_is_named_whole(tmp_path):
+    value = entry()
+    value["alternatives"][0]["effect"] = "It pays one hundred\nand twenty-five dollars less."
+    issues = check(make_repo(tmp_path), value)
+    assert any("writes money as `one hundred and twenty-five dollars`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "A dollar-for-dollar reduction follows.",
+        "Floor the monthly share to whole dollars.",
+        "Drop the cents: truncate toward zero.",
+        "Some families lose thousands of dollars a year.",
+        "Each dollar of earnings above the limit counts.",
+        "The notice states the amounts in dollars and cents.",
+        "For taxable years beginning after nineteen hundred ninety-six.",
+        "The 2-percent floor applies to one deduction.",
+        "A 401k plan balance counts.",
+        "The program serves 3 M people.",
+        "Schedule K-1 reports each partner's share.",
+    ],
+)
+def test_prose_about_money_without_a_figure_passes(tmp_path, text):
+    # A magnitude, or a unit on its own, names no figure; a number without a
+    # unit is no money.
+    value = entry()
+    del value["money_case"]
+    value["basis"] = text
+    assert check(make_repo(tmp_path), value) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "spelled"),
+    [
+        ("More than one dollar amount appears.", "one dollar"),
+        ("Several thousand dollars change hands.", "thousand dollars"),
+    ],
+)
+def test_counts_and_approximations_before_a_unit_are_refused(tmp_path, text, spelled):
+    # Intended: a number before a unit reads as a figure. The screen can't tell
+    # "more than one dollar amount" (a count) from "a five hundred dollar
+    # threshold" (a figure; legal text has many), and "several thousand
+    # dollars" still states an amount. Write "more than one amount" or
+    # "thousands of dollars".
+    value = entry()
+    del value["money_case"]
+    value["basis"] = text
+    issues = check(make_repo(tmp_path), value)
+    assert any(f"basis writes money as `{spelled}`;" in issue for issue in issues), issues
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("one " * 50_000 + "x", []),
+        ("1," * 100_000, []),
+        ("$" + "1," * 100_000, ["$1,1,1,1,1,1"]),
+        ("one hundred and " * 12_500 + "dollarsx", []),
+        ("a " * 100_000, []),
+        (("$1" + " " * 1000 + "x") * 200, []),
+        ("$1-" + "1," * 100_000, []),
+        ("1 k " * 50_000, []),
+        ("$1 k " * 40_000, ["$1 k"] * 40_000),
+        (("one" + " " * 1000 + "x") * 200, []),
+        (("$1 to one" + " " * 1000 + "x") * 200, []),
+        ("$1 to " + "one " * 50_000, []),
+        ("$1 and " * 40_000, []),
+    ],
+    ids=[
+        "number-words", "digit-commas", "sign-then-digits", "words-then-near-unit", "articles",
+        "sign-then-spaces", "range-then-digits", "abbreviations", "scaled-signs", "words-then-spaces",
+        "word-range-then-spaces", "range-then-words", "joined-ranges",
+    ],
+)
+def test_money_scans_stay_fast(text, expected):
+    # Coarse wall-clock guard: each run of number words or digits is one
+    # match, read whole, so a scan of about 200,000 characters takes well
+    # under a second. A screen that rescans a run from each of its
+    # characters is quadratic and takes minutes here.
+    import time
+
+    started = time.perf_counter()
+    assert sc._unsupported_money(text) == expected
+    sc._dollar_values(text)
+    assert time.perf_counter() - started < 10
 
 
 def test_the_register_refuses_anchors_and_cycles(tmp_path):
