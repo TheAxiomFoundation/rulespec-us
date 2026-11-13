@@ -1,0 +1,309 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ut/statute/59-10-1043
+    source_sha256: 5c3349cfa37c80be72ca412c73d22067d2d0994696d604c1104ffa0d82e0f91d
+  summary: '(2) Except as provided in Section 59-10-1002.2, a claimant who receives
+    military retirement pay may claim a nonrefundable tax credit against taxes equal
+    to the product of the percentage in Subsection 59-10-104(2) and qualifying pay
+    included in federal adjusted gross income. (3) A claimant may not carry excess
+    credit forward or back, or claim this credit on a return that claims the Section
+    59-10-1019 credit.
+
+    The TaxUnit calculation is scoped to full-year resident returns. Callers read
+    military_retirement_credit_scope first. When it is out_of_scope, they report that
+    status and omit credit amounts; guarded Money zeros are runtime sentinels, not
+    legal conclusions about credit or eligibility. The Person amount is a claimant
+    computation, not a return result.'
+  deferred_outputs:
+  - output: us-ut:statutes/59-10-1043/2#apportioned_military_retirement_credit
+    reason: Cannot be computed until Utah Code Section 59-10-1002.2 is encoded.
+  interpretations:
+  - id: full-year-resident-calculation-boundary
+    status: open
+    question: How should this ordinary credit calculation be exposed for returns requiring
+      apportionment?
+    texts:
+    - corpus_citation_path: us-ut/statute/59-10-1043
+      excerpt: '(2) Except as provided in Section 59-10-1002.2, a claimant who receives
+        military retirement pay may claim a nonrefundable tax credit against taxes
+        equal to the product of:'
+    reading: The executable TaxUnit amount is limited to full-year resident returns;
+      other residency statuses are reported as out of scope pending the cited apportionment
+      rule.
+    alternatives:
+    - id: compute-unapportioned-amount
+      reading: Expose the ordinary amount for part-year and nonresident returns before
+        apportionment is resolved.
+      effect: Could present an unapportioned amount as a return credit.
+    basis: The exception chapeau leaves the applicable apportioned computation unresolved.
+    affects:
+    - military_retirement_credit_scope
+    - military_retirement_credit_calculated
+    - military_retirement_credit_claim_allowed
+    - military_retirement_credit_usable
+rules:
+- name: military_retirement_credit_for_claimant
+  kind: derived
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Year
+  source: Utah Code § 59-10-1043(1), (1)(a), (1)(b), (2)(a), (2)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(1) As used in this section:'
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (1)(a)(i) "Military retirement pay" means retirement pay, including
+            survivor benefits, that relates to service in the armed forces or the
+            reserve components, as described in 10 U.S.C. Sec. 10101.
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(1)(a)(ii) "Military retirement pay" does not include:'
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (1)(a)(ii)(A) Social Security income;
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (1)(a)(ii)(B) 401(k) or IRA distributions; or
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (1)(a)(ii)(C) income from other sources.
+      - path: versions[0].formula
+        kind: definition
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (1)(b) "Survivor benefits" means the retired pay portion of the
+            benefits described in 10 U.S.C. Secs. 1447 through 1455.
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (2)(a) the percentage listed in Subsection 59-10-104(2); and
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (2)(b) the amount of military retirement pay that is included in
+            adjusted gross income on the claimant's federal income tax return for
+            the taxable year.
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-ut:statutes/59-10-104#resident_individual_income_tax_rate
+          output: resident_individual_income_tax_rate
+          hash: sha256:a6a9d878c99572670d08eb55745c3357b16d2fde709cd1b4be9a17bbab08b703
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: resident_individual_income_tax_rate * max(0, qualifying_military_retirement_pay_in_federal_agi)
+- name: military_retirement_credit_carryforward_or_carryback_allowed
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: Utah Code § 59-10-1043(3), (3)(a)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(3) A claimant may not:'
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (3)(a) carry forward or carry back the amount of a tax credit that
+            exceeds the claimant's tax liability for the taxable year; or
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: "false"
+- name: military_retirement_credit_scope
+  kind: derived
+  entity: TaxUnit
+  dtype: Text
+  period: Year
+  source: Utah Code § 59-10-1043(2), exception chapeau
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(2) Except as provided in Section 59-10-1002.2, a claimant who
+            receives military retirement pay may claim a nonrefundable tax credit
+            against taxes equal to the product of:'
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: 'if utah_return_residency_status == "full_year_resident": "in_scope"
+      else: "out_of_scope"'
+- name: military_retirement_credit_passes_same_return_claim_bar
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: Utah Code § 59-10-1043(3)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (3)(b) claim a tax credit under this section for a taxable year
+            if a tax credit under Section 59-10-1019 is claimed on the claimant's
+            return for the same taxable year.
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: not senior_credit_claimed_on_same_return
+- name: military_retirement_credit_claimant_of_tax_unit
+  kind: data_relation
+  data_relation:
+    predicate: military_retirement_credit_claimant_of_tax_unit
+    arity: 2
+    arguments:
+    - TaxUnit
+    - Person
+- name: military_retirement_credit_calculated
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  unit: USD
+  period: Year
+  source: Utah Code § 59-10-1043(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(2) Except as provided in Section 59-10-1002.2, a claimant who
+            receives military retirement pay may claim a nonrefundable tax credit
+            against taxes equal to the product of:'
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (2)(b) the amount of military retirement pay that is included in
+            adjusted gross income on the claimant's federal income tax return for
+            the taxable year.
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: 'if military_retirement_credit_scope == "in_scope": sum(military_retirement_credit_claimant_of_tax_unit.military_retirement_credit_for_claimant)
+      else: 0'
+- name: military_retirement_credit_claim_allowed
+  kind: derived
+  entity: TaxUnit
+  dtype: Judgment
+  period: Year
+  source: Utah Code § 59-10-1043(2), (3)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: condition
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(2) Except as provided in Section 59-10-1002.2, a claimant who
+            receives military retirement pay may claim a nonrefundable tax credit
+            against taxes equal to the product of:'
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (3)(b) claim a tax credit under this section for a taxable year
+            if a tax credit under Section 59-10-1019 is claimed on the claimant's
+            return for the same taxable year.
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: 'military_retirement_credit_scope == "in_scope"
+
+      and military_retirement_credit_calculated > 0
+
+      and military_retirement_credit_passes_same_return_claim_bar'
+- name: military_retirement_credit_usable
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  unit: USD
+  period: Year
+  source: Utah Code § 59-10-1043(2), (3)(a), (3)(b)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: '(2) Except as provided in Section 59-10-1002.2, a claimant who
+            receives military retirement pay may claim a nonrefundable tax credit
+            against taxes equal to the product of:'
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (3)(a) carry forward or carry back the amount of a tax credit that
+            exceeds the claimant's tax liability for the taxable year; or
+      - path: versions[0].formula
+        kind: exception
+        source:
+          corpus_citation_path: us-ut/statute/59-10-1043
+          excerpt: (3)(b) claim a tax credit under this section for a taxable year
+            if a tax credit under Section 59-10-1019 is claimed on the claimant's
+            return for the same taxable year.
+  versions:
+  - effective_from: '2026-01-01'
+    effective_to: '2026-12-31'
+    formula: 'if military_retirement_credit_scope == "in_scope": if remaining_utah_tax_liability
+      <= 0: 0 else: if military_retirement_credit_claim_allowed: min(military_retirement_credit_calculated,
+      remaining_utah_tax_liability) else: 0 else: 0'
+imports:
+- us-ut:statutes/59-10-104#resident_individual_income_tax_rate
+inputs:
+- name: utah_return_residency_status
+  entity: TaxUnit
+  dtype: Text
+  period: Year
+  description: Caller-supplied full_year_resident, part_year_resident, or nonresident
+    status.
+- name: qualifying_military_retirement_pay_in_federal_agi
+  entity: Person
+  dtype: Money
+  unit: USD
+  period: Year
+- name: senior_credit_claimed_on_same_return
+  entity: TaxUnit
+  dtype: Boolean
+  period: Year
+- name: remaining_utah_tax_liability
+  entity: TaxUnit
+  dtype: Money
+  unit: USD
+  period: Year
