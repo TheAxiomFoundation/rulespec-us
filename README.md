@@ -63,3 +63,148 @@ without being removed, so they only shrink.
 
 Do not add singular rule roots, separate parameter/test fixture files, or
 generated formula artifacts.
+
+## Validation drift and admissions
+
+- `.github/workflows/validation-drift.yml` replaces the daily full
+  validation (#1274, axiom-encode#2094). Once a day it plans a run from what
+  changed since the last drift run (`tools/validation_drift.py`). It runs
+  every file for an encoder merge that declares `Validation effect: tighten`
+  or `loosen` (or no valid effect), an encoder commit without a merged PR, a
+  rules-engine, composer or corpus pin or release, a new shared-validator
+  commit in the workflow's `uses:` line, or 7 days since the last full run. It skips the run when only `none` merges happened. Each failing
+  file opens or updates one `Validation drift: <path>` issue with the
+  `re-encode-queue` label (at most 50 new issues per run). People close the
+  issues; the run never closes them, because the validator lists only
+  failures. The report reads the validator's per-chunk result lines. A leg
+  that fails without explained per-file results (a crash, or a later step
+  such as companion tests), fails the report, so this run's state is not
+  recorded and the next run reports again. More than 50 new failures open
+  50 issues and record that the next run must be full, which opens the
+  rest. In `pinned`
+  verifier mode, encoder main merges do not start a run; a pin change does.
+  Run it by hand with `workflow_dispatch` (`scope: full`). A run that cannot
+  finish its report opens or refreshes one `Validation drift run failed`
+  issue (label `validation-drift-run`). Only the `issues` job can write
+  issues; it checks out nothing and runs only `gh` and `jq`.
+- The drift run and pull-request gating can call different shared-validator
+  commits until `repository-checks.yml` moves to the same commit. Keep them
+  equal.
+- A red full validation after a push to main still opens or refreshes one
+  alarm issue (`push-alarm` in `repository-checks.yml`).
+- `.axiom/admissions/` is the reviewed, repository-specific admissions
+  registry (axiom-encode#2095). Today it is dormant: it holds an empty
+  `coverage-exemptions.jsonl`, and no workflow exports it to the encoder yet
+  (`axiom-encode admission-registry export` from the protected `main`
+  commit). A follow-up wires it into the shared validator; until then a
+  record here admits nothing. `tests/test_admissions_registry.py` checks the
+  file layout, and CODEOWNERS requests review.
+
+## Switching to the encoder-main verifier
+
+This repository verifies pull requests with the pinned encoder
+(`encoder_verifier` absent, which means `pinned`). The switch to
+`encoder_verifier = "main"` (axiom-encode#2091) is one configuration-only
+pull request, after axiom-encode#2097 and #2101 and
+TheAxiomFoundation/.github#154 have merged. Both callers
+(`repository-checks.yml` and `validation-drift.yml`) must use a shared
+validator commit that contains .github#154 with the verifier hold (the
+.github#154 merge commit); an older validator ignores the hold. Follow
+these steps.
+
+1. Choose the verifier commit. Use an axiom-encode first-parent `main`
+   commit that passed the offline replay benchmark of axiom-encode#1891.
+   #1891 is an open pull request; until it merges and branch protection
+   makes it a required check, run the benchmark locally on that commit. Do
+   not use a commit only because it is the current tip.
+2. Measure before you open the pull request. Run the full validation and
+   the waiver audit of this repository with the chosen commit (locally, or
+   in an encoder-side run). List every new failure and every waiver whose
+   fingerprint changed.
+3. Sort what step 2 found into two groups.
+   - Waivers whose failure fingerprint changed under the chosen commit, and
+     waivers whose file now passes. The switch pull request restates these
+     (step 4). The shared validator accepts the ledger in a mode-switch
+     pull request only as a mechanical restate: it rebuilds the ledger from
+     the protected base and requires the same bytes. Only the `fingerprint`
+     of an `active` record may change, and an entry that has an `active`
+     record and no `pending` record may be removed. Owner, issue, expiry,
+     `pending` records, order and comments stay as they are. No entry is
+     added.
+   - Everything else: a file that fails with no waiver, and a waiver that
+     needs a new entry, another owner or issue, or a later expiry. A restate
+     cannot cover these, and the switch fails and names them. Fix them
+     before the switch, under the pinned verifier: re-encode the file, or
+     land an ordinary waiver pull request that the pinned verifier accepts.
+     Each of those ledger changes also changes
+     `validation_waiver_set_sha256` and makes every open manifest that
+     binds the whole ledger stale, so batch them into one pull request and
+     plan the re-signing. While you fix them, the chosen commit stays the
+     target: it becomes the hold in step 4, so later encoder merges do not
+     move the measurement.
+
+   A restate re-approves the new failure of a file that is already waived:
+   the validator proves that the fingerprint is the one that the new
+   verifier observes, not that the new failure is acceptable. Read the
+   restated failures before you approve the switch pull request.
+
+   Do not run the switch across a waiver renewal. A restate requires every
+   `pending` record to be the same as on `main`. Either finish the
+   renewal of the 2026-12-21 expiry (stage and consume) before you open the
+   switch pull request, or start it after the switch has merged. If `main`
+   gets a ledger change while the switch pull request is open, merge `main`
+   into the branch and restate again.
+4. Open the switch pull request. It changes only:
+   - `.axiom/workflow-toolchain.toml`: add `encoder_verifier = "main"` and
+     `encoder_verifier_hold = "<commit from step 1>"`. Keep
+     `axiom_encode_ref`; it becomes the producer floor and must be on
+     first-parent axiom-encode `main` (2bdc3b421 is).
+   - `known-validation-gaps.yaml` and `validation_waiver_set_sha256` in
+     `.axiom/toolchain.toml`, only if step 3 found waivers to restate: the
+     new fingerprints, the removed entries, and the new ledger digest.
+     Nothing else in `.axiom/toolchain.toml` may change. The held verifier
+     must contain the restate audit (axiom-encode#2101 or later).
+   - `.github/workflows/repository-checks.yml`: move the `uses:` line of
+     `validate-rulespec.yml` to the .github#154 merge commit (the commit
+     that `validation-drift.yml` uses once it is repinned before this
+     pull request merges), and pass `encoder-verifier: main` (read it from the table, as
+     `validation-drift.yml` does).
+
+   Its CI is a full dependency change: every file and every waiver is
+   checked under the held verifier (about 3.6 hours and 46 runner-hours),
+   and the generated guard compares the pinned base with the new verifier.
+   With a restate, the waiver audit also requires each restated
+   fingerprint to equal the failure that the held verifier observes, and
+   each removed file to pass.
+
+   A revert to `pinned` follows the same rule in the other direction: it
+   may restate the ledger only if `axiom_encode_ref` stays the same commit.
+   That commit is then the pinned verifier, so it must contain the restate
+   audit (axiom-encode#2101 or later). 2bdc3b421 does not. Move
+   `axiom_encode_ref` to such a commit, in the switch pull request or in a
+   later floor change, before you depend on a revert. A higher floor
+   rejects older producers, so signed pull requests from them need a new
+   signed run.
+   A second switch after a revert is a new switch pull request, measured
+   again from step 1.
+5. Use the hold rather than a freeze of encoder merges. Each run resolves
+   the verifier once, but a re-run, a later push run on `main` and the
+   drift run would each pick a newer encoder `main`. The hold fixes the
+   verifier commit for the switch pull request, its re-runs and the first
+   push run, without asking encoder authors to stop merging. A freeze of
+   validation-affecting encoder merges is the fallback if the hold is not
+   available.
+6. After the switch is green on `main`, remove `encoder_verifier_hold` in
+   a separate pull request. A hold-only change runs the first shard and the
+   guard, not a full validation, so first measure the current tip as in
+   step 2, and after the merge dispatch `validation-drift` with
+   `scope: full`. From then on, the drift run checks encoder merges that
+   declare `loosen` or `tighten`.
+
+Timing: all 1,939 waiver records expire on 2026-12-21 (#1980). Do the
+measurement of step 2 and the switch on the same side of that date, and
+renew the waivers in one ledger pull request, because a renewal changes
+every waived file's record.
+
+Producers below `axiom_encode_ref` stay rejected after the switch. Signed
+pull requests from such producers need a new signed run.
