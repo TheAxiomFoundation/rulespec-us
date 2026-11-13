@@ -23,9 +23,19 @@ into runnable programs.
   commit SHAs). Role-specific pins keep compatibility migrations explicit.
 - `.axiom/index/provisions_to_rules.json`: generated reverse index mapping
   each corpus citation path to the modules that depend on it (via module
-  `source_verification` and proof-atom sources). Regenerate with
-  `python tests/generate_reverse_index.py`; CI fails if it is stale. Do not
-  edit by hand.
+  `source_verification` and proof-atom sources). It is **not tracked**: it
+  is a pure function of the RuleSpec YAML, and a tracked copy made every
+  encoding pull request edit the same file. Generate it outside the
+  checkout with `python tests/generate_reverse_index.py --output <path>`
+  (the script refuses a path inside the checkout, because a copy there
+  blocks the encoder's clean-checkout gates). This is the trusted way.
+  As a convenience, commits on `main` also upload it as the
+  `provisions-to-rules-index` artifact of the `Source staleness and reverse
+  index` workflow. Take the artifact only from a successful `push` run
+  (`gh run list --workflow source-staleness.yml --branch main --event push
+  --status success`) whose `headSha` is a commit on `origin/main`: a pull
+  request run can upload an artifact with the same name. Never commit the
+  index; a test fails if anything under `.axiom/index/` is tracked.
 
 Durable ids are `<jurisdiction>:<path>#<rule>` — `us:statutes/7/2015/e`
 lives at `us/statutes/7/2015/e.yaml`, `us-ca:regulations/mpp/63-300/1` at
