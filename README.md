@@ -36,6 +36,14 @@ into runnable programs.
   --status success`) whose `headSha` is a commit on `origin/main`: a pull
   request run can upload an artifact with the same name. Never commit the
   index; a test fails if anything under `.axiom/index/` is tracked.
+- Pass `--deferred-provisions-output <path>` alongside `--output` to generate
+  a separate report for `module.deferred_outputs[].blocked_by_provisions`.
+  The report lists the affected output and candidate providers for each
+  provision. When every provision has a candidate, review and link the
+  compatible executable outputs before removing the deferral. CI shows
+  these states in its job summary and publishes the full
+  `deferred-provisions-report` artifact on `main`, with the same provenance
+  guidance as the reverse index.
 
 Durable ids are `<jurisdiction>:<path>#<rule>` — `us:statutes/7/2015/e`
 lives at `us/statutes/7/2015/e.yaml`, `us-ca:regulations/mpp/63-300/1` at
