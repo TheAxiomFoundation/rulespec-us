@@ -9,13 +9,27 @@ two places:
   proof grounding).
 
 This script scans every non-test RuleSpec YAML under the jurisdiction roots and
-emits ``.axiom/index/provisions_to_rules.json``: for each corpus citation path
+emits the provision -> rules index: for each corpus citation path
 referenced anywhere, the sorted list of module paths that depend on it, plus the
 kinds of reference (``module`` and/or ``proof_atom``). The output is fully
-deterministic (sorted keys, sorted module lists) so CI can regenerate it and
-diff against the committed copy. The serialized file deliberately omits the
-repo-global ``counts`` header (still printed for humans) so concurrent encoding
-PRs no longer collide on a shared summary line; see ``render_index``.
+deterministic (sorted keys, sorted module lists), so any two runs over the same
+tree produce the same bytes.
+
+The index is NOT tracked in Git. It is a pure function of the tracked RuleSpec
+YAML, so it is generated where it is needed: locally with this script (write it
+outside the checkout with ``--output``; this is the trusted way), or from the
+``provisions-to-rules-index`` artifact that the ``reverse-index`` CI job
+uploads for each commit on ``main`` (take it only from a successful ``push``
+run whose head commit is on ``main``; see the README). A tracked copy was the
+one file that every encoding pull request had to edit, so each merge made every
+other open pull request stale or conflicting, and the signed encoder workflow
+(which may only write signed RuleSpec paths) could not produce it at all.
+``tests/test_reverse_index.py`` fails if anything under ``.axiom/index/`` is
+tracked again. ``--output`` is required and there is no default location inside
+the checkout: the encoder's clean-checkout gates reject untracked and ignored
+files, so a copy left in the checkout would block signed applies there.
+``.axiom/index/`` is git-ignored only so that a stray copy cannot be committed
+by accident.
 
 The index is read-only tooling metadata. It does not participate in RuleSpec
 validation and nothing in the engine binds to it; it exists so that a change to
@@ -24,8 +38,8 @@ a corpus provision can be traced to every module that must be re-checked
 check.
 
 Usage:
-    python tests/generate_reverse_index.py            # write the index
-    python tests/generate_reverse_index.py --check    # exit 1 if stale
+    python tests/generate_reverse_index.py --output /tmp/provisions_to_rules.json
+    python tests/generate_reverse_index.py --output PATH --check   # exit 1 if PATH is stale
 """
 
 from __future__ import annotations
@@ -193,20 +207,31 @@ def build_index(repo_root: Path) -> dict[str, Any]:
 def render_index(index: dict[str, Any]) -> str:
     """Serialize the index deterministically with a trailing newline.
 
-    The ``counts`` block is intentionally omitted from the serialized file.
-    It is a repo-global summary that every module addition rewrites, so
-    committing it made those few lines the one region that *every* concurrent
-    encoding PR touched -- a guaranteed merge conflict that serialized bulk
-    merges. Counts are still computed and printed for humans (see ``main``);
-    only the on-disk artifact drops them, so two PRs adding modules under
-    different provisions no longer collide on a shared header. The remaining
-    ``provisions`` map stays deterministic (sorted keys and module lists), so a
-    git three-way merge of two disjoint insertions reproduces the canonical
-    output byte-for-byte and the up-to-date check passes without a manual
-    regenerate/rebase.
+    The ``counts`` block is intentionally omitted from the serialized file;
+    counts are still computed and printed for humans (see ``main``). The
+    serialized shape is unchanged from the time the index was tracked in Git,
+    so existing readers of the file keep working on a generated copy.
     """
     serializable = {key: value for key, value in index.items() if key != "counts"}
     return json.dumps(serializable, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
+
+
+def _is_inside(path: Path, directory: Path) -> bool:
+    """True when ``path`` is ``directory`` or lies under it.
+
+    Compares by file identity as well as by name, so a symlink or a
+    case-variant spelling on a case-insensitive filesystem is still caught.
+    """
+    resolved = path.resolve()
+    if resolved.is_relative_to(directory):
+        return True
+    for candidate in (resolved, *resolved.parents):
+        try:
+            if candidate.exists() and candidate.samefile(directory):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -214,7 +239,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Verify the committed index is up to date; exit 1 if it is stale.",
+        help="Verify the copy at --output is up to date; exit 1 if it is stale or absent.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help=(
+            "Where to write (or check) the index. Use a path outside the "
+            "checkout: the index is not tracked, and the encoder's "
+            "clean-checkout gates reject stray files inside it."
+        ),
     )
     parser.add_argument(
         "--repo-root",
@@ -225,22 +260,32 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
+    output_path = args.output
+    output_label = output_path.as_posix()
+    if _is_inside(output_path, repo_root):
+        print(
+            f"--output {output_label} is inside the repository being scanned. "
+            "The index is not tracked and the encoder's clean-checkout gates "
+            "reject stray files there; choose a path outside the checkout.",
+            file=sys.stderr,
+        )
+        return 2
     index = build_index(repo_root)
     rendered = render_index(index)
-    output_path = repo_root / INDEX_RELATIVE_PATH
     counts = index["counts"]
 
     if args.check:
         existing = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
         if existing != rendered:
             print(
-                f"{INDEX_RELATIVE_PATH.as_posix()} is stale. "
-                "Run `python tests/generate_reverse_index.py` and commit the result.",
+                f"{output_label} is stale or absent. "
+                "Run `python tests/generate_reverse_index.py --output <path>` to "
+                "regenerate it (the index is not tracked; do not commit it).",
                 file=sys.stderr,
             )
             return 1
         print(
-            f"{INDEX_RELATIVE_PATH.as_posix()} is up to date "
+            f"{output_label} is up to date "
             f"({counts['provisions']} provisions, {counts['edges']} edges, "
             f"{counts['modules']} modules)."
         )
@@ -249,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")
     print(
-        f"Wrote {INDEX_RELATIVE_PATH.as_posix()}: "
+        f"Wrote {output_label}: "
         f"{counts['provisions']} provisions, {counts['edges']} edges, "
         f"{counts['modules']} modules."
     )
