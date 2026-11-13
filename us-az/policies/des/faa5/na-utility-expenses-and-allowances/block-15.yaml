@@ -1,0 +1,87 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-15
+    source_sha256: 414b5fae6429df8a444f0abb64992f0823357bc41dcd0493f41e42d823cd6d32
+  summary: |-
+    The following utility expenses billed separate from or itemized with rent or mortgage payments are allowable:
+inputs:
+  - name: component_billed_separately_from_rent_or_mortgage
+    entity: UtilityExpenseComponent
+    dtype: Boolean
+    period: Month
+  - name: component_itemized_with_rent_or_mortgage
+    entity: UtilityExpenseComponent
+    dtype: Boolean
+    period: Month
+  - name: component_expense_category
+    entity: UtilityExpenseComponent
+    dtype: String
+    period: Month
+  - name: onsite_water_unavailable_for_component
+    entity: UtilityExpenseComponent
+    dtype: Boolean
+    period: Month
+# Branch inventory: chapeau ENCODE; water services ENCODE;
+# well maintenance: chemicals for water treatment ENCODE, service and repair ENCODE;
+# purchasing water when onsite water is unavailable ENCODE.
+# Each entity represents one expense component; all its facts describe that expense.
+# Category labels identify water service, well-maintenance chemicals,
+# well-maintenance service and repair, or purchasing water, respectively.
+# 2026-08-01 is the first full Month evidence coverage floor following the
+# authenticated snapshot, not a legal commencement date. Earlier coverage is unproven.
+# A negative result addresses only this source's water-expense categories;
+# it does not deny another utility-expense path or whole-program eligibility.
+rules:
+  - name: snap_water_utility_component_allowable
+    kind: derived
+    entity: UtilityExpenseComponent
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5, D NA Utility Expenses and Allowances, block 15
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-15
+              excerpt: "The following utility expenses billed separate from or itemized with rent or mortgage payments are allowable:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-15
+              excerpt: Water services expense.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-15
+              excerpt: |-
+                Well maintenance expenses include any of the following:
+
+                Chemicals for water treatment
+
+                Service and repair
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-utility-expenses-and-allowances/block-15
+              excerpt: The expense of purchasing water when onsite water is not available.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          (
+            component_billed_separately_from_rent_or_mortgage
+            or component_itemized_with_rent_or_mortgage
+          )
+          and (
+            component_expense_category == "water_service"
+            or component_expense_category == "well_water_treatment_chemicals"
+            or component_expense_category == "well_service_and_repair"
+            or (
+              component_expense_category == "purchased_water"
+              and onsite_water_unavailable_for_component
+            )
+          )
