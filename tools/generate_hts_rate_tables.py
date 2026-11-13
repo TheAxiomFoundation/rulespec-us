@@ -259,9 +259,12 @@ class ChapterEmitter:
             "module:",
             "  proof_validation:",
             "    required: true",
+            # One citation node per rated line; the engine requires exactly
+            # one singular module citation (rulespec-us#1354).
+            "  source_documents:",
+            *[f"    - corpus_citation_path: {CITATION_ROOT}/{h}" for h in cited],
             "  source_verification:",
-            "    corpus_citation_paths:",
-            *[f"      - {CITATION_ROOT}/{h}" for h in cited],
+            f"    corpus_citation_path: {CITATION_ROOT}/{cited[0]}",
             "  deferred_outputs:",
             f"    - output: us:policies/usitc/us-tariff-duty/lines/generated/ch{ch}#ch{ch}_applied_line_duty",
             "      reason: |-",
