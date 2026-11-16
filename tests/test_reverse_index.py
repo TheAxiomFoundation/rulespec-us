@@ -18,10 +18,9 @@ import os
 import subprocess
 from pathlib import Path
 
+import generate_reverse_index as gen
 import pytest
 import yaml
-
-import generate_reverse_index as gen
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -418,7 +417,8 @@ def test_deferred_provisions_follow_provider_lifecycle(tmp_path):
         {"provision": federal, "provider_modules": [federal_provider]},
     ]
     assert "Review linkage" in gen._render_deferral_summary(report)
-    # Re-running the report leaves the deferral open until the consumer is changed.
+    # Provider candidates leave the reminder open. Explicit metadata removal
+    # clears it; this report does not validate the consumer's eventual linkage.
     assert gen.build_reports(tmp_path, include_deferrals=True)[1] == report
     consumer_module["deferred_outputs"].pop(0)
     _write_rule_module(tmp_path / consumer, consumer_module, [])

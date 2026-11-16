@@ -40,7 +40,9 @@ into runnable programs.
   a separate report for `module.deferred_outputs[].blocked_by_provisions`.
   The report lists the affected output and candidate providers for each
   provision. When every provision has a candidate, review and link the
-  compatible executable outputs before removing the deferral. CI shows
+  compatible executable outputs before removing the deferral. Linkage
+  correctness is established by encoding validation and integration tests.
+  The report observes the declared deferral and its explicit removal. CI shows
   these states in its job summary and publishes the full
   `deferred-provisions-report` artifact on `main`, with the same provenance
   guidance as the reverse index.
