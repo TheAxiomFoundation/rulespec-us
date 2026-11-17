@@ -707,6 +707,7 @@ ENTRY_KEYS = frozenset(
         "conflict",
         "resolution",
         "text_kinds",
+        "spans",
         "unpublished_sources",
         "proposed",
     }
@@ -1046,6 +1047,56 @@ def check_text_kinds(entry: Mapping[str, Any], *, label: str, issues: list[str])
                 f"{k_label} is `{kind}`, but a `{document_class(path)}` path can only be "
                 f"{', '.join(allowed)}."
             )
+
+
+def source_excerpts(entry: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Each source the entry cites (a corpus citation path in `texts`, a
+    `citation` in `pending_texts`) -> its excerpts, in order. A source cited
+    more than once has several."""
+
+    excerpts: dict[str, list[str]] = {}
+    texts = entry.get("texts") if isinstance(entry.get("texts"), list) else []
+    pending = entry.get("pending_texts") if isinstance(entry.get("pending_texts"), list) else []
+    for item, key in [(text, "corpus_citation_path") for text in texts] + [(item, "citation") for item in pending]:
+        if isinstance(item, dict) and isinstance(item.get(key), str) and item[key].strip():
+            excerpt = item.get("excerpt")
+            excerpts.setdefault(item[key], []).extend([excerpt] if isinstance(excerpt, str) else [])
+    return excerpts
+
+
+def check_spans(entry: Mapping[str, Any], *, label: str, issues: list[str]) -> None:
+    """`spans`: for a source the entry cites, the exact contested words, each
+    verbatim in one of that source's excerpts. Spans quote sources, so they are
+    not prose; check says only that they are verbatim, not that they are the
+    right words (the encoder or a reviewed PR chooses them)."""
+
+    if "spans" not in entry:
+        return
+    spans = entry["spans"]
+    if not isinstance(spans, dict) or not spans:
+        issues.append(f"{label}.spans must be a non-empty mapping of source to a list of verbatim spans.")
+        return
+    excerpts = source_excerpts(entry)
+    for source, words in spans.items():
+        s_label = f"{label}.spans[{source}]"
+        if not isinstance(source, str) or source not in excerpts:
+            issues.append(
+                f"{s_label} names a source that is not one of this entry's texts (corpus_citation_path) "
+                "or pending_texts (citation)."
+            )
+            continue
+        if not _nonempty_list(words, label=s_label, issues=issues):
+            continue
+        seen: set[str] = set()
+        for index, span in enumerate(words):
+            span_label = f"{s_label}[{index}]"
+            if not _string(span, label=span_label, issues=issues):
+                continue
+            if span in seen:
+                issues.append(f"{span_label} repeats an earlier span of this source.")
+            seen.add(span)
+            if not any(span in excerpt for excerpt in excerpts[source]):
+                issues.append(f"{span_label} is not verbatim in any excerpt of {source}.")
 
 
 def check_interpretation_core(entry: Mapping[str, Any], *, label: str, require_texts: bool) -> list[str]:
@@ -1551,6 +1602,7 @@ def check_entry(entry: Any, *, index: int, ctx: RepoContext, jurisdictions: froz
     if "pending_texts" in entry:
         pending = check_pending_texts(pending, label=f"{label}.pending_texts", issues=issues)
     check_text_kinds(entry, label=label, issues=issues)
+    check_spans(entry, label=label, issues=issues)
 
     years = entry.get("years")
     if "years" in entry:
@@ -2359,6 +2411,7 @@ def aggregate(registers: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[
                             if isinstance(kind, str)
                         }
                     ),
+                    "spans": entry.get("spans") or {},
                     "ruling": entry.get("ruling"),
                     "adopted_by": entry.get("adopted_by") or [],
                     "implementations": [
