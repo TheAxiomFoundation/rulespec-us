@@ -43,10 +43,10 @@ import yaml
 GENERATOR_VERSION = "b1.6-schedule-compositions-3"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WITNESS_PATH = REPO_ROOT / "us/policies/cbp/us-tariff-duty/composition.yaml"
-WITNESS_SHA256 = "0745c24a9c7ca8cd54d28bf4da5ea474f479a866daf59d4890824a2f79c82c02"
+WITNESS_SHA256 = "acf169e32b2904eab396076a4eaa630a651bfc54f86ba651ec8fb71024e79c76"
 TABLE_DIR = REPO_ROOT / "us/policies/usitc/us-tariff-duty/lines/generated"
 TABLE_MANIFEST_PATH = TABLE_DIR / "GENERATED-MANIFEST.json"
-TABLE_MANIFEST_SHA256 = "0ab7aa9d757661fd488893af038a70ebdd916c555304962b9f93badb0e711f77"
+TABLE_MANIFEST_SHA256 = "0b93e7c7179ff0a10b2821bb13c844b4c5c7de50ef7413bb53b060da812f9afb"
 COMPOSITION_DIR = REPO_ROOT / "us/policies/cbp/us-tariff-schedule/generated"
 PROGRAM_DIR = REPO_ROOT / "programs/us/us-tariff-schedule"
 TABLE_EFFECTIVE_FROM = "2025-01-01"
@@ -815,11 +815,17 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
                 )
 
     source_verification = copy.deepcopy(witness["module"]["source_verification"])
+    cited = [
+        document["corpus_citation_path"]
+        for document in witness["module"]["source_documents"]
+    ]
     steel_citation = "us/statute/hts/9903.82.02"
-    if steel_citation not in source_verification["corpus_citation_paths"]:
-        source_verification["corpus_citation_paths"] = sorted(
-            set(source_verification["corpus_citation_paths"]) | {steel_citation}
-        )
+    if steel_citation not in cited:
+        cited = sorted(set(cited) | {steel_citation})
+    # The engine requires exactly one module citation (rulespec-us#1354); a
+    # chapter composition cites its first source, every source stays a node.
+    source_verification["corpus_citation_path"] = cited[0]
+    source_documents = [{"corpus_citation_path": path} for path in cited]
     structural_note = ""
     if chapter == "76":
         structural_note += (
@@ -875,6 +881,7 @@ def composition(chapter: str, witness: dict, table: dict) -> dict:
         )
     module_metadata = {
         "kind": "composition",
+        "source_documents": source_documents,
         "source_verification": source_verification,
     }
     if not has_column2_rate:
