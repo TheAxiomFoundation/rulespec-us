@@ -1,0 +1,166 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-vt/statute/33/1812
+  summary: |-
+    Section 1812 establishes Vermont Health Benefit Exchange financial assistance. Subsection (a) provides premium assistance to individuals and families eligible for federal premium tax credits under 26 U.S.C. section 36B whose income is at or below 300 per cent of the federal poverty level, and directs the Department of Vermont Health Access to establish a premium schedule on a sliding modified-adjusted-gross-income scale that reduces the enrollee premium contribution by 1.5 per cent below the amount established under section 36B, available for the same qualified health benefit plans for which federal premium tax credits are available. This module encodes the premium-assistance axis: the 300 per cent income ceiling, the 1.5 percentage-point reduction to the section 36B applicable percentage, the eligibility conjunction, and the residual premium-assistance amount that pays the incremental contribution gap between the federal applicable percentage and the reduced Vermont percentage, capped at the benchmark premium remaining after the federal advance premium tax credit so it never duplicates the federal credit.
+  deferred_outputs:
+  - output: us-vt:statutes/33/1812#cost_sharing_assistance
+    reason: Subsection (b) establishes cost-sharing assistance on a sliding
+      actuarial-value schedule (94/87/77/73 per cent by FPL band) reducing the
+      section 1402 out-of-pocket maximums; the enrollee cost-sharing surface
+      (deductibles, copayments, coinsurance, actuarial value by plan) is not
+      represented in this module's executable context.
+  - output: us-vt:statutes/33/1812#premium_assistance_advance_payment_and_reconciliation
+    reason: The State pays premium assistance directly to insurers using the
+      Affordable Care Act advance-payment mechanisms referenced in subsection
+      (c); advance payment, reconciliation, and insurer-payment mechanics are
+      administrative and outside the household-level computation.
+rules:
+- name: premium_assistance_maximum_household_income_poverty_line_ratio
+  kind: parameter
+  dtype: Rate
+  source: 33 V.S.A. § 1812(a)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-vt/statute/33/1812
+          excerpt: with income less than or equal to 300 percent of federal poverty
+            level shall be eligible for premium assistance from the State of Vermont
+  versions:
+  - effective_from: '2013-10-01'
+    formula: |-
+      3.0
+- name: premium_assistance_applicable_percentage_reduction
+  kind: parameter
+  dtype: Rate
+  source: 33 V.S.A. § 1812(a)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: parameter
+        source:
+          corpus_citation_path: us-vt/statute/33/1812
+          excerpt: The Department shall reduce the premium contribution for these
+            individuals and families by 1.5 percent below the premium amount established
+            in 26 U.S.C. § 36B
+  versions:
+  - effective_from: '2013-10-01'
+    formula: |-
+      0.015
+- name: premium_assistance_income_eligible
+  kind: derived
+  entity: TaxUnit
+  dtype: Boolean
+  period: Year
+  source: 33 V.S.A. § 1812(a)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-vt/statute/33/1812
+          excerpt: with income less than or equal to 300 percent of federal poverty
+            level
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-vt:statutes/33/1812#premium_assistance_maximum_household_income_poverty_line_ratio
+          output: premium_assistance_maximum_household_income_poverty_line_ratio
+          hash: sha256:local
+  versions:
+  - effective_from: '2013-10-01'
+    formula: |-
+      household_income_poverty_line_ratio <= premium_assistance_maximum_household_income_poverty_line_ratio
+- name: premium_assistance_eligible
+  kind: derived
+  entity: TaxUnit
+  dtype: Boolean
+  period: Year
+  source: 33 V.S.A. § 1812(a)(1)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-vt/statute/33/1812
+          excerpt: An individual or family eligible for federal premium tax credits
+            under 26 U.S.C. § 36B with income less than or equal to 300 percent of
+            federal poverty level shall be eligible for premium assistance from the
+            State of Vermont
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-vt:statutes/33/1812#premium_assistance_income_eligible
+          output: premium_assistance_income_eligible
+          hash: sha256:local
+  versions:
+  - effective_from: '2013-10-01'
+    formula: |-
+      eligible_for_federal_premium_tax_credit and premium_assistance_income_eligible
+- name: premium_assistance_vermont_applicable_percentage
+  kind: derived
+  entity: TaxUnit
+  dtype: Rate
+  period: Year
+  source: 33 V.S.A. § 1812(a)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-vt/statute/33/1812
+          excerpt: reduce the premium contribution for these individuals and families
+            by 1.5 percent below the premium amount established in 26 U.S.C. § 36B
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-vt:statutes/33/1812#premium_assistance_applicable_percentage_reduction
+          output: premium_assistance_applicable_percentage_reduction
+          hash: sha256:local
+  versions:
+  - effective_from: '2013-10-01'
+    formula: |-
+      max(0, federal_applicable_percentage - premium_assistance_applicable_percentage_reduction)
+- name: premium_assistance_amount
+  kind: derived
+  entity: TaxUnit
+  dtype: Money
+  period: Year
+  unit: USD
+  source: 33 V.S.A. § 1812(a)(2)
+  metadata:
+    proof:
+      atoms:
+      - path: versions[0].formula
+        kind: formula
+        source:
+          corpus_citation_path: us-vt/statute/33/1812
+          excerpt: establish a premium schedule on a sliding scale based on modified
+            adjusted gross income ... reduce the premium contribution ... by 1.5 percent
+            below the premium amount established in 26 U.S.C. § 36B
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-vt:statutes/33/1812#premium_assistance_eligible
+          output: premium_assistance_eligible
+          hash: sha256:local
+      - path: versions[0].formula
+        kind: import
+        import:
+          target: us-vt:statutes/33/1812#premium_assistance_vermont_applicable_percentage
+          output: premium_assistance_vermont_applicable_percentage
+          hash: sha256:local
+  versions:
+  - effective_from: '2013-10-01'
+    formula: |-
+      if premium_assistance_eligible: min(max(0, max(0, modified_adjusted_gross_income) * (federal_applicable_percentage - premium_assistance_vermont_applicable_percentage)), max(0, benchmark_plan_annual_premium - federal_advance_premium_tax_credit)) else: 0
