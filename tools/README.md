@@ -20,6 +20,69 @@ Consumers (axiom-api) pin a release tag and per-file sha256s instead of
 vendoring artifacts. To admit a program: land its spec here, wait for the
 release, then bump the consumer's pin.
 
+## Artifact names and legal periods
+
+A spec's legal identity is `(jurisdiction, program_id, period)`:
+`jurisdiction` and `program_id` are the first and last segments of its
+`program:` field, and `period` is its `period:` value. Both fields are read
+with surrounding whitespace stripped, as axiom-compose reads them.
+axiom-compose's behavior depends on `program:` only through those two
+segments: the first sets the allowed import prefixes and the `state:` scope
+prefix, and the last is the auto-gate program token. The middle segments
+appear only in labels (the composition target and summary). One program can
+have any number of periods; each is its own spec file and its own artifact.
+
+Each artifact is named after its spec path: the path under `programs/`,
+without `.yaml`, joined with `-`. The name depends only on the path, so
+adding a period never renames an artifact that already exists.
+
+| Spec | Artifact | `program_key` | `period` | `period_label` |
+|---|---|---|---|---|
+| `programs/us-az/snap/fy-2026.yaml` | `us-az-snap-fy-2026` | `us-az-snap` | `2026-01` | `fy-2026` |
+| `programs/us-az/snap/fy-2027.yaml` (example) | `us-az-snap-fy-2027` | `us-az-snap` | `2026-10` | `fy-2027` |
+| `programs/us/payroll/oasdi-wage-tax/fy-2026.yaml` | `us-payroll-oasdi-wage-tax-fy-2026` | `us-oasdi-wage-tax` | `2026` | `fy-2026` |
+| `programs/us/us-tariff-schedule/ch01.yaml` | `us-us-tariff-schedule-ch01` | `us-ch01` | `2026-01` | `null` |
+
+Each `manifest.json` program entry carries three fields beside the existing
+ones:
+
+- `program`: the spec's `program:` field as written, surrounding whitespace
+  stripped.
+- `program_key`: `<jurisdiction>-<program_id>`. It is the period-free key
+  shared by every period of one program, and it is exactly the name every
+  artifact had before rulespec-us#784.
+- `period_label`: the path segment that names the period, or `null` when the
+  spec path names the program itself. The tariff-schedule chapters are the
+  `null` case: in `ch01.yaml` the stem is the chapter, which is part of the
+  program, and the period appears only in `period`.
+
+The build refuses a spec tree, before composing anything, in three cases:
+
+- **Duplicate legal period.** Two specs share `(jurisdiction, program_id,
+  period)`. Keep one spec per period.
+- **Artifact name collision.** Two different spec paths join to the same
+  name, compared case-insensitively because release assets land on
+  case-insensitive filesystems. This needs one hyphenated string split
+  differently across directory levels, such as `programs/us-az/snap/x.yaml`
+  and `programs/us/az-snap/x.yaml`. Rename one of the paths.
+- **Ambiguous `program_key`.** Two different `(jurisdiction, program_id)`
+  pairs join to the same `program_key`, compared case-insensitively. For
+  example, `program: us-az/snap` and `program: us/az-snap` are different
+  programs (different jurisdictions) that would both have the key
+  `us-az-snap`, even at paths whose names do not collide. Change the first
+  or last `program:` segment of one of them.
+
+The builder never refuses a second period on its own.
+
+To add a period, add a spec beside the existing one, for example
+`programs/us-az/snap/fy-2027.yaml` with the same `program:` and the new
+`period:`. Consumers select an artifact by `program_key` and then pick the
+entry with the greatest `period` that does not exceed the requested period.
+On every tree the builder accepts, a `program_key` names exactly one
+`(jurisdiction, program_id)`. Together with the duplicate check, that makes
+`(program_key, period)` unique, so the rule always picks exactly one
+artifact. The manifest does not record when a period ends.
+
 The workflow also signs GitHub build-provenance attestations for
 `manifest.json` and every `*.compiled.json`. Consumers can verify a
 downloaded artifact was built by this workflow from this repo:
@@ -32,8 +95,27 @@ Run locally:
 
 ```bash
 AXIOM_RULES_ENGINE_BIN=~/axiom-rules/target/release/axiom-rules-engine \
-  python tools/build_program_artifacts.py --check   # gate mode
+  python tools/build_program_artifacts.py --check   # gate mode: builds, writes nothing
   python tools/build_program_artifacts.py           # writes dist/
+```
+
+Pre-flight refuses a build, leaving `dist/` untouched, when the engine binary
+is missing or not executable, axiom-compose is not importable, the engine's
+artifact format disagrees with the builder, the spec tree clashes, or a file
+the build would write in `dist/` is a symlink (writing it would follow the
+link). Once the pre-flight checks pass and before it writes, a build deletes
+the top-level `*.compiled.json`, `*.rulespec.yaml` and `manifest.json` regular
+files an earlier build left in `dist/`, so a `dist/` from before the #784
+rename never mixes old names with new ones. Other files, symlinks and
+subdirectories are left alone. `--check` touches nothing. After a failing
+build `dist/` holds only the specs that built; don't use it.
+
+The builder's own tests need no engine. CI runs them in the `builder-tests`
+job from the hash-pinned `tools/tests/requirements.txt`:
+
+```bash
+uv run --no-project --python 3.14 --with-requirements tools/tests/requirements.txt \
+  python -m pytest -q tools/tests
 ```
 
 # Engine root load
