@@ -19,6 +19,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -936,6 +937,157 @@ def test_a_money_case_names_the_pinned_test_that_computes_it(tmp_path):
     no_amount = entry()
     del no_amount["money_case"]
     assert check(ctx, no_amount) == []
+
+
+# ---------------------------------------------------------------------------
+# Excerpts: escapes held as text, and paragraph gaps in pending texts
+
+LABEL = "Entry `family-maximum-saving-clause` (entries[0])"
+
+
+def excerpt_issues(issues):
+    """The issues check_excerpts writes, without the schema's."""
+
+    return [issue for issue in issues if " as text, a backslash and a letter" in issue or "has a blank line or a paragraph separator" in issue]
+
+
+@pytest.mark.parametrize(
+    ("excerpt", "escapes"),
+    [
+        # #1871: N.Y. Tax Law 614 excerpts copied with their line breaks escaped.
+        ("(a)\\nUnmarried individual.", ["\\n"]),
+        ("a resident individual who\\nis not married", ["\\n"]),
+        # A backslash and n is an escape whatever follows it.
+        ("the excess of—\\n(1) the amount", ["\\n"]),
+        ("the excess of—\\n\\n(1) the amount", ["\\n"]),
+        ("ends the paragraph.\\n", ["\\n"]),
+        ("subject to the\\n6.85 percent rate", ["\\n"]),
+        ("the term\\n\"partnership\"", ["\\n"]),
+        ("a doubled \\\\n escape", ["\\n"]),
+        # A backslash and t or r is one where no letter follows.
+        ("line one\\r\\nline two", ["\\n", "\\r"]),
+        ("Amount\\t2,000", ["\\t"]),
+        ("a column\\t\\tthen another", ["\\t"]),
+        ("a\\r(1) clause", ["\\r"]),
+        ("a trailing tab\\t", ["\\t"]),
+        ("the tab\\t and the space", ["\\t"]),
+        # A backslash and t or r before a letter is left alone: a source may
+        # set a real backslash there (a Nevada manual has applicant\recipient).
+        ("A SNAP applicant\\recipient is receiving benefits", []),
+        ("where a \\times b and \\theta", []),
+        ("saved under C:\\temp\\reports", []),
+        ("a backslash before an accented letter, \\té", []),
+        # The Federal Register's footnote marks, and backslashes before other
+        # characters, are not escapes.
+        ("in the adult group.\\1\\ Total State", []),
+        ("a backslash \\ alone, and \\\\ two", []),
+        # Real line breaks and tabs are whitespace, not escapes.
+        ("a real\nline break and a real\ttab", []),
+    ],
+)
+def test_an_excerpt_holding_an_escape_as_text_is_refused(tmp_path, excerpt, escapes):
+    value = entry()
+    value["texts"][0]["excerpt"] = excerpt
+    value["pending_texts"][0]["excerpt"] = excerpt
+    issues = excerpt_issues(check(make_repo(tmp_path), value))
+    if not escapes:
+        assert issues == []
+        return
+    shown = ", ".join(f"`{escape}`" for escape in escapes)
+    assert issues == [
+        f"{LABEL}.{field}[0].excerpt holds {shown} as text, a backslash and a letter, which YAML keeps outside double "
+        "quotes; write a real line break or a space instead (a blank line only where the source has a paragraph "
+        "gap). If the source itself shows it, that is an ingest defect: fix the corpus, or quote around it."
+        for field in ("texts", "pending_texts")
+    ]
+
+
+def test_the_escaped_new_york_excerpts_from_1871_are_refused_and_their_fixes_pass(tmp_path):
+    # The two us/statute ... TAX/614 excerpts as #1871 first registered them,
+    # and as fixed from the corpus segment.
+    escaped = [
+        "(a)\\nUnmarried individual. For taxable years beginning after nineteen hundred\\nninety-six, the New York standard "
+        "deduction of a resident individual who\\nis not married nor the head of a household nor a surviving spouse nor "
+        "an\\nindividual who is claimed as a dependent by another New York state\\ntaxpayer shall be seven thousand five "
+        "hundred dollars;",
+        "(e) Standard deduction of a dependent individual. For taxable years\\nbeginning after nineteen hundred "
+        "ninety-six, the New York standard\\ndeduction of a resident individual whose federal exemption amount is\\nzero "
+        "shall be three thousand dollars;",
+    ]
+    ctx = make_repo(tmp_path)
+    value = entry()
+    value["texts"] = [{"corpus_citation_path": "us/statute/42/403/a/5", "excerpt": text} for text in escaped]
+    issues = excerpt_issues(check(ctx, value))
+    assert [issue.split(" holds ")[0] for issue in issues] == [f"{LABEL}.texts[0].excerpt", f"{LABEL}.texts[1].excerpt"]
+    assert all(" holds `\\n` as text" in issue for issue in issues)
+    for text in value["texts"]:
+        text["excerpt"] = text["excerpt"].replace("\\n", " ")
+    assert check(ctx, value) == []
+
+
+@pytest.mark.parametrize(
+    ("excerpt", "gap"),
+    [
+        ("excess of—\n\n(1) the amount", True),
+        ("excess of—\n  \n  (1) the amount", True),
+        ("excess of—\r\n\r\n(1) the amount", True),
+        ("excess of—\r\r(1) the amount", True),
+        ("excess of—\n\r(1) the amount", True),
+        # Paragraph separators: form feed, vertical tab, NEL, U+2028, U+2029.
+        ("excess of—\x0c(1) the amount", True),
+        ("excess of—\x0b(1) the amount", True),
+        ("excess of—\x85(1) the amount", True),
+        ("excess of—\u2028(1) the amount", True),
+        ("excess of—\u2029(1) the amount", True),
+        # One line end, however written, or any run of spaces is one space.
+        ("excess of—\n(1) the amount", False),
+        ("excess of—\r\n(1) the amount", False),
+        ("excess of—\r(1) the amount", False),
+        ("excess of—  \t (1) the amount", False),
+        ("excess of—\x1c(1) the amount", False),
+        # verify strips an excerpt, so a gap at either end is no gap.
+        ("\n\nexcess of— (1) the amount\n\n", False),
+    ],
+)
+def test_a_pending_excerpt_with_a_paragraph_gap_is_refused(tmp_path, excerpt, gap):
+    # A snapshot is read with every run of whitespace as one space, so a
+    # pending excerpt with a gap can never match it. A corpus text keeps its
+    # gaps, so a corpus excerpt may have one.
+    value = entry()
+    value["texts"][0]["excerpt"] = excerpt
+    value["pending_texts"][0]["excerpt"] = excerpt
+    issues = excerpt_issues(check(make_repo(tmp_path), value))
+    assert sc.has_paragraph_gap(excerpt) is gap
+    assert issues == (
+        [
+            f"{LABEL}.pending_texts[0].excerpt has a blank line or a paragraph separator, but verify reads a snapshot "
+            "with every run of whitespace as one space, so the excerpt can never match; join its paragraphs with a space."
+        ]
+        if gap
+        else []
+    )
+
+
+@pytest.mark.parametrize("excerpt", [None, 7, ["a\\nb"], {"x": "a\\nb"}])
+def test_a_malformed_excerpt_is_a_schema_issue_only(tmp_path, excerpt):
+    value = entry()
+    value["texts"][0]["excerpt"] = excerpt
+    value["pending_texts"][0]["excerpt"] = excerpt
+    issues = check(make_repo(tmp_path), value)
+    assert excerpt_issues(issues) == []
+    assert any("texts[0].excerpt must be a non-blank string" in issue for issue in issues)
+    for texts in ("a\\nb", ["a\\nb"], [None, 7]):
+        value = entry(texts=texts, pending_texts=texts)
+        assert excerpt_issues(check(make_repo(tmp_path), value)) == []
+
+
+def test_a_module_interpretation_is_left_to_the_encoder(tmp_path):
+    # check_module_interpretation mirrors axiom-encode's validation, which has
+    # no escape rule; a registered module carries the entry, whose own check
+    # refuses the escape.
+    item = sc.to_module_interpretation(entry(), interpretation_id="saving-clause", affects=["rule_a"])
+    item["texts"][0]["excerpt"] = "who\\nis"
+    assert sc.check_module_interpretation(item, rule_names={"rule_a"}, label="x") == []
 
 
 # ---------------------------------------------------------------------------
@@ -2011,6 +2163,116 @@ def test_verify_unreadable_files():
     payload, _, corpus = verified_inputs()
     issues, _ = sc.verify_register(payload, fetch=FakeNet({}), matches=substring, resolve=corpus.get)
     assert sum("cannot read" in issue for issue in issues) == 4
+
+
+# verify's paragraph-gap hint, with a stub resolver. The source sets its
+# subparagraphs off with blank lines, as 26 U.S.C. 199A(a)(2) does.
+GAPPED = (
+    "an amount equal to 20 percent of the excess (if any) of—\n\n(A) the taxable income of the taxpayer for the "
+    "taxable year, over\n\n(B) the net capital gain (as defined in section 1(h)) of the taxpayer for such taxable year."
+)
+RUN_TOGETHER = "of— (A) the taxable income of the taxpayer"
+
+
+def gap_issues(excerpt, *, source=GAPPED, matches=substring, gap_variants=None):
+    payload, net, _ = verified_inputs()
+    payload["entries"][0]["texts"][0]["excerpt"] = excerpt
+    issues, _ = sc.verify_register(
+        payload, fetch=net, matches=matches, resolve={"us/statute/42/403/a/5": source}.get, gap_variants=gap_variants
+    )
+    return issues
+
+
+def plain_gap_variants(source, excerpt):
+    """A stand-in for encoder_gap_variants with the substring matcher: one
+    record, every run of whitespace a space or, with a second line end, a
+    blank line."""
+
+    collapse = lambda text: re.sub(r"\s+", lambda run: "\n\n" if run.group().count("\n") > 1 else " ", text).strip()  # noqa: E731
+    return sc.gap_variants_in([collapse(source)], collapse(excerpt))
+
+
+def test_verify_says_when_only_the_paragraph_gaps_differ():
+    not_verbatim = "us:family-maximum-saving-clause (entries[0]).texts[0]: the excerpt is not verbatim at us/statute/42/403/a/5 in the pinned corpus release."
+    assert gap_issues(RUN_TOGETHER, gap_variants=plain_gap_variants) == [not_verbatim + sc.GAP_HINT]
+    assert sc.GAP_HINT == (
+        " The same words verify with the paragraph gaps the source sets between them, so keep the source's "
+        "paragraph gaps: a blank line where the source has one (in a literal block, `excerpt: |-`), and nowhere else."
+    )
+    # Without gap variants, or when the words differ too, there is no hint.
+    assert gap_issues(RUN_TOGETHER) == [not_verbatim]
+    assert gap_issues("of— (A) the taxable incomes of the taxpayer", gap_variants=plain_gap_variants) == [not_verbatim]
+    # A verbatim excerpt verifies, and no variant is asked for.
+    assert gap_issues("of—\n\n(A) the taxable income of the taxpayer", gap_variants=lambda source, excerpt: 1 / 0) == []
+
+
+def test_gap_variants_are_runs_of_the_excerpts_words_inside_one_record():
+    # Collapsed texts: each run of whitespace is one space or one blank line.
+    assert sc.gap_variants_in(["a\n\nb c"], "a b c") == ["a\n\nb c"]
+    # The excerpt itself is no variant, nor is a run of other words.
+    assert sc.gap_variants_in(["a b c"], "a b c") == []
+    assert sc.gap_variants_in(["a\n\nb c"], "a b d") == []
+    assert sc.gap_variants_in(["ab\n\nc"], "a b c") == []
+    # A one-word excerpt has no gaps to move, and an empty one no words.
+    assert sc.gap_variants_in(["a\n\nb"], "a") == []
+    assert sc.gap_variants_in(["a\n\nb"], "") == []
+    # Every occurrence counts, overlapping ones too, each variant once.
+    assert sc.gap_variants_in(["a a\n\na a\n\na"], "a a a") == ["a a\n\na", "a\n\na a"]
+    assert sc.gap_variants_in(["x\n\ny", "x\n\ny"], "x y") == ["x\n\ny"]
+    # Words found only across two records are no variant.
+    assert sc.gap_variants_in(["the first record ends", "here and the second begins"], "ends here") == []
+    # A word is matched as text, never as a pattern.
+    assert sc.gap_variants_in(["(a)\n\n1.5"], "(a) 1.5") == ["(a)\n\n1.5"]
+    assert sc.gap_variants_in(["(a)\n\n1x5"], "(a) 1.5") == []
+
+
+def test_verify_hint_with_the_encoders_own_normaliser():
+    pytest.importorskip("axiom_encode.harness.proof_validator")
+    from axiom_encode.corpus_resolver import PROOF_EVIDENCE_SEGMENT_SEPARATOR as SEP
+
+    matches, gap_variants = sc.encoder_matcher(), sc.encoder_gap_variants()
+    gapped_hint = gap_issues(RUN_TOGETHER, matches=matches, gap_variants=gap_variants)
+    assert len(gapped_hint) == 1 and gapped_hint[0].endswith(sc.GAP_HINT)
+    # The literal block verifies; so does one with extra spaces and a line wrap.
+    assert gap_issues("of—\n\n(A) the taxable income of the taxpayer", matches=matches, gap_variants=gap_variants) == []
+    assert gap_issues("of—\n   \n(A) the taxable\nincome  of the taxpayer", matches=matches, gap_variants=gap_variants) == []
+    # A gap the source lacks is a gap mismatch too.
+    extra = gap_issues("(A) the taxable\n\nincome of the taxpayer", matches=matches, gap_variants=gap_variants)
+    assert len(extra) == 1 and extra[0].endswith(sc.GAP_HINT)
+    # Other words: no hint.
+    other = gap_issues("of— (A) the taxable incomes of the taxpayer", matches=matches, gap_variants=gap_variants)
+    assert len(other) == 1 and not other[0].endswith(sc.GAP_HINT)
+    # Words that only run across two records get no hint.
+    records = f"the first record ends here{SEP}second record begins"
+    assert gap_variants(records, "ends here second record") == []
+    across = gap_issues("ends here second record", source=records, matches=matches, gap_variants=gap_variants)
+    assert len(across) == 1 and not across[0].endswith(sc.GAP_HINT)
+    # The review's cases. A number before the gap: flattened, "1 100" reads
+    # as one space-grouped number, but the variant keeps the source's gap and
+    # verifies, so the hint fires.
+    assert matches("1\n\n100\n\nx", "100\n\nx") and not matches("1\n\n100\n\nx", "100 x")
+    numeric = gap_issues("100 x", source="1\n\n100\n\nx", matches=matches, gap_variants=gap_variants)
+    assert len(numeric) == 1 and numeric[0].endswith(sc.GAP_HINT)
+    # A record separator in the excerpt is a blank line to the matcher, which
+    # splits only the source into records.
+    assert gap_variants("a b", f"a{SEP}b") == ["a b"]
+    held = gap_issues(f"a{SEP}b", source="a b", matches=matches, gap_variants=gap_variants)
+    assert len(held) == 1 and held[0].endswith(sc.GAP_HINT)
+    # A variant the matcher refuses (it cuts a word) draws no hint.
+    assert gap_variants("xa\n\nb", "a b") == ["a\n\nb"] and not matches("xa\n\nb", "a\n\nb")
+    cut = gap_issues("a b", source="xa\n\nb", matches=matches, gap_variants=gap_variants)
+    assert len(cut) == 1 and not cut[0].endswith(sc.GAP_HINT)
+
+
+def test_verify_cli_passes_the_encoders_gap_variants(tmp_path, monkeypatch):
+    (tmp_path / sc.REGISTER_FILENAME).write_text("version: 1\nentries: []\n")
+    gap_variants = object()
+    seen = {}
+    monkeypatch.setattr(sc, "encoder_matcher", lambda: substring)
+    monkeypatch.setattr(sc, "encoder_gap_variants", lambda: gap_variants)
+    monkeypatch.setattr(sc, "verify_register", lambda payload, **kwargs: (seen.update(kwargs), ([], ["verified"]))[1])
+    assert sc.main(["verify", "--root", str(tmp_path)]) == 0
+    assert seen["gap_variants"] is gap_variants
 
 
 # ---------------------------------------------------------------------------
