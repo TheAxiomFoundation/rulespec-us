@@ -12,9 +12,9 @@ name: Source staleness and reverse index
 #    workflow could not write it at all. This job proves the index is derivable
 #    from the tree under test (generator runs, output is canonical) and that
 #    no copy is tracked. For commits on `main` it also uploads the generated
-#    index as the `provisions-to-rules-index` artifact, which is what readers
-#    can use instead of a committed file. The job holds no secret and no
-#    write permission, and this definition never uploads for pull requests.
+#    index and deferred-provisions report, which readers can use instead of
+#    committed files. The job holds no secret or write permission, and
+#    this definition never uploads for pull requests.
 #    A pull request can still edit its own copy of this workflow, so readers
 #    must take the artifact only from a successful `push` run whose head
 #    commit is on `main` (or generate the index locally, which is the trusted
@@ -72,18 +72,21 @@ jobs:
           fi
           echo "No reverse index is tracked."
 
-      - name: Generate provision -> rules reverse index
+      - name: Generate reverse index and deferred-provisions report
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/reverse-index"
           python tests/generate_reverse_index.py \
-            --output "$RUNNER_TEMP/reverse-index/provisions_to_rules.json"
+            --output "$RUNNER_TEMP/reverse-index/provisions_to_rules.json" \
+            --deferred-provisions-output "$RUNNER_TEMP/reverse-index/deferred_provisions.json" \
+            >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Check the generated index is well formed and stable across runs
+      - name: Check the generated reports are stable across runs
         run: |
           set -euo pipefail
           python tests/generate_reverse_index.py --check \
-            --output "$RUNNER_TEMP/reverse-index/provisions_to_rules.json"
+            --output "$RUNNER_TEMP/reverse-index/provisions_to_rules.json" \
+            --deferred-provisions-output "$RUNNER_TEMP/reverse-index/deferred_provisions.json"
           python - "$RUNNER_TEMP/reverse-index/provisions_to_rules.json" <<'PY'
           import json
           import sys
@@ -114,6 +117,15 @@ jobs:
         with:
           name: provisions-to-rules-index
           path: ${{ runner.temp }}/reverse-index/provisions_to_rules.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload deferred-provisions report for this main commit
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: deferred-provisions-report
+          path: ${{ runner.temp }}/reverse-index/deferred_provisions.json
           if-no-files-found: error
           retention-days: 90
 
