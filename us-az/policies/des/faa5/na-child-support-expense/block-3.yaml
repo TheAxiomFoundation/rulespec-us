@@ -1,0 +1,121 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+  summary: |-
+    The child support expense is not allowed when all of the following are in the same budgetary unit:
+    The following is not allowable as a child support expense and is removed from the payment amount:
+inputs:
+  - name: paying_parent_in_budgetary_unit
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: supported_child_in_budgetary_unit
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: receiving_parent_in_budgetary_unit
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: payment_amount
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: payment_portion_paid_with_noncountable_income
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: spousal_maintenance_portion_not_already_excluded_for_noncountable_income
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: employer_garnishment_charges_outside_court_order_not_already_excluded
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+rules:
+  - name: child_support_expense_disallowed_for_shared_budgetary_unit
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 NA Child Support Expense, shared budgetary unit exclusion
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "The child support expense is not allowed when all of the following are in the same budgetary unit:"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "The parent paying the child support."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "The child for whom the child support is being paid."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "The parent receiving the child support."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          paying_parent_in_budgetary_unit
+          and supported_child_in_budgetary_unit
+          and receiving_parent_in_budgetary_unit
+  - name: child_support_payment_amount_after_exclusions
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    unit: USD
+    source: DES FAA5 NA Child Support Expense, disallowed expense and payment portions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "The child support expense is not allowed when all of the following are in the same budgetary unit:"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "The following is not allowable as a child support expense and is removed from the payment amount:"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "Any portion of the child support payment that is paid with income that is considered not countable."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "Any portion of the payment that is considered spousal maintenance (also known as alimony)."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-child-support-expense/block-3
+              excerpt: "Employer charges for garnishment that are not part of the court-ordered child or cash medical support expense."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if child_support_expense_disallowed_for_shared_budgetary_unit: 0 else:
+          max(0, payment_amount
+            - payment_portion_paid_with_noncountable_income
+            - spousal_maintenance_portion_not_already_excluded_for_noncountable_income
+            - employer_garnishment_charges_outside_court_order_not_already_excluded)
