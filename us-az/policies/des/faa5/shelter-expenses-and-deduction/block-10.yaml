@@ -1,0 +1,115 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+  summary: |-
+    Mortgage payments are an allowable expense deduction for NA.
+    However, a Reverse Mortgage(g) is not an allowable shelter expense deduction for NA.
+  interpretations:
+    - id: closing-cost-tax-insurance
+      status: open
+      question: Does the specific allowance for taxes and insurance override the general exclusion of closing costs?
+      texts:
+        - corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+          excerpt: Portions of the closing costs on a home that are identified as taxes and insurance.
+        - corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+          excerpt: Penalties for late payments, arrearages, and closing costs.
+      reading: Allow the identified tax and insurance portions; exclude other closing costs.
+      alternatives:
+        - id: exclude-all-closing-costs
+          reading: Exclude closing costs including identified tax and insurance portions.
+      basis: The specific inclusion identifies portions of an otherwise excluded category.
+      affects:
+        - mortgage_shelter_expense
+inputs:
+  - name: payment_category
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: payment_amount
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: housing_unit_occupied_by_budgetary_unit
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: housing_unit_temporarily_unoccupied
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: criteria_met_under_unoccupied_shelter_costs
+    entity: Payment
+    dtype: Boolean
+    period: Month
+rules:
+  - name: mortgage_shelter_expense
+    kind: derived
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+    source: DES FAA5, Shelter Expenses and Deduction, mortgage payments
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+              excerpt: Mortgage payments are an allowable expense deduction for NA.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+              excerpt: the housing unit must be occupied by the budgetary unit or temporarily unoccupied with certain criteria.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+              excerpt: 'Mortgage payments include the following:'
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+              excerpt: treat the repayment as a shelter expense and not a medical expense.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+              excerpt: a Reverse Mortgage(g) is not an allowable shelter expense deduction for NA.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-10
+              excerpt: 'The following are not allowable as part of the mortgage payment:'
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if payment_category == "reverse_mortgage"
+            or payment_category == "late_payment_penalty"
+            or payment_category == "arrearage"
+            or payment_category == "other_closing_cost"
+            or payment_category == "home_down_payment"
+            or payment_category == "fha_mortgage_during_fha_moratorium"
+            or payment_category == "license_plate_fee_for_vehicle_used_as_home": 0
+          else: if housing_unit_occupied_by_budgetary_unit
+            or (housing_unit_temporarily_unoccupied and criteria_met_under_unoccupied_shelter_costs):
+            if payment_category == "mortgage"
+              or payment_category == "mortgage_for_medical_expenses"
+              or payment_category == "home_equity_loan_regardless_of_use"
+              or payment_category == "interest"
+              or payment_category == "connecting_property_loan_secured_by_home_and_lot"
+              or payment_category == "closing_cost_tax_and_insurance_portion"
+              or payment_category == "other_continuing_charge_leading_to_home_ownership"
+              or payment_category == "mortgage_bill_during_foreclosure"
+              or payment_category == "homestead_act_housing_repair_loan"
+              or payment_category == "personal_loan_secured_by_property_lien"
+              or payment_category == "land_purchase_for_mobile_home"
+              or payment_category == "vehicle_payment_for_vehicle_participant_lives_in":
+              payment_amount
+            else: 0
+          else: 0
