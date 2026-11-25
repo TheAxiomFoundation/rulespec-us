@@ -26,6 +26,7 @@ jobs:
       axiom_rules_engine_ref: ${{ steps.pins.outputs.axiom_rules_engine_ref }}
       axiom_corpus_ref: ${{ steps.pins.outputs.axiom_corpus_ref }}
       rulespec_us_ref: ${{ steps.pins.outputs.rulespec_us_ref }}
+      encoder_verifier: ${{ steps.pins.outputs.encoder_verifier }}
     steps:
       - name: Checkout rules repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -53,11 +54,18 @@ jobs:
               if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
                   raise SystemExit(f"{path}: {key} must be a full lowercase commit SHA")
               print(f"{key}={value}")
+          # The shared validator refuses an encoder-verifier input that differs
+          # from this protected key, so the mode switch is the one-line
+          # configuration change in .axiom/workflow-toolchain.toml.
+          verifier = toolchain.get("encoder_verifier", "pinned")
+          if verifier not in ("pinned", "main"):
+              raise SystemExit(f"{path}: encoder_verifier must be pinned or main")
+          print(f"encoder_verifier={verifier}")
           PY
 
   validate:
     needs: workflow-toolchain
-    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@882c5f11545ec3343fc5ed170e01d65aa2c5bb3e
+    uses: TheAxiomFoundation/.github/.github/workflows/validate-rulespec.yml@1650ef1d5fb6e7779ea3a88fa09cda252a6172f2
     secrets: inherit
     with:
       axiom-encode-ref: ${{ needs.workflow-toolchain.outputs.axiom_encode_ref }}
@@ -65,6 +73,7 @@ jobs:
       axiom-rules-engine-ref: ${{ needs.workflow-toolchain.outputs.axiom_rules_engine_ref }}
       axiom-corpus-ref: ${{ needs.workflow-toolchain.outputs.axiom_corpus_ref }}
       rulespec-us-ref: ${{ needs.workflow-toolchain.outputs.rulespec_us_ref }}
+      encoder-verifier: ${{ needs.workflow-toolchain.outputs.encoder_verifier }}
       # The pinned signed release is mirrored to the public object store. The
       # registry endpoint returns HTTP 500 for its 30 MB release object; the
       # reusable validator authenticates the same pinned object after fetch.
