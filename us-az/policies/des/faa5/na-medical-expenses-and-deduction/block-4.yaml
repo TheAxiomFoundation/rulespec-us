@@ -1,0 +1,105 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The total amount shown on the final bill reflects the amount due after all insurance payments have been received. This is considered the allowable amount.
+    These expenses are allowed for any participant who was in an NA budgetary unit immediately before entering a hospital or nursing home.
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-4
+    source_sha256: af9b12bc38369b34da203c32ea22f68284b00c554788a48def082474f1a1a993
+  proof_validation:
+    required: true
+# Coverage inventory: first paragraph ENCODE; NOTE ENCODE.
+# Evaluate separately for each participant's identified care expense.
+# August 2026 is the evidence floor, not a legal commencement date.
+# The final-bill input is the amount due after all insurance payments,
+# rather than the gross charge or an amount awaiting insurance settlement.
+inputs:
+  - name: care_expense_category
+    entity: Person
+    dtype: String
+    period: Month
+  - name: care_authorized_by_licensed_practitioner
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: care_authorized_by_us_medically_qualified_source
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: participant_in_na_budgetary_unit_immediately_before_entry
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: final_bill_amount_due_after_all_insurance_payments
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+rules:
+  - name: snap_care_expense_allowable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block 4, authorization and NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-4
+              excerpt: The costs for hospital stays, nursing home care, or outpatient treatment are allowable expense deductions when authorized by a licensed practitioner or United States (U.S.) medically qualified source(g) .
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-4
+              excerpt: These expenses are allowed for any participant who was in an NA budgetary unit immediately before entering a hospital or nursing home.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          (
+            care_expense_category == "outpatient treatment"
+            or (
+              (
+                care_expense_category == "hospital stay"
+                or care_expense_category == "nursing home care"
+              )
+              and participant_in_na_budgetary_unit_immediately_before_entry
+            )
+          )
+          and (
+            care_authorized_by_licensed_practitioner
+            or care_authorized_by_us_medically_qualified_source
+          )
+  - name: snap_care_expense_allowable_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block 4, final bill
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-4
+              excerpt: The total amount shown on the final bill reflects the amount due after all insurance payments have been received. This is considered the allowable amount.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-4
+              excerpt: allowable expense deductions when authorized by a licensed practitioner or United States (U.S.) medically qualified source(g)
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-4
+              excerpt: These expenses are allowed for any participant who was in an NA budgetary unit immediately before entering a hospital or nursing home.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if snap_care_expense_allowable:
+            final_bill_amount_due_after_all_insurance_payments
+          else: 0
