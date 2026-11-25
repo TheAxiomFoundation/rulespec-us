@@ -1,0 +1,109 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+    source_sha256: 019016a7adf1891178a5473120e25276c385fd36aec1d27073804cd56f92a5d4
+  summary: |-
+    The NA Dependent Care Transportation Standard is 20% of all allowable dependent care expenses.
+    However, the transportation standard is not allowed when the budgetary unit resides with the dependent care provider.
+imports:
+  - us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#snap_allowable_monthly_dependent_care_expenses
+inputs:
+  - name: incurs_expense_to_transport_dependent_to_or_from_care_provider
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: budgetary_unit_resides_with_dependent_care_provider
+    entity: Person
+    dtype: Boolean
+    period: Month
+rules:
+  - name: dependent_care_transportation_rate
+    kind: parameter
+    dtype: Rate
+    source: DES FAA5 Dependent Care Expense, transportation standard
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+              excerpt: The NA Dependent Care Transportation Standard is 20% of all allowable dependent care expenses.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          0.20
+
+  - name: dependent_care_expenses_of_participant
+    kind: data_relation
+    source: DES FAA5 Dependent Care Expense, all allowable dependent care expenses
+    data_relation:
+      predicate: dependent_care_expenses_of_participant
+      arity: 2
+      arguments: [Payment, Person]
+
+  - name: dependent_care_transportation_standard_allowed
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: DES FAA5 Dependent Care Expense, transportation expense condition and shared-residence exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+              excerpt: The transportation standard is allowed when a participant incurs an expense to transport their dependent to, from, or both to and from a dependent care provider.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+              excerpt: However, the transportation standard is not allowed when the budgetary unit resides with the dependent care provider.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          not budgetary_unit_resides_with_dependent_care_provider
+          and incurs_expense_to_transport_dependent_to_or_from_care_provider
+
+  - name: dependent_care_transportation_standard
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: DES FAA5 Dependent Care Expense, transportation standard computation and availability
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+              excerpt: The NA Dependent Care Transportation Standard is 20% of all allowable dependent care expenses.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+              excerpt: The transportation standard is allowed when a participant incurs an expense to transport their dependent to, from, or both to and from a dependent care provider.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/dependent-care-expense/block-4
+              excerpt: However, the transportation standard is not allowed when the budgetary unit resides with the dependent care provider.
+          - path: versions[0].formula
+            kind: import
+            import:
+              target: us-az:policies/des/faa5/dependent-care-expense/na-dependent-care#snap_allowable_monthly_dependent_care_expenses
+              output: snap_allowable_monthly_dependent_care_expenses
+              hash: sha256:6bfea7e5b565810022d14e09ee351555e17774f90aa2a06c69e3c4d1c7f987cc
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if dependent_care_transportation_standard_allowed:
+            dependent_care_transportation_rate * sum(dependent_care_expenses_of_participant.snap_allowable_monthly_dependent_care_expenses)
+          else: 0
