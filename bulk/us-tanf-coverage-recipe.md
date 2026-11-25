@@ -36,7 +36,7 @@ original assumptions:
    `comparisons/<st>-tanf-ecps.yaml` configs run at **ECPS population scale**
    (`population: enhanced-cps`, `sample_size: 0`, filtered by state FIPS). There
    are **zero** TANF entries in `grids/us.yaml`. Population is correct here because
-   the populace-us loader already carries every state's household facts — "the
+   the Microcosm US loader already carries every state's household facts — "the
    ECPS bridge already maps the state's variables" is true for all TANF states.
 7. **"composition exception" = `manual_exception: composition` / `backend: deterministic`.**
    The AI encoder produces net-new leaf modules; the composed pipeline is a pure
@@ -94,7 +94,7 @@ Pins that must stay coherent (do not drift):
   `policyengine==4.18.9`, `policyengine-us==1.752.2`, `policyengine-core==3.28.0`.
   The runner installs these into a throwaway `uv run --with` env per invocation —
   you do **not** need PE in the oracles venv for a comparison.
-- Populace data pin (`axiom_oracles/bridges/population.py::POPULACE_PINS['us']`):
+- Microcosm data pin (`axiom_oracles/bridges/population.py::POPULACE_PINS['us']`):
   `populace_us_2024.h5` @ revision `…f0af251…`, sha256-verified, built_with 1.729.0.
   Cached under `~/.cache/huggingface/hub/datasets--policyengine--populace-us`
   (no HF token needed once cached; unauthenticated works, just rate-limited).
@@ -206,7 +206,7 @@ uv run scripts/run_comparison.py <st>-tanf-ecps --summary
 
 `run_comparison.py` composes, compiles, then spins an isolated
 `uv run --with policyengine==4.18.9 --with policyengine-us==1.752.2 …` env and
-runs PE `Microsimulation` over every populace-us household filtered to the state
+runs PE `Microsimulation` over every Microcosm US household filtered to the state
 FIPS, comparing the compiled Axiom output against PE `<st>_tanf` (annualized;
 `tolerance: 25`/yr absorbs rounding). Output: `… (N cases … mismatches: M)` plus a
 report under `reports/`. Smoke tip: `--sample-size` subsets the **national**

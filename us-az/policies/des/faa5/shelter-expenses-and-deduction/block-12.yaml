@@ -1,0 +1,135 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+    source_sha256: cd732782ed9f6f98e7b75548c82929cf8d4afa73388f3dd56284eceb54b8bf1d
+  summary: |-
+    Allow rental shelter expenses for the primary housing unit, including the following:
+    The portion of rental insurance that is for the structure only.
+    NOTE When structure coverage is not known, the entire amount of the rental insurance is not an allowable expense.
+inputs:
+  - name: expense_is_for_primary_housing_unit
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: rental_expense_is_billed
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: rental_expense_category
+    entity: Payment
+    dtype: String
+    period: Month
+  - name: rental_expense_amount
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: surcharge_is_mandatory
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: surcharge_is_billed_to_every_tenant_as_part_of_rent
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: rental_insurance_structure_coverage_is_known
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: rental_insurance_structure_portion
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+rules:
+  - name: allowable_rental_shelter_expense
+    kind: derived
+    entity: Payment
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Arizona DES FAA5, Shelter Expenses and Deduction, block 12
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Rent, rental taxes, and mandatory surcharges that are billed to every tenant as part of the rent for a primary housing unit are allowable for NA.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Allow rental shelter expenses for the primary housing unit
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Rent and taxes on a motel or hotel room.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Fees for a campground space.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Charges for renting land where a mobile home is located.
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: The portion of rental insurance that is for the structure only.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: When structure coverage is not known, the entire amount of the rental insurance is not an allowable expense.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Residential fees to live in a Group Living Arrangement (GLA).
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Do not allow fees that are not mandatory such as late charges and deposits for such things as pets, tool sheds, washers, dryers, and furniture.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/shelter-expenses-and-deduction/block-12
+              excerpt: Do not allow rental insurance for furniture and personal belongings, even when it is mandated by the landlord or on the lease.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if rental_expense_category == "late_charge"
+          or rental_expense_category == "pet_deposit"
+          or rental_expense_category == "tool_shed_deposit"
+          or rental_expense_category == "washer_deposit"
+          or rental_expense_category == "dryer_deposit"
+          or rental_expense_category == "furniture_deposit"
+          or rental_expense_category == "nonmandatory_fee"
+          or rental_expense_category == "personal_belongings_insurance"
+          or rental_expense_category == "furniture_insurance": 0
+          else: if expense_is_for_primary_housing_unit and rental_expense_is_billed:
+            if rental_expense_category == "rent"
+            or rental_expense_category == "rental_tax"
+            or rental_expense_category == "hotel_room_rent"
+            or rental_expense_category == "hotel_room_tax"
+            or rental_expense_category == "motel_room_rent"
+            or rental_expense_category == "motel_room_tax"
+            or rental_expense_category == "campground_space_fee"
+            or rental_expense_category == "mobile_home_land_rent"
+            or rental_expense_category == "gla_residential_fee": rental_expense_amount
+            else: if rental_expense_category == "surcharge":
+              if surcharge_is_mandatory and surcharge_is_billed_to_every_tenant_as_part_of_rent: rental_expense_amount else: 0
+            else: if rental_expense_category == "rental_insurance":
+              if rental_insurance_structure_coverage_is_known: rental_insurance_structure_portion else: 0
+            else: 0
+          else: 0

@@ -19,8 +19,13 @@ outputs:
 
 # Coverage review: 61 named rules = W 11, M 37, P 10, U 3.
 # M/P concern member composition, procedure, or other determinations.
-# W: household residency/income/resource and categorical wiring remain debt;
-# snap_eligible still reads the external na_budgetary_unit_is_eligible input.
+# W: the composition's snap_eligible reads na_budgetary_unit_is_eligible. The
+# transformations below derive that name from encoded rules (rulespec-us#1116):
+# federal residency, the positive eligible-member chain, and either the
+# Arizona categorical route or the ordinary federal resource and income tests.
+# Remaining W debt: the Arizona categorical rules still read supplied BCE/ECE
+# status facts, and the Arizona gross and net income test modules are not yet
+# the income branch.
 # U: three TBA rules may be a SNAP eligibility route or separate TBA status.
 # Record partial coverage pending supervised module repairs and a TBA ruling.
 acknowledged_incomplete:
@@ -64,4 +69,112 @@ scope:
     - policies/des/faa6/utility-allowance-current-amount
     - policies/des/faa5/shelter-expenses-and-deduction/shelter-deduction
     - policies/des/faa5/supplemental-payments-and-restored-benefits
+    - policies/des/faa5/dependent-care-expense/block-4
+    - policies/des/faa5/dependent-care-expense/block-5
+    - policies/des/faa5/dependent-care-expense/block-6
+    - policies/des/faa5/na-child-support-expense/block-3
+    - policies/des/faa5/na-eligibility-and-benefit-determination/block-10
+    - policies/des/faa5/na-eligibility-and-benefit-determination/block-3
+    - policies/des/faa5/na-medical-expenses-and-deduction/block-3
+    - policies/des/faa5/na-medical-expenses-and-deduction/block-8
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-10
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-11
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-14
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-15
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-16
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-17
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-19
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-3
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-6
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-7
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-8
+    - policies/des/faa5/shelter-expenses-and-deduction/block-10
+    - policies/des/faa5/shelter-expenses-and-deduction/block-11
+    - policies/des/faa5/shelter-expenses-and-deduction/block-12
+    - policies/des/faa5/shelter-expenses-and-deduction/block-13
+    - policies/des/faa5/shelter-expenses-and-deduction/block-15
+    - policies/des/faa5/shelter-expenses-and-deduction/block-16
+    - policies/des/faa5/shelter-expenses-and-deduction/block-17
+    - policies/des/faa5/shelter-expenses-and-deduction/block-18
+    - policies/des/faa5/shelter-expenses-and-deduction/block-20
+    - policies/des/faa5/shelter-expenses-and-deduction/block-21
+    - policies/des/faa5/shelter-expenses-and-deduction/block-22
+    - policies/des/faa5/shelter-expenses-and-deduction/block-5
+    - policies/des/faa5/shelter-expenses-and-deduction/block-7
+    - policies/des/faa5/shelter-expenses-and-deduction/block-8
+    - policies/des/faa5/shelter-expenses-and-deduction/block-9
+    - policies/des/faa5/na-medical-expenses-and-deduction/block-11
+    - policies/des/faa5/na-medical-expenses-and-deduction/block-12
+    - policies/des/faa5/na-medical-expenses-and-deduction/block-7
+    - policies/des/faa5/na-utility-expenses-and-allowances/block-13
 
+# Eligibility join (rulespec-us#1116). Wiring only: every operand is a rule
+# that an encoded module in scope already defines. The shape follows the
+# Georgia and Maryland compositions (residency, eligible member, then a
+# categorical route or the ordinary resource and income tests), with
+# Arizona's encoded categorical determination as the categorical route.
+transformations:
+  - pattern: all_of
+    name: az_ordinary_resource_and_income_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-az/snap/fy-2026 eligibility composition
+    conditions:
+      - snap_resource_eligible
+      - snap_standard_income_eligible
+
+  - pattern: any_of
+    name: az_income_and_resource_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-az/snap/fy-2026 eligibility composition
+    conditions:
+      - na_categorically_eligible_for_benefit_calculation
+      - az_ordinary_resource_and_income_eligible
+
+  - pattern: all_of
+    name: na_budgetary_unit_is_eligible
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: axiom-programs/us-az/snap/fy-2026 eligibility composition
+    conditions:
+      - snap_residency_eligible
+      - snap_household_member_eligible
+      - az_income_and_resource_eligible
+
+  # Expanded categorical eligibility operands (rulespec-us#2335). Wiring only,
+  # the same alias shape as the North Carolina spec (household_gross_income,
+  # maximum_allowable_gross_income_limit). FAA5 NA Categorical Eligibility
+  # block 5 tests the budgetary unit's gross income against 185% of the
+  # current federal poverty level, and no rule in scope defined either
+  # operand, so both compiled as supplied inputs. gross_income is the gross
+  # income that the ordinary 7 CFR 273.9 test in this program reads.
+  # current_federal_poverty_level_amount is the USDA FY 2026 monthly 100%
+  # standard that the same test reads as the net income limit.
+  - pattern: sum_terms
+    name: gross_income
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-az/snap/fy-2026 eligibility composition
+    terms:
+      - snap_total_gross_income
+
+  - pattern: sum_terms
+    name: current_federal_poverty_level_amount
+    effective_from: '2026-01-01'
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: axiom-programs/us-az/snap/fy-2026 eligibility composition
+    terms:
+      - snap_net_income_limit_100_percent_fpl_48_states_dc

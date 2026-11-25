@@ -1,0 +1,179 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Medical and hospitalization insurance premiums intended to cover medical expenses are allowable.
+    When a group policy does not specify how much of a premium is for each person, the amount is divided among those included in the policy.
+    Only the portion of the insurance premium assigned to the elderly or participant with a disability is budgeted.
+    Costs for accident and disability insurance benefits are not allowed including any of the following:
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+    source_sha256: 46a75aac92ff0edd02e007374c5ebd70671eed3adc60b83ced45d6b30f683f6b
+  proof_validation:
+    required: true
+  # Evidence coverage starts with the first full month after the authenticated
+  # snapshot. This is not a finding of legal commencement.
+  # No output is supplied for periods before this coverage floor.
+  #
+  # Consumer contract:
+  # Evaluate once per insured person and separately identified premium component.
+  # Component categories describe that same component, not the entire policy.
+  # An unitemized mixed medical/accident/disability premium must first be resolved
+  # externally; this module does not invent a component split.
+  # For unspecified group allocations, component_premium covers all insured
+  # people and insured_person_count includes every insured person, including
+  # people outside the household and people without elderly/disability status.
+  # insured_person_count must be a positive integer whenever division is reached.
+  # Premium and assigned-premium amounts must be nonnegative.
+  # Explicit assignments must be mutually consistent across insured people.
+  # Consumers sum distinct person/component results without duplicating them.
+  # Billing, ownership, out-of-pocket treatment, full participant eligibility,
+  # verification, and the household medical deduction remain consumer duties.
+  # No living-participant condition or cents-rounding rule is imposed here.
+inputs:
+  - name: snap_medical_insurance_premium_component_category
+    entity: Person
+    dtype: String
+    period: Month
+  - name: snap_medical_insurance_premium_intended_to_cover_medical_expenses
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_insurance_premium_covers_accident_or_disability_benefits
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_insurance_premium_is_group_policy
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_insurance_premium_per_person_amount_specified
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_insurance_premium_component_amount
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: snap_medical_insurance_premium_specified_person_amount
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: snap_medical_insurance_premium_insured_person_count
+    entity: Person
+    dtype: Count
+    period: Month
+  - name: snap_medical_insurance_premium_participant_is_elderly
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: snap_medical_insurance_premium_participant_has_disability
+    entity: Person
+    dtype: Boolean
+    period: Month
+rules:
+  - name: snap_medical_insurance_premium_component_allowable
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block 7, allowable insurance and exclusions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Medical and hospitalization insurance premiums intended to cover medical expenses are allowable.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: This includes health, dental, and vision insurance.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Costs for accident and disability insurance benefits are not allowed
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Benefits payable in lump sum settlements for death or dismemberment.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Income maintenance policies that cover mortgage or loan payments (including auto loans) while the policyholder or beneficiary has a disability.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          snap_medical_insurance_premium_intended_to_cover_medical_expenses
+          and (
+            snap_medical_insurance_premium_component_category == "medical"
+            or snap_medical_insurance_premium_component_category == "hospitalization"
+            or snap_medical_insurance_premium_component_category == "health"
+            or snap_medical_insurance_premium_component_category == "dental"
+            or snap_medical_insurance_premium_component_category == "vision"
+          )
+          and not snap_medical_insurance_premium_covers_accident_or_disability_benefits
+  - name: snap_medical_insurance_premium_assigned_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block 7, per-person premium allocation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: When a group policy does not specify how much of a premium is for each person, the amount is divided among those included in the policy.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if snap_medical_insurance_premium_is_group_policy:
+            if snap_medical_insurance_premium_per_person_amount_specified:
+              snap_medical_insurance_premium_specified_person_amount
+            else:
+              snap_medical_insurance_premium_component_amount / snap_medical_insurance_premium_insured_person_count
+          else:
+            snap_medical_insurance_premium_component_amount
+  - name: snap_medical_insurance_premium_budgeted_amount
+    kind: derived
+    entity: Person
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Arizona DES FAA5, NA Medical Expenses and Deduction, block 7, budgeted premium portion
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Only the portion of the insurance premium assigned to the elderly or participant with a disability is budgeted.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Medical and hospitalization insurance premiums intended to cover medical expenses are allowable.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-7
+              excerpt: Costs for accident and disability insurance benefits are not allowed
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if snap_medical_insurance_premium_component_allowable:
+            if snap_medical_insurance_premium_participant_is_elderly or snap_medical_insurance_premium_participant_has_disability:
+              snap_medical_insurance_premium_assigned_amount
+            else: 0
+          else: 0
