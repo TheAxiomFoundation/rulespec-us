@@ -1,0 +1,236 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The household must report the loss within ten days of the misfortune.
+    If the loss is due to a power outage the ten days starts the day the power is restored.
+    If the tenth day falls on a weekend or holiday the form is due the first workday following the weekend or holiday.
+    Replace the amount equal to the value of the food actually lost, but not more than the household’s “month to date paid” amount.
+  source_verification:
+    corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+    source_sha256: 70056285c02bc98f2c8c63423ddbda1b0faec2fbc50b1162c593f3e497787fdf
+  proof_validation:
+    required: true
+inputs:
+  - name: household_is_3svt_with_food_lost_to_household_misfortune
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: loss_due_to_power_outage
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: days_from_misfortune_to_report
+    entity: Household
+    dtype: Integer
+    period: Day
+  - name: days_from_power_restoration_to_report
+    entity: Household
+    dtype: Integer
+    period: Day
+  - name: days_from_report_to_form_return
+    entity: Household
+    dtype: Integer
+    period: Day
+  - name: form_tenth_day_is_weekend_or_holiday
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: form_returned_by_first_following_workday
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: form_271_completed_and_signed
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: loss_verified
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: food_actually_lost_value
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Day
+  - name: month_to_date_paid
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Day
+rules:
+  - name: loss_reporting_limit_days
+    kind: parameter
+    dtype: Integer
+    source: Household misfortune reporting deadline.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: The household must report the loss within ten days of the misfortune.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          10
+  - name: form_return_limit_days
+    kind: parameter
+    dtype: Integer
+    source: Form 271 return deadline.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: return the form within ten days of reporting the loss.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          10
+  - name: reporting_elapsed_days
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Day
+    source: Determine the date of misfortune; use power restoration for a power outage.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: If the loss is due to a power outage the ten days starts the day the power is restored.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if loss_due_to_power_outage: days_from_power_restoration_to_report else: days_from_misfortune_to_report
+  - name: loss_report_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Report loss within ten days, measured from restoration for outages.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: The household must report the loss within ten days of the misfortune.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          reporting_elapsed_days <= loss_reporting_limit_days
+  - name: form_return_timely
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Form 271 return deadline and weekend or holiday extension.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: return the form within ten days of reporting the loss.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: If the tenth day falls on a weekend or holiday the form is due the first workday following the weekend or holiday.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          days_from_report_to_form_return <= form_return_limit_days
+          or (form_tenth_day_is_weekend_or_holiday and form_returned_by_first_following_workday)
+  - name: replacement_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: >-
+      3SVT household misfortune eligibility; give Form 271, require completion,
+      signature and timely return, and verify the loss through collateral contact,
+      community agency documentation (fire department, power company or Red Cross),
+      or home visit. When confirming an outage provide only the address, not the
+      customer name, and CATN verification details.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: 'The household must : complete and sign the form, and return the form within ten days of reporting the loss.'
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: Verify the loss through
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          household_is_3svt_with_food_lost_to_household_misfortune
+          and loss_report_timely
+          and form_271_completed_and_signed
+          and form_return_timely
+          and loss_verified
+  - name: capped_replacement_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Day
+    source: Check ELIG/D/FS; use month to date paid as the replacement cap.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: Replace the amount equal to the value of the food actually lost, but not more than the household’s “month to date paid” amount.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          min(max(0, food_actually_lost_value), month_to_date_paid)
+  - name: replacement_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Day
+    source: >-
+      Replace eligible verified food loss up to month to date paid. Email COPS,
+      copying AOPS, with case name, case number, misfortune type, loss date,
+      power restoration date for outages, replacement month, requested amount,
+      and completed Form 271 attached. AOPS reviews all situations; COPS issues
+      all replacements; ES CATNs request details and outcome.
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: Replace the amount equal to the value of the food actually lost, but not more than the household’s “month to date paid” amount.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2500-benefits/block-23
+              excerpt: 3SVT households that lost food due to a Household Misfortune , such as a flood or fire, may qualify to have the value of their lost food replaced.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if replacement_eligible: capped_replacement_amount else: 0
