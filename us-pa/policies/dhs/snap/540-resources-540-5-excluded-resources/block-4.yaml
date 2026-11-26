@@ -1,0 +1,96 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The CAO will exclude the cash value of life insurance policies and all pension plans or funds including Individual Retirement Accounts (IRAs) Keogh Plans and Simplified Employees Pension Plans (SEPS).
+    NOTE: All pension plans or funds are excluded until a household member withdraws them.
+  source_verification:
+    corpus_citation_path: us-pa/manual/dhs/snap/540-resources-540-5-excluded-resources/block-4
+    source_sha256: 2ddab0dc59c7d2517dede8cd4863931f3b0e43ca59a14b955befe39428ccc4ff
+  proof_validation:
+    required: true
+inputs:
+  - name: asset_is_life_insurance_cash_value
+    entity: Asset
+    dtype: Boolean
+    period: Month
+  - name: asset_is_pension_plan_or_fund
+    entity: Asset
+    dtype: Boolean
+    period: Month
+    # Includes IRAs, Keogh Plans, and SEPS.
+  - name: asset_has_been_withdrawn_by_household_member
+    entity: Asset
+    dtype: Boolean
+    period: Month
+  - name: payment_is_withdrawn_retirement_funds
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: payment_is_recurring
+    entity: Payment
+    dtype: Boolean
+    period: Month
+rules:
+  - name: insurance_or_pension_resource_excluded
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: Pennsylvania SNAP Handbook 540.5, life insurance and pension exclusion and NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/540-resources-540-5-excluded-resources/block-4
+              excerpt: The CAO will exclude the cash value of life insurance policies and all pension plans or funds
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/540-resources-540-5-excluded-resources/block-4
+              excerpt: All pension plans or funds are excluded until a household member withdraws them.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          asset_is_life_insurance_cash_value
+          or (asset_is_pension_plan_or_fund
+          and not asset_has_been_withdrawn_by_household_member)
+  - name: retirement_withdrawal_treated_as_unearned_income
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Pennsylvania SNAP Handbook 540.5, NOTE, recurring withdrawn retirement funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/540-resources-540-5-excluded-resources/block-4
+              excerpt: Withdrawn retirement funds are treated either as unearned income if they are received as a recurring payment
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          payment_is_withdrawn_retirement_funds
+          and payment_is_recurring
+  - name: retirement_withdrawal_treated_as_lump_sum_resource
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Pennsylvania SNAP Handbook 540.5, NOTE, nonrecurring withdrawn retirement funds
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/540-resources-540-5-excluded-resources/block-4
+              excerpt: as a lump sum resource if they are received as a nonrecurring payment
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          payment_is_withdrawn_retirement_funds
+          and not payment_is_recurring
