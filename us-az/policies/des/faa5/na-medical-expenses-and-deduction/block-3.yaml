@@ -1,0 +1,166 @@
+format: rulespec/v1
+module:
+  summary: |-
+    See any of the following for additional information on allowable medical expenses:
+    Hospital Costs; Medical and Dental Care Fees; Medical Assistants; Medical Insurance Premiums; Medical Lodging; Medical Supplies; Medical Transportation; Medicare Premiums; Medication and Prescriptions; Service Animals.
+    Any of the following medical expenses are not allowable:
+    Charge accounts used for both medical expenses and other miscellaneous expenses.
+    When a portion of the bill that is for medical expenses can be determined, only that portion is allowed.
+  source_verification:
+    corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+    source_sha256: 5c130b63f46caa3174b8e5e02cc5e56b922cab4cbbbb780aa4fff7ba846a0212
+  proof_validation:
+    required: true
+inputs:
+  - name: expense_is_from_mixed_charge_account
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: mixed_bill_medical_portion_can_be_determined
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: determined_mixed_bill_medical_portion
+    entity: Payment
+    dtype: Money
+    period: Month
+  - name: expense_is_charge_account_installment_interest
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: medical_bill_paid_before_new_application_month
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: expense_is_carried_forward_amount
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: expense_is_late_charge
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: expense_covered_by_reimbursement
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: expense_covered_by_vendor_payment
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: expense_covered_by_second_mortgage
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: medical_expense_paid_in_monthly_installments
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: installment_statement_received_in_month
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: medical_expense_has_no_indicated_due_date
+    entity: Payment
+    dtype: Boolean
+    period: Month
+  - name: month_follows_medical_expense_billing_month
+    entity: Payment
+    dtype: Boolean
+    period: Month
+rules:
+  - name: medical_expense_disallowed_by_billing_or_funding
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Medical Expenses and Deduction, block 3, nonallowable expenses and NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+              excerpt: "Any of the following medical expenses are not allowable:"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+              excerpt: "When a portion of the bill that is for medical expenses can be determined, only that portion is allowed."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          (expense_is_from_mixed_charge_account
+            and not mixed_bill_medical_portion_can_be_determined)
+          or expense_is_charge_account_installment_interest
+          or medical_bill_paid_before_new_application_month
+          or expense_is_carried_forward_amount
+          or expense_is_late_charge
+          or expense_covered_by_reimbursement
+          or expense_covered_by_vendor_payment
+          or expense_covered_by_second_mortgage
+  - name: mixed_charge_account_medical_amount_allowed
+    kind: derived
+    entity: Payment
+    dtype: Money
+    period: Month
+    source: Arizona DES FAA5 NA Medical Expenses and Deduction, block 3, mixed charge account NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+              excerpt: "When a portion of the bill that is for medical expenses can be determined, only that portion is allowed."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+              excerpt: "Any of the following medical expenses are not allowable:"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if medical_expense_disallowed_by_billing_or_funding: 0
+          else: if expense_is_from_mixed_charge_account and mixed_bill_medical_portion_can_be_determined:
+            determined_mixed_bill_medical_portion
+          else: 0
+  - name: installment_medical_expense_deemed_billed_in_month
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Medical Expenses and Deduction, block 3, installment billing NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+              excerpt: "Medical expenses paid in monthly installments are considered billed when the statement is received."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          medical_expense_paid_in_monthly_installments
+          and installment_statement_received_in_month
+  - name: undated_medical_bill_deemed_due_in_month
+    kind: derived
+    entity: Payment
+    dtype: Judgment
+    period: Month
+    source: Arizona DES FAA5 NA Medical Expenses and Deduction, block 3, missing due date NOTE
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-az/manual/des/faa5/na-medical-expenses-and-deduction/block-3
+              excerpt: "When no due date is indicated for a medical expense, the bill is considered due in the month following the billing date."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          medical_expense_has_no_indicated_due_date
+          and month_follows_medical_expense_billing_month
