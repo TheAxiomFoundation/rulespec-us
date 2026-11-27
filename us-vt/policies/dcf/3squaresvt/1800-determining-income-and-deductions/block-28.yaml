@@ -1,0 +1,200 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Households that are not using the standard medical expense may choose to have one-time only medical expenses: used in one month; or averaged over the remaining months of their benefit period. Averaging begins the month the change is effective.
+  source_verification:
+    corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+    source_sha256: 4b8d82969fb5186ed993269603a2e0e8774416d0e247dd536b8e322ed05efa1b
+  proof_validation:
+    required: true
+  interpretations:
+    - id: twelve-month-averaging-denominator
+      status: open
+      question: Does averaging over a specified twelve-month segment use twelve months or only the months remaining when the change becomes effective?
+      texts:
+        - corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+          excerpt: Averaging begins the month the change is effective.
+        - corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+          excerpt: averaging the expense over the first 12-months of the benefit period
+      reading: Use the months remaining in the specified twelve-month segment beginning with the month the change becomes effective.
+      alternatives:
+        - id: full-segment-denominator
+          reading: Divide by twelve even when averaging begins after the start of the specified segment.
+      basis: The instruction that averaging begins when the change is effective also governs the exception.
+      affects:
+        - medical_expense_allocation_months
+inputs:
+  - name: uses_standard_medical_expense
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: expense_is_one_time
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: allocation_method
+    entity: Household
+    dtype: String
+    period: Month
+  - name: certification_months
+    entity: Household
+    dtype: Integer
+    period: Month
+  - name: reported_in_first_twelve_months
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: reported_in_second_twelve_months
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: remaining_benefit_months_from_change
+    entity: Household
+    dtype: Integer
+    period: Month
+  - name: remaining_segment_months_from_change
+    entity: Household
+    dtype: Integer
+    period: Month
+  - name: month_is_in_elected_allocation_period
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: one_time_medical_expense
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+rules:
+  - name: shorter_extended_certification_months
+    kind: parameter
+    dtype: Integer
+    source: Vermont 3SquaresVT Manual 1800, block 28, exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: certified for a 24-month or 36-month period
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          24
+  - name: longer_extended_certification_months
+    kind: parameter
+    dtype: Integer
+    source: Vermont 3SquaresVT Manual 1800, block 28, exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: certified for a 24-month or 36-month period
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          36
+  - name: averaging_segment_months
+    kind: parameter
+    dtype: Integer
+    source: Vermont 3SquaresVT Manual 1800, block 28, exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: over the first 12-months of the benefit period
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          12
+  - name: medical_expense_allocation_months
+    kind: derived
+    entity: Household
+    dtype: Integer
+    period: Month
+    source: Vermont 3SquaresVT Manual 1800, block 28, general rule and exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: used in one month; or averaged over the remaining months of their benefit period.
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: Households that are not using the standard medical expense
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: If the household is certified for a 24-month or 36-month period and the expense is reported in the first 12-months
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: If the household is certified for a 36-month period and the expense is reported in the second 12-months
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: Averaging begins the month the change is effective.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if uses_standard_medical_expense: 0
+          else: if not expense_is_one_time: 0
+          else: if allocation_method == "one_month": 1
+          else: if allocation_method == "remaining_benefit_period":
+            remaining_benefit_months_from_change
+          else: if allocation_method == "first_twelve_months":
+            if (certification_months == shorter_extended_certification_months or certification_months == longer_extended_certification_months) and reported_in_first_twelve_months:
+              min(remaining_segment_months_from_change, averaging_segment_months)
+            else: 0
+          else: if allocation_method == "second_twelve_months":
+            if certification_months == longer_extended_certification_months and reported_in_second_twelve_months:
+              min(remaining_segment_months_from_change, averaging_segment_months)
+            else: 0
+          else: 0
+  - name: allocated_one_time_medical_expense
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Vermont 3SquaresVT Manual 1800, block 28, general rule and exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: used in one month; or averaged over the remaining months of their benefit period.
+          - path: versions[0].formula
+            kind: ordering
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: Averaging begins the month the change is effective.
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1800-determining-income-and-deductions/block-28
+              excerpt: over the second 12-months of the benefit period or over the remaining months of the 36-month benefit period.
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if medical_expense_allocation_months > 0:
+            if month_is_in_elected_allocation_period:
+              one_time_medical_expense / medical_expense_allocation_months
+            else: 0
+          else: 0
