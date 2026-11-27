@@ -1,0 +1,158 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Verification is required for at least $35.01 in medical expenses.
+    Postpone verification for expedited service month(s), unless verification can be provided in time to meet the seven-day standard of promptness.
+  source_verification:
+    corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+    source_sha256: d7c378ff6da4d583b6ef90e9f976acc87e1bbf21c991d72ea71e123f23d1ba7b
+  proof_validation:
+    required: true
+inputs:
+  - name: reported_medical_expenses
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: verified_medical_expenses
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: chooses_actual_medical_expenses
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: chooses_medical_standard
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: expedited_service_month
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: days_needed_to_provide_verification
+    entity: Household
+    dtype: Decimal
+    period: Month
+rules:
+  - name: minimum_verified_medical_expenses
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Vermont 3SquaresVT Manual, 1700 Deductions, block 28, first sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "Verification is required for at least $35.01 in medical expenses."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          35.01
+  - name: actual_expense_verification_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Vermont 3SquaresVT Manual, 1700 Deductions, block 28, second sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "If the household reports more than $191 in medical expenses"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          191
+  - name: expedited_promptness_days
+    kind: parameter
+    dtype: Decimal
+    source: Vermont 3SquaresVT Manual, 1700 Deductions, block 28, second paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "seven-day standard of promptness"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          7
+  - name: medical_verification_postponed
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Vermont 3SquaresVT Manual, 1700 Deductions, block 28, second paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "Postpone verification for expedited service month(s), unless verification can be provided in time to meet the seven-day standard of promptness."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          expedited_service_month
+          and days_needed_to_provide_verification > expedited_promptness_days
+  - name: medical_expenses_verification_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Vermont 3SquaresVT Manual, 1700 Deductions, block 28, first and second paragraphs
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "Verification is required for at least $35.01 in medical expenses."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "verification is required for all reported medical expenses if the household chooses to have actual medical expenses deducted."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "Postpone verification for expedited service month(s)"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if medical_verification_postponed: 0
+          else: if reported_medical_expenses > actual_expense_verification_threshold and chooses_actual_medical_expenses: reported_medical_expenses
+          else: minimum_verified_medical_expenses
+  - name: medical_standard_granted
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Vermont 3SquaresVT Manual, 1700 Deductions, block 28, third sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-28
+              excerpt: "If the expenses are greater than $191 and the household chooses the medical standard, and at least $35.01 is verified, give them the standard."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          reported_medical_expenses > actual_expense_verification_threshold
+          and chooses_medical_standard
+          and verified_medical_expenses >= minimum_verified_medical_expenses
