@@ -1,0 +1,151 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The entire value of a resource is excluded if the AU is not able to sell it for any significant return.
+    This exclusion does not apply to stocks, bonds, and negotiable financial instruments.
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+    source_sha256: 37bb6b3168685efa0c0ccc1ee14df0b49c951954b222ecc60042020c16df7af9
+  proof_validation:
+    required: true
+inputs:
+  - name: estimated_sale_return
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: estimated_sale_or_disposition_costs
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: household_ownership_interest
+    entity: Asset
+    dtype: Rate
+    period: Month
+  - name: au_unable_to_sell_resource_for_any_significant_return
+    entity: Asset
+    dtype: Boolean
+    period: Month
+  - name: resource_is_stock
+    entity: Asset
+    dtype: Boolean
+    period: Month
+  - name: resource_is_bond
+    entity: Asset
+    dtype: Boolean
+    period: Month
+  - name: resource_is_negotiable_financial_instrument
+    entity: Asset
+    dtype: Boolean
+    period: Month
+  - name: entire_resource_value
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+rules:
+  - name: significant_return_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: Georgia SNAP Manual 3405, significant-return definition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "estimated to be more than $1,500."
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          1500
+  - name: estimated_net_return
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Georgia SNAP Manual 3405, significant-return definition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "after estimated costs of sale or disposition, taking into account the ownership interest of the household"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          (estimated_sale_return - estimated_sale_or_disposition_costs) * household_ownership_interest
+  - name: estimated_return_is_significant
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP Manual 3405, significant-return definition
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "that is estimated to be more than $1,500."
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          estimated_net_return > significant_return_threshold
+  - name: insignificant_return_exclusion_applies
+    kind: derived
+    entity: Asset
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP Manual 3405, resource exclusion and financial-instrument exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "if the AU is not able to sell it for any significant return."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "This exclusion does not apply to stocks, bonds, and negotiable financial instruments."
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          au_unable_to_sell_resource_for_any_significant_return
+          and not resource_is_stock
+          and not resource_is_bond
+          and not resource_is_negotiable_financial_instrument
+  - name: insignificant_return_excluded_value
+    kind: derived
+    entity: Asset
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Georgia SNAP Manual 3405, entire-value exclusion
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "The entire value of a resource is excluded if the AU is not able to sell it for any significant return."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3405/block-10
+              excerpt: "This exclusion does not apply to stocks, bonds, and negotiable financial instruments."
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          if insignificant_return_exclusion_applies: entire_resource_value else: 0
