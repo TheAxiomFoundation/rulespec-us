@@ -1,0 +1,155 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+    source_sha256: deef686d75d55d30e27b183fc57e8e38d9c5592a860a94ee4f7bc746301e78aa
+  summary: |-
+    When there is a COLA or other mass change in federal benefits:
+    SAR households do not have to report mass grant changes unless the mass grant change causes the total gross household income to go above the 130% FPIG limit.
+    Non-SAR households with unearned income have to report if the mass grant change causes the household’s gross monthly unearned income to change by more than $50.
+    When information about a mass change is not available through the I ncome Eligibility Verification System (IEVS), such as for VA, Black Lung, and Railroad Retirement benefits, the CAO must contact the household to determine whether there is an income change.
+inputs:
+  - name: federal_benefit_mass_change
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: sar_household
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: has_unearned_income
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: gross_income_before_mass_change
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: gross_income_after_mass_change
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: fpig
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: monthly_unearned_income_change_from_mass_change
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: mass_change_information_available_through_ievs
+    entity: Household
+    dtype: Boolean
+    period: Month
+rules:
+  - name: sar_reporting_fpig_ratio
+    kind: parameter
+    dtype: Rate
+    source: Pennsylvania SNAP Handbook 572.4, SAR reporting paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "above the 130% FPIG limit"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          1.30
+  - name: unearned_income_reporting_change_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Pennsylvania SNAP Handbook 572.4, Non-SAR reporting paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "gross monthly unearned income to change by more than $50"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          50
+  - name: sar_mass_change_report_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Pennsylvania SNAP Handbook 572.4, opening scope and SAR reporting paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "When there is a COLA or other mass change in federal benefits:"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "unless the mass grant change causes the total gross household income to go above the 130% FPIG limit."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          federal_benefit_mass_change
+          and sar_household
+          and gross_income_before_mass_change <= sar_reporting_fpig_ratio * fpig
+          and gross_income_after_mass_change > sar_reporting_fpig_ratio * fpig
+  - name: non_sar_mass_change_report_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Pennsylvania SNAP Handbook 572.4, opening scope and Non-SAR reporting paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "Non-SAR households with unearned income have to report if the mass grant change causes the household’s gross monthly unearned income to change by more than $50."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          federal_benefit_mass_change
+          and not sar_household
+          and has_unearned_income
+          and max(monthly_unearned_income_change_from_mass_change, 0 - monthly_unearned_income_change_from_mass_change) > unearned_income_reporting_change_threshold
+  - name: cao_household_contact_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Pennsylvania SNAP Handbook 572.4, opening scope and IEVS paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "When information about a mass change is not available through the I ncome Eligibility Verification System (IEVS)"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/572-mass-changes-572-4-federal-benefit-changes/block-2
+              excerpt: "such as for VA, Black Lung, and Railroad Retirement benefits, the CAO must contact the household to determine whether there is an income change."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          federal_benefit_mass_change
+          and not mass_change_information_available_through_ievs
