@@ -1,0 +1,135 @@
+format: rulespec/v1
+module:
+  summary: |-
+    SNAP benefits reported as not issued to the individual’s EBT Account are replaced only if the error is reported in the period of intended use. The period of intended use of regular monthly allotments is the month of issuance and the next 11 months.
+    Beginning December 20, 2024, the Department will only replace benefits pursuant to the process in Section 777-4(3)(B)-(F), as described below, if the replacement of benefits is federally authorized.
+  source_verification:
+    corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+    source_sha256: 6233045de261afba14e478c47d32a364d70c28c15478607b1eaef211c3bfdfbc
+  proof_validation:
+    required: true
+inputs:
+  - name: allotment_is_regular_monthly
+    entity: Person
+    dtype: Boolean
+    period: Day
+  - name: report_months_after_issuance
+    entity: Person
+    dtype: Integer
+    period: Day
+  - name: other_allotment_error_reported_in_intended_use_period
+    entity: Person
+    dtype: Boolean
+    period: Day
+  - name: benefits_reported_not_issued_to_individual_ebt_account
+    entity: Person
+    dtype: Boolean
+    period: Day
+  - name: replacement_is_federally_authorized
+    entity: Person
+    dtype: Boolean
+    period: Day
+  - name: electronically_stolen_benefits_application_received
+    entity: Person
+    dtype: Boolean
+    period: Day
+rules:
+  - name: regular_allotment_additional_use_months
+    kind: parameter
+    dtype: Integer
+    source: us-me/regulation/dhhs/ofi/chapter-301/block-171
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+              excerpt: the month of issuance and the next 11 months
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          11
+  - name: error_reported_in_intended_use_period
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: us-me/regulation/dhhs/ofi/chapter-301/block-171
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+              excerpt: The period of intended use of regular monthly allotments is the month of issuance and the next 11 months.
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          (allotment_is_regular_monthly
+          and report_months_after_issuance >= 0
+          and report_months_after_issuance <= regular_allotment_additional_use_months)
+          or (not allotment_is_regular_monthly
+          and other_allotment_error_reported_in_intended_use_period)
+  - name: nonissuance_replacement_reporting_condition_satisfied
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: us-me/regulation/dhhs/ofi/chapter-301/block-171
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+              excerpt: SNAP benefits reported as not issued to the individual’s EBT Account are replaced only if the error is reported in the period of intended use.
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          benefits_reported_not_issued_to_individual_ebt_account
+          and error_reported_in_intended_use_period
+  - name: federal_and_state_stolen_benefit_replacement_suspended
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: us-me/regulation/dhhs/ofi/chapter-301/block-171(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: effective_period
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+              excerpt: Beginning December 20, 2024
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+              excerpt: If replacement of benefits lacks federal authorization, the Department will also suspend replacement of state funded benefits for the same period.
+    versions:
+      - effective_from: '2024-12-20'
+        formula: |-
+          not replacement_is_federally_authorized
+  - name: stolen_benefits_application_denial_and_prompt_suspension_notice_required
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: us-me/regulation/dhhs/ofi/chapter-301/block-171(A)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-171
+              excerpt: If replacement of benefits is suspended due to a lack of federal authorization, the Department shall promptly notify a claimant of the suspension upon receiving an Electronically Stolen Benefits Application (EBSA) and deny that request.
+    versions:
+      - effective_from: '2024-12-20'
+        formula: |-
+          electronically_stolen_benefits_application_received
+          and federal_and_state_stolen_benefit_replacement_suspended
