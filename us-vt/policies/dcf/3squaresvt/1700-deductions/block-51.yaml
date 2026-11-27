@@ -1,0 +1,181 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The BUA includes all non-heating/non-cooling costs including installation/maintenance.
+    Assign the BUA to a household that does not qualify for the SUA but is responsible for paying any portion of two of the following expenses directly to the provider, to a landlord, or to someone with whom the household shares these expenses (including flat fees for these costs):
+  source_verification:
+    corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+    source_sha256: 26d15fa7842e231b135be517ebd907c847574875fb08678a8ccada223c553741
+  proof_validation:
+    required: true
+inputs:
+  - name: qualifies_for_sua
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: responsible_for_electricity_expense
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: responsible_for_cooking_fuel_expense
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: responsible_for_water_or_sewage_expense
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: responsible_for_garbage_or_trash_collection_expense
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: responsible_for_telephone_expense
+    entity: Household
+    dtype: Boolean
+    period: Month
+rules:
+  - name: sua_standard
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: "Utility Allowances: SUA (with heat)"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "SUA (with heat) $1,096"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          1096
+  - name: bua_standard
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: "Utility Allowances: BUA (without heat)"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "BUA (without heat) $311"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          311
+  - name: telephone_standard
+    kind: parameter
+    dtype: Money
+    period: Month
+    unit: USD
+    source: "Utility Allowances: Telephone"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "Telephone $37"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          37
+  - name: bua_required_expense_count
+    kind: parameter
+    dtype: Count
+    source: BUA assignment requirement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "responsible for paying any portion of two of the following expenses"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          2
+  - name: bua_expense_count
+    kind: derived
+    entity: Household
+    dtype: Count
+    period: Month
+    source: BUA qualifying expense list and payment responsibility
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "Electricity Cooking fuel Water/sewage, including well and septic tank installation and maintenance Garbage/trash collection Telephone"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "directly to the provider, to a landlord, or to someone with whom the household shares these expenses (including flat fees for these costs)"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          (if responsible_for_electricity_expense: 1 else: 0)
+          + (if responsible_for_cooking_fuel_expense: 1 else: 0)
+          + (if responsible_for_water_or_sewage_expense: 1 else: 0)
+          + (if responsible_for_garbage_or_trash_collection_expense: 1 else: 0)
+          + (if responsible_for_telephone_expense: 1 else: 0)
+  - name: bua_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: BUA assignment requirement
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "does not qualify for the SUA but is responsible for paying any portion of two of the following expenses"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          not qualifies_for_sua
+          and bua_expense_count >= bua_required_expense_count
+  - name: bua_amount
+    kind: derived
+    entity: Household
+    dtype: Money
+    period: Month
+    unit: USD
+    source: BUA assignment, included costs, and allowance amount
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "Assign the BUA to a household that does not qualify for the SUA"
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "BUA (without heat) $311"
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/1700-deductions/block-51
+              excerpt: "The BUA includes all non-heating/non-cooling costs including installation/maintenance."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if qualifies_for_sua: 0 else: if bua_eligible: bua_standard else: 0
