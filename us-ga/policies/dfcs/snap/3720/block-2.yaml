@@ -1,0 +1,223 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+    source_sha256: 9c39998635ad8f52e07a46d4eaedb5e818e928c559cd5f932cf80add10163f00
+  summary: |-
+    All Supplemental Nutrition Assistance Program (SNAP) assistance units (AUs) have a requirement to report changes in household circumstances during the certification period.
+    Simplified Reporting Requirements (SRR) apply to all AUs.
+inputs:
+  - name: during_certification_period
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: total_monthly_gross_income
+    entity: Household
+    dtype: Money
+    period: Month
+  - name: monthly_fpl_for_au_size
+    entity: Household
+    dtype: Money
+    period: Month
+  - name: is_abawd
+    entity: Person
+    dtype: Boolean
+    period: Month
+  - name: weekly_work_hours_after_change
+    entity: Person
+    dtype: Decimal
+    period: Month
+  - name: monthly_averaged_work_hours_after_change
+    entity: Person
+    dtype: Decimal
+    period: Month
+  - name: au_or_member_wins_substantial_lottery_winnings
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: au_or_member_wins_substantial_gambling_winnings
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: au_or_member_wins_substantial_prizes
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: au_or_member_wins_substantial_awards
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: au_or_member_wins_substantial_windfalls
+    entity: Household
+    dtype: Boolean
+    period: Month
+rules:
+  - name: gross_income_reporting_fpl_ratio
+    kind: parameter
+    dtype: Rate
+    source: Georgia SNAP Manual 3720, gross-income reporting change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "When total monthly gross income exceeds 130% of the FPL for the AU’s size;"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          1.30
+
+  - name: weekly_abawd_reporting_hours
+    kind: parameter
+    dtype: Decimal
+    source: Georgia SNAP Manual 3720, ABAWD work-hours reporting change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "20 hours per week"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          20
+
+  - name: monthly_abawd_reporting_hours
+    kind: parameter
+    dtype: Decimal
+    source: Georgia SNAP Manual 3720, ABAWD work-hours reporting change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "80 hours averaged monthly"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          80
+
+  - name: au_members
+    kind: data_relation
+    data_relation:
+      predicate: au_members
+      arity: 2
+      arguments: [Person, Household]
+
+  - name: income_change_report_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP Manual 3720, certification-period and SRR chapeaux; gross-income change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "during the certification period."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "Simplified Reporting Requirements (SRR) apply to all AUs."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "When total monthly gross income exceeds 130% of the FPL for the AU’s size;"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          during_certification_period
+          and total_monthly_gross_income > gross_income_reporting_fpl_ratio * monthly_fpl_for_au_size
+
+  - name: abawd_hours_reporting_trigger
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP Manual 3720, ABAWD work-hours reporting change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "When an ABAWD’s work hours fall below 20 hours per week or 80 hours averaged monthly;"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          is_abawd
+          and (weekly_work_hours_after_change < weekly_abawd_reporting_hours
+          or monthly_averaged_work_hours_after_change < monthly_abawd_reporting_hours)
+
+  - name: work_hours_change_report_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP Manual 3720, certification-period and SRR chapeaux; ABAWD work-hours change
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "during the certification period."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "SRR AUs are required to report the following changes:"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "When an ABAWD’s work hours fall below 20 hours per week or 80 hours averaged monthly;"
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          during_certification_period
+          and count_where(au_members, abawd_hours_reporting_trigger) > 0
+
+  - name: substantial_winnings_report_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Georgia SNAP Manual 3720, certification-period and SRR chapeaux; substantial winnings
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "during the certification period."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ga/manual/dfcs/snap/3720/block-2
+              excerpt: "When an AU or an AU member wins substantial winnings from lottery winnings, gambling winnings, prizes, awards and/or windfalls."
+    versions:
+      - effective_from: '2026-06-01'
+        formula: |-
+          during_certification_period
+          and (au_or_member_wins_substantial_lottery_winnings
+          or au_or_member_wins_substantial_gambling_winnings
+          or au_or_member_wins_substantial_prizes
+          or au_or_member_wins_substantial_awards
+          or au_or_member_wins_substantial_windfalls)
