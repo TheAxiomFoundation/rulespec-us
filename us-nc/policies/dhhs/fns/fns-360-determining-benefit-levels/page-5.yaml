@@ -1,0 +1,209 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+    source_sha256: 43b2f3dfb345762141c7dcbd876ff89167151c98c8c710418139909a184eb3b8
+  summary: |-
+    Maximum Monthly Income - EﬀecƟve October 1, 2025:
+    Use the DSS-1700, ApplicaƟon Worksheet, to manually determine the monthly allotment:
+    1. If there is a system failure; or
+    2. To prepare a trial budget.
+    FNS units without a speciﬁed member are subject to the gross and net income eligibility standards.
+  deferred_outputs:
+    - output: us-nc:policies/dhhs/fns/fns-360-determining-benefit-levels/page-5#separate_fns_unit_status
+      reason: Cannot be computed until Section 210, Household Concept, is encoded.
+    - output: us-nc:policies/dhhs/fns/fns-360-determining-benefit-levels/page-5/360.04/B#income_eligibility
+      reason: Cannot be computed until FNS 360.02, A is encoded.
+inputs:
+  - name: co_resident_fns_unit_size
+    entity: Household
+    dtype: Count
+    period: Month
+  - name: co_residents_monthly_gross_income
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: system_failure
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: preparing_trial_budget
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: fns_unit_has_specified_member
+    entity: Household
+    dtype: Boolean
+    period: Month
+rules:
+  - name: separate_unit_income_standard_ratio
+    kind: parameter
+    dtype: Rate
+    source: FNS 360.03, table heading
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: 165% Maximum Allowable Gross Income Limit
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          1.65
+  - name: separate_unit_income_table_max_size
+    kind: parameter
+    dtype: Count
+    source: FNS 360.03, final numbered table row
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: 8 $7,446
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          8
+  - name: separate_unit_gross_income_limit_by_size
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    indexed_by: co_resident_fns_unit_size
+    source: FNS 360.03, Maximum Monthly Income table
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].values
+            kind: parameter_table
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: 1 $2,152 2 $2,909 3 $3,665 4 $4,421 5 $5,177 6 $5,934 7 $6,690 8 $7,446
+              table:
+                header: 165% Maximum Allowable Gross Income Limit
+                row_key: Food and Nutrition Services Unit Size
+                column_key: Maximum Allowable Gross Income Limit
+    versions:
+      - effective_from: '2025-10-01'
+        values:
+          1: 2152
+          2: 2909
+          3: 3665
+          4: 4421
+          5: 5177
+          6: 5934
+          7: 6690
+          8: 7446
+  - name: separate_unit_additional_member_income_increment
+    kind: parameter
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 360.03, additional-member table row
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: Each addiƟonal member (+) $757
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          757
+  - name: separate_unit_co_resident_income_limit
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: FNS 360.03, Maximum Monthly Income table and additional-member row
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: Each addiƟonal member (+) $757
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: 8 $7,446
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          if co_resident_fns_unit_size <= separate_unit_income_table_max_size:
+            separate_unit_gross_income_limit_by_size[co_resident_fns_unit_size]
+          else:
+            separate_unit_gross_income_limit_by_size[separate_unit_income_table_max_size]
+            + (co_resident_fns_unit_size - separate_unit_income_table_max_size)
+            * separate_unit_additional_member_income_increment
+  - name: separate_unit_co_resident_income_within_limit
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 360.03, income condition for separate unit status
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: if the income of the people with whom they reside does not exceed the maximum allowable monthly amounts shown below.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          co_residents_monthly_gross_income <= separate_unit_co_resident_income_limit
+  - name: manual_application_worksheet_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 360.04(A), General Policy; (A)(1) and (A)(2)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: 'Use the DSS-1700, ApplicaƟon Worksheet, to manually determine the monthly allotment:'
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: 1. If there is a system failure; or 2. To prepare a trial budget.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          system_failure or preparing_trial_budget
+  - name: gross_and_net_income_standards_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: FNS 360.04(B), Income Eligibility Standards; (B)(1)
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-nc/manual/dhhs/fns/fns-360-determining-benefit-levels/page-5
+              excerpt: FNS units without a speciﬁed member are subject to the gross and net income eligibility standards.
+    versions:
+      - effective_from: '2025-10-01'
+        formula: |-
+          not fns_unit_has_specified_member
