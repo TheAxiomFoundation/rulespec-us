@@ -1,0 +1,179 @@
+format: rulespec/v1
+module:
+  summary: |-
+    CERTIFICATION PERIOD: Length of time for which eligibility is established.
+    COLLATERAL CONTACTS: A non-household member who provides information about the household's circumstances.
+    CORRECTIONAL FACILITY: Any facility that falls under the jurisdiction of the Department of Corrections (DOC) for the purpose of detaining (for 24 hours or more) and/or rehabilitating individuals convicted of a crime or awaiting trial, including those licensed and overseen by DOC, but operated by a county or other entity.
+  source_verification:
+    corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+    source_sha256: 40cd86c4e2eec1c964c1531be67084195600355be28c5e29895548759af2317c
+  proof_validation:
+    required: true
+inputs:
+  - name: fraudulent_ebt_card_created
+    entity: CardActivity
+    dtype: Boolean
+    period: Day
+  - name: same_fraudulent_ebt_card_used_to_unlawfully_access_snap_household_account_benefits
+    entity: CardActivity
+    dtype: Boolean
+    period: Day
+  - name: device_illegally_installed_on_atm_or_pos_to_capture_card_data_or_record_snap_household_pin
+    entity: CardActivity
+    dtype: Boolean
+    period: Day
+  - name: fraudulent_call_or_text_mimics_official_state_agency_messaging
+    entity: CardActivity
+    dtype: Boolean
+    period: Day
+  - name: activity_is_phishing
+    entity: CardActivity
+    dtype: Boolean
+    period: Day
+  - name: center_treats_substance_use_disorders
+    entity: TreatmentCenter
+    dtype: Boolean
+    period: Day
+  - name: center_approved_by_state
+    entity: TreatmentCenter
+    dtype: Boolean
+    period: Day
+  - name: person_is_non_household_member
+    entity: Person
+    dtype: Boolean
+    period: Day
+  - name: person_provides_information_about_that_households_circumstances
+    entity: Person
+    dtype: Boolean
+    period: Day
+  - name: facility_under_doc_jurisdiction_including_doc_licensed_and_overseen_facility_operated_by_another_entity
+    entity: Facility
+    dtype: Boolean
+    period: Day
+  - name: facility_purpose_is_detaining_individuals_convicted_of_crime_or_awaiting_trial
+    entity: Facility
+    dtype: Boolean
+    period: Day
+  - name: detention_duration_hours
+    entity: Facility
+    dtype: Decimal
+    period: Day
+  - name: facility_purpose_is_rehabilitating_individuals_convicted_of_crime_or_awaiting_trial
+    entity: Facility
+    dtype: Boolean
+    period: Day
+rules:
+  - name: card_cloning
+    kind: derived
+    entity: CardActivity
+    dtype: Judgment
+    period: Day
+    source: "10-144 C.M.R. Chapter 301, CARD CLONING"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+              excerpt: "The creation and use of a fraudulent EBT card to unlawfully access benefits from SNAP households’ account."
+    versions:
+      - effective_from: '2026-06-28'
+        formula: |-
+          fraudulent_ebt_card_created
+          and same_fraudulent_ebt_card_used_to_unlawfully_access_snap_household_account_benefits
+  - name: card_skimming
+    kind: derived
+    entity: CardActivity
+    dtype: Judgment
+    period: Day
+    source: "10-144 C.M.R. Chapter 301, CARD SKIMMING"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+    versions:
+      - effective_from: '2026-06-28'
+        formula: |-
+          device_illegally_installed_on_atm_or_pos_to_capture_card_data_or_record_snap_household_pin
+          or fraudulent_call_or_text_mimics_official_state_agency_messaging
+          or activity_is_phishing
+  - name: center_for_treatment_of_substance_use_disorders
+    kind: derived
+    entity: TreatmentCenter
+    dtype: Judgment
+    period: Day
+    source: "10-144 C.M.R. Chapter 301, CENTERS FOR THE TREATMENT OF SUBSTANCE USE DISORDERS"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+    versions:
+      - effective_from: '2026-06-28'
+        formula: |-
+          center_treats_substance_use_disorders
+          and center_approved_by_state
+  - name: collateral_contact
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Day
+    source: "10-144 C.M.R. Chapter 301, COLLATERAL CONTACTS"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+    versions:
+      - effective_from: '2026-06-28'
+        formula: |-
+          person_is_non_household_member
+          and person_provides_information_about_that_households_circumstances
+  - name: correctional_facility_minimum_detention_hours
+    kind: parameter
+    dtype: Decimal
+    source: "10-144 C.M.R. Chapter 301, CORRECTIONAL FACILITY"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+              excerpt: "detaining (for 24 hours or more)"
+    versions:
+      - effective_from: '2026-06-28'
+        formula: |-
+          24
+  - name: correctional_facility
+    kind: derived
+    entity: Facility
+    dtype: Judgment
+    period: Day
+    source: "10-144 C.M.R. Chapter 301, CORRECTIONAL FACILITY"
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-194
+    versions:
+      - effective_from: '2026-06-28'
+        formula: |-
+          facility_under_doc_jurisdiction_including_doc_licensed_and_overseen_facility_operated_by_another_entity
+          and (
+            (
+              facility_purpose_is_detaining_individuals_convicted_of_crime_or_awaiting_trial
+              and detention_duration_hours >= correctional_facility_minimum_detention_hours
+            )
+            or facility_purpose_is_rehabilitating_individuals_convicted_of_crime_or_awaiting_trial
+          )
