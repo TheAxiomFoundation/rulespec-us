@@ -1,0 +1,246 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The household must report the loss within ten days of the destruction.
+    A. The household must complete the SNAP Loss and Replacement Request form within 10 days of the initial report of the loss.
+    B. The disaster must be verified and documented.
+    C. The Department shall issue a replacement allotment not to exceed the lesser of the value of the food destroyed or one month's benefit within ten days of receiving the form and the verification.
+  source_verification:
+    corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+    source_sha256: 4eeaaf6ee276fbd9a1bcbab8ba997d717c421ed17caa7eb5ebcb3a1204aa0d27
+  proof_validation:
+    required: true
+inputs:
+  - name: destroyed_food_was_purchased_with_benefits
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: food_destroyed_due_to_household_misfortune
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: food_destroyed_due_to_special_disaster_declared_by_secretary_of_agriculture
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: days_from_destruction_to_loss_report
+    entity: Household
+    dtype: Integer
+    period: Month
+  - name: days_from_initial_report_to_completed_request_form
+    entity: Household
+    dtype: Integer
+    period: Month
+  - name: disaster_verified_and_documented
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: destroyed_food_value
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: monthly_benefit
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: department_received_form_and_verification
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: replacement_allotment_issued
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: days_from_receipt_of_form_and_verification_to_issuance
+    entity: Household
+    dtype: Integer
+    period: Month
+rules:
+  - name: loss_report_deadline_days
+    kind: parameter
+    dtype: Integer
+    source: block-172 chapeau
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "The household must report the loss within ten days of the destruction."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+  - name: request_form_deadline_days
+    kind: parameter
+    dtype: Integer
+    source: block-172 A
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "within 10 days of the initial report of the loss."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+  - name: replacement_issuance_deadline_days
+    kind: parameter
+    dtype: Integer
+    source: block-172 C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "within ten days of receiving the form and the verification."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          10
+  - name: replacement_benefit_months_cap
+    kind: parameter
+    dtype: Integer
+    source: block-172 C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "one month's benefit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          1
+  - name: food_replacement_eligible
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: block-172 chapeau; A; B
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "Benefits used to purchase food can only be replaced when the food has been destroyed due to a household misfortune, such as but not limited to fire or flood, or special disaster declaration by the Secretary of Agriculture."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "The household must report the loss within ten days of the destruction."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "The household must complete the SNAP Loss and Replacement Request form within 10 days of the initial report of the loss."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "The disaster must be verified and documented."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          destroyed_food_was_purchased_with_benefits
+          and (food_destroyed_due_to_household_misfortune or food_destroyed_due_to_special_disaster_declared_by_secretary_of_agriculture)
+          and days_from_destruction_to_loss_report <= loss_report_deadline_days
+          and days_from_initial_report_to_completed_request_form <= request_form_deadline_days
+          and disaster_verified_and_documented
+  - name: replacement_allotment_cap
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: block-172 C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "not to exceed the lesser of the value of the food destroyed or one month's benefit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          min(max(0, destroyed_food_value), max(0, monthly_benefit * replacement_benefit_months_cap))
+  - name: maximum_replacement_allotment
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: block-172 chapeau; A; B; C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "The Department shall issue a replacement allotment not to exceed the lesser of the value of the food destroyed or one month's benefit"
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          if food_replacement_eligible: replacement_allotment_cap else: 0
+  - name: replacement_issuance_required
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: block-172 C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "The Department shall issue a replacement allotment"
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "receiving the form and the verification."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          food_replacement_eligible and department_received_form_and_verification
+  - name: replacement_issuance_timing_compliant
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: block-172 C
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "shall issue a replacement allotment"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-me/regulation/dhhs/ofi/chapter-301/block-172
+              excerpt: "within ten days of receiving the form and the verification."
+    versions:
+      - effective_from: '0001-01-01'
+        formula: |-
+          not replacement_issuance_required
+          or (replacement_allotment_issued and days_from_receipt_of_form_and_verification_to_issuance <= replacement_issuance_deadline_days)
