@@ -1,0 +1,92 @@
+format: rulespec/v1
+module:
+  summary: |-
+    The SNAP open date will usually be the same date as the date on which the application was received.
+    If the household is ineligible for the application month or the first month of a new certification period but is eligible for future months, the open date is the first day of the first month of eligibility.
+    The system will not accept an open date of more than 60 days before the data-entry date.
+  source_verification:
+    corpus_citation_path: us-pa/manual/dhs/snap/580-issuing-benefits-580-3-initial-openings/block-3
+    source_sha256: 15ae644446219b5b935dde84f6ccac65ddf3b1d5dcda55c9402a873fa8846c6a
+  proof_validation:
+    required: true
+inputs:
+  - name: ineligible_for_application_month_or_first_month_of_new_certification_period
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: eligible_for_future_months
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: proposed_open_date_precedes_application_received_date
+    entity: Household
+    dtype: Boolean
+    period: Day
+  - name: days_from_proposed_open_date_to_data_entry_date
+    entity: Household
+    dtype: Integer
+    period: Day
+rules:
+  - name: maximum_open_date_lookback_days
+    kind: parameter
+    dtype: Integer
+    source: Pennsylvania SNAP Handbook 580.3, block 3, second paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/580-issuing-benefits-580-3-initial-openings/block-3
+              excerpt: "The system will not accept an open date of more than 60 days before the data-entry date."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          60
+  - name: usual_open_date_basis
+    kind: derived
+    entity: Household
+    dtype: String
+    period: Day
+    source: Pennsylvania SNAP Handbook 580.3, block 3, first paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: default
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/580-issuing-benefits-580-3-initial-openings/block-3
+              excerpt: "The SNAP open date will usually be the same date as the date on which the application was received."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/580-issuing-benefits-580-3-initial-openings/block-3
+              excerpt: "If the household is ineligible for the application month or the first month of a new certification period but is eligible for future months, the open date is the first day of the first month of eligibility."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if ineligible_for_application_month_or_first_month_of_new_certification_period and eligible_for_future_months: "first_day_of_first_month_of_eligibility" else: "application_received_date"
+  - name: open_date_meets_system_date_limits
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Day
+    source: Pennsylvania SNAP Handbook 580.3, block 3, system open-date limits
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/580-issuing-benefits-580-3-initial-openings/block-3
+              excerpt: "The system will not accept an open date before the application-received date."
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-pa/manual/dhs/snap/580-issuing-benefits-580-3-initial-openings/block-3
+              excerpt: "The system will not accept an open date of more than 60 days before the data-entry date."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          not proposed_open_date_precedes_application_received_date
+          and days_from_proposed_open_date_to_data_entry_date <= maximum_open_date_lookback_days

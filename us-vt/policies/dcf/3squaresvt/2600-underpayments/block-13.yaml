@@ -1,0 +1,123 @@
+format: rulespec/v1
+module:
+  proof_validation:
+    required: true
+  source_verification:
+    corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+    source_sha256: bf0a28d1d08ee3543f61e8d0be5ccd637a2ade54dd3a260ae3541948d7a11f15
+  summary: |-
+    Exclude months: when the household was ineligible, or more than 12-months before the timeframes .
+    If the household received less than they were due, the difference between the amounts is the underpayment.
+    Subtract any claims to be offset from the underpayment amount.
+inputs:
+  - name: household_was_eligible
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: household_should_have_been_eligible
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: months_before_applicable_timeframes
+    entity: Household
+    dtype: Count
+    period: Month
+  - name: benefits_received
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: benefits_due
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: claims_to_offset
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+rules:
+  - name: underpayment_lookback_months
+    kind: parameter
+    dtype: Count
+    source: Vermont 3SquaresVT Manual 2600, block-13
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+              excerpt: "more than 12-months before the timeframes"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          12
+  - name: month_in_underpayment_review
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Vermont 3SquaresVT Manual 2600, block-13, first paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+              excerpt: "when the household was eligible or should have been eligible."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+              excerpt: "Exclude months: when the household was ineligible, or more than 12-months before the timeframes ."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          (household_was_eligible or household_should_have_been_eligible)
+          and months_before_applicable_timeframes <= underpayment_lookback_months
+  - name: gross_underpayment
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Vermont 3SquaresVT Manual 2600, block-13, benefit comparison
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+              excerpt: "If the household received less than they were due, the difference between the amounts is the underpayment."
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+              excerpt: "Determine the months that benefits were potentially underpaid"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if month_in_underpayment_review: max(0, benefits_due - benefits_received) else: 0
+  - name: underpayment_after_claim_offsets
+    kind: derived
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+    source: Vermont 3SquaresVT Manual 2600, block-13, final paragraph
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2600-underpayments/block-13
+              excerpt: "Subtract any claims to be offset from the underpayment amount."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          max(0, gross_underpayment - claims_to_offset)

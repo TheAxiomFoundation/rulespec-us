@@ -1,0 +1,246 @@
+format: rulespec/v1
+module:
+  summary: |-
+    “Homeless person” means a person who lacks a fixed and regular nighttime residence, or who will imminently lose their nighttime residence.
+    The initial month is the only month benefits are prorated.
+  source_verification:
+    corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+    source_sha256: 7cb9bd8a2d9a256c6e6a35ebead2a424bb1b6753cedf7acb682f9ad08c7481d7
+  proof_validation:
+    required: true
+inputs:
+  - {name: establishment_is_public_or_private_nonprofit, entity: Business, dtype: Boolean, period: Month}
+  - {name: local_office_approves_establishment_on_sufficient_evidence_as_serving_homeless_persons, entity: Business, dtype: Boolean, period: Month}
+  - {name: lacks_fixed_and_regular_nighttime_residence, entity: Person, dtype: Boolean, period: Month}
+  - {name: will_imminently_lose_nighttime_residence, entity: Person, dtype: Boolean, period: Month}
+  - {name: primary_nighttime_residence_is_supervised_temporary_shelter, entity: Person, dtype: Boolean, period: Month}
+  - {name: primary_nighttime_residence_is_temporary_institution_for_persons_intended_to_be_institutionalized, entity: Person, dtype: Boolean, period: Month}
+  - {name: primary_nighttime_residence_is_temporary_accommodation_in_another_persons_home, entity: Person, dtype: Boolean, period: Month}
+  - {name: days_lived_in_that_other_persons_home, entity: Person, dtype: Integer, period: Month}
+  - {name: primary_nighttime_residence_is_place_not_designed_or_ordinarily_used_for_human_sleeping, entity: Person, dtype: Boolean, period: Month}
+  - {name: application_made_by_or_on_behalf_of_household, entity: Household, dtype: Boolean, period: Month}
+  - {name: certified_on_application_date, entity: Household, dtype: Boolean, period: Month}
+  - {name: application_is_untimely_recertification, entity: Household, dtype: Boolean, period: Month}
+  - {name: days_since_certification_expired_at_application, entity: Household, dtype: Integer, period: Month}
+  - {name: month_is_first_certified_month_following_participation_break, entity: Household, dtype: Boolean, period: Month}
+  - {name: migrant_or_seasonal_farm_worker_household, entity: Household, dtype: Boolean, period: Month}
+  - {name: participation_break_is_at_least_one_month, entity: Household, dtype: Boolean, period: Month}
+  - {name: program, entity: Person, dtype: String, period: Month}
+  - {name: fraud_established_by_court, entity: Person, dtype: Boolean, period: Month}
+  - {name: social_security_administration_verifies_client_committed_fraud, entity: Person, dtype: Boolean, period: Month}
+  - {name: act_violates_food_and_nutrition_act, entity: ProgramAct, dtype: Boolean, period: Month}
+  - {name: act_violates_snap_program_regulations, entity: ProgramAct, dtype: Boolean, period: Month}
+  - {name: act_violates_state_statute_relating_to_snap, entity: ProgramAct, dtype: Boolean, period: Month}
+rules:
+  - name: temporary_home_residence_day_limit
+    kind: parameter
+    dtype: Integer
+    source: Definitions — Homeless person, temporary accommodation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: after a person has lived in another person’s home for 90 days
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          90
+  - name: late_recertification_day_threshold
+    kind: parameter
+    dtype: Integer
+    source: Definitions — Initial application
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: parameter
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: more than 30 days after the household’s certification has expired
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          30
+  - name: homeless_meal_provider
+    kind: derived
+    entity: Business
+    dtype: Judgment
+    period: Month
+    source: Definitions — Homeless meal provider
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: public or private nonprofit establishment
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: the local office approves, upon presentation of sufficient evidence, as serving meals to homeless persons
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          establishment_is_public_or_private_nonprofit
+          and local_office_approves_establishment_on_sufficient_evidence_as_serving_homeless_persons
+  - name: homeless_person
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Definitions — Homeless person, including all four residence alternatives
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: lacks a fixed and regular nighttime residence, or who will imminently lose their nighttime residence
+          - path: versions[0].formula
+            kind: condition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: whose primary nighttime residence is one of the following
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: The situation is no longer considered “temporary” after a person has lived in another person’s home for 90 days.
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          lacks_fixed_and_regular_nighttime_residence
+          or will_imminently_lose_nighttime_residence
+          or primary_nighttime_residence_is_supervised_temporary_shelter
+          or primary_nighttime_residence_is_temporary_institution_for_persons_intended_to_be_institutionalized
+          or (primary_nighttime_residence_is_temporary_accommodation_in_another_persons_home
+              and days_lived_in_that_other_persons_home < temporary_home_residence_day_limit)
+          or primary_nighttime_residence_is_place_not_designed_or_ordinarily_used_for_human_sleeping
+  - name: initial_application
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Definitions — Initial application, both alternatives
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: an application made by or on behalf of a household
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: Is not certified on the date of the application
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: Has made an untimely application for recertification more than 30 days
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          application_made_by_or_on_behalf_of_household
+          and (
+            not certified_on_application_date
+            or (application_is_untimely_recertification
+                and days_since_certification_expired_at_application > late_recertification_day_threshold)
+          )
+  - name: initial_month
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Definitions — Initial month, including migrant or seasonal farm worker exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: the first month the household is certified for SNAP following any break in participation
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: following a break of at least one month in participation
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          month_is_first_certified_month_following_participation_break
+          and (
+            not migrant_or_seasonal_farm_worker_household
+            or participation_break_is_at_least_one_month
+          )
+  - name: benefits_prorated
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: Definitions — Initial month, final sentence
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: The initial month is the only month benefits are prorated.
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          initial_month
+  - name: intentional_failure_to_comply
+    kind: derived
+    entity: Person
+    dtype: Judgment
+    period: Month
+    source: Definitions — Intentional failure to comply, both program branches
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: In the FIP or veteran pension program means when fraud is established by a court.
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: In the SSI program means when the Social Security Administration verifies that the client committed fraud.
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          ((program == "FIP" or program == "veteran pension") and fraud_established_by_court)
+          or (program == "SSI" and social_security_administration_verifies_client_committed_fraud)
+  - name: intentional_program_violation
+    kind: derived
+    entity: ProgramAct
+    dtype: Judgment
+    period: Month
+    source: Definitions — Intentional program violation
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: definition
+            source:
+              corpus_citation_path: us-ia/manual/hhs/em/7-a/page-8
+              excerpt: any act that violates the Food and Nutrition Act, program regulations, or state statute relating to SNAP
+    versions:
+      - effective_from: '2025-06-20'
+        formula: |-
+          act_violates_food_and_nutrition_act
+          or act_violates_snap_program_regulations
+          or act_violates_state_statute_relating_to_snap

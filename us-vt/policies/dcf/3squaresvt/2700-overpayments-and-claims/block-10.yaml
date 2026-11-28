@@ -1,0 +1,192 @@
+format: rulespec/v1
+module:
+  summary: |-
+    Do not establish an overpayment for the following reasons: The application form is not signed. The change was not required to be reported.
+    The amount of the overpayment is less than $125 for Inadvertent Household Error (IHE) or less than $600 for Agency Errors .
+  source_verification:
+    corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+    source_sha256: 59f49613a19ddd4db90e16e21eae3952e6e3e50ebcf99599a04aa87d9e1cfd8c
+  proof_validation:
+    required: true
+  interpretations:
+    - id: reported-change-exception-scope
+      status: open
+      question: Does the reported-change exception cover changes that were not required to be reported?
+      texts:
+        - corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+          excerpt: "The change was not required to be reported. Exception : Complete an overpayment as an Agency Error if a change was reported by the household and the agency should have acted on the change but did not ."
+      reading: The exception covers a reported change on which the agency should have acted but did not, including a change that was not required to be reported.
+      alternatives:
+        - id: required-changes-only
+          reading: The exception requires that the reported change was required to be reported.
+          effect: A voluntarily reported change cannot remove the unreportable-change bar.
+      basis: The exception immediately follows the unreportable-change bar and does not state a required-reporting condition. The automatic review finding requests that additional condition, but the supplied source does not support it.
+      affects:
+        - reported_change_agency_error
+        - effective_error_type
+        - overpayment_establishment_barred
+    - id: quality-control-exception-scope
+      status: open
+      question: Does the Quality Control exception override only the monetary thresholds?
+      texts:
+        - corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+          excerpt: "Exception : Overpayments must be completed whenever it is determined there is an overpayment as a result of a Quality Control review."
+      reading: The Quality Control exception overrides the monetary thresholds while the unsigned-application and unreportable-change bars remain operative.
+      alternatives:
+        - id: all-bars-overridden
+          reading: A Quality Control determination overrides every establishment bar in this source unit.
+          effect: An unsigned application or an unreportable change cannot prevent completion of a Quality Control overpayment.
+      basis: The exception immediately follows the monetary thresholds, although the word whenever permits a broader reading.
+      affects:
+        - overpayment_establishment_barred
+inputs:
+  - name: application_signed
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: change_required_to_be_reported
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: change_reported_by_household
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: agency_should_have_acted_on_change
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: agency_failed_to_act_on_change
+    entity: Household
+    dtype: Boolean
+    period: Month
+  - name: error_type
+    entity: Household
+    dtype: String
+    period: Month
+  - name: overpayment_amount
+    entity: Household
+    dtype: Money
+    unit: USD
+    period: Month
+  - name: overpayment_determined_by_quality_control_review
+    entity: Household
+    dtype: Boolean
+    period: Month
+rules:
+  - name: inadvertent_household_error_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 3SquaresVT Manual 2700, block 10, IHE threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "less than $125 for Inadvertent Household Error (IHE)"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          125
+  - name: agency_error_threshold
+    kind: parameter
+    dtype: Money
+    unit: USD
+    source: 3SquaresVT Manual 2700, block 10, Agency Error threshold
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: amount
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "less than $600 for Agency Errors"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          600
+  - name: reported_change_agency_error
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 3SquaresVT Manual 2700, block 10, reported-change exception
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "Complete an overpayment as an Agency Error if a change was reported by the household and the agency should have acted on the change but did not"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          change_reported_by_household
+          and agency_should_have_acted_on_change
+          and agency_failed_to_act_on_change
+  - name: effective_error_type
+    kind: derived
+    entity: Household
+    dtype: String
+    period: Month
+    source: 3SquaresVT Manual 2700, block 10, Agency Error treatment
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "Complete an overpayment as an Agency Error if a change was reported by the household and the agency should have acted on the change but did not"
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          if reported_change_agency_error: "Agency Error" else: error_type
+  - name: overpayment_establishment_barred
+    kind: derived
+    entity: Household
+    dtype: Judgment
+    period: Month
+    source: 3SquaresVT Manual 2700, block 10, establishment bars and exceptions
+    metadata:
+      proof:
+        atoms:
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "Do not establish an overpayment for the following reasons: The application form is not signed."
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "The change was not required to be reported. Exception : Complete an overpayment as an Agency Error"
+          - path: versions[0].formula
+            kind: formula
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "The amount of the overpayment is less than $125 for Inadvertent Household Error (IHE) or less than $600 for Agency Errors"
+          - path: versions[0].formula
+            kind: exception
+            source:
+              corpus_citation_path: us-vt/manual/dcf/3squaresvt/2700-overpayments-and-claims/block-10
+              excerpt: "Overpayments must be completed whenever it is determined there is an overpayment as a result of a Quality Control review."
+    versions:
+      - effective_from: '2026-08-01'
+        formula: |-
+          not application_signed
+          or (
+            not change_required_to_be_reported
+            and not reported_change_agency_error
+          )
+          or (
+            not overpayment_determined_by_quality_control_review
+            and (
+              (effective_error_type == "IHE" and overpayment_amount < inadvertent_household_error_threshold)
+              or (effective_error_type == "Agency Error" and overpayment_amount < agency_error_threshold)
+            )
+          )
